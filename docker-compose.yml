@@ -21,8 +21,7 @@ services:
       BOOTSTRAP_HOUSEHOLD_LOCALE: ${BOOTSTRAP_HOUSEHOLD_LOCALE:-en}
       JAVA_OPTS: ${JAVA_OPTS:-}
     networks:
-      - ledger
-      - shared
+      - my-network
     expose:
       - "8080"
       - "9090"
@@ -48,8 +47,7 @@ services:
       backend:
         condition: service_healthy
     networks:
-      - ledger
-      - shared
+      - my-network
     ports:
       - "${FRONTEND_BIND_ADDR:-0.0.0.0}:${FRONTEND_PORT:-8087}:80"
     restart: unless-stopped
