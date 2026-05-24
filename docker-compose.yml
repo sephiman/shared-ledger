@@ -66,8 +66,6 @@ services:
       start_period: 10s
 
 networks:
-  ledger:
-    driver: bridge
-  shared:
+  my-network:
     external: true
-    name: ${SHARED_NETWORK_NAME}
+    name: all_dockers
