@@ -1,0 +1,73 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    image: shared-ledger-backend:latest
+    container_name: shared-ledger-backend
+    env_file: .env
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      APP_COOKIE_SECURE: ${APP_COOKIE_SECURE:-true}
+      REGISTRATION_MODE: ${REGISTRATION_MODE:-invite-only}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      BOOTSTRAP_HOUSEHOLD_NAME: ${BOOTSTRAP_HOUSEHOLD_NAME:-Home}
+      BOOTSTRAP_HOUSEHOLD_CURRENCY: ${BOOTSTRAP_HOUSEHOLD_CURRENCY:-EUR}
+      BOOTSTRAP_HOUSEHOLD_LOCALE: ${BOOTSTRAP_HOUSEHOLD_LOCALE:-en}
+      JAVA_OPTS: ${JAVA_OPTS:-}
+    networks:
+      - ledger
+      - shared
+    expose:
+      - "8080"
+      - "9090"
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9090/actuator/health/liveness | grep -q UP"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  frontend:
+    build:
+      context: ./frontend
+    image: shared-ledger-frontend:latest
+    container_name: shared-ledger-frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - ledger
+      - shared
+    ports:
+      - "${FRONTEND_BIND_ADDR:-0.0.0.0}:${FRONTEND_PORT:-8087}:80"
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/healthz | grep -q ok"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  ledger:
+    driver: bridge
+  shared:
+    external: true
+    name: ${SHARED_NETWORK_NAME}

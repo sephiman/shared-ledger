@@ -1,0 +1,16 @@
+spring:
+  flyway:
+    enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+app:
+  registration:
+    mode: invite-only
+  bootstrap:
+    admin-email: "admin@example.com"
+    admin-password: "TestAdminPass123!"
+    household-name: "TestHome"
+    household-currency: "EUR"
+    household-locale: "en"
