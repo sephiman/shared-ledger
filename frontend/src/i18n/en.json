@@ -88,6 +88,7 @@
     "filter_from": "From",
     "filter_to": "To",
     "delete_confirm": "Delete this transaction?",
+    "edit_title": "Edit transaction",
     "chips_title": "Recently used"
   },
   "recurring": {

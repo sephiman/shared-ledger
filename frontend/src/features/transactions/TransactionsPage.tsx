@@ -2,7 +2,12 @@ import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
-import { useDeleteTransaction, useTransactions, type TransactionFilters } from "@/api/transactions";
+import {
+  useDeleteTransaction,
+  useTransactions,
+  type Transaction,
+  type TransactionFilters,
+} from "@/api/transactions";
 import { useCategories } from "@/api/catalog";
 import { Button, Card, CardBody, CardHeader, Input, Label, Select } from "@/components/ui/primitives";
 import { formatMoney } from "@/lib/money";
@@ -10,6 +15,8 @@ import { formatDate } from "@/lib/dates";
 import { categoryIcon } from "@/lib/categoryGroup";
 import { categoryLabel, categoryLabelByCode } from "@/lib/categoryLabel";
 import { QuickAddForm } from "./QuickAddForm";
+
+type PanelMode = { kind: "closed" } | { kind: "create" } | { kind: "edit"; tx: Transaction };
 
 function buildExportQuery(filters: TransactionFilters): string {
   const keys: (keyof TransactionFilters)[] = ["from", "to", "direction", "categoryCode", "categoryGroup"];
@@ -40,10 +47,18 @@ export function TransactionsPage() {
   const household = useActiveHousehold();
   const [searchParams] = useSearchParams();
   const [filters, setFilters] = useState<TransactionFilters>(() => initialFiltersFromUrl(searchParams));
-  const [showAdd, setShowAdd] = useState(false);
+  const [panel, setPanel] = useState<PanelMode>({ kind: "closed" });
   const { data: page, isLoading } = useTransactions(household.householdId, filters);
   const { data: categories = [] } = useCategories(household.householdId);
   const del = useDeleteTransaction(household.householdId);
+
+  const closePanel = () => setPanel({ kind: "closed" });
+  const toggleCreate = () =>
+    setPanel((p) => (p.kind === "create" ? { kind: "closed" } : { kind: "create" }));
+  const startEdit = (tx: Transaction) => {
+    setPanel({ kind: "edit", tx });
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   return (
     <div className="space-y-4">
@@ -60,17 +75,24 @@ export function TransactionsPage() {
           >
             {t("common.export_csv")}
           </a>
-          <Button onClick={() => setShowAdd((s) => !s)}>{showAdd ? t("common.cancel") : t("tx.quick_add")}</Button>
+          <Button onClick={toggleCreate}>
+            {panel.kind === "create" ? t("common.cancel") : t("tx.quick_add")}
+          </Button>
         </div>
       </div>
 
-      {showAdd && (
+      {panel.kind !== "closed" && (
         <Card>
           <CardHeader>
-            <p className="font-medium">{t("tx.new")}</p>
+            <p className="font-medium">{panel.kind === "edit" ? t("tx.edit_title") : t("tx.new")}</p>
           </CardHeader>
           <CardBody>
-            <QuickAddForm householdId={household.householdId} onCreated={() => setShowAdd(false)} />
+            <QuickAddForm
+              householdId={household.householdId}
+              initial={panel.kind === "edit" ? panel.tx : undefined}
+              onSaved={closePanel}
+              onCancel={closePanel}
+            />
           </CardBody>
         </Card>
       )}
@@ -150,14 +172,28 @@ export function TransactionsPage() {
                         {formatMoney(tx.amount, household.currency, i18n.language)}
                       </td>
                       <td className="text-right">
-                        <Button
-                          variant="ghost"
-                          onClick={() => {
-                            if (window.confirm(t("tx.delete_confirm"))) void del.mutate(tx.id);
-                          }}
-                        >
-                          {t("common.delete")}
-                        </Button>
+                        <div className="inline-flex gap-1">
+                          <Button
+                            variant="ghost"
+                            className="px-2"
+                            aria-label={t("common.edit")}
+                            title={t("common.edit")}
+                            onClick={() => startEdit(tx)}
+                          >
+                            <span aria-hidden>✏️</span>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            className="px-2"
+                            aria-label={t("common.delete")}
+                            title={t("common.delete")}
+                            onClick={() => {
+                              if (window.confirm(t("tx.delete_confirm"))) void del.mutate(tx.id);
+                            }}
+                          >
+                            <span aria-hidden>🗑️</span>
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}

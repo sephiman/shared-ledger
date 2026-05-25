@@ -1,23 +1,38 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useCategories } from "@/api/catalog";
-import { useCreateTransaction, useQuickChips, type TransactionInput } from "@/api/transactions";
+import {
+  useCreateTransaction,
+  useQuickChips,
+  useUpdateTransaction,
+  type Transaction,
+  type TransactionInput,
+} from "@/api/transactions";
 import { Button, Chip, FieldError, Input, Label, Select, Textarea } from "@/components/ui/primitives";
 import { isoToday } from "@/lib/dates";
 import { asApiError } from "@/api/client";
 import { categoryIcon } from "@/lib/categoryGroup";
 import { categoryLabel, categoryLabelByCode } from "@/lib/categoryLabel";
 
-export function QuickAddForm({ householdId, onCreated }: { householdId: string; onCreated?: () => void }) {
+interface QuickAddFormProps {
+  householdId: string;
+  initial?: Transaction;
+  onSaved?: () => void;
+  onCancel?: () => void;
+}
+
+export function QuickAddForm({ householdId, initial, onSaved, onCancel }: QuickAddFormProps) {
   const { t, i18n } = useTranslation();
   const { data: categories = [] } = useCategories(householdId);
   const { data: chips = [] } = useQuickChips(householdId);
   const create = useCreateTransaction(householdId);
-  const [direction, setDirection] = useState<"income" | "expense">("expense");
-  const [amount, setAmount] = useState("");
-  const [categoryCode, setCategoryCode] = useState("");
-  const [date, setDate] = useState(isoToday());
-  const [description, setDescription] = useState("");
+  const update = useUpdateTransaction(householdId);
+  const isEdit = !!initial;
+  const [direction, setDirection] = useState<"income" | "expense">(initial?.direction ?? "expense");
+  const [amount, setAmount] = useState(initial?.amount ?? "");
+  const [categoryCode, setCategoryCode] = useState(initial?.categoryCode ?? "");
+  const [date, setDate] = useState(initial?.occurrenceDate ?? isoToday());
+  const [description, setDescription] = useState(initial?.description ?? "");
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<{ date?: string; amount?: string; categoryCode?: string }>({});
 
@@ -25,6 +40,8 @@ export function QuickAddForm({ householdId, onCreated }: { householdId: string; 
     .filter((c) => c.kind === direction)
     .slice()
     .sort((a, b) => categoryLabel(a, t).localeCompare(categoryLabel(b, t), i18n.language, { sensitivity: "base" }));
+
+  const pending = isEdit ? update.isPending : create.isPending;
 
   return (
     <form
@@ -51,10 +68,14 @@ export function QuickAddForm({ householdId, onCreated }: { householdId: string; 
             amount,
             description: description || null,
           };
-          await create.mutateAsync(input);
-          setAmount("");
-          setDescription("");
-          onCreated?.();
+          if (isEdit && initial) {
+            await update.mutateAsync({ id: initial.id, input });
+          } else {
+            await create.mutateAsync(input);
+            setAmount("");
+            setDescription("");
+          }
+          onSaved?.();
         } catch (err) {
           const api = asApiError(err);
           setError(t(`errors.${api.code}`, api.message));
@@ -62,7 +83,7 @@ export function QuickAddForm({ householdId, onCreated }: { householdId: string; 
       }}
       className="space-y-3"
     >
-      {chips.length > 0 && (
+      {!isEdit && chips.length > 0 && (
         <div>
           <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">{t("tx.chips_title")}</p>
           <div className="flex flex-wrap gap-2">
@@ -140,14 +161,21 @@ export function QuickAddForm({ householdId, onCreated }: { householdId: string; 
 
       <div>
         <Label>{t("common.description")}</Label>
-        <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} maxLength={500} />
+        <Textarea value={description ?? ""} onChange={(e) => setDescription(e.target.value)} rows={2} maxLength={500} />
       </div>
 
       <FieldError message={error} />
 
-      <Button type="submit" className="w-full" disabled={create.isPending}>
-        {t("common.save")}
-      </Button>
+      <div className="flex gap-2">
+        <Button type="submit" className="flex-1" disabled={pending}>
+          {t("common.save")}
+        </Button>
+        {isEdit && onCancel && (
+          <Button type="button" variant="ghost" onClick={onCancel} disabled={pending}>
+            {t("common.cancel")}
+          </Button>
+        )}
+      </div>
     </form>
   );
 }

@@ -88,6 +88,7 @@
     "filter_from": "Desde",
     "filter_to": "Hasta",
     "delete_confirm": "¿Borrar esta transacción?",
+    "edit_title": "Editar transacción",
     "chips_title": "Recientes"
   },
   "recurring": {
