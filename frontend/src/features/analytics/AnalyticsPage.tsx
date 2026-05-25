@@ -9,6 +9,7 @@ import { AllocationTab } from "./AllocationTab";
 import { TopMoversTab } from "./TopMoversTab";
 import { RecurringShareTab } from "./RecurringShareTab";
 import { HeatmapTab } from "./HeatmapTab";
+import { CostOfLivingTab } from "./CostOfLivingTab";
 
 type Tab =
   | "yoy"
@@ -18,7 +19,8 @@ type Tab =
   | "allocation"
   | "movers"
   | "recurring"
-  | "heatmap";
+  | "heatmap"
+  | "cost_of_living";
 
 export function AnalyticsPage() {
   const { t } = useTranslation();
@@ -32,6 +34,7 @@ export function AnalyticsPage() {
     { id: "movers", label: t("analytics.top_movers") },
     { id: "recurring", label: t("analytics.recurring_share") },
     { id: "heatmap", label: t("analytics.heatmap") },
+    { id: "cost_of_living", label: t("analytics.cost_of_living") },
   ];
   return (
     <div className="space-y-4">
@@ -58,6 +61,7 @@ export function AnalyticsPage() {
       {tab === "movers" && <TopMoversTab />}
       {tab === "recurring" && <RecurringShareTab />}
       {tab === "heatmap" && <HeatmapTab />}
+      {tab === "cost_of_living" && <CostOfLivingTab />}
     </div>
   );
 }

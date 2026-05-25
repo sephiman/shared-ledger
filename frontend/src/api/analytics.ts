@@ -296,6 +296,35 @@ export function useContributionSeries(householdId: string) {
   });
 }
 
+export interface CostOfLivingCategoryRow {
+  categoryCode: string;
+  groupCode: string | null;
+  monthlyAverage: string;
+}
+
+export interface CostOfLivingResponse {
+  asOfYear: number;
+  asOfMonth: number;
+  monthsAvailable: number;
+  essentialMonthlyAverage: string;
+  nonEssentialMonthlyAverage: string;
+  totalMonthlyAverage: string;
+  essentialPerYear: string;
+  nonEssentialPerYear: string;
+  totalPerYear: string;
+  essentialShare: number;
+  essentialCategories: CostOfLivingCategoryRow[];
+  nonEssentialCategories: CostOfLivingCategoryRow[];
+}
+
+export function useCostOfLiving(householdId: string) {
+  return useQuery({
+    queryKey: ["analytics", householdId, "cost-of-living"],
+    queryFn: async () =>
+      (await apiClient.get<CostOfLivingResponse>(`/households/${householdId}/analytics/cost-of-living`)).data,
+  });
+}
+
 export function useYearsAvailable(householdId: string) {
   return useQuery({
     queryKey: ["analytics", householdId, "years-available"],

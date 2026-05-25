@@ -149,4 +149,15 @@ class AnalyticsController(
     fun yearsAvailable(
         @PathVariable householdId: UUID,
     ): YearsAvailableResponse = service.yearsAvailable(householdId)
+
+    @GetMapping("/cost-of-living")
+    fun costOfLiving(
+        @PathVariable householdId: UUID,
+        @RequestParam(required = false) asOf: String?,
+    ): CostOfLivingResponse {
+        val ym = asOf?.let { YearMonth.parse(it) } ?: YearMonth.now()
+        return metrics.analyticsTimer("cost_of_living").record<CostOfLivingResponse> {
+            service.costOfLiving(householdId, ym)
+        }!!
+    }
 }

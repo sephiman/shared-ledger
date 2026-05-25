@@ -1,9 +1,11 @@
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
 import {
+  useCostOfLiving,
   useDashboardExtras,
   useMonthDashboard,
   useYearDashboard,
+  type CostOfLivingResponse,
   type DashboardExtras,
 } from "@/api/analytics";
 import { Card, CardBody, CardHeader } from "@/components/ui/primitives";
@@ -34,6 +36,7 @@ export function DashboardPage() {
   const month = useMonthDashboard(household.householdId, now.getFullYear(), now.getMonth() + 1);
   const year = useYearDashboard(household.householdId, now.getFullYear());
   const extras = useDashboardExtras(household.householdId);
+  const costOfLiving = useCostOfLiving(household.householdId);
   const { t, i18n } = useTranslation();
 
   if (month.isLoading || !month.data || year.isLoading || !year.data) {
@@ -47,8 +50,8 @@ export function DashboardPage() {
     <div className="space-y-8">
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <SavingsRateTile extras={extras.data} locale={i18n.language} />
-        <FixedCostTile
-          extras={extras.data}
+        <CostOfLivingTile
+          data={costOfLiving.data}
           currency={household.currency}
           locale={i18n.language}
         />
@@ -142,21 +145,21 @@ function SavingsRateTile({
   );
 }
 
-function FixedCostTile({
-  extras,
+function CostOfLivingTile({
+  data,
   currency,
   locale,
 }: {
-  extras: DashboardExtras | undefined;
+  data: CostOfLivingResponse | undefined;
   currency: string;
   locale: string;
 }) {
   const { t } = useTranslation();
-  if (!extras) {
+  if (!data) {
     return (
       <Card>
         <CardHeader>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{t("dashboard.fixed_cost_tile_title")}</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">{t("analytics.cost_of_living")}</p>
         </CardHeader>
         <CardBody>
           <p className="text-gray-500 dark:text-gray-400">{t("common.loading")}</p>
@@ -164,39 +167,36 @@ function FixedCostTile({
       </Card>
     );
   }
-  if (extras.monthsAvailable === 0) {
+  if (data.monthsAvailable === 0) {
     return (
       <Card>
         <CardHeader>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{t("dashboard.fixed_cost_tile_title")}</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">{t("analytics.cost_of_living")}</p>
         </CardHeader>
         <CardBody>
           <p className="text-2xl font-semibold text-gray-400">—</p>
-          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{t("dashboard.fixed_cost_no_data")}</p>
+          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{t("analytics.cost_of_living_no_data")}</p>
         </CardBody>
       </Card>
     );
   }
-  const perDay = formatMoney(extras.fixedRecurring.perDay, currency, locale);
-  const perYear = formatMoney(extras.fixedRecurring.perYear, currency, locale);
   return (
     <Card>
       <CardHeader>
-        <p className="text-sm text-gray-500 dark:text-gray-400">{t("dashboard.fixed_cost_tile_title")}</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">{t("analytics.cost_of_living")}</p>
       </CardHeader>
       <CardBody>
-        <p className="text-2xl font-semibold">
-          {t("dashboard.fixed_cost_per_day", { amount: perDay })}{" · "}
-          {t("dashboard.fixed_cost_per_year", { amount: perYear })}
+        <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+          {t("analytics.essential_monthly")}
+        </p>
+        <p className="text-3xl font-semibold tabular-nums">
+          {formatMoney(Number(data.essentialMonthlyAverage), currency, locale)}
         </p>
         <p
-          className="mt-2 text-xs text-gray-500 dark:text-gray-400"
-          title={t("dashboard.fixed_cost_based_on", { count: extras.monthsAvailable })}
+          className="mt-2 text-sm text-gray-500 dark:text-gray-400 tabular-nums"
+          title={t("analytics.cost_of_living_window", { count: data.monthsAvailable })}
         >
-          {t("dashboard.fixed_cost_with_discretionary", {
-            perDay: formatMoney(extras.fixedAll.perDay, currency, locale),
-            perYear: formatMoney(extras.fixedAll.perYear, currency, locale),
-          })}
+          {t("analytics.total_monthly")}: {formatMoney(Number(data.totalMonthlyAverage), currency, locale)}
         </p>
       </CardBody>
     </Card>

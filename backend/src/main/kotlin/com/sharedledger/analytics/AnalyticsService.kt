@@ -559,6 +559,72 @@ class AnalyticsService(
     }
 
     @Transactional(readOnly = true)
+    fun costOfLiving(householdId: UUID, asOf: YearMonth): CostOfLivingResponse {
+        val from = asOf.minusMonths(11).atDay(1)
+        val to = asOf.atEndOfMonth()
+        val rows = transactions.aggregationRows(householdId, from, to)
+
+        val catMeta = categories.findAll().associate { it.code to (it.essential to it.groupCode) }
+
+        var essentialTotal = BigDecimal.ZERO
+        var nonEssentialTotal = BigDecimal.ZERO
+        val perEssentialCategory = LinkedHashMap<String, BigDecimal>()
+        val perNonEssentialCategory = LinkedHashMap<String, BigDecimal>()
+        for (r in rows) {
+            if (r.direction != Direction.expense) continue
+            val meta = catMeta[r.categoryCode] ?: continue
+            if (meta.first) {
+                essentialTotal += r.amount
+                perEssentialCategory.merge(r.categoryCode, r.amount) { a, b -> a + b }
+            } else {
+                nonEssentialTotal += r.amount
+                perNonEssentialCategory.merge(r.categoryCode, r.amount) { a, b -> a + b }
+            }
+        }
+        val allTotal = essentialTotal + nonEssentialTotal
+
+        val bounds = transactions.dateBounds(householdId)
+        val monthsAvailable = bounds.minDate?.let { firstTx ->
+            val firstYm = YearMonth.from(firstTx)
+            val between = ChronoUnit.MONTHS.between(firstYm, asOf).toInt() + 1
+            between.coerceIn(0, 12)
+        } ?: 0
+        val denom = monthsAvailable.coerceAtLeast(1).toBigDecimal()
+
+        val essentialMonthly = essentialTotal.divide(denom, 2, RoundingMode.HALF_EVEN)
+        val nonEssentialMonthly = nonEssentialTotal.divide(denom, 2, RoundingMode.HALF_EVEN)
+        val totalMonthly = allTotal.divide(denom, 2, RoundingMode.HALF_EVEN)
+        val essentialShare = if (allTotal.signum() > 0)
+            essentialTotal.divide(allTotal, 4, RoundingMode.HALF_EVEN).toDouble() * 100.0
+        else 0.0
+
+        fun rowsFor(source: Map<String, BigDecimal>) = source.entries
+            .map { (code, sum) ->
+                CostOfLivingCategoryRow(
+                    categoryCode = code,
+                    groupCode = catMeta[code]?.second,
+                    monthlyAverage = Money.normalize(sum.divide(denom, 2, RoundingMode.HALF_EVEN)),
+                )
+            }
+            .sortedByDescending { it.monthlyAverage }
+
+        return CostOfLivingResponse(
+            asOfYear = asOf.year,
+            asOfMonth = asOf.monthValue,
+            monthsAvailable = monthsAvailable,
+            essentialMonthlyAverage = Money.normalize(essentialMonthly),
+            nonEssentialMonthlyAverage = Money.normalize(nonEssentialMonthly),
+            totalMonthlyAverage = Money.normalize(totalMonthly),
+            essentialPerYear = Money.normalize(essentialMonthly.multiply(BigDecimal.valueOf(12L))),
+            nonEssentialPerYear = Money.normalize(nonEssentialMonthly.multiply(BigDecimal.valueOf(12L))),
+            totalPerYear = Money.normalize(totalMonthly.multiply(BigDecimal.valueOf(12L))),
+            essentialShare = essentialShare,
+            essentialCategories = rowsFor(perEssentialCategory),
+            nonEssentialCategories = rowsFor(perNonEssentialCategory),
+        )
+    }
+
+    @Transactional(readOnly = true)
     fun yearsAvailable(householdId: UUID): YearsAvailableResponse {
         val bounds = transactions.dateBounds(householdId)
         val first = bounds.minDate ?: return YearsAvailableResponse(emptyList())

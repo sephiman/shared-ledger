@@ -4,7 +4,7 @@
     "tagline": "household finance, plain and durable"
   },
   "nav": {
-    "dashboard": "Dashboard",
+    "dashboard": "Home",
     "transactions": "Transactions",
     "recurring": "Recurring",
     "budgets": "Budgets",
@@ -223,7 +223,17 @@
     "heatmap_direction_income": "Income",
     "view_transactions": "View transactions",
     "select_year": "Year",
-    "select_month": "Month"
+    "select_month": "Month",
+    "cost_of_living": "Cost of living",
+    "cost_of_living_description": "Essential monthly spend compared with total. Essentials are the structural floor of the household budget — costs that cannot be cut without materially changing how the household lives.",
+    "essential_monthly": "Essential / month",
+    "non_essential_monthly": "Non-essential / month",
+    "total_monthly": "Total / month",
+    "essential_share": "Essential is {{percent}}% of total",
+    "cost_of_living_per_category": "By essential category",
+    "cost_of_living_per_category_non_essential": "By non-essential category",
+    "cost_of_living_window": "Trailing 12-month average · {{count}} month(s) of data",
+    "cost_of_living_no_data": "No transactions yet"
   },
   "fire": {
     "title": "FIRE",

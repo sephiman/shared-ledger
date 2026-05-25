@@ -6,6 +6,7 @@ export interface Category {
   kind: "income" | "expense";
   group: string | null;
   sortOrder: number;
+  essential: boolean;
 }
 
 export interface AssetClass {

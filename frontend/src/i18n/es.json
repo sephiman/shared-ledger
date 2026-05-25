@@ -4,7 +4,7 @@
     "tagline": "finanzas del hogar, sencillo y duradero"
   },
   "nav": {
-    "dashboard": "Panel",
+    "dashboard": "Inicio",
     "transactions": "Transacciones",
     "recurring": "Recurrentes",
     "budgets": "Presupuestos",
@@ -223,7 +223,17 @@
     "heatmap_direction_income": "Ingresos",
     "view_transactions": "Ver transacciones",
     "select_year": "Año",
-    "select_month": "Mes"
+    "select_month": "Mes",
+    "cost_of_living": "Coste de vida",
+    "cost_of_living_description": "Gasto mensual esencial frente al total. Los esenciales son el suelo estructural del presupuesto: costes que no se pueden recortar sin cambiar materialmente cómo vive el hogar.",
+    "essential_monthly": "Esencial / mes",
+    "non_essential_monthly": "No esencial / mes",
+    "total_monthly": "Total / mes",
+    "essential_share": "El esencial supone el {{percent}}% del total",
+    "cost_of_living_per_category": "Por categoría esencial",
+    "cost_of_living_per_category_non_essential": "Por categoría no esencial",
+    "cost_of_living_window": "Media de los últimos 12 meses · {{count}} mes(es) con datos",
+    "cost_of_living_no_data": "Aún no hay transacciones"
   },
   "fire": {
     "title": "FIRE",

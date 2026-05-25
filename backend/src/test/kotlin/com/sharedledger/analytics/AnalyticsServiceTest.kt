@@ -137,6 +137,59 @@ class AnalyticsServiceTest @Autowired constructor(
     }
 
     @Test
+    fun `cost of living separates essential from discretionary`() {
+        val (user, household) = seed()
+        val asOf = YearMonth.of(2025, 6)
+        var cursor = asOf.minusMonths(11)
+        while (!cursor.isAfter(asOf)) {
+            addTx(household, user, cursor.atDay(1), Direction.expense, "home.rent", "1000.00")
+            addTx(household, user, cursor.atDay(5), Direction.expense, "groceries.groceries", "300.00")
+            addTx(household, user, cursor.atDay(10), Direction.expense, "outings.restaurants", "200.00")
+            addTx(household, user, cursor.atDay(15), Direction.expense, "shopping.clothing", "100.00")
+            cursor = cursor.plusMonths(1)
+        }
+
+        val r = service.costOfLiving(household.id, asOf)
+        assertThat(r.monthsAvailable).isEqualTo(12)
+        assertThat(r.essentialMonthlyAverage).isEqualByComparingTo("1300.00")
+        assertThat(r.nonEssentialMonthlyAverage).isEqualByComparingTo("300.00")
+        assertThat(r.totalMonthlyAverage).isEqualByComparingTo("1600.00")
+        assertThat(r.essentialPerYear).isEqualByComparingTo("15600.00")
+        assertThat(r.nonEssentialPerYear).isEqualByComparingTo("3600.00")
+        assertThat(r.totalPerYear).isEqualByComparingTo("19200.00")
+        assertThat(r.essentialShare).isEqualTo(81.25)
+        assertThat(r.essentialCategories.map { it.categoryCode }).containsExactly("home.rent", "groceries.groceries")
+        assertThat(r.nonEssentialCategories.map { it.categoryCode }).containsExactly("outings.restaurants", "shopping.clothing")
+    }
+
+    @Test
+    fun `cost of living divides by months available not by twelve`() {
+        val (user, household) = seed()
+        val asOf = YearMonth.of(2025, 3)
+        addTx(household, user, YearMonth.of(2025, 1).atDay(1), Direction.expense, "home.rent", "1000.00")
+        addTx(household, user, YearMonth.of(2025, 2).atDay(1), Direction.expense, "home.rent", "1000.00")
+        addTx(household, user, YearMonth.of(2025, 3).atDay(1), Direction.expense, "home.rent", "1000.00")
+
+        val r = service.costOfLiving(household.id, asOf)
+        assertThat(r.monthsAvailable).isEqualTo(3)
+        assertThat(r.essentialMonthlyAverage).isEqualByComparingTo("1000.00")
+        assertThat(r.totalMonthlyAverage).isEqualByComparingTo("1000.00")
+    }
+
+    @Test
+    fun `cost of living ignores income rows`() {
+        val (user, household) = seed()
+        val asOf = YearMonth.of(2025, 6)
+        addTx(household, user, asOf.atDay(1), Direction.income, "income.salary", "5000.00")
+        addTx(household, user, asOf.atDay(5), Direction.expense, "home.rent", "1000.00")
+
+        val r = service.costOfLiving(household.id, asOf)
+        assertThat(r.essentialMonthlyAverage).isEqualByComparingTo("1000.00")
+        assertThat(r.totalMonthlyAverage).isEqualByComparingTo("1000.00")
+        assertThat(r.essentialShare).isEqualTo(100.0)
+    }
+
+    @Test
     fun `heatmap returns null for empty months and value for filled months`() {
         val (user, household) = seed()
         val ym = YearMonth.now()

@@ -26,6 +26,9 @@ class CategoryEntity(
 
     @Column(name = "active", nullable = false)
     var active: Boolean = true,
+
+    @Column(name = "essential", nullable = false)
+    var essential: Boolean = false,
 )
 
 @Entity
@@ -52,6 +55,7 @@ data class CategoryDto(
     val kind: String,
     val group: String?,
     val sortOrder: Int,
+    val essential: Boolean,
 )
 
 data class AssetClassDto(
@@ -68,7 +72,7 @@ class CatalogController(
     fun categories(): List<CategoryDto> =
         categories.findAllByOrderBySortOrderAsc()
             .filter { it.active }
-            .map { CategoryDto(it.code, it.kind, it.groupCode, it.sortOrder) }
+            .map { CategoryDto(it.code, it.kind, it.groupCode, it.sortOrder, it.kind == "expense" && it.essential) }
 
     @GetMapping("/api/asset-classes")
     fun assetClasses(): List<AssetClassDto> =

@@ -191,3 +191,24 @@ data class ContributionSeriesResponse(
 )
 
 data class YearsAvailableResponse(val years: List<Int>)
+
+data class CostOfLivingCategoryRow(
+    val categoryCode: String,
+    val groupCode: String?,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val monthlyAverage: BigDecimal,
+)
+
+data class CostOfLivingResponse(
+    val asOfYear: Int,
+    val asOfMonth: Int,
+    val monthsAvailable: Int,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val essentialMonthlyAverage: BigDecimal,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val nonEssentialMonthlyAverage: BigDecimal,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val totalMonthlyAverage: BigDecimal,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val essentialPerYear: BigDecimal,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val nonEssentialPerYear: BigDecimal,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val totalPerYear: BigDecimal,
+    val essentialShare: Double,
+    val essentialCategories: List<CostOfLivingCategoryRow>,
+    val nonEssentialCategories: List<CostOfLivingCategoryRow>,
+)
