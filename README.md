@@ -350,7 +350,122 @@ After step 6:
 
 ---
 
-## 9. Local development (no Docker)
+## 9. Preparing CSV files for bulk import
+
+The Transactions, Snapshots, and Movements screens each have an **Import** button that accepts a UTF-8 CSV with a fixed header row. The importer parses the file, shows a preview (rows that would be inserted, skipped as duplicates, or rejected with row-level errors), and only writes after explicit confirmation.
+
+The three feeds capture different things:
+
+- **Transactions** — day-to-day **income and expenses** (salary, rent, groceries, restaurants). This is the operational ledger used for budgets, savings rate, and the year-over-year analytics.
+- **Snapshots** — periodic **net-worth recordings**: how much you currently hold in each asset class and what each liability still owes. This tracks **savings/wealth state** at a point in time.
+- **Movements** — capital **moved into or out of** an asset class, or principal paid down on a liability. This tracks **what gets sent to (or taken from) savings**, separately from market gains.
+
+> **Tip — converting bank statements.** Banks rarely export in the shape these importers need. The fastest path is: download the statement (CSV, OFX, PDF), open ChatGPT, Claude, or any other LLM, paste the file, and ask it to rewrite it into one of the formats below — share the column list and an example row from this section.
+>
+> **Always review the converted file before importing.** Open the CSV in a spreadsheet and spot-check at least the `category_code` column for transactions: LLMs frequently miscategorize merchants (gas stations bucketed as groceries, streaming charges sent to utilities, refunds flipped to expenses). Even with the importer's preview step, mis-categorized rows that pass validation will silently distort your budgets and analytics. The same review applies to `type` / target columns for movements and `kind` / `key` for snapshots.
+
+### Transactions CSV
+
+Header (exact column names, any order): `date,direction,category_code,amount,description,created_at,updated_at`.
+
+| Column | Required | Values |
+| --- | --- | --- |
+| `date` | yes | ISO date, `YYYY-MM-DD`. Must not be more than one year in the future. |
+| `direction` | yes | `income` or `expense`. Must match the category's kind. |
+| `category_code` | yes | Stable category code (see list below). Custom categories use codes of the form `{group}.{slug}` (or `income.{slug}`) as created in *Settings → Custom categories*. |
+| `amount` | yes | Positive decimal with up to two decimals (e.g. `1234.56`). Comma decimal separators are also accepted. |
+| `description` | no | Free text, up to 500 characters. May be empty. |
+| `created_at` | no | ISO-8601 instant (e.g. `2026-01-15T08:30:00Z`). Leave blank to use the current time. |
+| `updated_at` | no | ISO-8601 instant. Leave blank to use the current time. |
+
+Global `category_code` values:
+
+- **Income** (flat): `income.salary`, `income.pension`, `income.reimbursements`, `income.benefits`, `income.financial`, `income.other`, `income.transfers`.
+- **Home**: `home.rent`, `home.mortgage`, `home.utilities`, `home.insurance_fees`, `home.services`, `home.taxes`, `home.repairs`, `home.furniture`, `home.other`.
+- **Transport**: `transport.fuel`, `transport.public`, `transport.airfare`, `transport.car_maintenance`, `transport.parking`, `transport.other`.
+- **Groceries**: `groceries.groceries`.
+- **Shopping**: `shopping.clothing`, `shopping.electronics`, `shopping.gifts`, `shopping.other`.
+- **Outings**: `outings.restaurants`, `outings.travel`, `outings.subscriptions`, `outings.hobbies`, `outings.lottery`.
+- **Financial**: `financial.fees`.
+- **Health**: `health.medical`, `health.pharmacy`.
+- **Personal**: `personal.personal_care`, `personal.education`, `personal.other`.
+
+Rows that match an existing transaction on `(date, direction, category_code, amount, description)` are skipped automatically — re-importing the same file is safe.
+
+Example:
+
+```csv
+date,direction,category_code,amount,description,created_at,updated_at
+2026-01-31,income,income.salary,2850.00,January payroll,,
+2026-02-03,expense,groceries.groceries,42.17,Mercadona,,
+2026-02-05,expense,outings.restaurants,28.50,Sushi,,
+```
+
+### Snapshots CSV
+
+Header (exact column names, any order): `date,note,kind,key,value`.
+
+A snapshot is a group of rows sharing the same `date` (and `note`, if set). Each row carries one asset-class value or one liability balance. **Every asset class and every active liability must appear for each date** — partial snapshots are rejected.
+
+| Column | Required | Values |
+| --- | --- | --- |
+| `date` | yes | ISO date. The grouping key. |
+| `note` | no | Optional note for the snapshot. Must be identical across every row sharing a `date`. |
+| `kind` | yes | `asset` or `liability`. |
+| `key` | yes | For `asset`: one of `cash`, `index_funds`, `etfs`, `stocks`, `crypto`, `pension`. For `liability`: the liability's name as configured in *Settings → Liabilities* (must currently be active). |
+| `value` | yes | Non-negative decimal with up to two decimals; `0` is allowed for an empty class or paid-off liability. |
+
+When a snapshot already exists for one of the imported dates, you pick the policy on the Import dialog: `skip` (keep what's there), `replace` (delete and re-create), or `abort` (refuse the import).
+
+Example (two snapshots, one liability called "Archena mortgage"):
+
+```csv
+date,note,kind,key,value
+2026-01-31,,asset,cash,4200.00
+2026-01-31,,asset,index_funds,18000.00
+2026-01-31,,asset,etfs,9500.00
+2026-01-31,,asset,stocks,2100.00
+2026-01-31,,asset,crypto,300.00
+2026-01-31,,asset,pension,11000.00
+2026-01-31,,liability,Archena mortgage,142300.00
+2026-02-28,Bonus paid in,asset,cash,5100.00
+2026-02-28,Bonus paid in,asset,index_funds,18750.00
+2026-02-28,Bonus paid in,asset,etfs,9600.00
+2026-02-28,Bonus paid in,asset,stocks,2050.00
+2026-02-28,Bonus paid in,asset,crypto,280.00
+2026-02-28,Bonus paid in,asset,pension,11200.00
+2026-02-28,Bonus paid in,liability,Archena mortgage,141950.00
+```
+
+### Movements CSV
+
+Header (exact column names, any order): `date,type,asset_class_code,liability_name,amount,description,created_at`.
+
+| Column | Required | Values |
+| --- | --- | --- |
+| `date` | yes | ISO date. Must not be more than one year in the future. |
+| `type` | yes | `contribution`, `withdrawal`, or `debt_payment`. |
+| `asset_class_code` | conditional | Required when `type` is `contribution` or `withdrawal`; must be empty otherwise. One of `cash`, `index_funds`, `etfs`, `stocks`, `crypto`, `pension`. |
+| `liability_name` | conditional | Required when `type` is `debt_payment`; must be empty otherwise. Must match a liability configured for the household. |
+| `amount` | yes | Positive decimal with up to two decimals. |
+| `description` | no | Free text, up to 500 characters. |
+| `created_at` | no | ISO-8601 instant. Leave blank to use the current time. |
+
+Rows that match an existing movement on `(date, type, target, amount, description)` are skipped automatically.
+
+Example:
+
+```csv
+date,type,asset_class_code,liability_name,amount,description,created_at
+2026-01-05,contribution,etfs,,500.00,DCA — VWCE,
+2026-01-15,contribution,index_funds,,300.00,DCA — world index,
+2026-02-01,debt_payment,,Archena mortgage,650.00,February principal,
+2026-03-10,withdrawal,stocks,,1200.00,Sold AAPL,
+```
+
+---
+
+## 10. Local development (no Docker)
 
 Backend:
 
@@ -379,7 +494,7 @@ cd frontend && npm test
 
 ---
 
-## 10. Project layout
+## 11. Project layout
 
 ```
 shared-ledger/
