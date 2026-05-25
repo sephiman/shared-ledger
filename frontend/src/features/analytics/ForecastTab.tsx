@@ -2,10 +2,12 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
 import { useForecast } from "@/api/analytics";
+import { useCategories } from "@/api/catalog";
 import { Card, CardBody, CardHeader, Label, Select } from "@/components/ui/primitives";
 import { formatMoney } from "@/lib/money";
 import { monthName } from "@/lib/dates";
 import { categoryIcon } from "@/lib/categoryGroup";
+import { categoryLabelByCode } from "@/lib/categoryLabel";
 
 export function ForecastTab() {
   const { t, i18n } = useTranslation();
@@ -13,6 +15,7 @@ export function ForecastTab() {
   const [horizon, setHorizon] = useState(6);
   const [window, setWindow] = useState(3);
   const { data } = useForecast(household.householdId, horizon, window);
+  const { data: categories = [] } = useCategories(household.householdId);
 
   return (
     <Card>
@@ -59,7 +62,7 @@ export function ForecastTab() {
                   <tr key={c.categoryCode} className="border-t border-border">
                     <td className="py-2">
                       <span className="mr-1.5" aria-hidden>{categoryIcon(c.categoryCode)}</span>
-                      {t(`category.${c.categoryCode}`)}
+                      {categoryLabelByCode(c.categoryCode, categories, t)}
                     </td>
                     {c.projection.map((p) => (
                       <td key={`${p.year}-${p.month}`} className={`text-right ${p.source === "recurring" ? "text-primary" : "text-gray-700 dark:text-gray-200"}`}>

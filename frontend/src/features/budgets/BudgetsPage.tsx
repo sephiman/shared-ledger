@@ -7,6 +7,7 @@ import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select } 
 import { formatMoney } from "@/lib/money";
 import { monthName } from "@/lib/dates";
 import { categoryIcon } from "@/lib/categoryGroup";
+import { categoryLabel } from "@/lib/categoryLabel";
 
 export function BudgetsPage() {
   const { t, i18n } = useTranslation();
@@ -17,7 +18,7 @@ export function BudgetsPage() {
   const { data: monthly = [] } = useBudgets(household.householdId, year, month);
   const { data: summary } = useMonthSummary(household.householdId, year, month);
   const { data: annual = [] } = useBudgets(household.householdId, year);
-  const { data: categories = [] } = useCategories();
+  const { data: categories = [] } = useCategories(household.householdId);
   const upsert = useUpsertBudgets(household.householdId);
 
   const expenseCategories = useMemo(
@@ -25,7 +26,7 @@ export function BudgetsPage() {
       categories
         .filter((c) => c.kind === "expense")
         .slice()
-        .sort((a, b) => t(`category.${a.code}`).localeCompare(t(`category.${b.code}`), i18n.language, { sensitivity: "base" })),
+        .sort((a, b) => categoryLabel(a, t).localeCompare(categoryLabel(b, t), i18n.language, { sensitivity: "base" })),
     [categories, t, i18n.language],
   );
   const monthlyByCat = useMemo(() => new Map(monthly.map((b) => [b.categoryCode, b])), [monthly]);
@@ -131,7 +132,7 @@ export function BudgetsPage() {
                     <tr key={c.code} className="border-t border-border">
                       <td className="py-2">
                         <span className="mr-1.5" aria-hidden>{categoryIcon(c.code)}</span>
-                        {t(`category.${c.code}`)}
+                        {categoryLabel(c, t)}
                       </td>
                       <td className="text-right">
                         {isEditingHere ? (
@@ -197,7 +198,7 @@ export function BudgetsPage() {
                     <tr key={c.code} className="border-t border-border">
                       <td className="py-2">
                         <span className="mr-1.5" aria-hidden>{categoryIcon(c.code)}</span>
-                        {t(`category.${c.code}`)}
+                        {categoryLabel(c, t)}
                       </td>
                       <td className="text-right">
                         {isEditingHere ? (

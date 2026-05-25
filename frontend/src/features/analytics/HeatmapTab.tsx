@@ -3,10 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
 import { useHeatmap, type HeatmapCategoryRow, type HeatmapMonth } from "@/api/analytics";
+import { useCategories } from "@/api/catalog";
 import { Card, CardBody, CardHeader, Label, Select } from "@/components/ui/primitives";
 import { formatMoney } from "@/lib/money";
 import { monthName } from "@/lib/dates";
 import { categoryIcon, groupIcon } from "@/lib/categoryGroup";
+import { categoryLabelByCode } from "@/lib/categoryLabel";
+import type { Category } from "@/api/catalog";
 
 type Range = "12" | "24" | "36" | "48" | "all";
 type Direction = "expense" | "income";
@@ -32,6 +35,7 @@ export function HeatmapTab() {
 
   const months = range === "all" ? 9999 : Number(range);
   const { data, isLoading } = useHeatmap(household.householdId, months, direction);
+  const { data: categories = [] } = useCategories(household.householdId);
 
   const baseColor = direction === "expense" ? EXPENSE_HUE : INCOME_HUE;
 
@@ -69,6 +73,7 @@ export function HeatmapTab() {
             <HeatmapGrid
               months={data.months}
               rows={data.categories}
+              categories={categories}
               currency={household.currency}
               locale={i18n.language}
               baseColor={baseColor}
@@ -105,6 +110,7 @@ function hexWithAlpha(hex: string, alpha: number): string {
 function HeatmapGrid({
   months,
   rows,
+  categories,
   currency,
   locale,
   baseColor,
@@ -112,6 +118,7 @@ function HeatmapGrid({
 }: {
   months: HeatmapMonth[];
   rows: HeatmapCategoryRow[];
+  categories: Category[];
   currency: string;
   locale: string;
   baseColor: string;
@@ -170,6 +177,7 @@ function HeatmapGrid({
               items={group.items}
               rowMax={rowMax}
               baseColor={baseColor}
+              categories={categories}
               currency={currency}
               locale={locale}
               onCellClick={onCellClick}
@@ -188,6 +196,7 @@ function HeatmapGroup({
   items,
   rowMax,
   baseColor,
+  categories,
   currency,
   locale,
   onCellClick,
@@ -198,6 +207,7 @@ function HeatmapGroup({
   items: { idx: number; row: HeatmapCategoryRow }[];
   rowMax: number[];
   baseColor: string;
+  categories: Category[];
   currency: string;
   locale: string;
   onCellClick: (categoryCode: string, month: HeatmapMonth) => void;
@@ -224,6 +234,7 @@ function HeatmapGroup({
             max={max}
             months={months}
             baseColor={baseColor}
+            categories={categories}
             currency={currency}
             locale={locale}
             onCellClick={onCellClick}
@@ -239,6 +250,7 @@ function RowCells({
   max,
   months,
   baseColor,
+  categories,
   currency,
   locale,
   onCellClick,
@@ -247,16 +259,18 @@ function RowCells({
   max: number;
   months: HeatmapMonth[];
   baseColor: string;
+  categories: Category[];
   currency: string;
   locale: string;
   onCellClick: (categoryCode: string, month: HeatmapMonth) => void;
 }) {
   const { t } = useTranslation();
+  const rowLabel = categoryLabelByCode(row.categoryCode, categories, t);
   return (
     <>
       <div className="sticky left-0 z-10 truncate bg-white px-2 py-1 dark:bg-gray-800">
         <span className="mr-1.5" aria-hidden>{categoryIcon(row.categoryCode)}</span>
-        {t(`category.${row.categoryCode}`)}
+        {rowLabel}
       </div>
       {row.values.map((v, colIdx) => {
         const m = months[colIdx];
@@ -274,7 +288,7 @@ function RowCells({
         const num = Number(v);
         const intensity = max > 0 ? Math.max(0.1, num / max) : 0;
         const bg = hexWithAlpha(baseColor, intensity);
-        const label = `${t(`category.${row.categoryCode}`)} · ${monthName(m.month, locale, "short")} ${m.year} · ${formatMoney(num, currency, locale)}`;
+        const label = `${rowLabel} · ${monthName(m.month, locale, "short")} ${m.year} · ${formatMoney(num, currency, locale)}`;
         return (
           <button
             key={colIdx}

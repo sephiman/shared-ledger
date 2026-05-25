@@ -1,6 +1,6 @@
 package com.sharedledger.budget
 
-import com.sharedledger.catalog.CategoryRepository
+import com.sharedledger.catalog.CategoryService
 import com.sharedledger.common.Money
 import com.sharedledger.common.errors.AppException
 import com.sharedledger.identity.user.User
@@ -18,14 +18,15 @@ import java.util.UUID
 class BudgetService(
     private val budgets: BudgetRepository,
     private val transactions: TransactionRepository,
-    private val categories: CategoryRepository,
+    private val categoryService: CategoryService,
 ) {
 
     @Transactional
     fun upsert(householdId: UUID, request: BudgetUpsertRequest, by: User): List<BudgetDto> {
         val result = mutableListOf<Budget>()
         for (item in request.items) {
-            val category = categories.findById(item.categoryCode).orElseThrow { AppException.notFound("CATEGORY_NOT_FOUND") }
+            val category = categoryService.find(householdId, item.categoryCode)
+                ?: throw AppException.notFound("CATEGORY_NOT_FOUND")
             if (category.kind != "expense") throw AppException.badRequest("BUDGET_REQUIRES_EXPENSE_CATEGORY")
 
             val existing = if (item.month != null) {

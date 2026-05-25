@@ -1,6 +1,6 @@
 package com.sharedledger.transaction
 
-import com.sharedledger.catalog.CategoryRepository
+import com.sharedledger.catalog.CategoryService
 import com.sharedledger.common.Csv
 import com.sharedledger.common.CsvReader
 import com.sharedledger.common.Money
@@ -28,7 +28,7 @@ import java.util.UUID
 @Service
 class TransactionImportService(
     private val repository: TransactionRepository,
-    private val categories: CategoryRepository,
+    private val categoryService: CategoryService,
     private val metrics: AppMetrics,
 ) {
 
@@ -125,7 +125,7 @@ class TransactionImportService(
             )
         }
 
-        val catalog = categories.findAll().associateBy { it.code }
+        val catalog = categoryService.listForHousehold(householdId).associateBy { it.code }
         val errors = mutableListOf<RowError>()
         val validRows = mutableListOf<ParsedRow>()
         var sumIncome = BigDecimal.ZERO
@@ -208,7 +208,7 @@ class TransactionImportService(
                 .mapTo(mutableSetOf()) { dedupKey(it.occurrenceDate, it.direction, it.categoryCode, it.amount, it.description) }
         } else mutableSetOf()
 
-        val categoryGroups = catalog.mapValues { it.value.groupCode ?: "ungrouped" }
+        val categoryGroups = catalog.mapValues { it.value.group ?: "ungrouped" }
 
         return ParsedFile(
             headers = parsed.headers,

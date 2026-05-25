@@ -2,16 +2,19 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
 import { useYearOverYear } from "@/api/analytics";
+import { useCategories } from "@/api/catalog";
 import { Card, CardBody, CardHeader, Label, Select } from "@/components/ui/primitives";
 import { formatMoney } from "@/lib/money";
 import { monthName } from "@/lib/dates";
 import { categoryIcon } from "@/lib/categoryGroup";
+import { categoryLabelByCode } from "@/lib/categoryLabel";
 
 export function YearOverYearTab() {
   const { t, i18n } = useTranslation();
   const household = useActiveHousehold();
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const { data } = useYearOverYear(household.householdId, month, 5);
+  const { data: categories = [] } = useCategories(household.householdId);
 
   return (
     <Card>
@@ -67,7 +70,7 @@ export function YearOverYearTab() {
                 <tr key={c.categoryCode} className="border-t border-border">
                   <td className="py-2">
                     <span className="mr-1.5" aria-hidden>{categoryIcon(c.categoryCode)}</span>
-                    {t(`category.${c.categoryCode}`)}
+                    {categoryLabelByCode(c.categoryCode, categories, t)}
                   </td>
                   {data.years.map((y) => (
                     <td key={y} className="text-right text-gray-600 dark:text-gray-300">{formatMoney(c.perYear[String(y)] ?? "0", household.currency, i18n.language)}</td>

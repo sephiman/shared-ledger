@@ -1,6 +1,6 @@
 package com.sharedledger.transaction
 
-import com.sharedledger.catalog.CategoryRepository
+import com.sharedledger.catalog.CategoryService
 import com.sharedledger.common.Csv
 import com.sharedledger.common.Money
 import com.sharedledger.common.PageResponse
@@ -19,14 +19,13 @@ import java.util.UUID
 @Service
 class TransactionService(
     private val repository: TransactionRepository,
-    private val categories: CategoryRepository,
+    private val categoryService: CategoryService,
     private val metrics: AppMetrics,
 ) {
 
     @Transactional
     fun create(householdId: UUID, request: TransactionRequest, by: User): Transaction {
-        val category = categories.findById(request.categoryCode).orElseThrow { AppException.notFound("CATEGORY_NOT_FOUND") }
-        if (category.kind != request.direction.name) throw AppException.badRequest("CATEGORY_DIRECTION_MISMATCH")
+        val category = categoryService.requireForDirection(householdId, request.categoryCode, request.direction.name)
         val tx = Transaction(
             householdId = householdId,
             occurrenceDate = request.occurrenceDate,
@@ -38,15 +37,14 @@ class TransactionService(
             updatedByUserId = by.id,
         )
         repository.save(tx)
-        metrics.transactionCreated(request.direction.name, category.groupCode ?: "ungrouped")
+        metrics.transactionCreated(request.direction.name, category.group ?: "ungrouped")
         return tx
     }
 
     @Transactional
     fun update(householdId: UUID, id: UUID, request: TransactionRequest, by: User): Transaction {
         val tx = loadOwn(householdId, id)
-        val category = categories.findById(request.categoryCode).orElseThrow { AppException.notFound("CATEGORY_NOT_FOUND") }
-        if (category.kind != request.direction.name) throw AppException.badRequest("CATEGORY_DIRECTION_MISMATCH")
+        categoryService.requireForDirection(householdId, request.categoryCode, request.direction.name)
         tx.occurrenceDate = request.occurrenceDate
         tx.direction = request.direction
         tx.categoryCode = request.categoryCode

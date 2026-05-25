@@ -15,6 +15,7 @@ import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select, T
 import { formatDate, isoToday, monthName, weekdayName } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { categoryIcon } from "@/lib/categoryGroup";
+import { categoryLabel, categoryLabelByCode } from "@/lib/categoryLabel";
 
 function defaultInput(): RecurringInput {
   // Defaults match today's date so a freshly-created template fires today
@@ -41,7 +42,7 @@ export function RecurringPage() {
   const { t, i18n } = useTranslation();
   const household = useActiveHousehold();
   const { data: templates = [], isLoading } = useRecurringTemplates(household.householdId);
-  const { data: categories = [] } = useCategories();
+  const { data: categories = [] } = useCategories(household.householdId);
   const create = useCreateRecurring(household.householdId);
   const update = useUpdateRecurring(household.householdId);
   const del = useDeleteRecurring(household.householdId);
@@ -146,10 +147,10 @@ export function RecurringPage() {
                   {categories
                     .filter((c) => c.kind === draft.direction)
                     .slice()
-                    .sort((a, b) => t(`category.${a.code}`).localeCompare(t(`category.${b.code}`), i18n.language, { sensitivity: "base" }))
+                    .sort((a, b) => categoryLabel(a, t).localeCompare(categoryLabel(b, t), i18n.language, { sensitivity: "base" }))
                     .map((c) => (
                       <option key={c.code} value={c.code}>
-                        {categoryIcon(c.code)} {t(`category.${c.code}`)}
+                        {categoryIcon(c.code)} {categoryLabel(c, t)}
                       </option>
                     ))}
                 </Select>
@@ -263,7 +264,7 @@ export function RecurringPage() {
                     <tr key={tpl.id} className="border-t border-border">
                       <td className="py-2">
                         <span className="mr-1.5" aria-hidden>{categoryIcon(tpl.categoryCode)}</span>
-                        {t(`category.${tpl.categoryCode}`)}
+                        {categoryLabelByCode(tpl.categoryCode, categories, t)}
                       </td>
                       <td>{t(`recurring.${tpl.cadence}`)}</td>
                       <td className="text-right">{formatMoney(tpl.amount, household.currency, i18n.language)}</td>

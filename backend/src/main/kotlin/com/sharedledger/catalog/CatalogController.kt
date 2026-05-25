@@ -6,7 +6,9 @@ import jakarta.persistence.Id
 import jakarta.persistence.Table
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RestController
+import java.util.UUID
 
 @Entity
 @Table(name = "categories")
@@ -56,6 +58,8 @@ data class CategoryDto(
     val group: String?,
     val sortOrder: Int,
     val essential: Boolean,
+    val name: String,
+    val custom: Boolean,
 )
 
 data class AssetClassDto(
@@ -65,16 +69,24 @@ data class AssetClassDto(
 
 @RestController
 class CatalogController(
-    private val categories: CategoryRepository,
+    private val categoryService: CategoryService,
     private val assetClasses: AssetClassRepository,
 ) {
-    @GetMapping("/api/categories")
-    fun categories(): List<CategoryDto> =
-        categories.findAllByOrderBySortOrderAsc()
-            .filter { it.active }
-            .map { CategoryDto(it.code, it.kind, it.groupCode, it.sortOrder, it.kind == "expense" && it.essential) }
+    @GetMapping("/api/households/{householdId}/categories")
+    fun categories(@PathVariable householdId: UUID): List<CategoryDto> =
+        categoryService.listForHousehold(householdId).map { it.toDto() }
 
     @GetMapping("/api/asset-classes")
     fun assetClasses(): List<AssetClassDto> =
         assetClasses.findAllByOrderBySortOrderAsc().map { AssetClassDto(it.code, it.sortOrder) }
+
+    private fun CategoryView.toDto() = CategoryDto(
+        code = code,
+        kind = kind,
+        group = group,
+        sortOrder = sortOrder,
+        essential = essential,
+        name = name,
+        custom = custom,
+    )
 }

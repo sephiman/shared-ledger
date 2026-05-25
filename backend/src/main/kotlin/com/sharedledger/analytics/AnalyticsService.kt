@@ -1,6 +1,6 @@
 package com.sharedledger.analytics
 
-import com.sharedledger.catalog.CategoryRepository
+import com.sharedledger.catalog.CategoryService
 import com.sharedledger.common.Money
 import com.sharedledger.networth.movement.MovementRepository
 import com.sharedledger.networth.movement.MovementType
@@ -29,7 +29,7 @@ private fun savingsRate(income: BigDecimal, expenses: BigDecimal): Double =
 @Service
 class AnalyticsService(
     private val transactions: TransactionRepository,
-    private val categories: CategoryRepository,
+    private val categoryService: CategoryService,
     private val recurring: RecurringTemplateRepository,
     private val snapshots: SnapshotRepository,
     private val movements: MovementRepository,
@@ -45,7 +45,7 @@ class AnalyticsService(
         val savingsRate = if (income.signum() > 0) {
             savings.divide(income, 4, RoundingMode.HALF_EVEN).toDouble() * 100.0
         } else 0.0
-        val catByCode = categories.findAll().associate { it.code to (it.groupCode ?: "ungrouped") }
+        val catByCode = categoryService.listForHousehold(householdId).associate { it.code to (it.group ?: "ungrouped") }
         val byGroup = tx.filter { it.direction == Direction.expense }
             .groupBy { catByCode[it.categoryCode] ?: "ungrouped" }
             .map { (g, list) -> GroupTotal(g, Money.normalize(list.sumOf { it.amount })) }
@@ -64,7 +64,7 @@ class AnalyticsService(
         val savingsRate = if (income.signum() > 0) {
             savings.divide(income, 4, RoundingMode.HALF_EVEN).toDouble() * 100.0
         } else 0.0
-        val catByCode = categories.findAll().associate { it.code to (it.groupCode ?: "ungrouped") }
+        val catByCode = categoryService.listForHousehold(householdId).associate { it.code to (it.group ?: "ungrouped") }
         val byGroup = tx.filter { it.direction == Direction.expense }
             .groupBy { catByCode[it.categoryCode] ?: "ungrouped" }
             .map { (g, list) -> GroupTotal(g, Money.normalize(list.sumOf { it.amount })) }
@@ -310,7 +310,7 @@ class AnalyticsService(
             LocalDate.of(year, 1, 1) to LocalDate.of(year, 12, 31)
         }
         val rows = transactions.aggregationRows(householdId, from, to)
-        val catGroup = categories.findAll().associate { it.code to (it.groupCode ?: "ungrouped") }
+        val catGroup = categoryService.listForHousehold(householdId).associate { it.code to (it.group ?: "ungrouped") }
 
         var income = BigDecimal.ZERO
         var expenses = BigDecimal.ZERO
@@ -356,7 +356,7 @@ class AnalyticsService(
         val rangeStart = baselineMonths.min().atDay(1)
         val rangeEnd = period.atEndOfMonth()
         val rows = transactions.aggregationRows(householdId, rangeStart, rangeEnd)
-        val catGroup = categories.findAll().associate { it.code to it.groupCode }
+        val catGroup = categoryService.listForHousehold(householdId).associate { it.code to it.group }
 
         val periodTotals = LinkedHashMap<String, BigDecimal>()
         val baselineTotals = LinkedHashMap<String, BigDecimal>()
@@ -492,9 +492,9 @@ class AnalyticsService(
         }
         val monthIndex = monthList.withIndex().associate { (i, ym) -> ym.key() to i }
 
-        val allCategories = categories.findAll()
-            .filter { it.active && it.kind == direction.name }
-            .sortedWith(compareBy({ it.groupCode ?: "" }, { it.sortOrder }, { it.code }))
+        val allCategories = categoryService.listForHousehold(householdId)
+            .filter { it.kind == direction.name }
+            .sortedWith(compareBy({ it.group ?: "" }, { it.sortOrder }, { it.code }))
 
         val cells: MutableMap<String, Array<BigDecimal?>> = LinkedHashMap()
         for (cat in allCategories) {
@@ -512,7 +512,7 @@ class AnalyticsService(
         val categoryRows = allCategories.map { cat ->
             HeatmapCategoryRow(
                 categoryCode = cat.code,
-                groupCode = cat.groupCode,
+                groupCode = cat.group,
                 values = cells[cat.code]!!.map { v -> v?.let { Money.normalize(it) } },
             )
         }
@@ -564,7 +564,7 @@ class AnalyticsService(
         val to = asOf.atEndOfMonth()
         val rows = transactions.aggregationRows(householdId, from, to)
 
-        val catMeta = categories.findAll().associate { it.code to (it.essential to it.groupCode) }
+        val catMeta = categoryService.listForHousehold(householdId).associate { it.code to (it.essential to it.group) }
 
         var essentialTotal = BigDecimal.ZERO
         var nonEssentialTotal = BigDecimal.ZERO

@@ -8,6 +8,7 @@ import { Button, Card, CardBody, CardHeader, Input, Label, Select } from "@/comp
 import { formatMoney } from "@/lib/money";
 import { formatDate } from "@/lib/dates";
 import { categoryIcon } from "@/lib/categoryGroup";
+import { categoryLabel, categoryLabelByCode } from "@/lib/categoryLabel";
 import { QuickAddForm } from "./QuickAddForm";
 
 function buildExportQuery(filters: TransactionFilters): string {
@@ -41,7 +42,7 @@ export function TransactionsPage() {
   const [filters, setFilters] = useState<TransactionFilters>(() => initialFiltersFromUrl(searchParams));
   const [showAdd, setShowAdd] = useState(false);
   const { data: page, isLoading } = useTransactions(household.householdId, filters);
-  const { data: categories = [] } = useCategories();
+  const { data: categories = [] } = useCategories(household.householdId);
   const del = useDeleteTransaction(household.householdId);
 
   return (
@@ -108,10 +109,10 @@ export function TransactionsPage() {
                 <option value="">{t("common.all")}</option>
                 {categories
                   .slice()
-                  .sort((a, b) => t(`category.${a.code}`).localeCompare(t(`category.${b.code}`), i18n.language, { sensitivity: "base" }))
+                  .sort((a, b) => categoryLabel(a, t).localeCompare(categoryLabel(b, t), i18n.language, { sensitivity: "base" }))
                   .map((c) => (
                     <option key={c.code} value={c.code}>
-                      {categoryIcon(c.code)} {t(`category.${c.code}`)}
+                      {categoryIcon(c.code)} {categoryLabel(c, t)}
                     </option>
                   ))}
               </Select>
@@ -141,7 +142,7 @@ export function TransactionsPage() {
                       <td className="py-2">{formatDate(tx.occurrenceDate, i18n.language)}</td>
                       <td>
                         <span className="mr-1.5" aria-hidden>{categoryIcon(tx.categoryCode)}</span>
-                        {t(`category.${tx.categoryCode}`)}
+                        {categoryLabelByCode(tx.categoryCode, categories, t)}
                       </td>
                       <td className="text-gray-600 dark:text-gray-300">{tx.description ?? t("tx.no_description")}</td>
                       <td className={`text-right font-medium ${tx.direction === "income" ? "text-green-600 dark:text-green-400" : "text-gray-900 dark:text-gray-100"}`}>

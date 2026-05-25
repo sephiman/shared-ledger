@@ -11,6 +11,7 @@ import com.sharedledger.networth.movement.MovementRequest
 import com.sharedledger.networth.movement.MovementService
 import com.sharedledger.networth.movement.MovementType
 import com.sharedledger.networth.snapshot.AssetValueInput
+import com.sharedledger.networth.snapshot.LiabilityBalanceInput
 import com.sharedledger.networth.snapshot.SnapshotRequest
 import com.sharedledger.networth.snapshot.SnapshotService
 import com.sharedledger.recurring.Cadence
@@ -210,7 +211,7 @@ class AnalyticsServiceTest @Autowired constructor(
         snapshots.create(household.id, SnapshotRequest(
             snapshotDate = LocalDate.of(2025, 1, 31),
             note = null,
-            assets = listOf(AssetValueInput("cash", BigDecimal("100.00"))),
+            assets = fullAssetSet("cash" to "100.00"),
             liabilities = emptyList(),
             confirmLargeChanges = false,
         ), user)
@@ -225,7 +226,7 @@ class AnalyticsServiceTest @Autowired constructor(
         snapshots.create(household.id, SnapshotRequest(
             snapshotDate = LocalDate.of(2025, 1, 31),
             note = null,
-            assets = listOf(AssetValueInput("cash", BigDecimal("1000.00"))),
+            assets = fullAssetSet("cash" to "1000.00"),
             liabilities = emptyList(),
             confirmLargeChanges = false,
         ), user)
@@ -255,9 +256,9 @@ class AnalyticsServiceTest @Autowired constructor(
         snapshots.create(household.id, SnapshotRequest(
             snapshotDate = LocalDate.of(2025, 2, 28),
             note = null,
-            assets = listOf(AssetValueInput("cash", BigDecimal("500.00")), AssetValueInput("etfs", BigDecimal("550.00"))),
-            liabilities = emptyList(),
-            confirmLargeChanges = false,
+            assets = fullAssetSet("cash" to "500.00", "etfs" to "550.00"),
+            liabilities = listOf(LiabilityBalanceInput(liability.id, BigDecimal("0.00"))),
+            confirmLargeChanges = true,
         ), user)
 
         val r = service.contributionSeries(household.id)
@@ -295,5 +296,17 @@ class AnalyticsServiceTest @Autowired constructor(
         val user = users.save(User(email = "an${System.nanoTime()}@example.com", passwordHash = "x", locale = "en"))
         val household = households.save(Household(name = "H", currency = "EUR", defaultLocale = "en"))
         return user to household
+    }
+
+    /**
+     * SnapshotService.create rejects a request that omits any asset class from the catalog,
+     * so tests must include all six (cash, index_funds, etfs, stocks, crypto, pension).
+     * Pass the codes/values that matter for the test; the rest default to 0.
+     */
+    private fun fullAssetSet(vararg values: Pair<String, String>): List<AssetValueInput> {
+        val overrides = values.toMap()
+        return listOf("cash", "index_funds", "etfs", "stocks", "crypto", "pension").map { code ->
+            AssetValueInput(code, BigDecimal(overrides[code] ?: "0.00"))
+        }
     }
 }

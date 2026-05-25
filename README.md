@@ -39,11 +39,11 @@ Postgres is **not** part of this compose file. It runs externally on a Docker ne
 - **Creating a household**: any authenticated user can create a new household from the header dropdown or from *Settings → Households*. The creator becomes its `owner`.
 - **Deleting a household** (owner only, hard delete): permanently removes the household and every record cascaded from it (transactions, snapshots, movements, budgets, recurring templates, FIRE settings, invitations, memberships). Confirmation requires typing `delete`. The operation is **refused with `HOUSEHOLD_IS_DEFAULT`** if any user — yourself or anyone else — has it set as their default; pick a different default first, then delete.
 
-### Categories (fixed, seeded)
+### Categories
 
-Income (flat list, no group): `Salary`, `Pension`, `Reimbursements`, `Benefits`, `Financial income`, `Other income`, `Transfers`.
+Two tiers: a global, seeded catalog shared by every household, plus per-household **custom categories** managed by the owner.
 
-Expense categories grouped by area:
+**Global catalog (seeded, immutable).** Income (flat list, no group): `Salary`, `Pension`, `Reimbursements`, `Benefits`, `Financial income`, `Other income`, `Transfers`. Expense categories grouped by area:
 
 - **Home** — Rent, Mortgage, Utilities, Insurance & fees, Services, Taxes, Repairs, Furniture, Other.
 - **Transport** — Fuel, Public transport, Airfare, Car maintenance, Parking, Other.
@@ -54,7 +54,17 @@ Expense categories grouped by area:
 - **Health** — Medical, Pharmacy.
 - **Personal** — Personal care, Education, Other.
 
-Categories have stable codes used in the API and database. Display labels live in the frontend translation files. Adding a language never requires a backend change. Adding categories is a Flyway migration; there is no UI for category management.
+Global categories have stable codes used in the API and database. Display labels live in the frontend translation files. Adding a language never requires a backend change. Changing the global catalog is a Flyway migration.
+
+**Custom categories (per household, owner-managed).** Owners can extend their household's catalog from *Settings → Custom categories*. Once created, a custom category behaves identically to a global one — it appears in the transaction picker, in budgets, in recurring templates, and in analytics (including the essential / discretionary split).
+
+- An expense custom must belong to one of the eight global expense groups; income customs are flat, like the global income.* set. The group dictates the icon — customs don't define their own.
+- The owner types a free-text name; the server derives a stable code as `{group}.{slug}` (or `income.{slug}`), where the slug is the name normalized to lowercase ASCII with underscores. Uniqueness is enforced per household, and the code must not collide with any global category.
+- The owner picks whether the category counts as essential at creation time (defaults to off). Essential customs roll into the cost-of-living essential breakdown alongside essential globals.
+- Customs are **private to the household** that created them; the API never returns one household's customs to another.
+- Regular members see custom categories and can assign them to transactions, but cannot create, edit, or delete them.
+- Edits cover renaming, toggling essential, and moving an expense custom between groups. The internal code is fixed at creation and never changes, so existing transactions, budgets, and recurring templates keep working across renames and group moves.
+- **Deleting a custom is a hard delete with cascade.** The category row and every transaction, budget, and recurring template referencing it are permanently removed in one transaction. The UI requires the owner to type `delete` to confirm, regardless of how many rows would be affected. Deleting the household itself cascades the same way.
 
 Investment, debt-payment and similar capital flows are intentionally NOT categories — they're handled as **net worth movements** (see below).
 
@@ -63,7 +73,7 @@ Investment, debt-payment and similar capital flows are intentionally NOT categor
 The day-to-day workflow. The operator and partner record real income and expenses as they happen, often from a phone.
 
 - Fields: occurrence date, amount (positive), direction (income or expense), category, optional description, who created it, who last updated it.
-- Direction must match the category's kind (enforced by a database trigger + application check).
+- Direction must match the category's kind, enforced in the catalog service for both global and custom categories.
 - Exact decimal arithmetic with two decimals end to end. No binary floats anywhere in the money path.
 - Soft delete: deleting marks the row removed but preserves it. Lists and aggregations ignore deleted rows by default.
 - List view supports filtering by date range, direction, category and category group, with pagination and sorting.
@@ -177,6 +187,7 @@ Projection output:
 - Change password.
 - **Households**: list every household the user belongs to, mark one as default, switch the active household, create a new household, or hard-delete an owned household (subject to the default-household restriction described above).
 - Household name, currency and default locale (owners only).
+- Custom categories: create, rename, change essential flag, move between groups, or hard-delete with cascade (owners only). Members see the list read-only.
 - Liabilities management: name + active flag (full CRUD).
 - Members & invitations: issue and revoke invitations, see pending ones (owners only).
 - FIRE settings (owners only).

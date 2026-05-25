@@ -1,6 +1,6 @@
 package com.sharedledger.recurring
 
-import com.sharedledger.catalog.CategoryRepository
+import com.sharedledger.catalog.CategoryService
 import com.sharedledger.common.Money
 import com.sharedledger.common.errors.AppException
 import com.sharedledger.identity.user.User
@@ -16,7 +16,7 @@ import java.util.UUID
 @Service
 class RecurringService(
     private val repository: RecurringTemplateRepository,
-    private val categories: CategoryRepository,
+    private val categoryService: CategoryService,
     private val transactions: TransactionRepository,
     private val metrics: AppMetrics,
 ) {
@@ -24,8 +24,7 @@ class RecurringService(
     @Transactional
     fun create(householdId: UUID, request: RecurringTemplateRequest, by: User): RecurringTemplate {
         validate(request)
-        val category = categories.findById(request.categoryCode).orElseThrow { AppException.notFound("CATEGORY_NOT_FOUND") }
-        if (category.kind != request.direction.name) throw AppException.badRequest("CATEGORY_DIRECTION_MISMATCH")
+        categoryService.requireForDirection(householdId, request.categoryCode, request.direction.name)
         val template = RecurringTemplate(
             householdId = householdId,
             direction = request.direction,
@@ -50,8 +49,7 @@ class RecurringService(
     fun update(householdId: UUID, id: UUID, request: RecurringTemplateRequest, by: User): RecurringTemplate {
         validate(request)
         val template = loadOwn(householdId, id)
-        val category = categories.findById(request.categoryCode).orElseThrow { AppException.notFound("CATEGORY_NOT_FOUND") }
-        if (category.kind != request.direction.name) throw AppException.badRequest("CATEGORY_DIRECTION_MISMATCH")
+        categoryService.requireForDirection(householdId, request.categoryCode, request.direction.name)
         template.direction = request.direction
         template.categoryCode = request.categoryCode
         template.amount = Money.normalize(request.amount)
@@ -108,8 +106,8 @@ class RecurringService(
             else RecurringDateMath.occurrencesInRange(template, from, cadenceCap)
         val datesToFire = (cadenceDates + today).toSortedSet()
 
-        val category = categories.findById(template.categoryCode)
-            .orElseThrow { AppException.notFound("CATEGORY_NOT_FOUND") }
+        val category = categoryService.find(template.householdId, template.categoryCode)
+            ?: throw AppException.notFound("CATEGORY_NOT_FOUND")
 
         var created = 0
         for (date in datesToFire) {
@@ -127,7 +125,7 @@ class RecurringService(
             )
             transactions.save(tx)
             metrics.recurringMaterialized(template.id.toString())
-            metrics.transactionCreated(template.direction.name, category.groupCode ?: "ungrouped")
+            metrics.transactionCreated(template.direction.name, category.group ?: "ungrouped")
             created++
         }
 

@@ -85,13 +85,7 @@ class HouseholdDataWipePersistenceTest @Autowired constructor(
         snapshots.save(otherSnapshot)
         val otherMv = movements.save(sampleMovement(other.id, user.id))
 
-        em.flush()
-        em.clear()
-
         service.wipe(target.id, user.id)
-
-        em.flush()
-        em.clear()
 
         // Target household: everything gone (incl. soft-deleted tx2 — bypassing @SQLRestriction via native count).
         assertThat(countRows("transactions", target.id)).isZero

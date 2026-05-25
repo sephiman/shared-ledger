@@ -1,6 +1,8 @@
 package com.sharedledger.transaction
 
 import com.sharedledger.catalog.CategoryEntity
+import com.sharedledger.catalog.CustomCategoryEntity
+import com.sharedledger.catalog.CustomCategoryId
 import org.springframework.data.jpa.domain.Specification
 import java.time.LocalDate
 import java.util.UUID
@@ -34,13 +36,30 @@ object TransactionSpecs {
     fun categoryCodeIs(code: String): Specification<Transaction> =
         Specification { root, _, cb -> cb.equal(root.get<String>("categoryCode"), code) }
 
-    fun categoryGroupIs(group: String): Specification<Transaction> =
+    fun categoryGroupIs(householdId: UUID, group: String): Specification<Transaction> =
         Specification { root, query, cb ->
-            val q = query ?: return@Specification cb.conjunction()
-            val sub = q.subquery(String::class.java)
-            val cat = sub.from(CategoryEntity::class.java)
-            sub.select(cat.get<String>("code")).where(cb.equal(cat.get<String>("groupCode"), group))
-            root.get<String>("categoryCode").`in`(sub)
+            val q = query
+
+            val globalSub = q.subquery(String::class.java)
+            val globalCat = globalSub.from(CategoryEntity::class.java)
+            globalSub.select(globalCat.get<String>("code"))
+                .where(cb.equal(globalCat.get<String>("groupCode"), group))
+
+            val customSub = q.subquery(String::class.java)
+            val customCat = customSub.from(CustomCategoryEntity::class.java)
+            val customId = customCat.get<CustomCategoryId>("id")
+            customSub.select(customId.get<String>("code"))
+                .where(
+                    cb.and(
+                        cb.equal(customCat.get<String>("groupCode"), group),
+                        cb.equal(customId.get<UUID>("householdId"), householdId),
+                    )
+                )
+
+            cb.or(
+                root.get<String>("categoryCode").`in`(globalSub),
+                root.get<String>("categoryCode").`in`(customSub),
+            )
         }
 
     fun fromCriteria(c: TransactionSearchCriteria): Specification<Transaction> {
@@ -49,7 +68,7 @@ object TransactionSpecs {
         c.to?.let { spec = spec.and(toDate(it)) }
         c.direction?.let { spec = spec.and(directionIs(it)) }
         c.categoryCode?.let { spec = spec.and(categoryCodeIs(it)) }
-        c.categoryGroup?.let { spec = spec.and(categoryGroupIs(it)) }
+        c.categoryGroup?.let { spec = spec.and(categoryGroupIs(c.householdId, it)) }
         return spec
     }
 }

@@ -1,20 +1,24 @@
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
 import { useCostOfLiving, type CostOfLivingCategoryRow } from "@/api/analytics";
+import { useCategories, type Category } from "@/api/catalog";
 import { Card, CardBody, CardHeader } from "@/components/ui/primitives";
 import { formatMoney, formatNumber } from "@/lib/money";
 import { categoryIcon } from "@/lib/categoryGroup";
+import { categoryLabelByCode } from "@/lib/categoryLabel";
 
 function CategoryBreakdown({
   title,
   amountHeader,
   rows,
+  categories,
   currency,
   locale,
 }: {
   title: string;
   amountHeader: string;
   rows: CostOfLivingCategoryRow[];
+  categories: Category[];
   currency: string;
   locale: string;
 }) {
@@ -38,7 +42,7 @@ function CategoryBreakdown({
                 <tr key={row.categoryCode} className="border-t border-border">
                   <td className="py-2">
                     <span className="mr-1.5" aria-hidden>{categoryIcon(row.categoryCode)}</span>
-                    {t(`category.${row.categoryCode}`)}
+                    {categoryLabelByCode(row.categoryCode, categories, t)}
                   </td>
                   <td className="text-right tabular-nums">
                     {formatMoney(Number(row.monthlyAverage), currency, locale)}
@@ -57,6 +61,7 @@ export function CostOfLivingTab() {
   const { t, i18n } = useTranslation();
   const household = useActiveHousehold();
   const { data, isLoading } = useCostOfLiving(household.householdId);
+  const { data: categories = [] } = useCategories(household.householdId);
 
   return (
     <div className="space-y-4">
@@ -106,6 +111,7 @@ export function CostOfLivingTab() {
                   title={t("analytics.cost_of_living_per_category")}
                   amountHeader={t("analytics.essential_monthly")}
                   rows={data.essentialCategories}
+                  categories={categories}
                   currency={household.currency}
                   locale={i18n.language}
                 />
@@ -113,6 +119,7 @@ export function CostOfLivingTab() {
                   title={t("analytics.cost_of_living_per_category_non_essential")}
                   amountHeader={t("analytics.non_essential_monthly")}
                   rows={data.nonEssentialCategories}
+                  categories={categories}
                   currency={household.currency}
                   locale={i18n.language}
                 />

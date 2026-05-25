@@ -2,10 +2,12 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
 import { useTopMovers, useYearsAvailable, type MoverRow } from "@/api/analytics";
+import { useCategories, type Category } from "@/api/catalog";
 import { Card, CardBody, CardHeader, Label, Select } from "@/components/ui/primitives";
 import { formatMoney, formatNumber } from "@/lib/money";
 import { monthName } from "@/lib/dates";
 import { categoryIcon } from "@/lib/categoryGroup";
+import { categoryLabelByCode } from "@/lib/categoryLabel";
 
 type Baseline = "year_ago" | "trailing6_avg";
 
@@ -19,6 +21,7 @@ export function TopMoversTab() {
   const [baseline, setBaseline] = useState<Baseline>("year_ago");
 
   const { data, isLoading } = useTopMovers(household.householdId, year, month, baseline);
+  const { data: categories = [] } = useCategories(household.householdId);
 
   const yearOptions = useMemo(() => {
     const fromServer = years?.years ?? [];
@@ -69,6 +72,7 @@ export function TopMoversTab() {
                   title={t("analytics.increases")}
                   rows={data.increases}
                   tone="up"
+                  categories={categories}
                   currency={household.currency}
                   locale={i18n.language}
                 />
@@ -76,6 +80,7 @@ export function TopMoversTab() {
                   title={t("analytics.decreases")}
                   rows={data.decreases}
                   tone="down"
+                  categories={categories}
                   currency={household.currency}
                   locale={i18n.language}
                 />
@@ -88,6 +93,7 @@ export function TopMoversTab() {
                   <MoverTable
                     rows={data.newActivity}
                     tone="new"
+                    categories={categories}
                     currency={household.currency}
                     locale={i18n.language}
                   />
@@ -118,12 +124,14 @@ function MoverList({
   title,
   rows,
   tone,
+  categories,
   currency,
   locale,
 }: {
   title: string;
   rows: MoverRow[];
   tone: "up" | "down" | "new";
+  categories: Category[];
   currency: string;
   locale: string;
 }) {
@@ -134,7 +142,7 @@ function MoverList({
       {rows.length === 0 ? (
         <p className="text-sm text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
       ) : (
-        <MoverTable rows={rows} tone={tone} currency={currency} locale={locale} />
+        <MoverTable rows={rows} tone={tone} categories={categories} currency={currency} locale={locale} />
       )}
     </div>
   );
@@ -143,11 +151,13 @@ function MoverList({
 function MoverTable({
   rows,
   tone,
+  categories,
   currency,
   locale,
 }: {
   rows: MoverRow[];
   tone: "up" | "down" | "new";
+  categories: Category[];
   currency: string;
   locale: string;
 }) {
@@ -172,7 +182,7 @@ function MoverTable({
               <td className="py-2">
                 <span className={`mr-2 ${arrowColor}`}>{arrow}</span>
                 <span className="mr-1.5" aria-hidden>{categoryIcon(r.categoryCode)}</span>
-                {t(`category.${r.categoryCode}`)}
+                {categoryLabelByCode(r.categoryCode, categories, t)}
               </td>
               <td className="text-right">{formatMoney(r.periodAmount, currency, locale)}</td>
               <td className="text-right">{formatMoney(r.baselineAmount, currency, locale)}</td>

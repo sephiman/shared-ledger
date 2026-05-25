@@ -6,10 +6,11 @@ import { Button, Chip, FieldError, Input, Label, Select, Textarea } from "@/comp
 import { isoToday } from "@/lib/dates";
 import { asApiError } from "@/api/client";
 import { categoryIcon } from "@/lib/categoryGroup";
+import { categoryLabel, categoryLabelByCode } from "@/lib/categoryLabel";
 
 export function QuickAddForm({ householdId, onCreated }: { householdId: string; onCreated?: () => void }) {
   const { t, i18n } = useTranslation();
-  const { data: categories = [] } = useCategories();
+  const { data: categories = [] } = useCategories(householdId);
   const { data: chips = [] } = useQuickChips(householdId);
   const create = useCreateTransaction(householdId);
   const [direction, setDirection] = useState<"income" | "expense">("expense");
@@ -23,7 +24,7 @@ export function QuickAddForm({ householdId, onCreated }: { householdId: string; 
   const eligibleCategories = categories
     .filter((c) => c.kind === direction)
     .slice()
-    .sort((a, b) => t(`category.${a.code}`).localeCompare(t(`category.${b.code}`), i18n.language, { sensitivity: "base" }));
+    .sort((a, b) => categoryLabel(a, t).localeCompare(categoryLabel(b, t), i18n.language, { sensitivity: "base" }));
 
   return (
     <form
@@ -78,7 +79,7 @@ export function QuickAddForm({ householdId, onCreated }: { householdId: string; 
                 }}
               >
                 <span className="mr-1" aria-hidden>{categoryIcon(c.categoryCode)}</span>
-                {t(`category.${c.categoryCode}`)}
+                {categoryLabelByCode(c.categoryCode, categories, t)}
               </Chip>
             ))}
           </div>
@@ -130,7 +131,7 @@ export function QuickAddForm({ householdId, onCreated }: { householdId: string; 
           <option value="">—</option>
           {eligibleCategories.map((c) => (
             <option key={c.code} value={c.code}>
-              {categoryIcon(c.code)} {t(`category.${c.code}`)}
+              {categoryIcon(c.code)} {categoryLabel(c, t)}
             </option>
           ))}
         </Select>
