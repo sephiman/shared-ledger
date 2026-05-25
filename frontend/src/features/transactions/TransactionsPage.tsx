@@ -7,6 +7,7 @@ import { useCategories } from "@/api/catalog";
 import { Button, Card, CardBody, CardHeader, Input, Label, Select } from "@/components/ui/primitives";
 import { formatMoney } from "@/lib/money";
 import { formatDate } from "@/lib/dates";
+import { categoryIcon } from "@/lib/categoryGroup";
 import { QuickAddForm } from "./QuickAddForm";
 
 function buildExportQuery(filters: TransactionFilters): string {
@@ -110,7 +111,7 @@ export function TransactionsPage() {
                   .sort((a, b) => t(`category.${a.code}`).localeCompare(t(`category.${b.code}`), i18n.language, { sensitivity: "base" }))
                   .map((c) => (
                     <option key={c.code} value={c.code}>
-                      {t(`category.${c.code}`)}
+                      {categoryIcon(c.code)} {t(`category.${c.code}`)}
                     </option>
                   ))}
               </Select>
@@ -138,7 +139,10 @@ export function TransactionsPage() {
                   {page.items.map((tx) => (
                     <tr key={tx.id} className="border-t border-border">
                       <td className="py-2">{formatDate(tx.occurrenceDate, i18n.language)}</td>
-                      <td>{t(`category.${tx.categoryCode}`)}</td>
+                      <td>
+                        <span className="mr-1.5" aria-hidden>{categoryIcon(tx.categoryCode)}</span>
+                        {t(`category.${tx.categoryCode}`)}
+                      </td>
                       <td className="text-gray-600 dark:text-gray-300">{tx.description ?? t("tx.no_description")}</td>
                       <td className={`text-right font-medium ${tx.direction === "income" ? "text-green-600 dark:text-green-400" : "text-gray-900 dark:text-gray-100"}`}>
                         {tx.direction === "income" ? "+" : "-"}

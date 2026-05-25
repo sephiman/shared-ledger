@@ -3,6 +3,7 @@ import { useActiveHousehold } from "@/auth/AuthContext";
 import { useCostOfLiving, type CostOfLivingCategoryRow } from "@/api/analytics";
 import { Card, CardBody, CardHeader } from "@/components/ui/primitives";
 import { formatMoney, formatNumber } from "@/lib/money";
+import { categoryIcon } from "@/lib/categoryGroup";
 
 function CategoryBreakdown({
   title,
@@ -35,7 +36,10 @@ function CategoryBreakdown({
             <tbody>
               {rows.map((row) => (
                 <tr key={row.categoryCode} className="border-t border-border">
-                  <td className="py-2">{t(`category.${row.categoryCode}`)}</td>
+                  <td className="py-2">
+                    <span className="mr-1.5" aria-hidden>{categoryIcon(row.categoryCode)}</span>
+                    {t(`category.${row.categoryCode}`)}
+                  </td>
                   <td className="text-right tabular-nums">
                     {formatMoney(Number(row.monthlyAverage), currency, locale)}
                   </td>

@@ -5,6 +5,7 @@ import { useForecast } from "@/api/analytics";
 import { Card, CardBody, CardHeader, Label, Select } from "@/components/ui/primitives";
 import { formatMoney } from "@/lib/money";
 import { monthName } from "@/lib/dates";
+import { categoryIcon } from "@/lib/categoryGroup";
 
 export function ForecastTab() {
   const { t, i18n } = useTranslation();
@@ -56,7 +57,10 @@ export function ForecastTab() {
               <tbody>
                 {data.categories.map((c) => (
                   <tr key={c.categoryCode} className="border-t border-border">
-                    <td className="py-2">{t(`category.${c.categoryCode}`)}</td>
+                    <td className="py-2">
+                      <span className="mr-1.5" aria-hidden>{categoryIcon(c.categoryCode)}</span>
+                      {t(`category.${c.categoryCode}`)}
+                    </td>
                     {c.projection.map((p) => (
                       <td key={`${p.year}-${p.month}`} className={`text-right ${p.source === "recurring" ? "text-primary" : "text-gray-700 dark:text-gray-200"}`}>
                         {formatMoney(p.projectedExpense, household.currency, i18n.language)}

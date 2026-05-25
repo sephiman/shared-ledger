@@ -5,6 +5,7 @@ import { useTopMovers, useYearsAvailable, type MoverRow } from "@/api/analytics"
 import { Card, CardBody, CardHeader, Label, Select } from "@/components/ui/primitives";
 import { formatMoney, formatNumber } from "@/lib/money";
 import { monthName } from "@/lib/dates";
+import { categoryIcon } from "@/lib/categoryGroup";
 
 type Baseline = "year_ago" | "trailing6_avg";
 
@@ -170,6 +171,7 @@ function MoverTable({
             <tr key={r.categoryCode} className="border-t border-border">
               <td className="py-2">
                 <span className={`mr-2 ${arrowColor}`}>{arrow}</span>
+                <span className="mr-1.5" aria-hidden>{categoryIcon(r.categoryCode)}</span>
                 {t(`category.${r.categoryCode}`)}
               </td>
               <td className="text-right">{formatMoney(r.periodAmount, currency, locale)}</td>

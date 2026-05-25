@@ -6,6 +6,7 @@ import { useHeatmap, type HeatmapCategoryRow, type HeatmapMonth } from "@/api/an
 import { Card, CardBody, CardHeader, Label, Select } from "@/components/ui/primitives";
 import { formatMoney } from "@/lib/money";
 import { monthName } from "@/lib/dates";
+import { categoryIcon, groupIcon } from "@/lib/categoryGroup";
 
 type Range = "12" | "24" | "36" | "48" | "all";
 type Direction = "expense" | "income";
@@ -210,6 +211,7 @@ function HeatmapGroup({
           className={`sticky left-0 z-10 bg-gray-50 px-2 py-1 font-semibold text-gray-600 dark:bg-gray-900 dark:text-gray-300 ${isFirst ? "" : "border-t border-border"}`}
           style={{ gridColumn: `1 / span ${totalCols}` }}
         >
+          <span className="mr-1.5" aria-hidden>{groupIcon(groupCode)}</span>
           {t(`category_group.${groupCode}`)}
         </div>
       )}
@@ -253,6 +255,7 @@ function RowCells({
   return (
     <>
       <div className="sticky left-0 z-10 truncate bg-white px-2 py-1 dark:bg-gray-800">
+        <span className="mr-1.5" aria-hidden>{categoryIcon(row.categoryCode)}</span>
         {t(`category.${row.categoryCode}`)}
       </div>
       {row.values.map((v, colIdx) => {

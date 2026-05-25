@@ -5,6 +5,7 @@ import { useYearOverYear } from "@/api/analytics";
 import { Card, CardBody, CardHeader, Label, Select } from "@/components/ui/primitives";
 import { formatMoney } from "@/lib/money";
 import { monthName } from "@/lib/dates";
+import { categoryIcon } from "@/lib/categoryGroup";
 
 export function YearOverYearTab() {
   const { t, i18n } = useTranslation();
@@ -64,7 +65,10 @@ export function YearOverYearTab() {
               </tr>
               {data.categories.map((c) => (
                 <tr key={c.categoryCode} className="border-t border-border">
-                  <td className="py-2">{t(`category.${c.categoryCode}`)}</td>
+                  <td className="py-2">
+                    <span className="mr-1.5" aria-hidden>{categoryIcon(c.categoryCode)}</span>
+                    {t(`category.${c.categoryCode}`)}
+                  </td>
                   {data.years.map((y) => (
                     <td key={y} className="text-right text-gray-600 dark:text-gray-300">{formatMoney(c.perYear[String(y)] ?? "0", household.currency, i18n.language)}</td>
                   ))}

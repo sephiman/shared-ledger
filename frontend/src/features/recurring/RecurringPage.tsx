@@ -14,6 +14,7 @@ import {
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select, Textarea } from "@/components/ui/primitives";
 import { formatDate, isoToday, monthName, weekdayName } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
+import { categoryIcon } from "@/lib/categoryGroup";
 
 function defaultInput(): RecurringInput {
   // Defaults match today's date so a freshly-created template fires today
@@ -148,7 +149,7 @@ export function RecurringPage() {
                     .sort((a, b) => t(`category.${a.code}`).localeCompare(t(`category.${b.code}`), i18n.language, { sensitivity: "base" }))
                     .map((c) => (
                       <option key={c.code} value={c.code}>
-                        {t(`category.${c.code}`)}
+                        {categoryIcon(c.code)} {t(`category.${c.code}`)}
                       </option>
                     ))}
                 </Select>
@@ -260,7 +261,10 @@ export function RecurringPage() {
                 <tbody>
                   {templates.map((tpl) => (
                     <tr key={tpl.id} className="border-t border-border">
-                      <td className="py-2">{t(`category.${tpl.categoryCode}`)}</td>
+                      <td className="py-2">
+                        <span className="mr-1.5" aria-hidden>{categoryIcon(tpl.categoryCode)}</span>
+                        {t(`category.${tpl.categoryCode}`)}
+                      </td>
                       <td>{t(`recurring.${tpl.cadence}`)}</td>
                       <td className="text-right">{formatMoney(tpl.amount, household.currency, i18n.language)}</td>
                       <td>{tpl.nextFireDate ? formatDate(tpl.nextFireDate, i18n.language) : "—"}</td>

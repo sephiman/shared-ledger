@@ -6,6 +6,7 @@ import { useCategories } from "@/api/catalog";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select } from "@/components/ui/primitives";
 import { formatMoney } from "@/lib/money";
 import { monthName } from "@/lib/dates";
+import { categoryIcon } from "@/lib/categoryGroup";
 
 export function BudgetsPage() {
   const { t, i18n } = useTranslation();
@@ -128,7 +129,10 @@ export function BudgetsPage() {
                   const monthlyAmount = monthlyByCat.get(c.code)?.amount;
                   return (
                     <tr key={c.code} className="border-t border-border">
-                      <td className="py-2">{t(`category.${c.code}`)}</td>
+                      <td className="py-2">
+                        <span className="mr-1.5" aria-hidden>{categoryIcon(c.code)}</span>
+                        {t(`category.${c.code}`)}
+                      </td>
                       <td className="text-right">
                         {isEditingHere ? (
                           <div className="flex flex-col items-end gap-1">
@@ -191,7 +195,10 @@ export function BudgetsPage() {
                   const annualAmount = annualByCat.get(c.code)?.amount;
                   return (
                     <tr key={c.code} className="border-t border-border">
-                      <td className="py-2">{t(`category.${c.code}`)}</td>
+                      <td className="py-2">
+                        <span className="mr-1.5" aria-hidden>{categoryIcon(c.code)}</span>
+                        {t(`category.${c.code}`)}
+                      </td>
                       <td className="text-right">
                         {isEditingHere ? (
                           <div className="flex flex-col items-end gap-1">

@@ -6,6 +6,7 @@ import { Card, CardBody, CardHeader, Label, Select } from "@/components/ui/primi
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { formatMoney, formatNumber } from "@/lib/money";
 import { monthName } from "@/lib/dates";
+import { groupIcon } from "@/lib/categoryGroup";
 
 const PALETTE = ["#0ea5e9", "#22c55e", "#a855f7", "#f97316", "#ef4444", "#14b8a6", "#eab308", "#ec4899"];
 const SAVED_COLOR = "#16a34a";
@@ -37,7 +38,7 @@ export function AllocationTab() {
     if (!data) return [];
     const slices = data.slices.map((s) => ({
       key: s.groupCode,
-      name: t(`category_group.${s.groupCode}`),
+      name: `${groupIcon(s.groupCode)} ${t(`category_group.${s.groupCode}`)}`,
       amount: Number(s.amount),
       percent: s.percentOfIncome,
     }));

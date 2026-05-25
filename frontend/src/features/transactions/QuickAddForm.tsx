@@ -5,6 +5,7 @@ import { useCreateTransaction, useQuickChips, type TransactionInput } from "@/ap
 import { Button, Chip, FieldError, Input, Label, Select, Textarea } from "@/components/ui/primitives";
 import { isoToday } from "@/lib/dates";
 import { asApiError } from "@/api/client";
+import { categoryIcon } from "@/lib/categoryGroup";
 
 export function QuickAddForm({ householdId, onCreated }: { householdId: string; onCreated?: () => void }) {
   const { t, i18n } = useTranslation();
@@ -76,6 +77,7 @@ export function QuickAddForm({ householdId, onCreated }: { householdId: string; 
                   }
                 }}
               >
+                <span className="mr-1" aria-hidden>{categoryIcon(c.categoryCode)}</span>
                 {t(`category.${c.categoryCode}`)}
               </Chip>
             ))}
@@ -128,7 +130,7 @@ export function QuickAddForm({ householdId, onCreated }: { householdId: string; 
           <option value="">—</option>
           {eligibleCategories.map((c) => (
             <option key={c.code} value={c.code}>
-              {t(`category.${c.code}`)}
+              {categoryIcon(c.code)} {t(`category.${c.code}`)}
             </option>
           ))}
         </Select>

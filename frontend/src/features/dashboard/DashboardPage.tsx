@@ -10,6 +10,7 @@ import {
 } from "@/api/analytics";
 import { Card, CardBody, CardHeader } from "@/components/ui/primitives";
 import { formatMoney, formatNumber } from "@/lib/money";
+import { groupIcon } from "@/lib/categoryGroup";
 import {
   Bar,
   BarChart,
@@ -216,7 +217,7 @@ function DashboardSection({
 }) {
   const { t } = useTranslation();
   const groupedData = data.byGroup.map((g) => ({
-    name: t(`category_group.${g.groupCode}`),
+    name: `${groupIcon(g.groupCode)} ${t(`category_group.${g.groupCode}`)}`,
     amount: Number(g.amount),
   }));
 
