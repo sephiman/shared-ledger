@@ -325,6 +325,65 @@ export function useCostOfLiving(householdId: string) {
   });
 }
 
+export interface ExplorerMonth {
+  year: number;
+  month: number;
+  amount: string;
+}
+
+export interface ExplorerMonthLabel {
+  year: number;
+  month: number;
+  amount: string;
+}
+
+export interface ExplorerDescriptionRow {
+  description: string;
+  occurrences: number;
+  totalAmount: string;
+  averagePerOccurrence: string;
+}
+
+export interface ExplorerResponse {
+  scopeType: "group" | "category";
+  scopeCode: string;
+  months: ExplorerMonth[];
+  priorMonths: ExplorerMonth[] | null;
+  priorYearsAvailable: number;
+  averagePerMonth: string;
+  medianPerMonth: string;
+  highestMonth: ExplorerMonthLabel | null;
+  lowestNonZeroMonth: ExplorerMonthLabel | null;
+  topDescriptions: ExplorerDescriptionRow[] | null;
+}
+
+export interface ExplorerParams {
+  scopeType?: "group" | "category";
+  scopeCode?: string;
+  months: number;
+  yoyOverlay: boolean;
+}
+
+export function useExplorer(householdId: string, params: ExplorerParams, enabled = true) {
+  return useQuery({
+    queryKey: ["analytics", householdId, "explorer", params],
+    queryFn: async () => {
+      const query: Record<string, string | number | boolean> = {
+        months: params.months,
+        yoyOverlay: params.yoyOverlay,
+      };
+      if (params.scopeType && params.scopeCode) {
+        query.scopeType = params.scopeType;
+        query.scopeCode = params.scopeCode;
+      }
+      return (await apiClient.get<ExplorerResponse>(`/households/${householdId}/analytics/explorer`, {
+        params: query,
+      })).data;
+    },
+    enabled,
+  });
+}
+
 export function useYearsAvailable(householdId: string) {
   return useQuery({
     queryKey: ["analytics", householdId, "years-available"],

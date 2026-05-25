@@ -212,3 +212,35 @@ data class CostOfLivingResponse(
     val essentialCategories: List<CostOfLivingCategoryRow>,
     val nonEssentialCategories: List<CostOfLivingCategoryRow>,
 )
+
+data class ExplorerMonth(
+    val year: Int,
+    val month: Int,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val amount: BigDecimal,
+)
+
+data class ExplorerMonthLabel(
+    val year: Int,
+    val month: Int,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val amount: BigDecimal,
+)
+
+data class ExplorerDescriptionRow(
+    val description: String,
+    val occurrences: Int,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val totalAmount: BigDecimal,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val averagePerOccurrence: BigDecimal,
+)
+
+data class ExplorerResponse(
+    val scopeType: String, // "group" or "category"
+    val scopeCode: String,
+    val months: List<ExplorerMonth>,
+    val priorMonths: List<ExplorerMonth>?,
+    val priorYearsAvailable: Int,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val averagePerMonth: BigDecimal,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val medianPerMonth: BigDecimal,
+    val highestMonth: ExplorerMonthLabel?,
+    val lowestNonZeroMonth: ExplorerMonthLabel?,
+    val topDescriptions: List<ExplorerDescriptionRow>?,
+)

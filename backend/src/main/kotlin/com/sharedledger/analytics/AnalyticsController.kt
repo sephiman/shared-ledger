@@ -160,4 +160,26 @@ class AnalyticsController(
             service.costOfLiving(householdId, ym)
         }!!
     }
+
+    @GetMapping("/explorer")
+    fun explorer(
+        @PathVariable householdId: UUID,
+        @RequestParam(required = false) scopeType: String?,
+        @RequestParam(required = false) scopeCode: String?,
+        @RequestParam(defaultValue = "12") months: Int,
+        @RequestParam(defaultValue = "false") yoyOverlay: Boolean,
+    ): ExplorerResponse = metrics.analyticsTimer("explorer").record<ExplorerResponse> {
+        if (scopeType != null && scopeType !in setOf("group", "category")) {
+            throw AppException.badRequest("INVALID_PARAMETER", "scopeType")
+        }
+        if ((scopeType == null) != (scopeCode == null)) {
+            throw AppException.badRequest("INVALID_PARAMETER", "scope")
+        }
+        val safeMonths = when {
+            months <= 0 -> 12
+            months > 600 -> 9999 // "full history"
+            else -> months
+        }
+        service.explorer(householdId, scopeType, scopeCode, safeMonths, yoyOverlay)
+    }!!
 }

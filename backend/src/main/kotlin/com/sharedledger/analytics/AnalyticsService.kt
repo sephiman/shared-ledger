@@ -625,6 +625,156 @@ class AnalyticsService(
     }
 
     @Transactional(readOnly = true)
+    fun explorer(
+        householdId: UUID,
+        scopeType: String?,
+        scopeCode: String?,
+        months: Int,
+        yoyOverlay: Boolean,
+    ): ExplorerResponse {
+        val today = YearMonth.now()
+        val bounds = transactions.dateBounds(householdId)
+        val firstTxYm = bounds.minDate?.let { YearMonth.from(it) }
+
+        val resolvedStart = if (months >= 9999) {
+            firstTxYm ?: today
+        } else {
+            today.minusMonths((months - 1).toLong())
+        }
+        val resolvedMonths = mutableListOf<YearMonth>().also { list ->
+            var cursor = resolvedStart
+            while (!cursor.isAfter(today)) { list += cursor; cursor = cursor.plusMonths(1) }
+        }
+
+        // Categories grouped by group code (e.g. "home", "transport", ...). Only expense kind matters for scope.
+        val allCategories = categoryService.listForHousehold(householdId).filter { it.kind == Direction.expense.name }
+        val groupByCategory = allCategories.associate { it.code to (it.group ?: "ungrouped") }
+
+        // Resolve default scope: group with the highest trailing-12-month spend.
+        val effectiveType: String
+        val effectiveCode: String
+        if (scopeType != null && scopeCode != null) {
+            effectiveType = scopeType
+            effectiveCode = scopeCode
+        } else {
+            val t12Start = today.minusMonths(11)
+            val rowsT12 = transactions.aggregationRows(householdId, t12Start.atDay(1), today.atEndOfMonth())
+            val perGroup = LinkedHashMap<String, BigDecimal>()
+            for (r in rowsT12) {
+                if (r.direction != Direction.expense) continue
+                val g = groupByCategory[r.categoryCode] ?: "ungrouped"
+                perGroup.merge(g, r.amount) { a, b -> a + b }
+            }
+            effectiveType = "group"
+            effectiveCode = perGroup.entries.maxByOrNull { it.value }?.key
+                ?: allCategories.firstOrNull()?.group
+                ?: "home"
+        }
+
+        // Pull range we need: current window plus optional prior-year window.
+        val priorStart = resolvedStart.minusYears(1)
+        val priorEnd = today.minusYears(1)
+        val rangeStart = (if (yoyOverlay) priorStart else resolvedStart).atDay(1)
+        val rangeEnd = today.atEndOfMonth()
+        val rows = transactions.aggregationRows(householdId, rangeStart, rangeEnd)
+
+        fun matchesScope(categoryCode: String): Boolean = when (effectiveType) {
+            "category" -> categoryCode == effectiveCode
+            else -> (groupByCategory[categoryCode] ?: "ungrouped") == effectiveCode
+        }
+
+        // Bucket current and prior windows.
+        val currentTotals = LinkedHashMap<Int, BigDecimal>()
+        val priorTotals = if (yoyOverlay) LinkedHashMap<Int, BigDecimal>() else null
+        for (r in rows) {
+            if (r.direction != Direction.expense) continue
+            if (!matchesScope(r.categoryCode)) continue
+            val ym = YearMonth.from(r.occurrenceDate)
+            val k = ym.key()
+            when {
+                !ym.isBefore(resolvedStart) && !ym.isAfter(today) ->
+                    currentTotals.merge(k, r.amount) { a, b -> a + b }
+                priorTotals != null && !ym.isBefore(priorStart) && !ym.isAfter(priorEnd) ->
+                    priorTotals.merge(k, r.amount) { a, b -> a + b }
+            }
+        }
+
+        val currentSeries = resolvedMonths.map { ym ->
+            ExplorerMonth(ym.year, ym.monthValue, Money.normalize(currentTotals[ym.key()] ?: BigDecimal.ZERO))
+        }
+        val priorSeries = priorTotals?.let {
+            resolvedMonths.map { ym ->
+                val shifted = ym.minusYears(1)
+                ExplorerMonth(shifted.year, shifted.monthValue, Money.normalize(it[shifted.key()] ?: BigDecimal.ZERO))
+            }
+        }
+
+        // Quick stats over the current window (zero months count toward the average).
+        val totalAcrossRange = currentSeries.fold(BigDecimal.ZERO) { acc, m -> acc + m.amount }
+        val denom = currentSeries.size.coerceAtLeast(1).toBigDecimal()
+        val averagePerMonth = totalAcrossRange.divide(denom, 2, RoundingMode.HALF_EVEN)
+        val sorted = currentSeries.map { it.amount }.sorted()
+        val median = if (sorted.isEmpty()) BigDecimal.ZERO
+        else if (sorted.size % 2 == 1) sorted[sorted.size / 2]
+        else sorted[sorted.size / 2 - 1].add(sorted[sorted.size / 2])
+            .divide(BigDecimal.valueOf(2L), 2, RoundingMode.HALF_EVEN)
+
+        val highest = currentSeries.maxByOrNull { it.amount }?.takeIf { it.amount.signum() > 0 }
+            ?.let { ExplorerMonthLabel(it.year, it.month, it.amount) }
+        val lowestNonZero = currentSeries.filter { it.amount.signum() > 0 }
+            .minByOrNull { it.amount }
+            ?.let { ExplorerMonthLabel(it.year, it.month, it.amount) }
+
+        // Top descriptions: only meaningful for a single category.
+        val topDescriptions: List<ExplorerDescriptionRow>? = if (effectiveType == "category") {
+            val tx = transactions.findByHouseholdIdAndOccurrenceDateBetween(
+                householdId,
+                resolvedStart.atDay(1),
+                today.atEndOfMonth(),
+            )
+            data class Bucket(var occurrences: Int = 0, var total: BigDecimal = BigDecimal.ZERO)
+            val grouped = LinkedHashMap<String, Bucket>()
+            for (t in tx) {
+                if (t.direction != Direction.expense) continue
+                if (t.categoryCode != effectiveCode) continue
+                val key = (t.description ?: "").trim().ifEmpty { "" }
+                val b = grouped.getOrPut(key) { Bucket() }
+                b.occurrences += 1
+                b.total += t.amount
+            }
+            grouped.entries
+                .map { (desc, b) ->
+                    val avg = if (b.occurrences == 0) BigDecimal.ZERO
+                    else b.total.divide(BigDecimal.valueOf(b.occurrences.toLong()), 2, RoundingMode.HALF_EVEN)
+                    ExplorerDescriptionRow(
+                        description = desc,
+                        occurrences = b.occurrences,
+                        totalAmount = Money.normalize(b.total),
+                        averagePerOccurrence = Money.normalize(avg),
+                    )
+                }
+                .sortedByDescending { it.totalAmount }
+        } else null
+
+        val priorYearsAvailable = firstTxYm?.let {
+            ChronoUnit.MONTHS.between(it, today).toInt() / 12
+        } ?: 0
+
+        return ExplorerResponse(
+            scopeType = effectiveType,
+            scopeCode = effectiveCode,
+            months = currentSeries,
+            priorMonths = priorSeries,
+            priorYearsAvailable = priorYearsAvailable.coerceAtLeast(0),
+            averagePerMonth = Money.normalize(averagePerMonth),
+            medianPerMonth = Money.normalize(median),
+            highestMonth = highest,
+            lowestNonZeroMonth = lowestNonZero,
+            topDescriptions = topDescriptions,
+        )
+    }
+
+    @Transactional(readOnly = true)
     fun yearsAvailable(householdId: UUID): YearsAvailableResponse {
         val bounds = transactions.dateBounds(householdId)
         val first = bounds.minDate ?: return YearsAvailableResponse(emptyList())
