@@ -311,10 +311,15 @@
     "custom_category_essential": "Esencial"
   },
   "household": {
+    "label": "Unidad",
     "switch_aria": "Cambiar unidad activa",
     "switch_to": "Cambiar a esta",
     "create_title": "Crear nueva unidad",
     "create_submit": "Crear"
+  },
+  "user": {
+    "menu_aria": "Abrir menú de usuario",
+    "signed_in_as": "Sesión iniciada como"
   },
   "errors": {
     "INVALID_CREDENTIALS": "Email o contraseña no válidos",

@@ -311,10 +311,15 @@
     "custom_category_essential": "Essential"
   },
   "household": {
+    "label": "Household",
     "switch_aria": "Switch active household",
     "switch_to": "Switch to",
     "create_title": "Create new household",
     "create_submit": "Create"
+  },
+  "user": {
+    "menu_aria": "Open user menu",
+    "signed_in_as": "Signed in as"
   },
   "errors": {
     "INVALID_CREDENTIALS": "Invalid email or password",
