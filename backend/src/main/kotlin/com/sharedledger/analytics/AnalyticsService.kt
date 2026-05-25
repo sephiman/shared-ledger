@@ -525,6 +525,22 @@ class AnalyticsService(
     }
 
     @Transactional(readOnly = true)
+    fun daily(householdId: UUID, from: LocalDate, to: LocalDate, direction: Direction): DailyResponse {
+        val rows = transactions.aggregationRows(householdId, from, to)
+        val totals = LinkedHashMap<LocalDate, BigDecimal>()
+        for (r in rows) {
+            if (r.direction != direction) continue
+            totals.merge(r.occurrenceDate, r.amount) { a, b -> a + b }
+        }
+        val days = totals.entries.asSequence()
+            .filter { it.value.signum() > 0 }
+            .sortedBy { it.key }
+            .map { (d, amt) -> DailyPoint(d, Money.normalize(amt)) }
+            .toList()
+        return DailyResponse(from, to, direction.name, days)
+    }
+
+    @Transactional(readOnly = true)
     fun contributionSeries(householdId: UUID): ContributionSeriesResponse {
         val ms = movements.findInRange(householdId, LocalDate.of(1970, 1, 1), LocalDate.now().plusYears(100))
             .filter { it.type != MovementType.debt_payment }

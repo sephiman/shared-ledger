@@ -244,3 +244,15 @@ data class ExplorerResponse(
     val lowestNonZeroMonth: ExplorerMonthLabel?,
     val topDescriptions: List<ExplorerDescriptionRow>?,
 )
+
+data class DailyPoint(
+    val date: java.time.LocalDate,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val amount: BigDecimal,
+)
+
+data class DailyResponse(
+    val from: java.time.LocalDate,
+    val to: java.time.LocalDate,
+    val direction: String,
+    val days: List<DailyPoint>,
+)

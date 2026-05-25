@@ -9,6 +9,7 @@ import { formatMoney } from "@/lib/money";
 import { monthName } from "@/lib/dates";
 import { categoryIcon, groupIcon } from "@/lib/categoryGroup";
 import { categoryLabelByCode } from "@/lib/categoryLabel";
+import { hexWithAlpha } from "@/lib/color";
 import type { Category } from "@/api/catalog";
 
 type Range = "12" | "24" | "36" | "48" | "all";
@@ -98,13 +99,6 @@ export function HeatmapTab() {
       </Card>
     </div>
   );
-}
-
-function hexWithAlpha(hex: string, alpha: number): string {
-  const a = Math.round(Math.max(0, Math.min(1, alpha)) * 255)
-    .toString(16)
-    .padStart(2, "0");
-  return `${hex}${a}`;
 }
 
 function HeatmapGrid({

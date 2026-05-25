@@ -384,6 +384,35 @@ export function useExplorer(householdId: string, params: ExplorerParams, enabled
   });
 }
 
+export interface DailyPoint {
+  date: string;
+  amount: string;
+}
+
+export interface DailyResponse {
+  from: string;
+  to: string;
+  direction: "expense" | "income";
+  days: DailyPoint[];
+}
+
+export function useDailyTotals(
+  householdId: string,
+  from: string,
+  to: string,
+  direction: "expense" | "income" = "expense",
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ["analytics", householdId, "daily", from, to, direction],
+    queryFn: async () =>
+      (await apiClient.get<DailyResponse>(`/households/${householdId}/analytics/daily`, {
+        params: { from, to, direction },
+      })).data,
+    enabled: enabled && Boolean(from) && Boolean(to),
+  });
+}
+
 export function useYearsAvailable(householdId: string) {
   return useQuery({
     queryKey: ["analytics", householdId, "years-available"],

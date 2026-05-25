@@ -206,6 +206,80 @@ class AnalyticsServiceTest @Autowired constructor(
     }
 
     @Test
+    fun `daily aggregates expenses by day and excludes income`() {
+        val (user, household) = seed()
+        val d1 = LocalDate.of(2025, 5, 10)
+        val d2 = LocalDate.of(2025, 5, 12)
+        addTx(household, user, d1, Direction.expense, "groceries.groceries", "30.00")
+        addTx(household, user, d1, Direction.expense, "outings.restaurants", "20.00")
+        addTx(household, user, d2, Direction.expense, "shopping.other", "40.00")
+        addTx(household, user, d1, Direction.income, "income.salary", "1000.00")
+
+        val r = service.daily(household.id, LocalDate.of(2025, 5, 1), LocalDate.of(2025, 5, 31), Direction.expense)
+        assertThat(r.days).hasSize(2)
+        assertThat(r.days[0].date).isEqualTo(d1)
+        assertThat(r.days[0].amount).isEqualByComparingTo("50.00")
+        assertThat(r.days[1].date).isEqualTo(d2)
+        assertThat(r.days[1].amount).isEqualByComparingTo("40.00")
+    }
+
+    @Test
+    fun `daily returns only non-zero days`() {
+        val (user, household) = seed()
+        addTx(household, user, LocalDate.of(2025, 5, 10), Direction.expense, "groceries.groceries", "30.00")
+        addTx(household, user, LocalDate.of(2025, 5, 15), Direction.income, "income.salary", "500.00")
+
+        val r = service.daily(household.id, LocalDate.of(2025, 5, 1), LocalDate.of(2025, 5, 31), Direction.expense)
+        assertThat(r.days).hasSize(1)
+        assertThat(r.days[0].date).isEqualTo(LocalDate.of(2025, 5, 10))
+    }
+
+    @Test
+    fun `daily honors direction income`() {
+        val (user, household) = seed()
+        addTx(household, user, LocalDate.of(2025, 5, 10), Direction.expense, "groceries.groceries", "30.00")
+        addTx(household, user, LocalDate.of(2025, 5, 15), Direction.income, "income.salary", "500.00")
+
+        val r = service.daily(household.id, LocalDate.of(2025, 5, 1), LocalDate.of(2025, 5, 31), Direction.income)
+        assertThat(r.days).hasSize(1)
+        assertThat(r.days[0].date).isEqualTo(LocalDate.of(2025, 5, 15))
+        assertThat(r.days[0].amount).isEqualByComparingTo("500.00")
+    }
+
+    @Test
+    fun `daily sorts ascending by date`() {
+        val (user, household) = seed()
+        addTx(household, user, LocalDate.of(2025, 5, 20), Direction.expense, "groceries.groceries", "10.00")
+        addTx(household, user, LocalDate.of(2025, 5, 3), Direction.expense, "groceries.groceries", "20.00")
+        addTx(household, user, LocalDate.of(2025, 5, 12), Direction.expense, "groceries.groceries", "30.00")
+
+        val r = service.daily(household.id, LocalDate.of(2025, 5, 1), LocalDate.of(2025, 5, 31), Direction.expense)
+        assertThat(r.days.map { it.date }).containsExactly(
+            LocalDate.of(2025, 5, 3),
+            LocalDate.of(2025, 5, 12),
+            LocalDate.of(2025, 5, 20),
+        )
+    }
+
+    @Test
+    fun `daily clips strictly to from to range inclusive`() {
+        val (user, household) = seed()
+        addTx(household, user, LocalDate.of(2025, 4, 30), Direction.expense, "groceries.groceries", "10.00")
+        addTx(household, user, LocalDate.of(2025, 5, 1), Direction.expense, "groceries.groceries", "20.00")
+        addTx(household, user, LocalDate.of(2025, 5, 31), Direction.expense, "groceries.groceries", "30.00")
+        addTx(household, user, LocalDate.of(2025, 6, 1), Direction.expense, "groceries.groceries", "40.00")
+
+        val r = service.daily(household.id, LocalDate.of(2025, 5, 1), LocalDate.of(2025, 5, 31), Direction.expense)
+        assertThat(r.days.map { it.date }).containsExactly(
+            LocalDate.of(2025, 5, 1),
+            LocalDate.of(2025, 5, 31),
+        )
+        assertThat(r.from).isEqualTo(LocalDate.of(2025, 5, 1))
+        assertThat(r.to).isEqualTo(LocalDate.of(2025, 5, 31))
+        assertThat(r.direction).isEqualTo("expense")
+    }
+
+    @Test
     fun `contribution series is empty when no movements exist`() {
         val (user, household) = seed()
         snapshots.create(household.id, SnapshotRequest(

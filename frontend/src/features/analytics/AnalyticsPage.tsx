@@ -9,6 +9,7 @@ import { AllocationTab } from "./AllocationTab";
 import { TopMoversTab } from "./TopMoversTab";
 import { RecurringShareTab } from "./RecurringShareTab";
 import { HeatmapTab } from "./HeatmapTab";
+import { DailyTab } from "./DailyTab";
 import { CostOfLivingTab } from "./CostOfLivingTab";
 import { ExplorerTab } from "./ExplorerTab";
 
@@ -21,6 +22,7 @@ type Tab =
   | "movers"
   | "recurring"
   | "heatmap"
+  | "daily"
   | "cost_of_living"
   | "explorer";
 
@@ -36,6 +38,7 @@ export function AnalyticsPage() {
     { id: "movers", label: t("analytics.top_movers") },
     { id: "recurring", label: t("analytics.recurring_share") },
     { id: "heatmap", label: t("analytics.heatmap") },
+    { id: "daily", label: t("analytics.daily") },
     { id: "cost_of_living", label: t("analytics.cost_of_living") },
     { id: "explorer", label: t("analytics.explorer") },
   ];
@@ -64,6 +67,7 @@ export function AnalyticsPage() {
       {tab === "movers" && <TopMoversTab />}
       {tab === "recurring" && <RecurringShareTab />}
       {tab === "heatmap" && <HeatmapTab />}
+      {tab === "daily" && <DailyTab />}
       {tab === "cost_of_living" && <CostOfLivingTab />}
       {tab === "explorer" && <ExplorerTab />}
     </div>

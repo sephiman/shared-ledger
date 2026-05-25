@@ -8,7 +8,9 @@ import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import java.time.LocalDate
 import java.time.YearMonth
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 @RestController
@@ -136,6 +138,29 @@ class AnalyticsController(
             else -> months
         }
         service.heatmap(householdId, safeMonths, dir)
+    }!!
+
+    @GetMapping("/daily")
+    fun daily(
+        @PathVariable householdId: UUID,
+        @RequestParam from: String,
+        @RequestParam to: String,
+        @RequestParam(defaultValue = "expense") direction: String,
+    ): DailyResponse = metrics.analyticsTimer("daily").record<DailyResponse> {
+        val dir = when (direction) {
+            "expense" -> Direction.expense
+            "income" -> Direction.income
+            else -> throw AppException.badRequest("INVALID_PARAMETER", "direction")
+        }
+        val pFrom = runCatching { LocalDate.parse(from) }
+            .getOrElse { throw AppException.badRequest("INVALID_PARAMETER", "from") }
+        val pTo = runCatching { LocalDate.parse(to) }
+            .getOrElse { throw AppException.badRequest("INVALID_PARAMETER", "to") }
+        if (pFrom.isAfter(pTo)) throw AppException.badRequest("INVALID_PARAMETER", "from")
+        if (ChronoUnit.DAYS.between(pFrom, pTo) > 366L * 20L) {
+            throw AppException.badRequest("INVALID_PARAMETER", "range_too_wide")
+        }
+        service.daily(householdId, pFrom, pTo, dir)
     }!!
 
     @GetMapping("/contribution-series")
