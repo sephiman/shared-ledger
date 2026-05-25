@@ -93,6 +93,15 @@ class AuthService(
         return user
     }
 
+    @Transactional
+    fun setDefaultHousehold(userId: UUID, householdId: UUID): User {
+        val user = loadManaged(userId)
+        members.findByIdHouseholdIdAndIdUserId(householdId, userId)
+            ?: throw AppException.forbidden("NOT_A_HOUSEHOLD_MEMBER")
+        user.defaultHouseholdId = householdId
+        return user
+    }
+
     private fun loadManaged(userId: UUID): User =
         users.findById(userId).orElseThrow { AppException.unauthorized() }
 }

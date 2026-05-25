@@ -25,6 +25,10 @@ data class MeUpdateRequest(
     val locale: String,
 )
 
+data class DefaultHouseholdRequest(
+    val householdId: UUID,
+)
+
 data class HouseholdMembershipDto(
     val householdId: UUID,
     val name: String,
@@ -36,6 +40,7 @@ data class MeResponse(
     val id: UUID,
     val email: String,
     val locale: String,
+    val defaultHouseholdId: UUID?,
     val households: List<HouseholdMembershipDto>,
 )
 

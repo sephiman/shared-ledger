@@ -289,7 +289,23 @@
     "wipe_action": "Borrar todos los datos…",
     "wipe_warning": "Se eliminarán de forma permanente todas las transacciones, instantáneas y movimientos. Se conservan los pasivos, presupuestos, plantillas recurrentes y miembros.",
     "wipe_confirm_prompt": "Escribe \"delete\" para confirmar",
-    "wipe_confirm_button": "Borrar todo"
+    "wipe_confirm_button": "Borrar todo",
+    "households_title": "Unidades familiares",
+    "households_description": "Cambia entre las unidades a las que perteneces, fija una por defecto o crea una nueva.",
+    "set_default": "Fijar por defecto",
+    "default_badge": "Por defecto",
+    "active_badge": "Activa",
+    "create_household": "Crear unidad",
+    "create_household_description": "Crea una unidad nueva. Pasarás a ser su propietario.",
+    "delete_household": "Eliminar",
+    "delete_household_blocked": "No se puede eliminar: algún miembro la tiene como predeterminada. Que elija otra primero.",
+    "delete_household_confirm": "¿Eliminar de forma permanente esta unidad y todo lo que contiene (transacciones, instantáneas, presupuestos…)? Esto no se puede deshacer."
+  },
+  "household": {
+    "switch_aria": "Cambiar unidad activa",
+    "switch_to": "Cambiar a esta",
+    "create_title": "Crear nueva unidad",
+    "create_submit": "Crear"
   },
   "errors": {
     "INVALID_CREDENTIALS": "Email o contraseña no válidos",
@@ -299,7 +315,13 @@
     "RATE_LIMITED": "Demasiados intentos; inténtalo más tarde",
     "VALIDATION_FAILED": "Corrige los campos marcados",
     "WIPE_CONFIRMATION_REQUIRED": "Escribe \"delete\" para confirmar",
+    "HOUSEHOLD_IS_DEFAULT": "Esta unidad es la predeterminada de uno o más miembros y no se puede eliminar.",
+    "HOUSEHOLD_NOT_FOUND": "Unidad no encontrada",
+    "NOT_HOUSEHOLD_OWNER": "Sólo los propietarios pueden hacer esto",
+    "NOT_A_HOUSEHOLD_MEMBER": "No eres miembro de esta unidad",
     "field_required": "Obligatorio",
+    "email_invalid": "Introduce un email válido",
+    "password_too_short": "La contraseña debe tener al menos 8 caracteres",
     "amount_positive": "Introduce un importe mayor que 0",
     "number_required": "Introduce un número",
     "select_required": "Selecciona una opción",

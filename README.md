@@ -32,8 +32,12 @@ Postgres is **not** part of this compose file. It runs externally on a Docker ne
 - All financial data belongs to a household, not directly to a user.
 - A user may belong to one or more households.
 - Each household has its own currency (default EUR) and default locale.
-- Roles within a household: **owner** and **member**. Only owners may modify household settings and manage invitations.
+- Roles within a household: **owner** and **member**. Only owners may modify household settings, manage invitations, or delete the household.
 - Every household-scoped API endpoint verifies the caller is a member of the household. Household IDs in paths are never trusted without that check.
+- **Switching households**: when a user belongs to more than one household, a dropdown appears in the header to switch the active household. With a single household the dropdown is hidden.
+- **Default household**: each user can pick one of their memberships as their default. On login (and on any new device), the app selects the default first; if none is set, the first membership is used. The default is stored per user and survives a clean browser.
+- **Creating a household**: any authenticated user can create a new household from the header dropdown or from *Settings → Households*. The creator becomes its `owner`.
+- **Deleting a household** (owner only, hard delete): permanently removes the household and every record cascaded from it (transactions, snapshots, movements, budgets, recurring templates, FIRE settings, invitations, memberships). Confirmation requires typing `delete`. The operation is **refused with `HOUSEHOLD_IS_DEFAULT`** if any user — yourself or anyone else — has it set as their default; pick a different default first, then delete.
 
 ### Categories (fixed, seeded)
 
@@ -171,6 +175,7 @@ Projection output:
 
 - Change language (per user).
 - Change password.
+- **Households**: list every household the user belongs to, mark one as default, switch the active household, create a new household, or hard-delete an owned household (subject to the default-household restriction described above).
 - Household name, currency and default locale (owners only).
 - Liabilities management: name + active flag (full CRUD).
 - Members & invitations: issue and revoke invitations, see pending ones (owners only).

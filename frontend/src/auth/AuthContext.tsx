@@ -12,6 +12,7 @@ export interface Me {
   id: string;
   email: string;
   locale: "en" | "es";
+  defaultHouseholdId: string | null;
   households: HouseholdMembership[];
 }
 
@@ -44,8 +45,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const me = await apiClient.get<Me>("/auth/me");
       setUser(me.data);
-      if (!activeHouseholdId && me.data.households.length > 0) {
-        setActiveHouseholdId(me.data.households[0].householdId);
+      const stillMember = activeHouseholdId
+        ? me.data.households.some((h) => h.householdId === activeHouseholdId)
+        : false;
+      if (!stillMember && me.data.households.length > 0) {
+        const next =
+          (me.data.defaultHouseholdId &&
+            me.data.households.find((h) => h.householdId === me.data.defaultHouseholdId)?.householdId) ||
+          me.data.households[0].householdId;
+        setActiveHouseholdId(next);
       }
     } catch {
       setUser(null);
@@ -66,7 +74,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await apiClient.post<Me>("/auth/login", { email, password, rememberMe });
       setUser(res.data);
       if (res.data.households.length > 0) {
-        setActiveHouseholdId(res.data.households[0].householdId);
+        const next =
+          (res.data.defaultHouseholdId &&
+            res.data.households.find((h) => h.householdId === res.data.defaultHouseholdId)?.householdId) ||
+          res.data.households[0].householdId;
+        setActiveHouseholdId(next);
       }
     },
     [setActiveHouseholdId],

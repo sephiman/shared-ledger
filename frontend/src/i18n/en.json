@@ -289,7 +289,23 @@
     "wipe_action": "Delete all data…",
     "wipe_warning": "All transactions, snapshots, and movements will be permanently removed. Liabilities, budgets, recurring templates, and household members are kept.",
     "wipe_confirm_prompt": "Type \"delete\" to confirm",
-    "wipe_confirm_button": "Delete everything"
+    "wipe_confirm_button": "Delete everything",
+    "households_title": "Households",
+    "households_description": "Switch between households you belong to, set a default, or create a new one.",
+    "set_default": "Set as default",
+    "default_badge": "Default",
+    "active_badge": "Active",
+    "create_household": "Create household",
+    "create_household_description": "Start a fresh household. You'll become its owner.",
+    "delete_household": "Delete",
+    "delete_household_blocked": "Cannot delete: this household is set as default by one or more members. They need to pick a different default first.",
+    "delete_household_confirm": "Permanently delete this household and everything in it (transactions, snapshots, budgets…)? This cannot be undone."
+  },
+  "household": {
+    "switch_aria": "Switch active household",
+    "switch_to": "Switch to",
+    "create_title": "Create new household",
+    "create_submit": "Create"
   },
   "errors": {
     "INVALID_CREDENTIALS": "Invalid email or password",
@@ -299,7 +315,13 @@
     "RATE_LIMITED": "Too many attempts; try again later",
     "VALIDATION_FAILED": "Please fix the highlighted fields",
     "WIPE_CONFIRMATION_REQUIRED": "Type \"delete\" to confirm",
+    "HOUSEHOLD_IS_DEFAULT": "This household is the default for one or more members and cannot be deleted.",
+    "HOUSEHOLD_NOT_FOUND": "Household not found",
+    "NOT_HOUSEHOLD_OWNER": "Only household owners can do that",
+    "NOT_A_HOUSEHOLD_MEMBER": "You are not a member of this household",
     "field_required": "Required",
+    "email_invalid": "Enter a valid email address",
+    "password_too_short": "Password must be at least 8 characters",
     "amount_positive": "Enter an amount greater than 0",
     "number_required": "Enter a number",
     "select_required": "Select an option",

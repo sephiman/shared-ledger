@@ -26,4 +26,7 @@ class User(
 
     @Column(name = "last_login_at")
     var lastLoginAt: Instant? = null,
+
+    @Column(name = "default_household_id")
+    var defaultHouseholdId: UUID? = null,
 ) : TimestampedEntity()

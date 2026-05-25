@@ -1,16 +1,23 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold, useAuth } from "@/auth/AuthContext";
-import { useChangePassword, useHousehold, useHouseholdMembers, useInvitations, useIssueInvitation, useRevokeInvitation, useUpdateHousehold, useUpdateMe, useWipeHouseholdData } from "@/api/settings";
+import { useChangePassword, useDeleteHousehold, useHousehold, useHouseholdMembers, useInvitations, useIssueInvitation, useRevokeInvitation, useSetDefaultHousehold, useUpdateHousehold, useUpdateMe, useWipeHouseholdData } from "@/api/settings";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select } from "@/components/ui/primitives";
 import { asApiError } from "@/api/client";
 import { useTheme, type ThemePreference } from "@/lib/theme";
+import { CreateHouseholdDialog } from "@/features/household/CreateHouseholdDialog";
 
 export function SettingsPage() {
   const { t, i18n } = useTranslation();
-  const { user, refresh } = useAuth();
+  const { user, refresh, activeHouseholdId, setActiveHouseholdId } = useAuth();
   const household = useActiveHousehold();
+  const setDefault = useSetDefaultHousehold();
+  const deleteHh = useDeleteHousehold();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
   const { data: hh } = useHousehold(household.householdId);
   const updateHh = useUpdateHousehold(household.householdId);
   const isOwner = household.role === "owner";
@@ -148,6 +155,140 @@ export function SettingsPage() {
           </Button>
         </CardBody>
       </Card>
+
+      {user && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-medium">{t("settings.households_title")}</p>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("settings.households_description")}</p>
+              </div>
+              <Button variant="secondary" onClick={() => setCreateOpen(true)}>
+                {t("settings.create_household")}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardBody>
+            <table className="w-full text-sm">
+              <tbody>
+                {user.households.map((h) => {
+                  const isDefault = h.householdId === user.defaultHouseholdId;
+                  const isActive = h.householdId === activeHouseholdId;
+                  const isOwnerHere = h.role === "owner";
+                  const isDeleting = deleteTargetId === h.householdId;
+                  return (
+                    <Fragment key={h.householdId}>
+                      <tr className="border-t border-border first:border-t-0">
+                        <td className="py-2">
+                          <span className="font-medium">{h.name}</span>
+                          <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">{h.currency}</span>
+                          {isDefault && (
+                            <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
+                              {t("settings.default_badge")}
+                            </span>
+                          )}
+                          {isActive && (
+                            <span className="ml-2 rounded bg-sky-100 px-1.5 py-0.5 text-xs text-sky-800 dark:bg-sky-900/50 dark:text-sky-200">
+                              {t("settings.active_badge")}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2 text-right">
+                          {!isActive && (
+                            <Button
+                              variant="ghost"
+                              onClick={() => setActiveHouseholdId(h.householdId)}
+                            >
+                              {t("household.switch_to")}
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            disabled={isDefault || setDefault.isPending}
+                            onClick={async () => {
+                              await setDefault.mutateAsync(h.householdId);
+                              await refresh();
+                            }}
+                          >
+                            {t("settings.set_default")}
+                          </Button>
+                          {isOwnerHere && (
+                            <Button
+                              variant="ghost"
+                              disabled={isDefault || deleteHh.isPending}
+                              title={isDefault ? t("settings.delete_household_blocked") : undefined}
+                              onClick={() => {
+                                setDeleteError(null);
+                                setDeleteConfirm("");
+                                setDeleteTargetId(h.householdId);
+                              }}
+                              className="text-red-600 dark:text-red-400"
+                            >
+                              {t("settings.delete_household")}
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                      {isDeleting && (
+                        <tr className="border-t border-border">
+                          <td colSpan={2} className="py-3">
+                            <div className="space-y-3 rounded-md border border-red-300 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950/30">
+                              <p className="text-sm text-red-800 dark:text-red-300">{t("settings.delete_household_confirm")}</p>
+                              <div>
+                                <Label>{t("settings.wipe_confirm_prompt")}</Label>
+                                <Input
+                                  value={deleteConfirm}
+                                  onChange={(e) => { setDeleteConfirm(e.target.value); if (deleteError) setDeleteError(null); }}
+                                  placeholder="delete"
+                                  autoFocus
+                                />
+                              </div>
+                              {deleteError && <FieldError message={deleteError} />}
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="danger"
+                                  disabled={deleteConfirm !== "delete" || deleteHh.isPending}
+                                  onClick={async () => {
+                                    setDeleteError(null);
+                                    try {
+                                      if (isActive) {
+                                        const fallback = user.households.find((x) => x.householdId !== h.householdId);
+                                        if (fallback) setActiveHouseholdId(fallback.householdId);
+                                      }
+                                      await deleteHh.mutateAsync(h.householdId);
+                                      await refresh();
+                                      setDeleteTargetId(null);
+                                      setDeleteConfirm("");
+                                    } catch (err) {
+                                      const api = asApiError(err);
+                                      setDeleteError(t(`errors.${api.code}`, api.message));
+                                    }
+                                  }}
+                                >
+                                  {t("settings.delete_household")}
+                                </Button>
+                                <Button
+                                  variant="secondary"
+                                  onClick={() => { setDeleteTargetId(null); setDeleteConfirm(""); setDeleteError(null); }}
+                                >
+                                  {t("common.cancel")}
+                                </Button>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+            <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">{t("settings.delete_household_blocked")}</p>
+            {deleteError && <FieldError message={deleteError} />}
+          </CardBody>
+        </Card>
+      )}
 
       {hh && (
         <Card>
@@ -376,6 +517,16 @@ export function SettingsPage() {
           </CardBody>
         </Card>
       )}
+
+      <CreateHouseholdDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={async (householdId) => {
+          await refresh();
+          setActiveHouseholdId(householdId);
+          setCreateOpen(false);
+        }}
+      />
     </div>
   );
 }

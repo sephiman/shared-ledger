@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "./client";
+import type { Me } from "@/auth/AuthContext";
 
 export interface Household {
   id: string;
@@ -97,6 +98,28 @@ export function useUpdateMe() {
   return useMutation({
     mutationFn: async (locale: "en" | "es") => {
       await apiClient.patch("/auth/me", { locale });
+    },
+  });
+}
+
+export function useCreateHousehold() {
+  return useMutation({
+    mutationFn: async (input: { name: string; currency: string; defaultLocale: "en" | "es" }) =>
+      (await apiClient.post<Household>("/households", input)).data,
+  });
+}
+
+export function useSetDefaultHousehold() {
+  return useMutation({
+    mutationFn: async (householdId: string) =>
+      (await apiClient.put<Me>("/auth/me/default-household", { householdId })).data,
+  });
+}
+
+export function useDeleteHousehold() {
+  return useMutation({
+    mutationFn: async (householdId: string) => {
+      await apiClient.delete(`/households/${householdId}`);
     },
   });
 }

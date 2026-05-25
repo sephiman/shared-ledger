@@ -31,13 +31,14 @@ export function AppShell() {
             <img src={logoSrc} alt={t("app.name")} className="h-10 w-auto" />
             {user && user.households.length > 1 && (
               <select
+                aria-label={t("household.switch_aria")}
                 value={activeHouseholdId ?? ""}
                 onChange={(e) => setActiveHouseholdId(e.target.value)}
                 className="rounded border border-border bg-white px-2 py-1 text-sm dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600"
               >
                 {user.households.map((h) => (
                   <option key={h.householdId} value={h.householdId}>
-                    {h.name}
+                    {h.householdId === user.defaultHouseholdId ? `★ ${h.name}` : h.name}
                   </option>
                 ))}
               </select>

@@ -3,7 +3,6 @@ package com.sharedledger.identity.auth
 import com.sharedledger.common.errors.AppException
 import com.sharedledger.household.HouseholdMemberRepository
 import com.sharedledger.household.HouseholdRepository
-import com.sharedledger.household.invitation.InvitationService
 import com.sharedledger.identity.user.User
 import com.sharedledger.identity.user.UserRepository
 import com.sharedledger.observability.AppMetrics
@@ -17,13 +16,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository
 import org.springframework.security.web.csrf.CsrfToken
-import org.springframework.web.bind.annotation.GetMapping
-import org.springframework.web.bind.annotation.PatchMapping
-import org.springframework.web.bind.annotation.PathVariable
-import org.springframework.web.bind.annotation.PostMapping
-import org.springframework.web.bind.annotation.RequestBody
-import org.springframework.web.bind.annotation.RequestMapping
-import org.springframework.web.bind.annotation.RestController
+import org.springframework.web.bind.annotation.*
 
 @RestController
 @RequestMapping("/api/auth")
@@ -73,7 +66,7 @@ class AuthController(
     }
 
     @PostMapping("/logout")
-    fun logout(request: HttpServletRequest, response: HttpServletResponse): Map<String, String> {
+    fun logout(request: HttpServletRequest): Map<String, String> {
         request.getSession(false)?.invalidate()
         SecurityContextHolder.clearContext()
         return mapOf("status" to "ok")
@@ -102,6 +95,13 @@ class AuthController(
         return mapOf("status" to "ok")
     }
 
+    @PutMapping("/me/default-household")
+    fun setDefaultHousehold(@Valid @RequestBody body: DefaultHouseholdRequest): MeResponse {
+        val current = currentUser.requireUser()
+        val updated = authService.setDefaultHousehold(current.id, body.householdId)
+        return buildMe(updated)
+    }
+
     private fun buildMe(user: User): MeResponse {
         val memberships = members.findAllByIdUserId(user.id)
         val byId = households.findAllById(memberships.map { it.id.householdId }).associateBy { it.id }
@@ -110,6 +110,7 @@ class AuthController(
                 HouseholdMembershipDto(h.id, h.name, h.currency, m.role.name)
             }
         }
-        return MeResponse(user.id, user.email, user.locale, list)
+        val defaultId = user.defaultHouseholdId?.takeIf { id -> list.any { it.householdId == id } }
+        return MeResponse(user.id, user.email, user.locale, defaultId, list)
     }
 }

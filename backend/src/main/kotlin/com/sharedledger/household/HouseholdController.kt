@@ -4,8 +4,10 @@ import com.sharedledger.common.errors.AppException
 import com.sharedledger.identity.auth.CurrentUser
 import com.sharedledger.identity.user.UserRepository
 import jakarta.validation.Valid
+import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
+import org.springframework.http.ResponseEntity
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.*
 import java.time.Instant
@@ -26,6 +28,17 @@ data class HouseholdUpdateRequest(
     val currency: String?,
     @field:Pattern(regexp = "en|es", message = "validation.invalid")
     val defaultLocale: String?,
+)
+
+data class HouseholdCreateRequest(
+    @field:NotBlank(message = "validation.required")
+    @field:Size(max = 120, message = "validation.required")
+    val name: String,
+    @field:NotBlank(message = "validation.required")
+    @field:Pattern(regexp = "[A-Za-z]{3}", message = "validation.invalid")
+    val currency: String,
+    @field:Pattern(regexp = "en|es", message = "validation.invalid")
+    val defaultLocale: String = "en",
 )
 
 data class HouseholdMemberDto(
@@ -52,6 +65,21 @@ class HouseholdController(
         return households.findAllByUser(user.id).map { h ->
             HouseholdDto(h.id, h.name, h.currency, h.defaultLocale, memberships[h.id]?.role?.name)
         }
+    }
+
+    @PostMapping
+    @Transactional
+    fun create(@Valid @RequestBody body: HouseholdCreateRequest): ResponseEntity<HouseholdDto> {
+        val user = currentUser.requireUser()
+        val household = Household(
+            name = body.name.trim(),
+            currency = body.currency.uppercase(),
+            defaultLocale = body.defaultLocale,
+        )
+        households.save(household)
+        members.save(HouseholdMember(HouseholdMemberId(household.id, user.id), HouseholdRole.owner))
+        val dto = HouseholdDto(household.id, household.name, household.currency, household.defaultLocale, HouseholdRole.owner.name)
+        return ResponseEntity.status(201).body(dto)
     }
 
     @GetMapping("/{householdId}")
@@ -87,5 +115,19 @@ class HouseholdController(
         body.currency?.let { h.currency = it.uppercase() }
         body.defaultLocale?.let { h.defaultLocale = it }
         return HouseholdDto(h.id, h.name, h.currency, h.defaultLocale, householdContext.role().name)
+    }
+
+    @RequireHouseholdOwner
+    @DeleteMapping("/{householdId}")
+    @Transactional
+    fun delete(@PathVariable householdId: UUID): ResponseEntity<Void> {
+        if (!households.existsById(householdId)) {
+            throw AppException.notFound("HOUSEHOLD_NOT_FOUND")
+        }
+        if (users.existsByDefaultHouseholdId(householdId)) {
+            throw AppException.conflict("HOUSEHOLD_IS_DEFAULT")
+        }
+        households.deleteById(householdId)
+        return ResponseEntity.noContent().build()
     }
 }

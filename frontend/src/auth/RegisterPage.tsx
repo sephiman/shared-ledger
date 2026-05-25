@@ -63,9 +63,11 @@ export function RegisterPage() {
               e.preventDefault();
               setError(null);
               const next: typeof fieldErrors = {};
-              if (!email.trim()) next.email = t("errors.field_required");
+              const trimmedEmail = email.trim();
+              if (!trimmedEmail) next.email = t("errors.field_required");
+              else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) next.email = t("errors.email_invalid");
               if (!password) next.password = t("errors.field_required");
-              else if (password.length < 8) next.password = t("errors.field_required");
+              else if (password.length < 8) next.password = t("errors.password_too_short");
               if (!invitationToken) {
                 if (!householdName.trim()) next.householdName = t("errors.field_required");
                 const cur = currency.trim();
