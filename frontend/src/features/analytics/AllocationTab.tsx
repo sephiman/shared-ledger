@@ -60,7 +60,7 @@ export function AllocationTab() {
       <Card>
         <CardHeader>
           <p className="font-medium">{t("analytics.allocation")}</p>
-          <p className="mt-1 text-sm text-gray-500">{t("analytics.allocation_description")}</p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("analytics.allocation_description")}</p>
         </CardHeader>
         <CardBody className="space-y-4">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -91,16 +91,16 @@ export function AllocationTab() {
             )}
           </div>
 
-          {isLoading && <p className="text-gray-500">{t("common.loading")}</p>}
+          {isLoading && <p className="text-gray-500 dark:text-gray-400">{t("common.loading")}</p>}
 
           {!isLoading && data && chartData.length === 0 && (
-            <p className="text-gray-500">{t("common.empty")}</p>
+            <p className="text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
           )}
 
           {!isLoading && data && chartData.length > 0 && (
             <>
               {incomeZero && (
-                <p className="text-sm text-gray-500">{t("analytics.allocation_no_income")}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{t("analytics.allocation_no_income")}</p>
               )}
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
@@ -135,7 +135,7 @@ export function AllocationTab() {
 
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="text-left text-gray-500">
+                  <thead className="text-left text-gray-500 dark:text-gray-400">
                     <tr>
                       <th className="py-2">{t("common.category")}</th>
                       <th className="text-right">{t("common.amount")}</th>

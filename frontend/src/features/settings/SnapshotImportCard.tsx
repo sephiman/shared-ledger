@@ -57,7 +57,7 @@ export function SnapshotImportCard() {
     <Card>
       <CardHeader>
         <p className="font-medium">{t("import.snapshots")}</p>
-        <p className="mt-1 text-sm text-gray-500">{t("import.snapshots_description")}</p>
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("import.snapshots_description")}</p>
       </CardHeader>
       <CardBody className="space-y-3">
         {!result && (

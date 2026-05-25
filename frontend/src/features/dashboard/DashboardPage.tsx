@@ -37,7 +37,7 @@ export function DashboardPage() {
   const { t, i18n } = useTranslation();
 
   if (month.isLoading || !month.data || year.isLoading || !year.data) {
-    return <p className="text-gray-500">{t("common.loading")}</p>;
+    return <p className="text-gray-500 dark:text-gray-400">{t("common.loading")}</p>;
   }
 
   const monthTitle = new Date().toLocaleString(i18n.language, { month: "long", year: "numeric" });
@@ -82,10 +82,10 @@ function SavingsRateTile({
     return (
       <Card>
         <CardHeader>
-          <p className="text-sm text-gray-500">{t("dashboard.savings_rate_tile_title")}</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">{t("dashboard.savings_rate_tile_title")}</p>
         </CardHeader>
         <CardBody>
-          <p className="text-gray-500">{t("common.loading")}</p>
+          <p className="text-gray-500 dark:text-gray-400">{t("common.loading")}</p>
         </CardBody>
       </Card>
     );
@@ -97,7 +97,7 @@ function SavingsRateTile({
   return (
     <Card>
       <CardHeader>
-        <p className="text-sm text-gray-500">{t("dashboard.savings_rate_tile_title")}</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">{t("dashboard.savings_rate_tile_title")}</p>
       </CardHeader>
       <CardBody>
         <div className="flex items-center justify-between gap-4">
@@ -105,7 +105,7 @@ function SavingsRateTile({
             <p className="text-3xl font-semibold">
               {formatNumber(extras.trailing12.rate, locale, 1)}%
             </p>
-            <p className="mt-1 text-xs text-gray-500">{t("dashboard.savings_rate_trailing12")}</p>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{t("dashboard.savings_rate_trailing12")}</p>
           </div>
           <div
             className="h-12 w-32 flex-shrink-0"
@@ -129,11 +129,11 @@ function SavingsRateTile({
         </div>
         <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
           <div>
-            <p className="text-gray-500">{t("dashboard.savings_rate_ytd")}</p>
+            <p className="text-gray-500 dark:text-gray-400">{t("dashboard.savings_rate_ytd")}</p>
             <p className="font-medium">{formatNumber(extras.ytd.rate, locale, 1)}%</p>
           </div>
           <div>
-            <p className="text-gray-500">{t("dashboard.savings_rate_month")}</p>
+            <p className="text-gray-500 dark:text-gray-400">{t("dashboard.savings_rate_month")}</p>
             <p className="font-medium">{formatNumber(extras.currentMonth.rate, locale, 1)}%</p>
           </div>
         </div>
@@ -156,10 +156,10 @@ function FixedCostTile({
     return (
       <Card>
         <CardHeader>
-          <p className="text-sm text-gray-500">{t("dashboard.fixed_cost_tile_title")}</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">{t("dashboard.fixed_cost_tile_title")}</p>
         </CardHeader>
         <CardBody>
-          <p className="text-gray-500">{t("common.loading")}</p>
+          <p className="text-gray-500 dark:text-gray-400">{t("common.loading")}</p>
         </CardBody>
       </Card>
     );
@@ -168,11 +168,11 @@ function FixedCostTile({
     return (
       <Card>
         <CardHeader>
-          <p className="text-sm text-gray-500">{t("dashboard.fixed_cost_tile_title")}</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">{t("dashboard.fixed_cost_tile_title")}</p>
         </CardHeader>
         <CardBody>
           <p className="text-2xl font-semibold text-gray-400">—</p>
-          <p className="mt-2 text-xs text-gray-500">{t("dashboard.fixed_cost_no_data")}</p>
+          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{t("dashboard.fixed_cost_no_data")}</p>
         </CardBody>
       </Card>
     );
@@ -182,7 +182,7 @@ function FixedCostTile({
   return (
     <Card>
       <CardHeader>
-        <p className="text-sm text-gray-500">{t("dashboard.fixed_cost_tile_title")}</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">{t("dashboard.fixed_cost_tile_title")}</p>
       </CardHeader>
       <CardBody>
         <p className="text-2xl font-semibold">
@@ -190,7 +190,7 @@ function FixedCostTile({
           {t("dashboard.fixed_cost_per_year", { amount: perYear })}
         </p>
         <p
-          className="mt-2 text-xs text-gray-500"
+          className="mt-2 text-xs text-gray-500 dark:text-gray-400"
           title={t("dashboard.fixed_cost_based_on", { count: extras.monthsAvailable })}
         >
           {t("dashboard.fixed_cost_with_discretionary", {
@@ -226,7 +226,7 @@ function DashboardSection({
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <Card>
           <CardHeader>
-            <p className="text-sm text-gray-500">{t("analytics.income")}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{t("analytics.income")}</p>
           </CardHeader>
           <CardBody>
             <p className="text-2xl font-semibold text-green-600">{formatMoney(data.income, currency, locale)}</p>
@@ -234,7 +234,7 @@ function DashboardSection({
         </Card>
         <Card>
           <CardHeader>
-            <p className="text-sm text-gray-500">{t("analytics.expenses")}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{t("analytics.expenses")}</p>
           </CardHeader>
           <CardBody>
             <p className="text-2xl font-semibold text-red-600">{formatMoney(data.expenses, currency, locale)}</p>
@@ -242,7 +242,7 @@ function DashboardSection({
         </Card>
         <Card>
           <CardHeader>
-            <p className="text-sm text-gray-500">{t("analytics.savings")}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{t("analytics.savings")}</p>
           </CardHeader>
           <CardBody>
             <p className="text-2xl font-semibold">{formatMoney(data.savings, currency, locale)}</p>
@@ -250,7 +250,7 @@ function DashboardSection({
         </Card>
         <Card>
           <CardHeader>
-            <p className="text-sm text-gray-500">{t("analytics.savings_rate")}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{t("analytics.savings_rate")}</p>
           </CardHeader>
           <CardBody>
             <p className="text-2xl font-semibold">{data.savingsRate.toFixed(1)}%</p>

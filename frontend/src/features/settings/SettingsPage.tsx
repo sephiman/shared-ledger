@@ -57,7 +57,7 @@ export function SettingsPage() {
       <Card>
         <CardHeader>
           <p className="font-medium">{t("import.title")}</p>
-          <p className="mt-1 text-sm text-gray-500">{t("import.settings_description")}</p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("import.settings_description")}</p>
         </CardHeader>
         <CardBody>
           <Link to="/settings/import" className="text-sm text-primary">{t("import.open")}</Link>
@@ -152,7 +152,7 @@ export function SettingsPage() {
         <Card>
           <CardHeader>
             <p className="font-medium">{t("settings.household_settings")}</p>
-            <p className="mt-1 text-sm text-gray-500">{t("settings.household_settings_description")}</p>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("settings.household_settings_description")}</p>
           </CardHeader>
           <CardBody className="space-y-3">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -217,7 +217,7 @@ export function SettingsPage() {
         <Card>
           <CardHeader>
             <p className="font-medium">{t("settings.members")}</p>
-            <p className="mt-1 text-sm text-gray-500">{t("settings.members_description")}</p>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("settings.members_description")}</p>
           </CardHeader>
           <CardBody className="space-y-3">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -248,11 +248,11 @@ export function SettingsPage() {
               <div className="rounded border border-sky-300 bg-sky-50 p-3 text-sm">
                 <p className="font-medium">{t("settings.issued_token")}</p>
                 <code className="block break-all rounded bg-white px-2 py-1">{issuedToken}</code>
-                <p className="mt-2 text-xs text-gray-600">{window.location.origin}/register?invite={issuedToken}</p>
+                <p className="mt-2 text-xs text-gray-600 dark:text-gray-300">{window.location.origin}/register?invite={issuedToken}</p>
               </div>
             )}
             <table className="w-full text-sm">
-              <thead className="text-left text-gray-500">
+              <thead className="text-left text-gray-500 dark:text-gray-400">
                 <tr>
                   <th className="py-2">{t("settings.invitation_role")}</th>
                   <th>{t("auth.email")}</th>
@@ -262,7 +262,7 @@ export function SettingsPage() {
               </thead>
               <tbody>
                 {invitations.length === 0 ? (
-                  <tr><td colSpan={4} className="py-2 text-gray-500">{t("common.empty")}</td></tr>
+                  <tr><td colSpan={4} className="py-2 text-gray-500 dark:text-gray-400">{t("common.empty")}</td></tr>
                 ) : invitations.map((i) => (
                   <tr key={i.id} className="border-t border-border">
                     <td className="py-2">{t(`settings.${i.role}`)}</td>
@@ -283,7 +283,7 @@ export function SettingsPage() {
         <Card className="border-red-300 dark:border-red-800">
           <CardHeader>
             <p className="font-medium text-red-700 dark:text-red-400">{t("settings.danger_zone")}</p>
-            <p className="mt-1 text-sm text-gray-500">{t("settings.wipe_description")}</p>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("settings.wipe_description")}</p>
           </CardHeader>
           <CardBody className="space-y-3">
             {!wipeOpen ? (

@@ -39,7 +39,7 @@ export function HeatmapTab() {
       <Card>
         <CardHeader>
           <p className="font-medium">{t("analytics.heatmap")}</p>
-          <p className="mt-1 text-sm text-gray-500">{t("analytics.heatmap_description")}</p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("analytics.heatmap_description")}</p>
         </CardHeader>
         <CardBody className="space-y-4">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -62,7 +62,7 @@ export function HeatmapTab() {
             </div>
           </div>
 
-          {isLoading && <p className="text-gray-500">{t("common.loading")}</p>}
+          {isLoading && <p className="text-gray-500 dark:text-gray-400">{t("common.loading")}</p>}
 
           {!isLoading && data && data.categories.length > 0 && (
             <HeatmapGrid
@@ -86,7 +86,7 @@ export function HeatmapTab() {
           )}
 
           {!isLoading && data && data.categories.length === 0 && (
-            <p className="text-gray-500">{t("common.empty")}</p>
+            <p className="text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
           )}
         </CardBody>
       </Card>
@@ -151,11 +151,11 @@ function HeatmapGrid({
     <div className="overflow-x-auto">
       <div className="inline-block min-w-full">
         <div className="grid text-xs" style={{ gridTemplateColumns: gridTemplate }}>
-          <div className="sticky left-0 z-10 bg-white px-2 py-1 font-medium text-gray-500 dark:bg-gray-800">
+          <div className="sticky left-0 z-10 bg-white px-2 py-1 font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">
             {t("common.category")}
           </div>
           {months.map((m) => (
-            <div key={`${m.year}-${m.month}`} className="px-1 py-1 text-center text-gray-500">
+            <div key={`${m.year}-${m.month}`} className="px-1 py-1 text-center text-gray-500 dark:text-gray-400">
               {monthName(m.month, locale, "short")} {String(m.year).slice(2)}
             </div>
           ))}

@@ -18,7 +18,7 @@ const DataImportPage = lazy(() => import("@/features/settings/DataImportPage").t
 
 function LazyFallback() {
   const { t } = useTranslation();
-  return <p className="text-gray-500">{t("common.loading")}</p>;
+  return <p className="text-gray-500 dark:text-gray-400">{t("common.loading")}</p>;
 }
 
 function Lazy({ children }: { children: ReactNode }) {

@@ -107,14 +107,14 @@ export function FirePage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-semibold">{t("fire.title")}</h1>
-        <p className="mt-1 text-sm text-gray-500">{t("fire.description")}</p>
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("fire.description")}</p>
       </div>
 
       {form && (
         <Card>
           <CardHeader>
             <p className="font-medium">{t("nav.settings")}</p>
-            <p className="mt-1 text-sm text-gray-500">{t("fire.settings_description")}</p>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("fire.settings_description")}</p>
           </CardHeader>
           <CardBody className="space-y-3">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -154,7 +154,7 @@ export function FirePage() {
 
             <div>
               <Label>{t("fire.scenarios")}</Label>
-              <p className="mb-2 text-xs text-gray-500">{t("fire.scenarios_help")}</p>
+              <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">{t("fire.scenarios_help")}</p>
               <div className="space-y-2">
                 {form.returnScenarios.map((sc, idx) => {
                   const meanErr = errors.scenarios?.[idx]?.meanPercent;
@@ -196,7 +196,7 @@ export function FirePage() {
 
             <div>
               <Label>{t("fire.qualifying")}</Label>
-              <p className="mb-2 text-xs text-gray-500">{t("fire.qualifying_help")}</p>
+              <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">{t("fire.qualifying_help")}</p>
               <div className={`flex flex-wrap gap-2 ${errors.qualifying ? "rounded-md p-1 ring-1 ring-red-500" : ""}`}>
                 {assetClasses.map((cls) => {
                   const active = form.qualifyingAssetClasses.includes(cls.code);
@@ -211,7 +211,7 @@ export function FirePage() {
                         setForm({ ...form, qualifyingAssetClasses: next });
                         clearFieldError("qualifying");
                       }}
-                      className={`rounded-full border px-3 py-1 text-sm ${active ? "border-primary bg-sky-50 text-primary" : "border-border bg-white text-gray-700"}`}
+                      className={`rounded-full border px-3 py-1 text-sm ${active ? "border-primary bg-sky-50 text-primary dark:bg-sky-900/40 dark:text-sky-300" : "border-border bg-white text-gray-700 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600"}`}
                     >
                       {t(`asset.${cls.code}`)}
                     </button>
@@ -232,7 +232,7 @@ export function FirePage() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <p className="font-medium">{t("fire.projection")} ({projection.monteCarloTrials.toLocaleString(i18n.language)} {t("fire.trials")})</p>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-gray-600 dark:text-gray-300">
                 {t("fire.actual_return")}: {projection.actualAnnualizedReturnPercent ? `${projection.actualAnnualizedReturnPercent}%` : t("fire.needs_snapshots")}
               </p>
             </div>
@@ -295,7 +295,7 @@ export function FirePage() {
           </CardHeader>
           <CardBody>
             <table className="w-full text-sm">
-              <thead className="text-left text-gray-500">
+              <thead className="text-left text-gray-500 dark:text-gray-400">
                 <tr>
                   <th className="py-2">{t("fire.scenario")}</th>
                   <th>{t("fire.target_hit_deterministic")}</th>
@@ -314,7 +314,7 @@ export function FirePage() {
                 ))}
               </tbody>
             </table>
-            <p className="mt-3 text-xs text-gray-500">
+            <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
               {t("fire.target_amount")}: {formatMoney(projection.settings.targetAmount, household.currency, i18n.language)}
             </p>
           </CardBody>

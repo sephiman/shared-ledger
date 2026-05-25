@@ -8,7 +8,7 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
 
   if (loading) {
-    return <div className="flex h-screen items-center justify-center text-gray-500">{t("common.loading")}</div>;
+    return <div className="flex h-screen items-center justify-center text-gray-500 dark:text-gray-400">{t("common.loading")}</div>;
   }
   if (!user) {
     const next = encodeURIComponent(location.pathname + location.search);

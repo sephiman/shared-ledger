@@ -23,11 +23,11 @@ export function AllocationTab() {
     <Card>
       <CardHeader>
         <p className="font-medium">{t("networth.allocation")} {latest ? `· ${formatDate(latest.snapshotDate, i18n.language)}` : ""}</p>
-        <p className="mt-1 text-sm text-gray-500">{t("networth.allocation_description")}</p>
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("networth.allocation_description")}</p>
       </CardHeader>
       <CardBody className="h-96">
         {data.length === 0 ? (
-          <p className="text-gray-500">{t("common.empty")}</p>
+          <p className="text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>

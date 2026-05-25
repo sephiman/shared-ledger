@@ -51,7 +51,7 @@ export function YearByYearTab() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="font-medium">{t("analytics.yby")}</p>
-              <p className="mt-1 text-sm text-gray-500">{t("analytics.yby_description")}</p>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("analytics.yby_description")}</p>
             </div>
             <div className="flex gap-2">
               <Chip active={metric === "expenses"} onClick={() => setMetric("expenses")}>

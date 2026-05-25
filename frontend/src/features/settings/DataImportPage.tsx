@@ -11,7 +11,7 @@ export function DataImportPage() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">{t("import.title")}</h1>
-          <p className="mt-1 text-sm text-gray-500">{t("import.page_description")}</p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("import.page_description")}</p>
         </div>
         <Link to="/settings" className="text-sm text-primary">{t("common.cancel")}</Link>
       </div>

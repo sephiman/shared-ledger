@@ -22,7 +22,7 @@ export function TrailingTab() {
       <Card>
         <CardHeader>
           <p className="font-medium">{t("analytics.income")} / {t("analytics.expenses")}</p>
-          <p className="mt-1 text-sm text-gray-500">{t("analytics.trailing_description")}</p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("analytics.trailing_description")}</p>
         </CardHeader>
         <CardBody className="h-72">
           <ResponsiveContainer width="100%" height="100%">

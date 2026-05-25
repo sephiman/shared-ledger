@@ -112,7 +112,7 @@ export function RecurringPage() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">{t("recurring.title")}</h1>
-          <p className="mt-1 text-sm text-gray-500">{t("recurring.description")}</p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("recurring.description")}</p>
         </div>
         <Button onClick={startNew}>{t("recurring.new")}</Button>
       </div>
@@ -142,11 +142,15 @@ export function RecurringPage() {
                   onChange={(e) => { setDraft({ ...draft, categoryCode: e.target.value }); if (errors.categoryCode) setErrors({ ...errors, categoryCode: undefined }); }}
                 >
                   <option value="">—</option>
-                  {categories.filter((c) => c.kind === draft.direction).map((c) => (
-                    <option key={c.code} value={c.code}>
-                      {t(`category.${c.code}`)}
-                    </option>
-                  ))}
+                  {categories
+                    .filter((c) => c.kind === draft.direction)
+                    .slice()
+                    .sort((a, b) => t(`category.${a.code}`).localeCompare(t(`category.${b.code}`), i18n.language, { sensitivity: "base" }))
+                    .map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {t(`category.${c.code}`)}
+                      </option>
+                    ))}
                 </Select>
                 <FieldError message={errors.categoryCode} />
               </div>
@@ -236,13 +240,13 @@ export function RecurringPage() {
       <Card>
         <CardBody>
           {isLoading ? (
-            <p className="text-gray-500">{t("common.loading")}</p>
+            <p className="text-gray-500 dark:text-gray-400">{t("common.loading")}</p>
           ) : templates.length === 0 ? (
-            <p className="text-gray-500">{t("common.empty")}</p>
+            <p className="text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="text-left text-gray-500">
+                <thead className="text-left text-gray-500 dark:text-gray-400">
                   <tr>
                     <th className="py-2">{t("common.category")}</th>
                     <th>{t("recurring.cadence")}</th>

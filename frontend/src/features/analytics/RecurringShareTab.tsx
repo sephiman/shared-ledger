@@ -52,7 +52,7 @@ export function RecurringShareTab() {
       <Card>
         <CardHeader>
           <p className="font-medium">{t("analytics.recurring_share")}</p>
-          <p className="mt-1 text-sm text-gray-500">{t("analytics.recurring_share_description")}</p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("analytics.recurring_share_description")}</p>
         </CardHeader>
         <CardBody className="space-y-4">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -87,10 +87,10 @@ export function RecurringShareTab() {
             )}
           </div>
 
-          {isLoading && <p className="text-gray-500">{t("common.loading")}</p>}
+          {isLoading && <p className="text-gray-500 dark:text-gray-400">{t("common.loading")}</p>}
 
           {!isLoading && data && Number(data.total) === 0 && (
-            <p className="text-gray-500">{t("common.empty")}</p>
+            <p className="text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
           )}
 
           {!isLoading && data && Number(data.total) > 0 && (
@@ -133,7 +133,7 @@ export function RecurringShareTab() {
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="text-left text-gray-500">
+                  <thead className="text-left text-gray-500 dark:text-gray-400">
                     <tr>
                       <th className="py-2">{t("common.category")}</th>
                       <th className="text-right">{t("common.amount")}</th>

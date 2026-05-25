@@ -19,7 +19,14 @@ export function BudgetsPage() {
   const { data: categories = [] } = useCategories();
   const upsert = useUpsertBudgets(household.householdId);
 
-  const expenseCategories = useMemo(() => categories.filter((c) => c.kind === "expense"), [categories]);
+  const expenseCategories = useMemo(
+    () =>
+      categories
+        .filter((c) => c.kind === "expense")
+        .slice()
+        .sort((a, b) => t(`category.${a.code}`).localeCompare(t(`category.${b.code}`), i18n.language, { sensitivity: "base" })),
+    [categories, t, i18n.language],
+  );
   const monthlyByCat = useMemo(() => new Map(monthly.map((b) => [b.categoryCode, b])), [monthly]);
   const annualByCat = useMemo(() => new Map(annual.filter((b) => b.month === null).map((b) => [b.categoryCode, b])), [annual]);
 
@@ -73,7 +80,7 @@ export function BudgetsPage() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">{t("budget.title")}</h1>
-          <p className="mt-1 text-sm text-gray-500">{t("budget.description")}</p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("budget.description")}</p>
         </div>
         <div className="flex gap-2">
           <div>
@@ -99,12 +106,12 @@ export function BudgetsPage() {
       <Card>
         <CardHeader>
           <p className="font-medium">{t("budget.monthly")} · {monthName(month, i18n.language)} {year}{summary ? ` — ${summary.daysElapsed}/${summary.daysInMonth}` : ""}</p>
-          <p className="mt-1 text-sm text-gray-500">{t("budget.monthly_description")}</p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("budget.monthly_description")}</p>
         </CardHeader>
         <CardBody>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="text-left text-gray-500">
+              <thead className="text-left text-gray-500 dark:text-gray-400">
                 <tr>
                   <th className="py-2">{t("common.category")}</th>
                   <th className="text-right">{t("budget.budget")}</th>
@@ -166,12 +173,12 @@ export function BudgetsPage() {
       <Card>
         <CardHeader>
           <p className="font-medium">{t("budget.annual_matrix")} · {year}</p>
-          <p className="mt-1 text-sm text-gray-500">{t("budget.annual_description")}</p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("budget.annual_description")}</p>
         </CardHeader>
         <CardBody>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="text-left text-gray-500">
+              <thead className="text-left text-gray-500 dark:text-gray-400">
                 <tr>
                   <th className="py-2">{t("common.category")}</th>
                   <th className="text-right">{t("budget.annual")}</th>

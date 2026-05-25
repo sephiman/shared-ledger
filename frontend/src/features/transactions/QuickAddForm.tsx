@@ -7,7 +7,7 @@ import { isoToday } from "@/lib/dates";
 import { asApiError } from "@/api/client";
 
 export function QuickAddForm({ householdId, onCreated }: { householdId: string; onCreated?: () => void }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { data: categories = [] } = useCategories();
   const { data: chips = [] } = useQuickChips(householdId);
   const create = useCreateTransaction(householdId);
@@ -19,7 +19,10 @@ export function QuickAddForm({ householdId, onCreated }: { householdId: string; 
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<{ date?: string; amount?: string; categoryCode?: string }>({});
 
-  const eligibleCategories = categories.filter((c) => c.kind === direction);
+  const eligibleCategories = categories
+    .filter((c) => c.kind === direction)
+    .slice()
+    .sort((a, b) => t(`category.${a.code}`).localeCompare(t(`category.${b.code}`), i18n.language, { sensitivity: "base" }));
 
   return (
     <form
@@ -59,7 +62,7 @@ export function QuickAddForm({ householdId, onCreated }: { householdId: string; 
     >
       {chips.length > 0 && (
         <div>
-          <p className="mb-2 text-xs text-gray-500">{t("tx.chips_title")}</p>
+          <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">{t("tx.chips_title")}</p>
           <div className="flex flex-wrap gap-2">
             {chips.map((c) => (
               <Chip

@@ -76,7 +76,7 @@ export function LoginPage() {
             <Button type="submit" className="w-full" disabled={submitting}>
               {t("auth.login")}
             </Button>
-            <p className="text-center text-sm text-gray-600">
+            <p className="text-center text-sm text-gray-600 dark:text-gray-300">
               {t("auth.no_account")} <Link to="/register" className="text-primary">{t("auth.register_here")}</Link>
             </p>
           </form>

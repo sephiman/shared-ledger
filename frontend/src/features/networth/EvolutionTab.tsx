@@ -69,11 +69,11 @@ export function EvolutionTab() {
     <Card>
       <CardHeader>
         <p className="font-medium">{t("networth.evolution")}</p>
-        <p className="mt-1 text-sm text-gray-500">{t("networth.evolution_description")}</p>
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("networth.evolution_description")}</p>
       </CardHeader>
       <CardBody className="h-96">
         {data.length === 0 ? (
-          <p className="text-gray-500">{t("common.empty")}</p>
+          <p className="text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data}>
@@ -130,7 +130,7 @@ export function EvolutionTab() {
       </CardBody>
       {data.length > 0 && contributions && !overlayVisible && (
         <div className="border-t border-border px-4 py-3">
-          <p className="text-sm text-gray-500">{t("networth.no_movements_hint")}</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">{t("networth.no_movements_hint")}</p>
         </div>
       )}
     </Card>
@@ -167,20 +167,20 @@ function EvolutionTooltip({ active, label, payload, assetClasses, currency, loca
     <div className="rounded-md border border-border bg-white p-3 text-xs shadow-sm dark:bg-gray-800">
       <p className="mb-2 font-medium">{label}</p>
       <p>
-        <span className="text-gray-500">{t("networth.net_worth")}: </span>
+        <span className="text-gray-500 dark:text-gray-400">{t("networth.net_worth")}: </span>
         <span className="font-medium">{formatMoney(netWorth, currency, locale)}</span>
       </p>
       {showContributions && contributions != null && (
         <>
           <p>
-            <span className="text-gray-500">{t("networth.contributions_to_date")}: </span>
+            <span className="text-gray-500 dark:text-gray-400">{t("networth.contributions_to_date")}: </span>
             <span className="font-medium">{formatMoney(contributions, currency, locale)}</span>
           </p>
           <p>
-            <span className="text-gray-500">{t("networth.revaluation")}: </span>
+            <span className="text-gray-500 dark:text-gray-400">{t("networth.revaluation")}: </span>
             <span className="font-medium">{formatMoney(revaluation ?? 0, currency, locale)}</span>
             {revaluationPct != null && (
-              <span className="ml-1 text-gray-500">({formatNumber(revaluationPct, locale, 1)}%)</span>
+              <span className="ml-1 text-gray-500 dark:text-gray-400">({formatNumber(revaluationPct, locale, 1)}%)</span>
             )}
           </p>
         </>
@@ -190,7 +190,7 @@ function EvolutionTooltip({ active, label, payload, assetClasses, currency, loca
         if (typeof v !== "number" || v === 0) return null;
         return (
           <p key={cls.code}>
-            <span className="text-gray-500">{t(`asset.${cls.code}`)}: </span>
+            <span className="text-gray-500 dark:text-gray-400">{t(`asset.${cls.code}`)}: </span>
             <span>{formatMoney(v, currency, locale)}</span>
           </p>
         );

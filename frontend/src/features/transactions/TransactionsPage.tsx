@@ -48,7 +48,7 @@ export function TransactionsPage() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">{t("tx.title")}</h1>
-          <p className="mt-1 text-sm text-gray-500">{t("tx.description")}</p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("tx.description")}</p>
         </div>
         <div className="flex gap-2">
           <a
@@ -105,24 +105,27 @@ export function TransactionsPage() {
               <Label>{t("common.category")}</Label>
               <Select value={filters.categoryCode ?? ""} onChange={(e) => setFilters({ ...filters, categoryCode: e.target.value || undefined, page: 0 })}>
                 <option value="">{t("common.all")}</option>
-                {categories.map((c) => (
-                  <option key={c.code} value={c.code}>
-                    {t(`category.${c.code}`)}
-                  </option>
-                ))}
+                {categories
+                  .slice()
+                  .sort((a, b) => t(`category.${a.code}`).localeCompare(t(`category.${b.code}`), i18n.language, { sensitivity: "base" }))
+                  .map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {t(`category.${c.code}`)}
+                    </option>
+                  ))}
               </Select>
             </div>
           </div>
         </CardHeader>
         <CardBody>
           {isLoading || !page ? (
-            <p className="text-gray-500">{t("common.loading")}</p>
+            <p className="text-gray-500 dark:text-gray-400">{t("common.loading")}</p>
           ) : page.items.length === 0 ? (
-            <p className="text-gray-500">{t("common.empty")}</p>
+            <p className="text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="text-left text-gray-500">
+                <thead className="text-left text-gray-500 dark:text-gray-400">
                   <tr>
                     <th className="py-2">{t("common.date")}</th>
                     <th>{t("common.category")}</th>

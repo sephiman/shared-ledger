@@ -43,7 +43,7 @@ export function AnalyticsPage() {
             onClick={() => setTab(it.id)}
             className={cn(
               "px-3 py-2 text-sm font-medium",
-              tab === it.id ? "border-b-2 border-primary text-primary" : "text-gray-600",
+              tab === it.id ? "border-b-2 border-primary text-primary" : "text-gray-600 dark:text-gray-300",
             )}
           >
             {it.label}

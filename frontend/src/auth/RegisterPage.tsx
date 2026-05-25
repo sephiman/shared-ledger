@@ -50,7 +50,7 @@ export function RegisterPage() {
         <CardHeader>
           <h1 className="text-lg font-semibold">{t("auth.register")}</h1>
           {invite && (
-            <p className="mt-1 text-sm text-gray-600">
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
               {t("auth.register_with_invite", { household: invite.householdName, role: invite.role })}
             </p>
           )}
@@ -126,7 +126,7 @@ export function RegisterPage() {
             </div>
             {!invitationToken && (
               <div className="space-y-3 rounded border border-border p-3">
-                <p className="text-sm font-medium text-gray-700">{t("auth.household_section")}</p>
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{t("auth.household_section")}</p>
                 <div>
                   <Label>{t("auth.household_name")}</Label>
                   <Input
@@ -152,7 +152,7 @@ export function RegisterPage() {
             <Button type="submit" className="w-full" disabled={submitting}>
               {t("auth.register")}
             </Button>
-            <p className="text-center text-sm text-gray-600">
+            <p className="text-center text-sm text-gray-600 dark:text-gray-300">
               {t("auth.have_account")} <Link to="/login" className="text-primary">{t("auth.login_here")}</Link>
             </p>
           </form>

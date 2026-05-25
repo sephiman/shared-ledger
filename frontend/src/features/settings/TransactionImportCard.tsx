@@ -54,7 +54,7 @@ export function TransactionImportCard() {
     <Card>
       <CardHeader>
         <p className="font-medium">{t("import.transactions")}</p>
-        <p className="mt-1 text-sm text-gray-500">{t("import.transactions_description")}</p>
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("import.transactions_description")}</p>
       </CardHeader>
       <CardBody className="space-y-3">
         {!result && (
@@ -101,30 +101,30 @@ function PreviewPanel({ preview, dataset }: { preview: PreviewSummary; dataset: 
         {dataset === "snapshots" && <Stat label={t("import.would_replace")} value={preview.wouldReplace} />}
       </div>
       {(preview.dateFrom || preview.dateTo) && (
-        <p className="text-gray-600">{t("import.date_range")}: {preview.dateFrom} → {preview.dateTo}</p>
+        <p className="text-gray-600 dark:text-gray-300">{t("import.date_range")}: {preview.dateFrom} → {preview.dateTo}</p>
       )}
       {dataset === "transactions" && (
-        <p className="text-gray-600">
+        <p className="text-gray-600 dark:text-gray-300">
           {t("common.income")}: {preview.sumIncome ?? "0,00"} · {t("common.expense")}: {preview.sumExpense ?? "0,00"}
         </p>
       )}
       {dataset === "snapshots" && (
-        <p className="text-gray-600">
+        <p className="text-gray-600 dark:text-gray-300">
           {t("networth.total_assets")}: {preview.sumAssets ?? "0,00"} · {t("networth.total_liabilities")}: {preview.sumLiabilities ?? "0,00"}
         </p>
       )}
       {dataset === "movements" && (
-        <p className="text-gray-600">
+        <p className="text-gray-600 dark:text-gray-300">
           {t("networth.contribution")}: {preview.sumContributions ?? "0,00"} · {t("networth.withdrawal")}: {preview.sumWithdrawals ?? "0,00"} · {t("networth.debt_payment")}: {preview.sumDebtPayments ?? "0,00"}
         </p>
       )}
       {preview.errorCount > 0 && (
         <div>
           <p className="font-medium text-red-600">{t("import.errors_found", { count: preview.errorCount })}</p>
-          {preview.truncatedErrors && <p className="text-xs text-gray-500">{t("import.errors_truncated")}</p>}
+          {preview.truncatedErrors && <p className="text-xs text-gray-500 dark:text-gray-400">{t("import.errors_truncated")}</p>}
           <div className="mt-1 max-h-64 overflow-auto">
             <table className="w-full text-xs">
-              <thead className="text-left text-gray-500">
+              <thead className="text-left text-gray-500 dark:text-gray-400">
                 <tr>
                   <th className="py-1">{t("import.row")}</th>
                   <th>{t("import.field")}</th>
@@ -156,10 +156,10 @@ function SkippedRowsTable({ rows, truncated, totalCount }: { rows: { row: number
   return (
     <div>
       <p className="font-medium text-amber-700">{t("import.skipped_found", { count: totalCount })}</p>
-      {truncated && <p className="text-xs text-gray-500">{t("import.skipped_truncated", { shown: rows.length })}</p>}
+      {truncated && <p className="text-xs text-gray-500 dark:text-gray-400">{t("import.skipped_truncated", { shown: rows.length })}</p>}
       <div className="mt-1 max-h-64 overflow-auto">
         <table className="w-full text-xs">
-          <thead className="text-left text-gray-500">
+          <thead className="text-left text-gray-500 dark:text-gray-400">
             <tr>
               <th className="py-1">{t("import.row")}</th>
               <th>{t("import.skipped_summary")}</th>
@@ -199,7 +199,7 @@ function ResultPanel({ result, onReset }: { result: ExecuteResult; onReset: () =
 function Stat({ label, value }: { label: string; value: number }) {
   return (
     <div>
-      <p className="text-xs text-gray-500">{label}</p>
+      <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
       <p className="text-lg font-medium">{value}</p>
     </div>
   );

@@ -120,7 +120,7 @@ export function SnapshotsTab() {
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-sm text-gray-500">{t("networth.snapshots_description")}</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">{t("networth.snapshots_description")}</p>
         <div className="flex gap-2">
           <a
             href={`/api/households/${household.householdId}/snapshots/export.csv`}
@@ -169,7 +169,7 @@ export function SnapshotsTab() {
                         value={assets[cls.code] ?? ""}
                         onChange={(e) => setAssets({ ...assets, [cls.code]: e.target.value })}
                       />
-                      <span className={`w-24 text-right text-xs ${d.large ? "text-amber-600" : "text-gray-500"}`}>{d.abs} ({d.pct})</span>
+                      <span className={`w-24 text-right text-xs ${d.large ? "text-amber-600" : "text-gray-500 dark:text-gray-400"}`}>{d.abs} ({d.pct})</span>
                     </div>
                   );
                 })}
@@ -189,7 +189,7 @@ export function SnapshotsTab() {
                         value={liab[l.id] ?? ""}
                         onChange={(e) => setLiab({ ...liab, [l.id]: e.target.value })}
                       />
-                      <span className={`w-24 text-right text-xs ${d.large ? "text-amber-600" : "text-gray-500"}`}>{d.abs} ({d.pct})</span>
+                      <span className={`w-24 text-right text-xs ${d.large ? "text-amber-600" : "text-gray-500 dark:text-gray-400"}`}>{d.abs} ({d.pct})</span>
                     </div>
                   );
                 })}
@@ -216,10 +216,10 @@ export function SnapshotsTab() {
       <Card>
         <CardBody>
           {snapshots.length === 0 ? (
-            <p className="text-gray-500">{t("common.empty")}</p>
+            <p className="text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
           ) : (
             <table className="w-full text-sm">
-              <thead className="text-left text-gray-500">
+              <thead className="text-left text-gray-500 dark:text-gray-400">
                 <tr>
                   <th className="py-2">{t("networth.snapshot_date")}</th>
                   <th className="text-right">{t("networth.total_assets")}</th>

@@ -19,7 +19,7 @@ export function ForecastTab() {
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="font-medium">{t("analytics.forecast")}</p>
-            <p className="mt-1 text-sm text-gray-500">{t("analytics.forecast_description")}</p>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("analytics.forecast_description")}</p>
           </div>
           <div className="flex items-end gap-2">
             <div>
@@ -39,13 +39,13 @@ export function ForecastTab() {
       </CardHeader>
       <CardBody>
         {!data ? (
-          <p className="text-gray-500">{t("common.loading")}</p>
+          <p className="text-gray-500 dark:text-gray-400">{t("common.loading")}</p>
         ) : data.categories.length === 0 ? (
-          <p className="text-gray-500">{t("common.empty")}</p>
+          <p className="text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="text-left text-gray-500">
+              <thead className="text-left text-gray-500 dark:text-gray-400">
                 <tr>
                   <th className="py-2">{t("common.category")}</th>
                   {data.categories[0].projection.map((p) => (
@@ -58,7 +58,7 @@ export function ForecastTab() {
                   <tr key={c.categoryCode} className="border-t border-border">
                     <td className="py-2">{t(`category.${c.categoryCode}`)}</td>
                     {c.projection.map((p) => (
-                      <td key={`${p.year}-${p.month}`} className={`text-right ${p.source === "recurring" ? "text-primary" : "text-gray-700"}`}>
+                      <td key={`${p.year}-${p.month}`} className={`text-right ${p.source === "recurring" ? "text-primary" : "text-gray-700 dark:text-gray-200"}`}>
                         {formatMoney(p.projectedExpense, household.currency, i18n.language)}
                       </td>
                     ))}

@@ -55,7 +55,7 @@ export function MovementImportCard() {
     <Card>
       <CardHeader>
         <p className="font-medium">{t("import.movements")}</p>
-        <p className="mt-1 text-sm text-gray-500">{t("import.movements_description")}</p>
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("import.movements_description")}</p>
       </CardHeader>
       <CardBody className="space-y-3">
         {!result && (

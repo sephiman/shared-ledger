@@ -75,7 +75,7 @@ export function MovementsTab() {
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-sm text-gray-500">{t("networth.movements_description")}</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">{t("networth.movements_description")}</p>
         <div className="flex gap-2">
           <a
             href={`/api/households/${household.householdId}/movements/export.csv`}
@@ -173,10 +173,10 @@ export function MovementsTab() {
       <Card>
         <CardBody>
           {!page || page.items.length === 0 ? (
-            <p className="text-gray-500">{t("common.empty")}</p>
+            <p className="text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
           ) : (
             <table className="w-full text-sm">
-              <thead className="text-left text-gray-500">
+              <thead className="text-left text-gray-500 dark:text-gray-400">
                 <tr>
                   <th className="py-2">{t("common.date")}</th>
                   <th>{t("networth.movement_type")}</th>

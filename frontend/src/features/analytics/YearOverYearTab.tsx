@@ -18,7 +18,7 @@ export function YearOverYearTab() {
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="font-medium">{t("analytics.yoy")}</p>
-            <p className="mt-1 text-sm text-gray-500">{t("analytics.yoy_description")}</p>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("analytics.yoy_description")}</p>
           </div>
           <div>
             <Label className="text-xs">{t("common.month")}</Label>
@@ -32,10 +32,10 @@ export function YearOverYearTab() {
       </CardHeader>
       <CardBody>
         {!data || data.years.length === 0 ? (
-          <p className="text-gray-500">{t("common.empty")}</p>
+          <p className="text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
         ) : (
           <table className="w-full text-sm">
-            <thead className="text-left text-gray-500">
+            <thead className="text-left text-gray-500 dark:text-gray-400">
               <tr>
                 <th className="py-2"></th>
                 {data.years.map((y) => (
@@ -66,7 +66,7 @@ export function YearOverYearTab() {
                 <tr key={c.categoryCode} className="border-t border-border">
                   <td className="py-2">{t(`category.${c.categoryCode}`)}</td>
                   {data.years.map((y) => (
-                    <td key={y} className="text-right text-gray-600">{formatMoney(c.perYear[String(y)] ?? "0", household.currency, i18n.language)}</td>
+                    <td key={y} className="text-right text-gray-600 dark:text-gray-300">{formatMoney(c.perYear[String(y)] ?? "0", household.currency, i18n.language)}</td>
                   ))}
                 </tr>
               ))}

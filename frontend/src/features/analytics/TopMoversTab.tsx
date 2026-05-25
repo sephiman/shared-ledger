@@ -30,7 +30,7 @@ export function TopMoversTab() {
       <Card>
         <CardHeader>
           <p className="font-medium">{t("analytics.top_movers")}</p>
-          <p className="mt-1 text-sm text-gray-500">{t("analytics.top_movers_description")}</p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("analytics.top_movers_description")}</p>
         </CardHeader>
         <CardBody className="space-y-4">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -59,7 +59,7 @@ export function TopMoversTab() {
             </div>
           </div>
 
-          {isLoading && <p className="text-gray-500">{t("common.loading")}</p>}
+          {isLoading && <p className="text-gray-500 dark:text-gray-400">{t("common.loading")}</p>}
 
           {!isLoading && data && (
             <div className="space-y-4">
@@ -83,7 +83,7 @@ export function TopMoversTab() {
               {data.newActivity.length > 0 && (
                 <div className="space-y-2">
                   <h3 className="text-sm font-medium">{t("analytics.new_activity")}</h3>
-                  <p className="text-xs text-gray-500">{t("analytics.new_activity_description")}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{t("analytics.new_activity_description")}</p>
                   <MoverTable
                     rows={data.newActivity}
                     tone="new"
@@ -94,7 +94,7 @@ export function TopMoversTab() {
               )}
 
               {data.increases.length === 0 && data.decreases.length === 0 && data.newActivity.length === 0 && (
-                <p className="text-gray-500">{t("analytics.no_movers")}</p>
+                <p className="text-gray-500 dark:text-gray-400">{t("analytics.no_movers")}</p>
               )}
 
               {(data.increases.length > 0 || data.decreases.length > 0) && (
@@ -131,7 +131,7 @@ function MoverList({
     <div className="space-y-2">
       <h3 className="text-sm font-medium">{title}</h3>
       {rows.length === 0 ? (
-        <p className="text-sm text-gray-500">{t("common.empty")}</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
       ) : (
         <MoverTable rows={rows} tone={tone} currency={currency} locale={locale} />
       )}
@@ -156,7 +156,7 @@ function MoverTable({
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
-        <thead className="text-left text-gray-500">
+        <thead className="text-left text-gray-500 dark:text-gray-400">
           <tr>
             <th className="py-2">{t("common.category")}</th>
             <th className="text-right">{t("analytics.period_amount")}</th>

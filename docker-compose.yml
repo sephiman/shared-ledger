@@ -63,7 +63,10 @@ services:
       retries: 3
       start_period: 10s
 
+# Externally-managed Postgres on a shared Docker network.
+# The backend joins this network and resolves Postgres by DNS alias = DB_HOST.
+# SHARED_NETWORK_NAME defaults to "all_dockers" but can be overridden via .env.
 networks:
   my-network:
     external: true
-    name: all_dockers
+    name: ${SHARED_NETWORK_NAME:-all_dockers}
