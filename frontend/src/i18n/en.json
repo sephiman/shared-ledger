@@ -163,6 +163,9 @@
   },
   "analytics": {
     "title": "Analytics",
+    "composition": "Composition",
+    "changes": "Changes",
+    "trends": "Trends",
     "month_dashboard": "Month dashboard",
     "yoy": "Year-over-year",
     "yoy_description": "Compares income and expenses for the selected month across the last 5 years.",

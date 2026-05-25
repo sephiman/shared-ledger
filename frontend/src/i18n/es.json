@@ -163,6 +163,9 @@
   },
   "analytics": {
     "title": "Analítica",
+    "composition": "Composición",
+    "changes": "Cambios",
+    "trends": "Tendencias",
     "month_dashboard": "Panel del mes",
     "yoy": "Año contra año",
     "yoy_description": "Compara ingresos y gastos del mes seleccionado en los últimos 5 años.",
