@@ -5,6 +5,7 @@ import { asApiError } from "@/api/client";
 import { useExecuteSnapshots, usePreviewSnapshots, type ExecuteResult, type PreviewSummary, type SnapshotPolicy } from "@/api/import";
 import { Button, Card, CardBody, CardHeader, FieldError, Label, Select } from "@/components/ui/primitives";
 import { PreviewPanel, ResultPanel } from "./TransactionImportCard";
+import { CsvFormatHelp } from "./CsvFormatHelp";
 import { FilePicker } from "./FilePicker";
 
 export function SnapshotImportCard() {
@@ -58,6 +59,7 @@ export function SnapshotImportCard() {
       <CardHeader>
         <p className="font-medium">{t("import.snapshots")}</p>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("import.snapshots_description")}</p>
+        <CsvFormatHelp dataset="snapshots" />
       </CardHeader>
       <CardBody className="space-y-3">
         {!result && (

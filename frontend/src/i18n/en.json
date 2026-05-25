@@ -458,7 +458,55 @@
     "inserted": "Inserted",
     "skipped": "Skipped",
     "replaced": "Replaced",
-    "import_another": "Import another file"
+    "import_another": "Import another file",
+    "format": {
+      "toggle": "Show CSV format reference",
+      "ai_hint": "Tip: paste this whole reference into any AI assistant (ChatGPT, Claude, Gemini, …) together with your bank statement, PDF account summary or other report, and ask it to produce a CSV that follows exactly this format. Then come back here, validate the result, and import it.",
+      "headers_label": "Header line",
+      "columns_label": "Columns",
+      "example_label": "Example",
+      "required": "required",
+      "optional": "optional",
+      "custom_badge": "Custom",
+      "none_yet": "No values defined yet.",
+      "tx": {
+        "intro": "European-CSV dialect: UTF-8, semicolon (;) column separator, comma (,) as decimal mark, RFC-4180 quoting (wrap a field in double quotes if it contains ;, \" or a line break; escape \" by doubling). First row is the literal header shown below; one transaction per data row. Amounts are always positive — the sign of the operation comes from the direction column.",
+        "date": "ISO date YYYY-MM-DD (e.g. 2026-05-25). The day the transaction occurred.",
+        "direction": "Either income or expense (lowercase). Must match the kind of the chosen category_code.",
+        "category_code": "One of the codes listed below. income.* codes are valid only with direction=income; the rest are expense.",
+        "amount": "Positive decimal. Comma is the canonical decimal separator (e.g. 12,34); dot is also accepted on import. No thousand separators, no currency symbol. Up to 2 decimals are stored.",
+        "description": "Optional free text up to 500 characters. Leave the field empty if there is no description.",
+        "created_at": "Optional ISO instant in UTC (e.g. 2026-05-25T10:30:00Z). Defaults to now if empty.",
+        "updated_at": "Optional ISO instant in UTC. Defaults to now if empty.",
+        "income_codes_label": "Income category codes (use with direction=income)",
+        "expense_codes_label": "Expense category codes (use with direction=expense)",
+        "dedup": "Duplicate detection: rows whose (date, direction, category_code, amount, description) match an existing transaction are skipped automatically."
+      },
+      "snap": {
+        "intro": "European-CSV dialect: UTF-8, semicolon (;) column separator, comma (,) as decimal mark, RFC-4180 quoting. First row is the literal header shown below. A snapshot of net worth on a given date is built by grouping rows that share the same date. Each snapshot must include a value row for every asset class AND for every active liability of the household, otherwise the whole date is rejected.",
+        "date": "ISO date YYYY-MM-DD. All rows with the same date form one snapshot.",
+        "note": "Optional free text. Must be identical on every row for the same date (otherwise the date is rejected).",
+        "kind": "Either asset or liability (lowercase). Determines what key is expected on this row.",
+        "key": "If kind=asset: one of the asset class codes below. If kind=liability: the exact name of an active liability defined in this household (case-sensitive).",
+        "value": "Non-negative decimal (0 is allowed). Comma is the canonical decimal separator; dot is also accepted on import.",
+        "asset_codes_label": "Asset class codes",
+        "liabilities_label": "Liabilities",
+        "liabilities_note": "Liability rows must reference the exact name of a liability that already exists and is active in this household. Inactive or unknown names will be rejected. Create or activate liabilities in Net worth → Liabilities first.",
+        "no_liabilities": "No active liabilities in this household yet.",
+        "rules": "Per-date rules: every asset class must have exactly one value row, every active liability must have exactly one value row, and no asset/liability key may repeat within the same date."
+      },
+      "mov": {
+        "intro": "European-CSV dialect: UTF-8, semicolon (;) column separator, comma (,) as decimal mark, RFC-4180 quoting. First row is the literal header shown below; one movement per data row. Movements record contributions or withdrawals against an asset class, or payments against a liability — they do not affect transaction totals.",
+        "date": "ISO date YYYY-MM-DD.",
+        "type": "One of contribution, withdrawal, or debt_payment (lowercase).",
+        "asset_class_code": "Required when type is contribution or withdrawal — one of the asset class codes below. Must be empty when type=debt_payment.",
+        "liability_name": "Required when type=debt_payment — exact name of an existing active liability in this household. Must be empty when type is contribution or withdrawal.",
+        "amount": "Positive decimal. Comma is the canonical decimal separator; dot is also accepted on import. No sign — the type column determines the effect.",
+        "description": "Optional free text up to 500 characters.",
+        "created_at": "Optional ISO instant in UTC (e.g. 2026-05-25T10:30:00Z). Defaults to now if empty.",
+        "dedup": "Duplicate detection: rows whose (date, type, target, amount, description) match an existing movement are skipped automatically. target is the asset_class_code or the liability."
+      }
+    }
   },
   "category": {
     "income.salary": "Salary",

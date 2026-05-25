@@ -4,6 +4,7 @@ import { useActiveHousehold } from "@/auth/AuthContext";
 import { asApiError } from "@/api/client";
 import { useExecuteMovements, usePreviewMovements, type ExecuteResult, type PreviewSummary } from "@/api/import";
 import { Button, Card, CardBody, CardHeader, FieldError } from "@/components/ui/primitives";
+import { CsvFormatHelp } from "./CsvFormatHelp";
 import { FilePicker } from "./FilePicker";
 import { PreviewPanel, ResultPanel } from "./TransactionImportCard";
 
@@ -56,6 +57,7 @@ export function MovementImportCard() {
       <CardHeader>
         <p className="font-medium">{t("import.movements")}</p>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("import.movements_description")}</p>
+        <CsvFormatHelp dataset="movements" />
       </CardHeader>
       <CardBody className="space-y-3">
         {!result && (

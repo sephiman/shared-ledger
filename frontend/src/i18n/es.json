@@ -458,7 +458,55 @@
     "inserted": "Insertadas",
     "skipped": "Omitidas",
     "replaced": "Reemplazadas",
-    "import_another": "Importar otro archivo"
+    "import_another": "Importar otro archivo",
+    "format": {
+      "toggle": "Ver formato del CSV",
+      "ai_hint": "Consejo: pega esta referencia completa en cualquier asistente de IA (ChatGPT, Claude, Gemini, …) junto con tu extracto bancario, resumen de cuenta en PDF u otro informe, y pídele que genere un CSV que siga exactamente este formato. Después vuelve aquí, valida el resultado e impórtalo.",
+      "headers_label": "Fila de cabecera",
+      "columns_label": "Columnas",
+      "example_label": "Ejemplo",
+      "required": "obligatorio",
+      "optional": "opcional",
+      "custom_badge": "Personalizada",
+      "none_yet": "Aún no hay valores definidos.",
+      "tx": {
+        "intro": "CSV en dialecto europeo: UTF-8, punto y coma (;) como separador de columnas, coma (,) como separador decimal, comillas según RFC-4180 (encierra el campo entre comillas dobles si contiene ;, \" o un salto de línea; escapa \" duplicándolas). La primera fila es la cabecera literal indicada abajo; una transacción por fila. Los importes son siempre positivos — el signo de la operación lo determina la columna direction.",
+        "date": "Fecha ISO YYYY-MM-DD (p. ej. 2026-05-25). Día en que ocurrió la transacción.",
+        "direction": "income o expense (en minúscula). Debe coincidir con la naturaleza del category_code elegido.",
+        "category_code": "Uno de los códigos listados abajo. Los códigos income.* solo son válidos con direction=income; el resto son de gasto.",
+        "amount": "Decimal positivo. La coma es el separador decimal canónico (p. ej. 12,34); también se acepta el punto al importar. Sin separador de miles ni símbolo de moneda. Hasta 2 decimales.",
+        "description": "Texto libre opcional de hasta 500 caracteres. Deja el campo vacío si no hay descripción.",
+        "created_at": "Instante ISO opcional en UTC (p. ej. 2026-05-25T10:30:00Z). Si está vacío, se usa el momento actual.",
+        "updated_at": "Instante ISO opcional en UTC. Si está vacío, se usa el momento actual.",
+        "income_codes_label": "Códigos de categoría de ingreso (usar con direction=income)",
+        "expense_codes_label": "Códigos de categoría de gasto (usar con direction=expense)",
+        "dedup": "Detección de duplicados: las filas cuya combinación (date, direction, category_code, amount, description) coincide con una transacción existente se omiten automáticamente."
+      },
+      "snap": {
+        "intro": "CSV en dialecto europeo: UTF-8, punto y coma (;) como separador de columnas, coma (,) como separador decimal, comillas según RFC-4180. La primera fila es la cabecera literal indicada abajo. Una instantánea de patrimonio en una fecha se forma agrupando todas las filas con la misma fecha. Cada instantánea debe incluir una fila de valor para CADA clase de activo Y para CADA pasivo activo de la unidad familiar; si no, esa fecha se rechaza.",
+        "date": "Fecha ISO YYYY-MM-DD. Todas las filas con la misma fecha forman una instantánea.",
+        "note": "Texto libre opcional. Debe ser idéntico en todas las filas con la misma fecha (si no, la fecha se rechaza).",
+        "kind": "asset o liability (en minúscula). Determina qué se espera en la columna key.",
+        "key": "Si kind=asset: uno de los códigos de clase de activo de abajo. Si kind=liability: el nombre exacto de un pasivo activo definido en esta unidad familiar (sensible a mayúsculas).",
+        "value": "Decimal no negativo (se permite 0). La coma es el separador decimal canónico; también se acepta el punto al importar.",
+        "asset_codes_label": "Códigos de clase de activo",
+        "liabilities_label": "Pasivos",
+        "liabilities_note": "Las filas de tipo liability deben usar el nombre exacto de un pasivo que ya exista y esté activo en esta unidad familiar. Los pasivos inactivos o desconocidos se rechazarán. Crea o activa primero los pasivos en Patrimonio → Pasivos.",
+        "no_liabilities": "Aún no hay pasivos activos en esta unidad familiar.",
+        "rules": "Reglas por fecha: cada clase de activo debe tener exactamente una fila de valor, cada pasivo activo debe tener exactamente una fila de valor, y ninguna combinación kind+key puede repetirse dentro de la misma fecha."
+      },
+      "mov": {
+        "intro": "CSV en dialecto europeo: UTF-8, punto y coma (;) como separador de columnas, coma (,) como separador decimal, comillas según RFC-4180. La primera fila es la cabecera literal indicada abajo; un movimiento por fila. Los movimientos registran aportaciones o retiradas sobre una clase de activo, o pagos sobre un pasivo — no afectan a los totales de transacciones.",
+        "date": "Fecha ISO YYYY-MM-DD.",
+        "type": "Uno de contribution, withdrawal o debt_payment (en minúscula).",
+        "asset_class_code": "Obligatorio si type es contribution o withdrawal — uno de los códigos de clase de activo de abajo. Debe quedar vacío si type=debt_payment.",
+        "liability_name": "Obligatorio si type=debt_payment — nombre exacto de un pasivo activo existente en esta unidad familiar. Debe quedar vacío si type es contribution o withdrawal.",
+        "amount": "Decimal positivo. La coma es el separador decimal canónico; también se acepta el punto al importar. Sin signo — el efecto lo determina la columna type.",
+        "description": "Texto libre opcional de hasta 500 caracteres.",
+        "created_at": "Instante ISO opcional en UTC (p. ej. 2026-05-25T10:30:00Z). Si está vacío, se usa el momento actual.",
+        "dedup": "Detección de duplicados: las filas cuya combinación (date, type, destino, amount, description) coincide con un movimiento existente se omiten automáticamente. El destino es el asset_class_code o el pasivo."
+      }
+    }
   },
   "category": {
     "income.salary": "Salario",
