@@ -9,8 +9,8 @@ const NAV = [
   { to: "/transactions", key: "nav.transactions" },
   { to: "/recurring", key: "nav.recurring" },
   { to: "/budgets", key: "nav.budgets" },
-  { to: "/networth", key: "nav.networth" },
   { to: "/analytics", key: "nav.analytics" },
+  { to: "/networth", key: "nav.networth" },
   { to: "/fire", key: "nav.fire" },
   { to: "/settings", key: "nav.settings" },
 ];
