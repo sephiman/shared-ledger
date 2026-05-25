@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold, useAuth } from "@/auth/AuthContext";
-import { useChangePassword, useHousehold, useInvitations, useIssueInvitation, useRevokeInvitation, useUpdateHousehold, useUpdateMe, useWipeHouseholdData } from "@/api/settings";
+import { useChangePassword, useHousehold, useHouseholdMembers, useInvitations, useIssueInvitation, useRevokeInvitation, useUpdateHousehold, useUpdateMe, useWipeHouseholdData } from "@/api/settings";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select } from "@/components/ui/primitives";
 import { asApiError } from "@/api/client";
 import { useTheme, type ThemePreference } from "@/lib/theme";
@@ -27,6 +27,7 @@ export function SettingsPage() {
     }
   }, [hh]);
 
+  const { data: members = [] } = useHouseholdMembers(household.householdId);
   const { data: invitations = [] } = useInvitations(household.householdId);
   const issue = useIssueInvitation(household.householdId);
   const revoke = useRevokeInvitation(household.householdId);
@@ -213,11 +214,47 @@ export function SettingsPage() {
         </Card>
       )}
 
+      <Card>
+        <CardHeader>
+          <p className="font-medium">{t("settings.members_list_title")}</p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("settings.members_list_description")}</p>
+        </CardHeader>
+        <CardBody>
+          <table className="w-full text-sm">
+            <thead className="text-left text-gray-500 dark:text-gray-400">
+              <tr>
+                <th className="py-2">{t("auth.email")}</th>
+                <th>{t("settings.invitation_role")}</th>
+                <th>{t("settings.joined_at")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {members.length === 0 ? (
+                <tr><td colSpan={3} className="py-2 text-gray-500 dark:text-gray-400">{t("common.empty")}</td></tr>
+              ) : members.map((m) => (
+                <tr key={m.userId} className="border-t border-border">
+                  <td className="py-2">
+                    {m.email}
+                    {user?.id === m.userId && (
+                      <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                        {t("settings.you")}
+                      </span>
+                    )}
+                  </td>
+                  <td>{t(`settings.${m.role}`)}</td>
+                  <td>{new Date(m.joinedAt).toLocaleDateString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </CardBody>
+      </Card>
+
       {isOwner && (
         <Card>
           <CardHeader>
-            <p className="font-medium">{t("settings.members")}</p>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("settings.members_description")}</p>
+            <p className="font-medium">{t("settings.invitations")}</p>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("settings.invitations_description")}</p>
           </CardHeader>
           <CardBody className="space-y-3">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">

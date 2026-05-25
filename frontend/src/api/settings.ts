@@ -26,6 +26,13 @@ export interface IssuedInvitation {
   expiresAt: string;
 }
 
+export interface HouseholdMemberRow {
+  userId: string;
+  email: string;
+  role: "owner" | "member";
+  joinedAt: string;
+}
+
 export function useHousehold(householdId: string) {
   return useQuery({
     queryKey: ["household", householdId],
@@ -41,6 +48,14 @@ export function useUpdateHousehold(householdId: string) {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["household", householdId] });
     },
+  });
+}
+
+export function useHouseholdMembers(householdId: string) {
+  return useQuery({
+    queryKey: ["household-members", householdId],
+    queryFn: async () =>
+      (await apiClient.get<HouseholdMemberRow[]>(`/households/${householdId}/members`)).data,
   });
 }
 

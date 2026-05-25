@@ -2,18 +2,14 @@ package com.sharedledger.household
 
 import com.sharedledger.common.errors.AppException
 import com.sharedledger.identity.auth.CurrentUser
+import com.sharedledger.identity.user.UserRepository
 import jakarta.validation.Valid
-import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
 import org.springframework.transaction.annotation.Transactional
-import org.springframework.web.bind.annotation.GetMapping
-import org.springframework.web.bind.annotation.PatchMapping
-import org.springframework.web.bind.annotation.PathVariable
-import org.springframework.web.bind.annotation.RequestBody
-import org.springframework.web.bind.annotation.RequestMapping
-import org.springframework.web.bind.annotation.RestController
-import java.util.UUID
+import org.springframework.web.bind.annotation.*
+import java.time.Instant
+import java.util.*
 
 data class HouseholdDto(
     val id: UUID,
@@ -32,11 +28,19 @@ data class HouseholdUpdateRequest(
     val defaultLocale: String?,
 )
 
+data class HouseholdMemberDto(
+    val userId: UUID,
+    val email: String,
+    val role: HouseholdRole,
+    val joinedAt: Instant,
+)
+
 @RestController
 @RequestMapping("/api/households")
 class HouseholdController(
     private val households: HouseholdRepository,
     private val members: HouseholdMemberRepository,
+    private val users: UserRepository,
     private val currentUser: CurrentUser,
     private val householdContext: HouseholdContext,
 ) {
@@ -54,6 +58,21 @@ class HouseholdController(
     fun get(@PathVariable householdId: UUID): HouseholdDto {
         val h = households.findById(householdId).orElseThrow { AppException.notFound("HOUSEHOLD_NOT_FOUND") }
         return HouseholdDto(h.id, h.name, h.currency, h.defaultLocale, householdContext.role().name)
+    }
+
+    @GetMapping("/{householdId}/members")
+    @Transactional(readOnly = true)
+    fun listMembers(@PathVariable householdId: UUID): List<HouseholdMemberDto> {
+        val memberships = members.findAllByIdHouseholdId(householdId)
+        if (memberships.isEmpty()) return emptyList()
+        val emailByUserId = users.findAllById(memberships.map { it.id.userId })
+            .associate { it.id to it.email }
+        return memberships
+            .mapNotNull { m ->
+                val email = emailByUserId[m.id.userId] ?: return@mapNotNull null
+                HouseholdMemberDto(m.id.userId, email, m.role, m.joinedAt)
+            }
+            .sortedWith(compareBy({ if (it.role == HouseholdRole.owner) 0 else 1 }, { it.joinedAt }))
     }
 
     @RequireHouseholdOwner

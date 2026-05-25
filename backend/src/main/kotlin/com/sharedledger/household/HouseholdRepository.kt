@@ -17,5 +17,6 @@ interface HouseholdRepository : JpaRepository<Household, UUID> {
 
 interface HouseholdMemberRepository : JpaRepository<HouseholdMember, HouseholdMemberId> {
     fun findAllByIdUserId(userId: UUID): List<HouseholdMember>
+    fun findAllByIdHouseholdId(householdId: UUID): List<HouseholdMember>
     fun findByIdHouseholdIdAndIdUserId(householdId: UUID, userId: UUID): HouseholdMember?
 }
