@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "./client";
-import type { Me } from "@/auth/AuthContext";
+import { useAuth, type Me } from "@/auth/AuthContext";
 
 export interface Household {
   id: string;
@@ -43,11 +43,15 @@ export function useHousehold(householdId: string) {
 
 export function useUpdateHousehold(householdId: string) {
   const qc = useQueryClient();
+  const { refresh } = useAuth();
   return useMutation({
     mutationFn: async (patch: Partial<Household>) =>
       (await apiClient.patch<Household>(`/households/${householdId}`, patch)).data,
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["household", householdId] });
+      // Pages read currency/name from useActiveHousehold() (sourced from /auth/me);
+      // refresh so changes propagate beyond the Settings card.
+      void refresh();
     },
   });
 }

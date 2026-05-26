@@ -30,7 +30,7 @@
     "register_with_invite": "Invitado a {{household}} como {{role}}",
     "household_section": "Tu nueva unidad familiar",
     "household_name": "Nombre",
-    "household_currency": "Moneda (ej. EUR)",
+    "household_currency": "Moneda",
     "household_locale": "Idioma"
   },
   "common": {

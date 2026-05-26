@@ -1,5 +1,6 @@
 package com.sharedledger.identity.auth
 
+import com.sharedledger.common.validation.ValidCurrency
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
@@ -63,6 +64,7 @@ data class NewHouseholdInput(
     @field:NotBlank(message = "validation.required")
     val name: String,
     @field:NotBlank(message = "validation.required")
+    @field:ValidCurrency
     val currency: String,
     @field:Pattern(regexp = "en|es", message = "validation.invalid")
     val defaultLocale: String = "en",

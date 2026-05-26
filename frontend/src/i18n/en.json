@@ -30,7 +30,7 @@
     "register_with_invite": "You're invited to join {{household}} as {{role}}",
     "household_section": "Your new household",
     "household_name": "Household name",
-    "household_currency": "Currency (e.g. EUR)",
+    "household_currency": "Currency",
     "household_locale": "Language"
   },
   "common": {

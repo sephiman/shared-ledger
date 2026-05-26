@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useCreateHousehold } from "@/api/settings";
 import { asApiError } from "@/api/client";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select } from "@/components/ui/primitives";
+import { getCurrencyOptions } from "@/lib/currency";
 
 interface Props {
   open: boolean;
@@ -18,6 +19,7 @@ export function CreateHouseholdDialog({ open, onClose, onCreated }: Props) {
   const [defaultLocale, setDefaultLocale] = useState<"en" | "es">(i18n.language.startsWith("es") ? "es" : "en");
   const [errors, setErrors] = useState<{ name?: string; currency?: string }>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const currencyOptions = useMemo(() => getCurrencyOptions(i18n.language), [i18n.language]);
 
   if (!open) return null;
 
@@ -54,7 +56,7 @@ export function CreateHouseholdDialog({ open, onClose, onCreated }: Props) {
               const trimmedName = name.trim();
               const trimmedCurrency = currency.trim().toUpperCase();
               if (!trimmedName) next.name = t("errors.field_required");
-              if (!trimmedCurrency || trimmedCurrency.length !== 3) next.currency = t("errors.field_required");
+              if (!trimmedCurrency) next.currency = t("errors.field_required");
               if (Object.keys(next).length > 0) {
                 setErrors(next);
                 return;
@@ -88,12 +90,15 @@ export function CreateHouseholdDialog({ open, onClose, onCreated }: Props) {
             </div>
             <div>
               <Label>{t("auth.household_currency")}</Label>
-              <Input
+              <Select
                 value={currency}
                 invalid={!!errors.currency}
-                maxLength={3}
                 onChange={(e) => { setCurrency(e.target.value); if (errors.currency) setErrors({ ...errors, currency: undefined }); }}
-              />
+              >
+                {currencyOptions.map((opt) => (
+                  <option key={opt.code} value={opt.code}>{opt.label}</option>
+                ))}
+              </Select>
               <FieldError message={errors.currency} />
             </div>
             <div>

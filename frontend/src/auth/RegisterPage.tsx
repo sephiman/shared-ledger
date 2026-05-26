@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/auth/AuthContext";
 import { apiClient, asApiError, seedCsrf } from "@/api/client";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select } from "@/components/ui/primitives";
+import { getCurrencyOptions } from "@/lib/currency";
 
 interface PublicInvite {
   householdName: string;
@@ -28,6 +29,7 @@ export function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string; householdName?: string; currency?: string }>({});
+  const currencyOptions = useMemo(() => getCurrencyOptions(i18n.language), [i18n.language]);
 
   useEffect(() => {
     void (async () => {
@@ -70,9 +72,7 @@ export function RegisterPage() {
               else if (password.length < 8) next.password = t("errors.password_too_short");
               if (!invitationToken) {
                 if (!householdName.trim()) next.householdName = t("errors.field_required");
-                const cur = currency.trim();
-                if (!cur) next.currency = t("errors.field_required");
-                else if (cur.length !== 3) next.currency = t("errors.field_required");
+                if (!currency.trim()) next.currency = t("errors.field_required");
               }
               if (Object.keys(next).length > 0) {
                 setFieldErrors(next);
@@ -140,12 +140,15 @@ export function RegisterPage() {
                 </div>
                 <div>
                   <Label>{t("auth.household_currency")}</Label>
-                  <Input
+                  <Select
                     value={currency}
                     invalid={!!fieldErrors.currency}
                     onChange={(e) => { setCurrency(e.target.value); if (fieldErrors.currency) setFieldErrors({ ...fieldErrors, currency: undefined }); }}
-                    maxLength={3}
-                  />
+                  >
+                    {currencyOptions.map((opt) => (
+                      <option key={opt.code} value={opt.code}>{opt.label}</option>
+                    ))}
+                  </Select>
                   <FieldError message={fieldErrors.currency} />
                 </div>
               </div>

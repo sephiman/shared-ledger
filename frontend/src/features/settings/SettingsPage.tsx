@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold, useAuth } from "@/auth/AuthContext";
@@ -10,6 +10,7 @@ import { useTheme, type ThemePreference } from "@/lib/theme";
 import { categoryIcon } from "@/lib/categoryGroup";
 import { CreateHouseholdDialog } from "@/features/household/CreateHouseholdDialog";
 import { CustomCategoryDialog } from "./CustomCategoryDialog";
+import { getCurrencyOptions } from "@/lib/currency";
 
 export function SettingsPage() {
   const { t, i18n } = useTranslation();
@@ -28,6 +29,15 @@ export function SettingsPage() {
   const [name, setName] = useState<string>("");
   const [currency, setCurrency] = useState<string>("");
   const [defaultLocale, setDefaultLocale] = useState<string>("");
+  const currencyOptions = useMemo(() => {
+    const opts = getCurrencyOptions(i18n.language);
+    // Keep a legacy/non-listed code (e.g. one stored before ISO validation) visible in the dropdown.
+    const existing = hh?.currency;
+    if (existing && !opts.some((o) => o.code === existing)) {
+      return [{ code: existing, label: existing }, ...opts];
+    }
+    return opts;
+  }, [i18n.language, hh?.currency]);
 
   useEffect(() => {
     if (hh) {
@@ -322,13 +332,16 @@ export function SettingsPage() {
               </div>
               <div>
                 <Label>{t("common.currency")}</Label>
-                <Input
+                <Select
                   value={currency || hh.currency}
                   invalid={!!hhErrors.currency}
                   onChange={(e) => { setCurrency(e.target.value); if (hhErrors.currency) setHhErrors({ ...hhErrors, currency: undefined }); }}
                   disabled={!isOwner}
-                  maxLength={3}
-                />
+                >
+                  {currencyOptions.map((opt) => (
+                    <option key={opt.code} value={opt.code}>{opt.label}</option>
+                  ))}
+                </Select>
                 <FieldError message={hhErrors.currency} />
               </div>
               <div>
@@ -347,7 +360,6 @@ export function SettingsPage() {
                   const next: typeof hhErrors = {};
                   if (!nextName) next.name = t("errors.field_required");
                   if (!nextCurrency) next.currency = t("errors.field_required");
-                  else if (nextCurrency.length !== 3) next.currency = t("errors.field_required");
                   if (Object.keys(next).length > 0) {
                     setHhErrors(next);
                     return;

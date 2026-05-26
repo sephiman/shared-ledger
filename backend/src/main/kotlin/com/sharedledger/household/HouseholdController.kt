@@ -1,6 +1,7 @@
 package com.sharedledger.household
 
 import com.sharedledger.common.errors.AppException
+import com.sharedledger.common.validation.ValidCurrency
 import com.sharedledger.identity.auth.CurrentUser
 import com.sharedledger.identity.user.UserRepository
 import jakarta.validation.Valid
@@ -24,7 +25,7 @@ data class HouseholdDto(
 data class HouseholdUpdateRequest(
     @field:Size(min = 1, max = 120, message = "validation.required")
     val name: String?,
-    @field:Pattern(regexp = "[A-Za-z]{3}", message = "validation.invalid")
+    @field:ValidCurrency
     val currency: String?,
     @field:Pattern(regexp = "en|es", message = "validation.invalid")
     val defaultLocale: String?,
@@ -35,7 +36,7 @@ data class HouseholdCreateRequest(
     @field:Size(max = 120, message = "validation.required")
     val name: String,
     @field:NotBlank(message = "validation.required")
-    @field:Pattern(regexp = "[A-Za-z]{3}", message = "validation.invalid")
+    @field:ValidCurrency
     val currency: String,
     @field:Pattern(regexp = "en|es", message = "validation.invalid")
     val defaultLocale: String = "en",
