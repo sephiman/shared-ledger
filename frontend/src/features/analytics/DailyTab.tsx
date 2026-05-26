@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useActiveHousehold } from "@/auth/AuthContext";
 import { useDailyTotals, useYearsAvailable, type DailyPoint } from "@/api/analytics";
 import { useCategories, type Category } from "@/api/catalog";
@@ -568,8 +568,9 @@ function DailyPatternCharts({
       iso,
       label: weekdayName(iso, locale, "short"),
       avg: counts[iso] > 0 ? sums[iso] / counts[iso] : 0,
+      fill: iso === highlightWeekday ? HIGHLIGHT_HUE : EXPENSE_HUE,
     }));
-  }, [points, from, to, locale]);
+  }, [points, from, to, locale, highlightWeekday]);
 
   const domData = useMemo(() => {
     const sums = new Array(32).fill(0); // 1..31
@@ -608,12 +609,11 @@ function DailyPatternCharts({
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="label" />
               <YAxis tickFormatter={(v) => shortAmount(Number(v))} />
-              <Tooltip formatter={(v) => formatMoney(Number(v), currency, locale)} />
-              <Bar dataKey="avg" fill={EXPENSE_HUE}>
-                {dowData.map((d) => (
-                  <Cell key={d.iso} fill={d.iso === highlightWeekday ? HIGHLIGHT_HUE : EXPENSE_HUE} />
-                ))}
-              </Bar>
+              <Tooltip
+                cursor={{ fill: "rgba(14,165,233,0.08)" }}
+                content={(props) => <PatternTooltip {...props} currency={currency} locale={locale} />}
+              />
+              <Bar dataKey="avg" fill={EXPENSE_HUE} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -626,13 +626,36 @@ function DailyPatternCharts({
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="dom" interval={2} />
               <YAxis tickFormatter={(v) => shortAmount(Number(v))} />
-              <Tooltip formatter={(v) => formatMoney(Number(v), currency, locale)} />
+              <Tooltip
+                cursor={{ fill: "rgba(14,165,233,0.08)" }}
+                content={(props) => <PatternTooltip {...props} currency={currency} locale={locale} />}
+              />
               <Bar dataKey="avg" fill={EXPENSE_HUE} />
             </BarChart>
           </ResponsiveContainer>
         </div>
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{t("analytics.daily_pattern_dom_note")}</p>
       </div>
+    </div>
+  );
+}
+
+interface PatternTooltipProps {
+  active?: boolean;
+  label?: string | number;
+  payload?: ReadonlyArray<{ value?: unknown }>;
+  currency: string;
+  locale: string;
+}
+
+function PatternTooltip({ active, label, payload, currency, locale }: PatternTooltipProps) {
+  if (!active || !payload || payload.length === 0) return null;
+  const raw = payload[0]?.value;
+  const value = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : 0;
+  return (
+    <div className="rounded-md border border-border bg-white p-2 text-xs shadow-sm dark:bg-gray-800">
+      <p className="mb-1 font-medium text-gray-900 dark:text-gray-100">{label}</p>
+      <p className="font-medium tabular-nums text-gray-900 dark:text-gray-100">{formatMoney(value, currency, locale)}</p>
     </div>
   );
 }

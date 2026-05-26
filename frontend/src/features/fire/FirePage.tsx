@@ -6,6 +6,7 @@ import { useAssetClasses } from "@/api/catalog";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label } from "@/components/ui/primitives";
 import { Area, CartesianGrid, ComposedChart, Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { formatMoney } from "@/lib/money";
+import { ChartTooltip } from "@/components/charts/ChartTooltip";
 
 const PALETTE = ["#0ea5e9", "#22c55e", "#a855f7", "#f97316", "#ef4444"];
 
@@ -244,14 +245,19 @@ export function FirePage() {
                 <XAxis dataKey="year" />
                 <YAxis />
                 <Tooltip
-                  formatter={(v, name) => {
-                    if (Array.isArray(v)) {
-                      const lo = formatMoney(String(v[0]), household.currency, i18n.language);
-                      const hi = formatMoney(String(v[1]), household.currency, i18n.language);
-                      return [`${lo} – ${hi}`, name as string];
-                    }
-                    return formatMoney(String(v), household.currency, i18n.language);
-                  }}
+                  content={(props) => (
+                    <ChartTooltip
+                      {...props}
+                      formatValue={(v) => {
+                        if (Array.isArray(v)) {
+                          const lo = formatMoney(String(v[0]), household.currency, i18n.language);
+                          const hi = formatMoney(String(v[1]), household.currency, i18n.language);
+                          return `${lo} – ${hi}`;
+                        }
+                        return formatMoney(String(v ?? "0"), household.currency, i18n.language);
+                      }}
+                    />
+                  )}
                 />
                 <Legend />
                 {projection.scenarios.map((s, idx) => {

@@ -40,6 +40,11 @@ export function HeatmapTab() {
 
   const baseColor = direction === "expense" ? EXPENSE_HUE : INCOME_HUE;
 
+  const visibleRows = useMemo(
+    () => (data?.categories ?? []).filter((r) => r.values.some((v) => v != null && Number(v) !== 0)),
+    [data],
+  );
+
   return (
     <div className="space-y-4">
       <Card>
@@ -70,10 +75,10 @@ export function HeatmapTab() {
 
           {isLoading && <p className="text-gray-500 dark:text-gray-400">{t("common.loading")}</p>}
 
-          {!isLoading && data && data.categories.length > 0 && (
+          {!isLoading && data && visibleRows.length > 0 && (
             <HeatmapGrid
               months={data.months}
-              rows={data.categories}
+              rows={visibleRows}
               categories={categories}
               currency={household.currency}
               locale={i18n.language}
@@ -92,7 +97,7 @@ export function HeatmapTab() {
             />
           )}
 
-          {!isLoading && data && data.categories.length === 0 && (
+          {!isLoading && data && visibleRows.length === 0 && (
             <p className="text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
           )}
         </CardBody>

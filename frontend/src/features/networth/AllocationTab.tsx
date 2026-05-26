@@ -3,8 +3,10 @@ import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
 import { useSnapshots } from "@/api/networth";
 import { Card, CardBody, CardHeader } from "@/components/ui/primitives";
-import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { formatDate } from "@/lib/dates";
+import { formatMoney } from "@/lib/money";
+import { ChartTooltip } from "@/components/charts/ChartTooltip";
 
 const PALETTE = ["#0ea5e9", "#22c55e", "#a855f7", "#f97316", "#ef4444", "#14b8a6"];
 
@@ -16,7 +18,11 @@ export function AllocationTab() {
 
   const data = useMemo(() => {
     if (!latest) return [];
-    return latest.assets.map((a) => ({ name: t(`asset.${a.assetClassCode}`), value: Number(a.value) }));
+    return latest.assets.map((a, i) => ({
+      name: t(`asset.${a.assetClassCode}`),
+      value: Number(a.value),
+      fill: PALETTE[i % PALETTE.length],
+    }));
   }, [latest, t]);
 
   return (
@@ -31,12 +37,15 @@ export function AllocationTab() {
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
-              <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={120} label>
-                {data.map((_, i) => (
-                  <Cell key={i} fill={PALETTE[i % PALETTE.length]} />
-                ))}
-              </Pie>
-              <Tooltip />
+              <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={120} label />
+              <Tooltip
+                content={(props) => (
+                  <ChartTooltip
+                    {...props}
+                    formatValue={(v) => formatMoney(Number(v), household.currency, i18n.language)}
+                  />
+                )}
+              />
               <Legend />
             </PieChart>
           </ResponsiveContainer>

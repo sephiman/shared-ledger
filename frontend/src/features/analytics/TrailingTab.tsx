@@ -4,6 +4,8 @@ import { useTrailing12 } from "@/api/analytics";
 import { Card, CardBody, CardHeader } from "@/components/ui/primitives";
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { monthName } from "@/lib/dates";
+import { formatMoney, formatNumber } from "@/lib/money";
+import { ChartTooltip } from "@/components/charts/ChartTooltip";
 
 export function TrailingTab() {
   const { t, i18n } = useTranslation();
@@ -30,7 +32,15 @@ export function TrailingTab() {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="period" />
               <YAxis />
-              <Tooltip />
+              <Tooltip
+                cursor={{ fill: "rgba(14,165,233,0.08)" }}
+                content={(props) => (
+                  <ChartTooltip
+                    {...props}
+                    formatValue={(v) => formatMoney(Number(v), household.currency, i18n.language)}
+                  />
+                )}
+              />
               <Legend />
               <Bar dataKey="income" name={t("analytics.income")} fill="#22c55e" />
               <Bar dataKey="expenses" name={t("analytics.expenses")} fill="#ef4444" />
@@ -47,9 +57,16 @@ export function TrailingTab() {
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="period" />
-              <YAxis />
-              <Tooltip />
-              <Line type="monotone" dataKey="savings" stroke="#0ea5e9" dot={false} />
+              <YAxis tickFormatter={(v) => `${v}%`} />
+              <Tooltip
+                content={(props) => (
+                  <ChartTooltip
+                    {...props}
+                    formatValue={(v) => `${formatNumber(Number(v), i18n.language, 1)}%`}
+                  />
+                )}
+              />
+              <Line type="monotone" dataKey="savings" name={t("analytics.savings_rate")} stroke="#0ea5e9" dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </CardBody>

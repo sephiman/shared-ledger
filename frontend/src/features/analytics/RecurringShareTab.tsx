@@ -3,9 +3,10 @@ import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
 import { useRecurringShare, useYearsAvailable, type RecurringShareParams } from "@/api/analytics";
 import { Card, CardBody, CardHeader, Label, Select } from "@/components/ui/primitives";
-import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { formatMoney, formatNumber } from "@/lib/money";
 import { monthName } from "@/lib/dates";
+import { ChartTooltip } from "@/components/charts/ChartTooltip";
 
 type ScopeKey = "month" | "trailing12" | "ytd" | "year";
 
@@ -42,8 +43,8 @@ export function RecurringShareTab() {
   const chartData = useMemo(() => {
     if (!data) return [];
     return [
-      { key: "recurring", name: t("analytics.recurring"), amount: Number(data.recurring) },
-      { key: "discretionary", name: t("analytics.discretionary"), amount: Number(data.discretionary) },
+      { key: "recurring", name: t("analytics.recurring"), amount: Number(data.recurring), fill: RECURRING_COLOR },
+      { key: "discretionary", name: t("analytics.discretionary"), amount: Number(data.discretionary), fill: DISCRETIONARY_COLOR },
     ];
   }, [data, t]);
 
@@ -113,19 +114,14 @@ export function RecurringShareTab() {
                       innerRadius="55%"
                       outerRadius="85%"
                       paddingAngle={1}
-                    >
-                      {chartData.map((entry) => (
-                        <Cell
-                          key={entry.key}
-                          fill={entry.key === "recurring" ? RECURRING_COLOR : DISCRETIONARY_COLOR}
-                        />
-                      ))}
-                    </Pie>
+                    />
                     <Tooltip
-                      formatter={(value: unknown, name: unknown) => [
-                        formatMoney(Number(value), household.currency, i18n.language),
-                        String(name ?? ""),
-                      ]}
+                      content={(props) => (
+                        <ChartTooltip
+                          {...props}
+                          formatValue={(v) => formatMoney(Number(v), household.currency, i18n.language)}
+                        />
+                      )}
                     />
                     <Legend />
                   </PieChart>

@@ -4,8 +4,9 @@ import { useActiveHousehold } from "@/auth/AuthContext";
 import { useYearByYear } from "@/api/analytics";
 import { Card, CardBody, CardHeader, Chip } from "@/components/ui/primitives";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import type { Formatter, ValueType, NameType } from "recharts/types/component/DefaultTooltipContent";
 import { monthName } from "@/lib/dates";
+import { formatMoney, formatNumber } from "@/lib/money";
+import { ChartTooltip } from "@/components/charts/ChartTooltip";
 
 const PALETTE = ["#0ea5e9", "#22c55e", "#a855f7", "#f97316", "#ef4444"];
 
@@ -40,9 +41,10 @@ export function YearByYearTab() {
   }, [data, i18n.language, metric]);
 
   const yAxisFormatter = metric === "savingsRate" ? (v: number) => `${v.toFixed(0)}%` : undefined;
-  const tooltipFormatter: Formatter<ValueType, NameType> | undefined = metric === "savingsRate"
-    ? (value, name) => [`${Number(value ?? 0).toFixed(1)}%`, name ?? ""]
-    : undefined;
+  const formatValue = (v: unknown) =>
+    metric === "savingsRate"
+      ? `${formatNumber(Number(v ?? 0), i18n.language, 1)}%`
+      : formatMoney(Number(v ?? 0), household.currency, i18n.language);
 
   return (
     <div className="space-y-4">
@@ -80,7 +82,9 @@ export function YearByYearTab() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis tickFormatter={yAxisFormatter} />
-                <Tooltip formatter={tooltipFormatter} />
+                <Tooltip
+                  content={(props) => <ChartTooltip {...props} formatValue={formatValue} />}
+                />
                 <Legend />
                 {years.map((y, idx) => (
                   <Line key={y} type="monotone" dataKey={`v_${y}`} name={String(y)} stroke={PALETTE[idx % PALETTE.length]} dot={false} />

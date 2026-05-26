@@ -16,6 +16,17 @@ export function isoToday(): string {
   return d.toISOString().slice(0, 10);
 }
 
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+export function monthBounds(year: number, month: number): { from: string; to: string } {
+  const lastDay = new Date(year, month, 0).getDate();
+  return { from: `${year}-${pad2(month)}-01`, to: `${year}-${pad2(month)}-${pad2(lastDay)}` };
+}
+
+export function yearBounds(year: number): { from: string; to: string } {
+  return { from: `${year}-01-01`, to: `${year}-12-31` };
+}
+
 export function monthName(month: number, locale: string, width: "long" | "short" = "long"): string {
   return new Date(2000, month - 1, 1).toLocaleString(locale, { month: width });
 }

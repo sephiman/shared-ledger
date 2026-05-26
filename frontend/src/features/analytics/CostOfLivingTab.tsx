@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import { useActiveHousehold } from "@/auth/AuthContext";
 import { useCostOfLiving, type CostOfLivingCategoryRow } from "@/api/analytics";
 import { useCategories, type Category } from "@/api/catalog";
@@ -23,6 +24,7 @@ function CategoryBreakdown({
   locale: string;
 }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   return (
     <div>
       <p className="mb-2 text-sm font-medium">{title}</p>
@@ -39,7 +41,11 @@ function CategoryBreakdown({
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.categoryCode} className="border-t border-border">
+                <tr
+                  key={row.categoryCode}
+                  className="cursor-pointer border-t border-border hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                  onClick={() => navigate(`/transactions?categoryCode=${encodeURIComponent(row.categoryCode)}`)}
+                >
                   <td className="py-2">
                     <span className="mr-1.5" aria-hidden>{categoryIcon(row.categoryCode)}</span>
                     {categoryLabelByCode(row.categoryCode, categories, t)}

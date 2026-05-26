@@ -3,10 +3,12 @@ import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
 import { useAllocation, useYearsAvailable } from "@/api/analytics";
 import { Card, CardBody, CardHeader, Label, Select } from "@/components/ui/primitives";
-import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { formatMoney, formatNumber } from "@/lib/money";
-import { monthName } from "@/lib/dates";
+import { monthBounds, monthName, yearBounds } from "@/lib/dates";
 import { groupIcon } from "@/lib/categoryGroup";
+import { ChartTooltip } from "@/components/charts/ChartTooltip";
+import { useNavigate } from "react-router-dom";
 
 const PALETTE = ["#0ea5e9", "#22c55e", "#a855f7", "#f97316", "#ef4444", "#14b8a6", "#eab308", "#ec4899"];
 const SAVED_COLOR = "#16a34a";
@@ -16,11 +18,20 @@ type ScopeKind = "month" | "year";
 export function AllocationTab() {
   const { t, i18n } = useTranslation();
   const household = useActiveHousehold();
+  const navigate = useNavigate();
   const now = new Date();
   const { data: years } = useYearsAvailable(household.householdId);
   const [scope, setScope] = useState<ScopeKind>("month");
   const [year, setYear] = useState<number>(now.getFullYear());
   const [month, setMonth] = useState<number>(now.getMonth() + 1);
+
+  function navigateToCategoryGroup(groupCode: string) {
+    const params = new URLSearchParams({ categoryGroup: groupCode });
+    const range = scope === "month" ? monthBounds(year, month) : yearBounds(year);
+    params.set("from", range.from);
+    params.set("to", range.to);
+    navigate(`/transactions?${params.toString()}`);
+  }
 
   const { data, isLoading } = useAllocation(
     household.householdId,
@@ -36,11 +47,12 @@ export function AllocationTab() {
 
   const chartData = useMemo(() => {
     if (!data) return [];
-    const slices = data.slices.map((s) => ({
+    const slices = data.slices.map((s, i) => ({
       key: s.groupCode,
       name: `${groupIcon(s.groupCode)} ${t(`category_group.${s.groupCode}`)}`,
       amount: Number(s.amount),
       percent: s.percentOfIncome,
+      fill: PALETTE[i % PALETTE.length],
     }));
     const savedNum = Number(data.saved);
     if (savedNum > 0) {
@@ -49,6 +61,7 @@ export function AllocationTab() {
         name: t("analytics.saved"),
         amount: savedNum,
         percent: Number(data.income) > 0 ? (savedNum / Number(data.income)) * 100 : 0,
+        fill: SAVED_COLOR,
       });
     }
     return slices;
@@ -115,19 +128,14 @@ export function AllocationTab() {
                       innerRadius="55%"
                       outerRadius="85%"
                       paddingAngle={1}
-                    >
-                      {chartData.map((entry, i) => (
-                        <Cell
-                          key={entry.key}
-                          fill={entry.key === "__saved__" ? SAVED_COLOR : PALETTE[i % PALETTE.length]}
-                        />
-                      ))}
-                    </Pie>
+                    />
                     <Tooltip
-                      formatter={(value: unknown, name: unknown) => [
-                        formatMoney(Number(value), household.currency, i18n.language),
-                        String(name ?? ""),
-                      ]}
+                      content={(props) => (
+                        <ChartTooltip
+                          {...props}
+                          formatValue={(v) => formatMoney(Number(v), household.currency, i18n.language)}
+                        />
+                      )}
                     />
                     <Legend />
                   </PieChart>
@@ -144,13 +152,24 @@ export function AllocationTab() {
                     </tr>
                   </thead>
                   <tbody>
-                    {chartData.map((row) => (
-                      <tr key={row.key} className="border-t border-border">
-                        <td className="py-2">{row.name}</td>
-                        <td className="text-right">{formatMoney(row.amount, household.currency, i18n.language)}</td>
-                        <td className="text-right">{formatNumber(row.percent, i18n.language, 1)}%</td>
-                      </tr>
-                    ))}
+                    {chartData.map((row) => {
+                      const linkable = row.key !== "__saved__";
+                      return (
+                        <tr
+                          key={row.key}
+                          className={
+                            linkable
+                              ? "cursor-pointer border-t border-border hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                              : "border-t border-border"
+                          }
+                          onClick={linkable ? () => navigateToCategoryGroup(row.key) : undefined}
+                        >
+                          <td className="py-2">{row.name}</td>
+                          <td className="text-right">{formatMoney(row.amount, household.currency, i18n.language)}</td>
+                          <td className="text-right">{formatNumber(row.percent, i18n.language, 1)}%</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

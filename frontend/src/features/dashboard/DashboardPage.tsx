@@ -204,6 +204,26 @@ function CostOfLivingTile({
   );
 }
 
+interface GroupBarTooltipProps {
+  active?: boolean;
+  label?: string | number;
+  payload?: ReadonlyArray<{ value?: unknown }>;
+  currency: string;
+  locale: string;
+}
+
+function GroupBarTooltip({ active, label, payload, currency, locale }: GroupBarTooltipProps) {
+  if (!active || !payload || payload.length === 0) return null;
+  const raw = payload[0]?.value;
+  const value = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : 0;
+  return (
+    <div className="rounded-md border border-border bg-white p-2 text-xs shadow-sm dark:bg-gray-800">
+      <p className="mb-1 font-medium text-gray-900 dark:text-gray-100">{label}</p>
+      <p className="font-medium tabular-nums text-gray-900 dark:text-gray-100">{formatMoney(value, currency, locale)}</p>
+    </div>
+  );
+}
+
 function DashboardSection({
   title,
   data,
@@ -269,7 +289,10 @@ function DashboardSection({
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" />
               <YAxis />
-              <Tooltip />
+              <Tooltip
+                cursor={{ fill: "rgba(14,165,233,0.08)" }}
+                content={(props) => <GroupBarTooltip {...props} currency={currency} locale={locale} />}
+              />
               <Bar dataKey="amount" fill="#0ea5e9" />
             </BarChart>
           </ResponsiveContainer>

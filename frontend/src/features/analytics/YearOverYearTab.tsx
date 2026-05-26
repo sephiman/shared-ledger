@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import { useActiveHousehold } from "@/auth/AuthContext";
 import { useYearOverYear } from "@/api/analytics";
 import { useCategories } from "@/api/catalog";
@@ -12,6 +13,7 @@ import { categoryLabelByCode } from "@/lib/categoryLabel";
 export function YearOverYearTab() {
   const { t, i18n } = useTranslation();
   const household = useActiveHousehold();
+  const navigate = useNavigate();
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const { data } = useYearOverYear(household.householdId, month, 5);
   const { data: categories = [] } = useCategories(household.householdId);
@@ -67,7 +69,11 @@ export function YearOverYearTab() {
                 ))}
               </tr>
               {data.categories.map((c) => (
-                <tr key={c.categoryCode} className="border-t border-border">
+                <tr
+                  key={c.categoryCode}
+                  className="cursor-pointer border-t border-border hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                  onClick={() => navigate(`/transactions?categoryCode=${encodeURIComponent(c.categoryCode)}`)}
+                >
                   <td className="py-2">
                     <span className="mr-1.5" aria-hidden>{categoryIcon(c.categoryCode)}</span>
                     {categoryLabelByCode(c.categoryCode, categories, t)}

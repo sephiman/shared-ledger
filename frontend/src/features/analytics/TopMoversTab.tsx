@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import { useActiveHousehold } from "@/auth/AuthContext";
 import { useTopMovers, useYearsAvailable, type MoverRow } from "@/api/analytics";
 import { useCategories, type Category } from "@/api/catalog";
 import { Card, CardBody, CardHeader, Label, Select } from "@/components/ui/primitives";
 import { formatMoney, formatNumber } from "@/lib/money";
-import { monthName } from "@/lib/dates";
+import { monthBounds, monthName } from "@/lib/dates";
 import { categoryIcon } from "@/lib/categoryGroup";
 import { categoryLabelByCode } from "@/lib/categoryLabel";
 
@@ -75,6 +76,7 @@ export function TopMoversTab() {
                   categories={categories}
                   currency={household.currency}
                   locale={i18n.language}
+                  period={{ year, month }}
                 />
                 <MoverList
                   title={t("analytics.decreases")}
@@ -83,6 +85,7 @@ export function TopMoversTab() {
                   categories={categories}
                   currency={household.currency}
                   locale={i18n.language}
+                  period={{ year, month }}
                 />
               </div>
 
@@ -96,6 +99,7 @@ export function TopMoversTab() {
                     categories={categories}
                     currency={household.currency}
                     locale={i18n.language}
+                    period={{ year, month }}
                   />
                 </div>
               )}
@@ -127,6 +131,7 @@ function MoverList({
   categories,
   currency,
   locale,
+  period,
 }: {
   title: string;
   rows: MoverRow[];
@@ -134,6 +139,7 @@ function MoverList({
   categories: Category[];
   currency: string;
   locale: string;
+  period: { year: number; month: number };
 }) {
   const { t } = useTranslation();
   return (
@@ -142,7 +148,7 @@ function MoverList({
       {rows.length === 0 ? (
         <p className="text-sm text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
       ) : (
-        <MoverTable rows={rows} tone={tone} categories={categories} currency={currency} locale={locale} />
+        <MoverTable rows={rows} tone={tone} categories={categories} currency={currency} locale={locale} period={period} />
       )}
     </div>
   );
@@ -154,16 +160,24 @@ function MoverTable({
   categories,
   currency,
   locale,
+  period,
 }: {
   rows: MoverRow[];
   tone: "up" | "down" | "new";
   categories: Category[];
   currency: string;
   locale: string;
+  period: { year: number; month: number };
 }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const arrow = tone === "up" ? "▲" : tone === "down" ? "▼" : "•";
   const arrowColor = tone === "up" ? "text-red-600" : tone === "down" ? "text-green-600" : "text-sky-600";
+  function open(code: string) {
+    const { from, to } = monthBounds(period.year, period.month);
+    const params = new URLSearchParams({ categoryCode: code, from, to });
+    navigate(`/transactions?${params.toString()}`);
+  }
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -178,7 +192,11 @@ function MoverTable({
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.categoryCode} className="border-t border-border">
+            <tr
+              key={r.categoryCode}
+              className="cursor-pointer border-t border-border hover:bg-gray-50 dark:hover:bg-gray-700/50"
+              onClick={() => open(r.categoryCode)}
+            >
               <td className="py-2">
                 <span className={`mr-2 ${arrowColor}`}>{arrow}</span>
                 <span className="mr-1.5" aria-hidden>{categoryIcon(r.categoryCode)}</span>
