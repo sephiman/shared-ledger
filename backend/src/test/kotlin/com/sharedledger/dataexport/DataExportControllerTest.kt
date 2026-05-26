@@ -29,7 +29,7 @@ class DataExportControllerTest @Autowired constructor(
 ) : IntegrationTestBase() {
 
     @Test
-    fun `exportAll returns a zip with the four dataset CSVs`() {
+    fun `exportAll returns a zip with all dataset CSVs`() {
         val (user, household) = seed()
         recurring.create(
             household.id,
@@ -56,8 +56,8 @@ class DataExportControllerTest @Autowired constructor(
         val body = response.body ?: error("expected zip body")
         val entries = readZipEntries(body)
 
-        // Four datasets, all CSVs.
-        assertThat(entries.keys).hasSize(4)
+        // All datasets, all CSVs.
+        assertThat(entries.keys).hasSize(6)
         assertThat(entries.keys).allSatisfy { name -> assertThat(name).endsWith(".csv") }
         val byDataset = entries.mapKeys { (k, _) -> datasetOf(k) }
         assertThat(byDataset.keys).containsExactlyInAnyOrder(
@@ -65,6 +65,8 @@ class DataExportControllerTest @Autowired constructor(
             "recurring-templates",
             "movements",
             "snapshots",
+            "loans",
+            "loan-payments",
         )
 
         // Each CSV has a header line.
@@ -97,6 +99,8 @@ class DataExportControllerTest @Autowired constructor(
             stem.endsWith("-transactions") -> "transactions"
             stem.endsWith("-movements") -> "movements"
             stem.endsWith("-snapshots") -> "snapshots"
+            stem.endsWith("-loan-payments") -> "loan-payments"
+            stem.endsWith("-loans") -> "loans"
             else -> error("unrecognised filename: $filename")
         }
     }

@@ -3,6 +3,7 @@ package com.sharedledger.dataexport
 import com.sharedledger.common.Csv
 import com.sharedledger.common.errors.AppException
 import com.sharedledger.household.HouseholdRepository
+import com.sharedledger.loan.LoanService
 import com.sharedledger.networth.movement.MovementService
 import com.sharedledger.networth.snapshot.SnapshotService
 import com.sharedledger.recurring.RecurringService
@@ -29,6 +30,7 @@ class DataExportController(
     private val recurring: RecurringService,
     private val movements: MovementService,
     private val snapshots: SnapshotService,
+    private val loans: LoanService,
     private val households: HouseholdRepository,
 ) {
 
@@ -55,6 +57,8 @@ class DataExportController(
             Csv.exportFilename(today, household.name, "recurring-templates") to recurring.exportCsv(householdId),
             Csv.exportFilename(today, household.name, "movements") to movements.exportCsv(householdId),
             Csv.exportFilename(today, household.name, "snapshots") to snapshots.exportCsv(householdId),
+            Csv.exportFilename(today, household.name, "loans") to loans.exportLoansCsv(householdId),
+            Csv.exportFilename(today, household.name, "loan-payments") to loans.exportPaymentsCsv(householdId),
         )
 
         val out = ByteArrayOutputStream()

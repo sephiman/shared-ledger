@@ -5,6 +5,8 @@ import { TransactionImportCard } from "./TransactionImportCard";
 import { SnapshotImportCard } from "./SnapshotImportCard";
 import { MovementImportCard } from "./MovementImportCard";
 import { RecurringImportCard } from "./RecurringImportCard";
+import { LoanImportCard } from "./LoanImportCard";
+import { LoanPaymentImportCard } from "./LoanPaymentImportCard";
 
 export function DataImportPage() {
   const { t } = useTranslation();
@@ -22,6 +24,8 @@ export function DataImportPage() {
       <SnapshotImportCard />
       <MovementImportCard />
       <RecurringImportCard />
+      <LoanImportCard />
+      <LoanPaymentImportCard />
     </div>
   );
 }

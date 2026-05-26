@@ -160,6 +160,71 @@ export function useExecuteRecurring(householdId: string) {
   });
 }
 
+export function usePreviewLoans(householdId: string) {
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const res = await apiClient.post<PreviewSummary>(
+        `/households/${householdId}/loans/import/preview`,
+        asForm(file),
+        { headers: { "Content-Type": null } },
+      );
+      return res.data;
+    },
+    meta: { silentSuccess: true },
+  });
+}
+
+export function useExecuteLoans(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const res = await apiClient.post<ExecuteResult>(
+        `/households/${householdId}/loans/import/execute`,
+        asForm(file),
+        { headers: { "Content-Type": null } },
+      );
+      return res.data;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["loans", householdId] });
+      void qc.invalidateQueries({ queryKey: ["loans-summary", householdId] });
+    },
+  });
+}
+
+export function usePreviewLoanPayments(householdId: string) {
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const res = await apiClient.post<PreviewSummary>(
+        `/households/${householdId}/loans/payments/import/preview`,
+        asForm(file),
+        { headers: { "Content-Type": null } },
+      );
+      return res.data;
+    },
+    meta: { silentSuccess: true },
+  });
+}
+
+export function useExecuteLoanPayments(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const res = await apiClient.post<ExecuteResult>(
+        `/households/${householdId}/loans/payments/import/execute`,
+        asForm(file),
+        { headers: { "Content-Type": null } },
+      );
+      return res.data;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["loans", householdId] });
+      void qc.invalidateQueries({ queryKey: ["loans-summary", householdId] });
+      void qc.invalidateQueries({ queryKey: ["loan", householdId] });
+    },
+  });
+}
+
 export function usePreviewSnapshots(householdId: string) {
   return useMutation({
     mutationFn: async ({ file, policy }: { file: File; policy: SnapshotPolicy }) => {

@@ -4,12 +4,14 @@ import { useAssetClasses, useCategories, type AssetClass, type Category } from "
 import { useLiabilities } from "@/api/networth";
 import { categoryLabel } from "@/lib/categoryLabel";
 
-type Dataset = "transactions" | "snapshots" | "movements" | "recurring";
+type Dataset = "transactions" | "snapshots" | "movements" | "recurring" | "loans" | "loan_payments";
 
 const TX_HEADER = "date;direction;category_code;amount;description;created_at;updated_at";
 const SNAP_HEADER = "date;note;kind;key;value";
 const MOV_HEADER = "date;type;asset_class_code;liability_name;amount;description;created_at";
 const REC_HEADER = "direction;category_code;amount;description;cadence;day_of_week;day_of_month;month_of_year;day_of_month_yearly;start_date;end_date;active";
+const LOAN_HEADER = "borrower_name;principal_amount;start_date;interest_type;annual_interest_rate;compounding_period;description;status";
+const LOAN_PAYMENT_HEADER = "borrower_name;loan_start_date;payment_date;amount;description";
 
 export function CsvFormatHelp({ dataset }: { dataset: Dataset }) {
   const { t } = useTranslation();
@@ -24,8 +26,88 @@ export function CsvFormatHelp({ dataset }: { dataset: Dataset }) {
         {dataset === "snapshots" && <SnapshotFormat />}
         {dataset === "movements" && <MovementFormat />}
         {dataset === "recurring" && <RecurringFormat />}
+        {dataset === "loans" && <LoanFormat />}
+        {dataset === "loan_payments" && <LoanPaymentFormat />}
       </div>
     </details>
+  );
+}
+
+function LoanFormat() {
+  const { t } = useTranslation();
+  const example = [
+    LOAN_HEADER,
+    "Alice;1000,00;2025-01-01;none;;;Loan for car repair;active",
+    "Bob;5000,00;2024-06-15;simple;5,00;;;active",
+    "Carol;3000,00;2024-03-01;compound;4,50;monthly;Renovation loan;active",
+  ].join("\n");
+  return (
+    <>
+      <p>{t("import.format.loan.intro")}</p>
+      <Section title={t("import.format.headers_label")}>
+        <CodeBlock>{LOAN_HEADER}</CodeBlock>
+      </Section>
+      <Section title={t("import.format.columns_label")}>
+        <ColumnList
+          items={[
+            { name: "borrower_name", req: true, desc: t("import.format.loan.borrower_name") },
+            { name: "principal_amount", req: true, desc: t("import.format.loan.principal_amount") },
+            { name: "start_date", req: true, desc: t("import.format.loan.start_date") },
+            { name: "interest_type", req: true, desc: t("import.format.loan.interest_type") },
+            { name: "annual_interest_rate", req: false, desc: t("import.format.loan.annual_interest_rate") },
+            { name: "compounding_period", req: false, desc: t("import.format.loan.compounding_period") },
+            { name: "description", req: false, desc: t("import.format.loan.description") },
+            { name: "status", req: false, desc: t("import.format.loan.status") },
+          ]}
+        />
+      </Section>
+      <Section title={t("import.format.loan.catalogs_label")}>
+        <ul className="space-y-1 text-xs">
+          <li><code className="font-mono">interest_type</code>: none / simple / compound</li>
+          <li><code className="font-mono">compounding_period</code>: monthly / yearly</li>
+          <li><code className="font-mono">status</code>: active / settled / written_off</li>
+        </ul>
+      </Section>
+      <Section title={t("import.format.example_label")}>
+        <CodeBlock>{example}</CodeBlock>
+      </Section>
+      <p className="text-xs text-gray-500 dark:text-gray-400">{t("import.format.loan.dedup")}</p>
+    </>
+  );
+}
+
+function LoanPaymentFormat() {
+  const { t } = useTranslation();
+  const example = [
+    LOAN_PAYMENT_HEADER,
+    "Alice;2025-01-01;2025-02-01;200,00;First repayment",
+    "Bob;2024-06-15;2024-07-15;500,00;",
+  ].join("\n");
+  return (
+    <>
+      <p>{t("import.format.loan_payment.intro")}</p>
+      <Section title={t("import.format.headers_label")}>
+        <CodeBlock>{LOAN_PAYMENT_HEADER}</CodeBlock>
+      </Section>
+      <Section title={t("import.format.columns_label")}>
+        <ColumnList
+          items={[
+            { name: "borrower_name", req: true, desc: t("import.format.loan_payment.borrower_name") },
+            { name: "loan_start_date", req: true, desc: t("import.format.loan_payment.loan_start_date") },
+            { name: "payment_date", req: true, desc: t("import.format.loan_payment.payment_date") },
+            { name: "amount", req: true, desc: t("import.format.loan_payment.amount") },
+            { name: "description", req: false, desc: t("import.format.loan_payment.description") },
+          ]}
+        />
+      </Section>
+      <Section title={t("import.format.example_label")}>
+        <CodeBlock>{example}</CodeBlock>
+      </Section>
+      <p className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-100">
+        {t("import.format.loan_payment.matching_note")}
+      </p>
+      <p className="text-xs text-gray-500 dark:text-gray-400">{t("import.format.loan_payment.dedup")}</p>
+    </>
   );
 }
 

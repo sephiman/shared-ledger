@@ -1,9 +1,9 @@
 package com.sharedledger.recurring
 
+import com.sharedledger.loan.LoanScheduleMaterializer
 import com.sharedledger.observability.AppMetrics
 import com.sharedledger.transaction.Transaction
 import com.sharedledger.transaction.TransactionRepository
-import jakarta.persistence.EntityManager
 import org.slf4j.LoggerFactory
 import org.slf4j.MDC
 import org.springframework.dao.DataIntegrityViolationException
@@ -18,9 +18,9 @@ import java.util.UUID
 class RecurringMaterializer(
     private val templates: RecurringTemplateRepository,
     private val transactions: TransactionRepository,
-    private val em: EntityManager,
     private val metrics: AppMetrics,
     private val txManager: PlatformTransactionManager,
+    private val loanScheduleMaterializer: LoanScheduleMaterializer,
 ) {
     private val log = LoggerFactory.getLogger(RecurringMaterializer::class.java)
 
@@ -35,6 +35,7 @@ class RecurringMaterializer(
         for (template in active) {
             materializeOne(template, today)
         }
+        loanScheduleMaterializer.runForAll(today)
     }
 
     fun runForHousehold(householdId: UUID, today: LocalDate): Int {
@@ -78,7 +79,7 @@ class RecurringMaterializer(
                     }
                     metrics.recurringMaterialized(template_id)
                     created++
-                } catch (ex: DataIntegrityViolationException) {
+                } catch (ignored: DataIntegrityViolationException) {
                     // Idempotency: row already exists from a prior run.
                     log.debug("Skipped duplicate occurrence on {} for template {}", date, template_id)
                 }
