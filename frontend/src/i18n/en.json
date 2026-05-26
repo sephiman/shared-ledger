@@ -418,12 +418,24 @@
     "IMPORT_MOVEMENT_TYPE_INVALID": "Type must be contribution, withdrawal, or debt_payment",
     "IMPORT_MOVEMENT_ASSET_REQUIRED": "Contribution/withdrawal needs an asset_class_code",
     "IMPORT_MOVEMENT_LIABILITY_REQUIRED": "Debt-payment needs a liability_name",
-    "IMPORT_MOVEMENT_TARGET_MISMATCH": "Target column does not match the movement type"
+    "IMPORT_MOVEMENT_TARGET_MISMATCH": "Target column does not match the movement type",
+    "IMPORT_CADENCE_INVALID": "Cadence must be weekly, monthly, or yearly",
+    "IMPORT_CADENCE_FIELDS_INVALID": "Day/month columns do not match the cadence (weekly needs day_of_week; monthly needs day_of_month; yearly needs month_of_year + day_of_month_yearly; others must be empty)",
+    "IMPORT_DAY_OF_WEEK_INVALID": "day_of_week must be 1-7 (1=Monday … 7=Sunday)",
+    "IMPORT_DAY_OF_MONTH_INVALID": "Day-of-month must be 1-31",
+    "IMPORT_MONTH_OF_YEAR_INVALID": "month_of_year must be 1-12",
+    "IMPORT_END_BEFORE_START": "end_date is before start_date",
+    "IMPORT_ACTIVE_INVALID": "active must be true or false"
+  },
+  "export": {
+    "title": "Export everything",
+    "description": "Download a single ZIP containing transactions, recurring templates, movements, and snapshots — one CSV per dataset. The same files re-import cleanly.",
+    "download_all": "Download all data (ZIP)"
   },
   "import": {
-    "title": "Data import",
-    "open": "Open data import",
-    "settings_description": "Import previously exported transactions and snapshots back into this household.",
+    "title": "Data import & export",
+    "open": "Open data import & export",
+    "settings_description": "Import previously exported CSVs back into this household, or download a full backup as a ZIP.",
     "page_description": "Upload a CSV exported from this app. Validation runs first; nothing is written until you confirm.",
     "transactions": "Transactions",
     "transactions_description": "Same format as Transactions → Export CSV. Duplicates of existing data are skipped automatically; rows duplicated within the same file are all imported with a numeric suffix appended to the description.",
@@ -431,6 +443,8 @@
     "snapshots_description": "Same format as Snapshots → Export CSV. Each date is one snapshot; choose what to do if a date already exists.",
     "movements": "Net worth movements",
     "movements_description": "Same format as Movements → Export CSV. Duplicates of existing data are skipped automatically; rows duplicated within the same file are all imported with a numeric suffix appended to the description.",
+    "recurring": "Recurring templates",
+    "recurring_description": "Same format as Recurring → Export CSV. Imports never advance the materialization clock — new templates fire from their start_date the next time you run them.",
     "validate": "Validate",
     "confirm": "Import",
     "file": "File",
@@ -501,6 +515,23 @@
         "liabilities_note": "Liability rows must reference the exact name of a liability that already exists and is active in this household. Inactive or unknown names will be rejected. Create or activate liabilities in Net worth → Liabilities first.",
         "no_liabilities": "No active liabilities in this household yet.",
         "rules": "Per-date rules: every asset class must have exactly one value row, every active liability must have exactly one value row, and no asset/liability key may repeat within the same date."
+      },
+      "rec": {
+        "intro": "European-CSV dialect: UTF-8, semicolon (;) column separator, comma (,) as decimal mark, RFC-4180 quoting. First row is the literal header shown below; one recurring template per data row. Imports do not advance the materialization clock — newly imported templates fire from their start_date the next time you run them.",
+        "direction": "Either income or expense (lowercase). Must match the kind of the chosen category_code.",
+        "category_code": "One of the codes listed below.",
+        "amount": "Positive decimal. Comma is the canonical decimal separator (e.g. 45,00); dot is also accepted on import. Up to 2 decimals are stored.",
+        "description": "Optional free text up to 500 characters.",
+        "cadence": "One of weekly, monthly, or yearly (lowercase). Determines which of the day/month columns is required.",
+        "day_of_week": "1-7 (1=Monday … 7=Sunday). Required when cadence=weekly. Must be empty otherwise.",
+        "day_of_month": "1-31. Required when cadence=monthly. Must be empty otherwise.",
+        "month_of_year": "1-12. Required when cadence=yearly. Must be empty otherwise.",
+        "day_of_month_yearly": "1-31. Required when cadence=yearly. Must be empty otherwise.",
+        "start_date": "ISO date YYYY-MM-DD. The earliest date this template can fire.",
+        "end_date": "Optional ISO date YYYY-MM-DD. The template stops firing after this date. Must be ≥ start_date.",
+        "active": "true or false. Inactive templates are kept but never fire automatically.",
+        "dedup": "Duplicate detection: a row is skipped automatically if every column matches an existing template (direction, category, amount, cadence, all day/month fields, start/end dates, active, and description).",
+        "in_file_dedup": "If two rows inside the file are identical in every column, the duplicates get “ (2)”, “ (3)”, … appended to their description so each one stays distinct."
       },
       "mov": {
         "intro": "European-CSV dialect: UTF-8, semicolon (;) column separator, comma (,) as decimal mark, RFC-4180 quoting. First row is the literal header shown below; one movement per data row. Movements record contributions or withdrawals against an asset class, or payments against a liability — they do not affect transaction totals.",

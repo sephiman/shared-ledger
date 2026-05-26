@@ -127,6 +127,36 @@ export function useExecuteMovements(householdId: string) {
   });
 }
 
+export function usePreviewRecurring(householdId: string) {
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const res = await apiClient.post<PreviewSummary>(
+        `/households/${householdId}/recurring-templates/import/preview`,
+        asForm(file),
+        { headers: { "Content-Type": null } },
+      );
+      return res.data;
+    },
+  });
+}
+
+export function useExecuteRecurring(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const res = await apiClient.post<ExecuteResult>(
+        `/households/${householdId}/recurring-templates/import/execute`,
+        asForm(file),
+        { headers: { "Content-Type": null } },
+      );
+      return res.data;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["recurring", householdId] });
+    },
+  });
+}
+
 export function usePreviewSnapshots(householdId: string) {
   return useMutation({
     mutationFn: async ({ file, policy }: { file: File; policy: SnapshotPolicy }) => {

@@ -1,8 +1,13 @@
 package com.sharedledger.recurring
 
+import com.sharedledger.common.Csv
+import com.sharedledger.common.errors.AppException
+import com.sharedledger.household.HouseholdRepository
 import com.sharedledger.household.RequireHouseholdOwner
 import com.sharedledger.identity.auth.CurrentUser
 import jakarta.validation.Valid
+import org.springframework.http.HttpHeaders
+import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
@@ -20,6 +25,7 @@ import java.util.UUID
 class RecurringController(
     private val service: RecurringService,
     private val currentUser: CurrentUser,
+    private val households: HouseholdRepository,
 ) {
 
     @GetMapping
@@ -61,5 +67,16 @@ class RecurringController(
     fun materialize(@PathVariable householdId: UUID, @PathVariable id: UUID): Map<String, Any> {
         val created = service.fireNow(householdId, id, currentUser.requireUser())
         return mapOf("created" to created)
+    }
+
+    @GetMapping("/export.csv")
+    fun exportCsv(@PathVariable householdId: UUID): ResponseEntity<String> {
+        val csv = service.exportCsv(householdId)
+        val household = households.findById(householdId).orElseThrow { AppException.notFound("HOUSEHOLD_NOT_FOUND") }
+        val filename = Csv.exportFilename(LocalDate.now(), household.name, "recurring-templates")
+        return ResponseEntity.ok()
+            .contentType(MediaType.parseMediaType("text/csv; charset=utf-8"))
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"$filename\"")
+            .body(csv)
     }
 }

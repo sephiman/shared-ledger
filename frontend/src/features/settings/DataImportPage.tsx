@@ -1,8 +1,10 @@
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
+import { DataExportCard } from "./DataExportCard";
 import { TransactionImportCard } from "./TransactionImportCard";
 import { SnapshotImportCard } from "./SnapshotImportCard";
 import { MovementImportCard } from "./MovementImportCard";
+import { RecurringImportCard } from "./RecurringImportCard";
 
 export function DataImportPage() {
   const { t } = useTranslation();
@@ -15,9 +17,11 @@ export function DataImportPage() {
         </div>
         <Link to="/settings" className="text-sm text-primary">{t("common.cancel")}</Link>
       </div>
+      <DataExportCard />
       <TransactionImportCard />
       <SnapshotImportCard />
       <MovementImportCard />
+      <RecurringImportCard />
     </div>
   );
 }

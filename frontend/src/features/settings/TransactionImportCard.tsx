@@ -92,7 +92,7 @@ export function TransactionImportCard() {
   );
 }
 
-function PreviewPanel({ preview, dataset }: { preview: PreviewSummary; dataset: "transactions" | "snapshots" | "movements" }) {
+function PreviewPanel({ preview, dataset }: { preview: PreviewSummary; dataset: "transactions" | "snapshots" | "movements" | "recurring" }) {
   const { t } = useTranslation();
   return (
     <div className="space-y-3 rounded border border-border p-3 text-sm">

@@ -1,6 +1,7 @@
 package com.sharedledger.recurring
 
 import com.sharedledger.catalog.CategoryService
+import com.sharedledger.common.Csv
 import com.sharedledger.common.Money
 import com.sharedledger.common.errors.AppException
 import com.sharedledger.identity.user.User
@@ -83,6 +84,39 @@ class RecurringService(
 
     @Transactional(readOnly = true)
     fun get(householdId: UUID, id: UUID): RecurringTemplate = loadOwn(householdId, id)
+
+    @Transactional(readOnly = true)
+    fun exportCsv(householdId: UUID): String {
+        val all = repository.findAllByHouseholdId(householdId)
+            .sortedWith(compareBy({ it.startDate }, { it.id.toString() }))
+        val sb = StringBuilder()
+        sb.append(
+            Csv.row(
+                "direction", "category_code", "amount", "description", "cadence",
+                "day_of_week", "day_of_month", "month_of_year", "day_of_month_yearly",
+                "start_date", "end_date", "active",
+            ),
+        )
+        for (t in all) {
+            sb.append(
+                Csv.row(
+                    t.direction.name,
+                    t.categoryCode,
+                    Csv.decimal(t.amount),
+                    t.description,
+                    t.cadence.name,
+                    t.dayOfWeek?.toString().orEmpty(),
+                    t.dayOfMonth?.toString().orEmpty(),
+                    t.monthOfYear?.toString().orEmpty(),
+                    t.dayOfMonthYearly?.toString().orEmpty(),
+                    t.startDate,
+                    t.endDate?.toString().orEmpty(),
+                    if (t.active) "true" else "false",
+                ),
+            )
+        }
+        return sb.toString()
+    }
 
     /**
      * Materialize this template up to today: catches up any pending cadence occurrences AND

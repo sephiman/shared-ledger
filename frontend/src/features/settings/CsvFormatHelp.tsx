@@ -4,11 +4,12 @@ import { useAssetClasses, useCategories, type AssetClass, type Category } from "
 import { useLiabilities } from "@/api/networth";
 import { categoryLabel } from "@/lib/categoryLabel";
 
-type Dataset = "transactions" | "snapshots" | "movements";
+type Dataset = "transactions" | "snapshots" | "movements" | "recurring";
 
 const TX_HEADER = "date;direction;category_code;amount;description;created_at;updated_at";
 const SNAP_HEADER = "date;note;kind;key;value";
 const MOV_HEADER = "date;type;asset_class_code;liability_name;amount;description;created_at";
+const REC_HEADER = "direction;category_code;amount;description;cadence;day_of_week;day_of_month;month_of_year;day_of_month_yearly;start_date;end_date;active";
 
 export function CsvFormatHelp({ dataset }: { dataset: Dataset }) {
   const { t } = useTranslation();
@@ -22,6 +23,7 @@ export function CsvFormatHelp({ dataset }: { dataset: Dataset }) {
         {dataset === "transactions" && <TransactionFormat />}
         {dataset === "snapshots" && <SnapshotFormat />}
         {dataset === "movements" && <MovementFormat />}
+        {dataset === "recurring" && <RecurringFormat />}
       </div>
     </details>
   );
@@ -170,6 +172,63 @@ function MovementFormat() {
       </Section>
       <p className="text-xs text-gray-500 dark:text-gray-400">{t("import.format.mov.dedup")}</p>
       <p className="text-xs text-gray-500 dark:text-gray-400">{t("import.format.mov.in_file_dedup")}</p>
+    </>
+  );
+}
+
+function RecurringFormat() {
+  const { t } = useTranslation();
+  const household = useActiveHousehold();
+  const { data: categories } = useCategories(household.householdId);
+  const sorted = [...(categories ?? [])].sort(byKindThenSort);
+  const income = sorted.filter((c) => c.kind === "income");
+  const expense = sorted.filter((c) => c.kind === "expense");
+
+  const examples = [
+    REC_HEADER,
+    expense[0] && `expense;${expense[0].code};45,00;Netflix;monthly;;15;;;2026-01-15;;true`,
+    expense[1] && `expense;${expense[1].code};1200,00;Rent;monthly;;1;;;2026-01-01;;true`,
+    income[0] && `income;${income[0].code};3200,00;Payroll;monthly;;25;;;2026-01-25;;true`,
+  ].filter(Boolean).join("\n");
+
+  return (
+    <>
+      <p>{t("import.format.rec.intro")}</p>
+      <Section title={t("import.format.headers_label")}>
+        <CodeBlock>{REC_HEADER}</CodeBlock>
+      </Section>
+      <Section title={t("import.format.columns_label")}>
+        <ColumnList
+          items={[
+            { name: "direction", req: true, desc: t("import.format.rec.direction") },
+            { name: "category_code", req: true, desc: t("import.format.rec.category_code") },
+            { name: "amount", req: true, desc: t("import.format.rec.amount") },
+            { name: "description", req: false, desc: t("import.format.rec.description") },
+            { name: "cadence", req: true, desc: t("import.format.rec.cadence") },
+            { name: "day_of_week", req: false, desc: t("import.format.rec.day_of_week") },
+            { name: "day_of_month", req: false, desc: t("import.format.rec.day_of_month") },
+            { name: "month_of_year", req: false, desc: t("import.format.rec.month_of_year") },
+            { name: "day_of_month_yearly", req: false, desc: t("import.format.rec.day_of_month_yearly") },
+            { name: "start_date", req: true, desc: t("import.format.rec.start_date") },
+            { name: "end_date", req: false, desc: t("import.format.rec.end_date") },
+            { name: "active", req: true, desc: t("import.format.rec.active") },
+          ]}
+        />
+      </Section>
+      <Section title={t("import.format.tx.income_codes_label")}>
+        <CategoryCodeList items={income} />
+      </Section>
+      <Section title={t("import.format.tx.expense_codes_label")}>
+        <CategoryCodeList items={expense} />
+      </Section>
+      <p className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-100">
+        {t("import.format.tx.unknown_category_note")}
+      </p>
+      <Section title={t("import.format.example_label")}>
+        <CodeBlock>{examples}</CodeBlock>
+      </Section>
+      <p className="text-xs text-gray-500 dark:text-gray-400">{t("import.format.rec.dedup")}</p>
+      <p className="text-xs text-gray-500 dark:text-gray-400">{t("import.format.rec.in_file_dedup")}</p>
     </>
   );
 }

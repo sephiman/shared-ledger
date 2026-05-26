@@ -418,12 +418,24 @@
     "IMPORT_MOVEMENT_TYPE_INVALID": "El tipo debe ser contribution, withdrawal o debt_payment",
     "IMPORT_MOVEMENT_ASSET_REQUIRED": "Las contribuciones/retiros requieren asset_class_code",
     "IMPORT_MOVEMENT_LIABILITY_REQUIRED": "El pago de deuda requiere liability_name",
-    "IMPORT_MOVEMENT_TARGET_MISMATCH": "La columna de destino no coincide con el tipo"
+    "IMPORT_MOVEMENT_TARGET_MISMATCH": "La columna de destino no coincide con el tipo",
+    "IMPORT_CADENCE_INVALID": "La cadencia debe ser weekly, monthly o yearly",
+    "IMPORT_CADENCE_FIELDS_INVALID": "Las columnas de día/mes no coinciden con la cadencia (weekly requiere day_of_week; monthly requiere day_of_month; yearly requiere month_of_year + day_of_month_yearly; las demás deben quedar vacías)",
+    "IMPORT_DAY_OF_WEEK_INVALID": "day_of_week debe estar entre 1 y 7 (1=lunes … 7=domingo)",
+    "IMPORT_DAY_OF_MONTH_INVALID": "El día del mes debe estar entre 1 y 31",
+    "IMPORT_MONTH_OF_YEAR_INVALID": "month_of_year debe estar entre 1 y 12",
+    "IMPORT_END_BEFORE_START": "end_date es anterior a start_date",
+    "IMPORT_ACTIVE_INVALID": "active debe ser true o false"
+  },
+  "export": {
+    "title": "Exportar todo",
+    "description": "Descarga un único ZIP con transacciones, plantillas recurrentes, movimientos e instantáneas — un CSV por conjunto. Los mismos archivos vuelven a importarse sin cambios.",
+    "download_all": "Descargar todos los datos (ZIP)"
   },
   "import": {
-    "title": "Importación de datos",
-    "open": "Abrir importación",
-    "settings_description": "Importa transacciones e instantáneas previamente exportadas a esta unidad familiar.",
+    "title": "Importación y exportación de datos",
+    "open": "Abrir importación y exportación",
+    "settings_description": "Importa CSVs previamente exportados a esta unidad familiar, o descarga una copia completa en ZIP.",
     "page_description": "Sube un CSV exportado desde esta aplicación. Primero se valida; no se escribe nada hasta confirmar.",
     "transactions": "Transacciones",
     "transactions_description": "Mismo formato que Transacciones → Exportar CSV. Los duplicados de datos existentes se omiten automáticamente; las filas duplicadas dentro del mismo archivo se importan todas añadiendo un sufijo numérico a la descripción.",
@@ -431,6 +443,8 @@
     "snapshots_description": "Mismo formato que Instantáneas → Exportar CSV. Cada fecha forma una instantánea; elige qué hacer si la fecha ya existe.",
     "movements": "Movimientos de patrimonio",
     "movements_description": "Mismo formato que Movimientos → Exportar CSV. Los duplicados de datos existentes se omiten automáticamente; las filas duplicadas dentro del mismo archivo se importan todas añadiendo un sufijo numérico a la descripción.",
+    "recurring": "Plantillas recurrentes",
+    "recurring_description": "Mismo formato que Recurrentes → Exportar CSV. Importar nunca avanza el reloj de materialización — las plantillas nuevas se dispararán desde su start_date la próxima vez que las ejecutes.",
     "validate": "Validar",
     "confirm": "Importar",
     "file": "Archivo",
@@ -501,6 +515,23 @@
         "liabilities_note": "Las filas de tipo liability deben usar el nombre exacto de un pasivo que ya exista y esté activo en esta unidad familiar. Los pasivos inactivos o desconocidos se rechazarán. Crea o activa primero los pasivos en Patrimonio → Pasivos.",
         "no_liabilities": "Aún no hay pasivos activos en esta unidad familiar.",
         "rules": "Reglas por fecha: cada clase de activo debe tener exactamente una fila de valor, cada pasivo activo debe tener exactamente una fila de valor, y ninguna combinación kind+key puede repetirse dentro de la misma fecha."
+      },
+      "rec": {
+        "intro": "CSV en dialecto europeo: UTF-8, punto y coma (;) como separador de columnas, coma (,) como separador decimal, comillas según RFC-4180. La primera fila es la cabecera literal indicada abajo; una plantilla recurrente por fila. Importar no avanza el reloj de materialización — las plantillas nuevas se dispararán desde su start_date la próxima vez que las ejecutes.",
+        "direction": "income o expense (en minúscula). Debe coincidir con la naturaleza del category_code elegido.",
+        "category_code": "Uno de los códigos listados abajo.",
+        "amount": "Decimal positivo. La coma es el separador decimal canónico (p. ej. 45,00); también se acepta el punto al importar. Hasta 2 decimales.",
+        "description": "Texto libre opcional de hasta 500 caracteres.",
+        "cadence": "weekly, monthly o yearly (en minúscula). Determina qué columnas de día/mes son obligatorias.",
+        "day_of_week": "1-7 (1=lunes … 7=domingo). Obligatorio si cadence=weekly. En el resto debe quedar vacío.",
+        "day_of_month": "1-31. Obligatorio si cadence=monthly. En el resto debe quedar vacío.",
+        "month_of_year": "1-12. Obligatorio si cadence=yearly. En el resto debe quedar vacío.",
+        "day_of_month_yearly": "1-31. Obligatorio si cadence=yearly. En el resto debe quedar vacío.",
+        "start_date": "Fecha ISO YYYY-MM-DD. Primera fecha posible en la que la plantilla puede dispararse.",
+        "end_date": "Fecha ISO YYYY-MM-DD opcional. La plantilla deja de dispararse después de esta fecha. Debe ser ≥ start_date.",
+        "active": "true o false. Las inactivas se mantienen pero no se disparan automáticamente.",
+        "dedup": "Detección de duplicados: una fila se omite si todas sus columnas coinciden con una plantilla existente (direction, category, amount, cadence, todos los campos de día/mes, start/end dates, active y description).",
+        "in_file_dedup": "Si dos filas dentro del archivo son idénticas en todas las columnas, a las duplicadas se les añade « (2)», « (3)», … a la descripción para que cada una quede distinta."
       },
       "mov": {
         "intro": "CSV en dialecto europeo: UTF-8, punto y coma (;) como separador de columnas, coma (,) como separador decimal, comillas según RFC-4180. La primera fila es la cabecera literal indicada abajo; un movimiento por fila. Los movimientos registran aportaciones o retiradas sobre una clase de activo, o pagos sobre un pasivo — no afectan a los totales de transacciones.",
