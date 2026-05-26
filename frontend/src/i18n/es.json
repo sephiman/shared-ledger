@@ -35,6 +35,7 @@
   },
   "common": {
     "save": "Guardar",
+    "saved": "Guardado",
     "cancel": "Cancelar",
     "delete": "Borrar",
     "edit": "Editar",

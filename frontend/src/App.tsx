@@ -5,6 +5,7 @@ import { LoginPage } from "@/auth/LoginPage";
 import { RegisterPage } from "@/auth/RegisterPage";
 import { RequireAuth } from "@/auth/RequireAuth";
 import { AppShell } from "@/components/layout/AppShell";
+import { ToastHost } from "@/components/ui/ToastHost";
 
 const DashboardPage = lazy(() => import("@/features/dashboard/DashboardPage").then((m) => ({ default: m.DashboardPage })));
 const TransactionsPage = lazy(() => import("@/features/transactions/TransactionsPage").then((m) => ({ default: m.TransactionsPage })));
@@ -27,28 +28,31 @@ function Lazy({ children }: { children: ReactNode }) {
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
-      <Route
-        element={
-          <RequireAuth>
-            <AppShell />
-          </RequireAuth>
-        }
-      >
-        <Route index element={<Navigate to="/dashboard" replace />} />
-        <Route path="/dashboard" element={<Lazy><DashboardPage /></Lazy>} />
-        <Route path="/transactions" element={<Lazy><TransactionsPage /></Lazy>} />
-        <Route path="/recurring" element={<Lazy><RecurringPage /></Lazy>} />
-        <Route path="/budgets" element={<Lazy><BudgetsPage /></Lazy>} />
-        <Route path="/networth/*" element={<Lazy><NetWorthPage /></Lazy>} />
-        <Route path="/analytics/*" element={<Lazy><AnalyticsPage /></Lazy>} />
-        <Route path="/fire" element={<Lazy><FirePage /></Lazy>} />
-        <Route path="/settings" element={<Lazy><SettingsPage /></Lazy>} />
-        <Route path="/settings/import" element={<Lazy><DataImportPage /></Lazy>} />
-      </Route>
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
-    </Routes>
+    <>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route
+          element={
+            <RequireAuth>
+              <AppShell />
+            </RequireAuth>
+          }
+        >
+          <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={<Lazy><DashboardPage /></Lazy>} />
+          <Route path="/transactions" element={<Lazy><TransactionsPage /></Lazy>} />
+          <Route path="/recurring" element={<Lazy><RecurringPage /></Lazy>} />
+          <Route path="/budgets" element={<Lazy><BudgetsPage /></Lazy>} />
+          <Route path="/networth/*" element={<Lazy><NetWorthPage /></Lazy>} />
+          <Route path="/analytics/*" element={<Lazy><AnalyticsPage /></Lazy>} />
+          <Route path="/fire" element={<Lazy><FirePage /></Lazy>} />
+          <Route path="/settings" element={<Lazy><SettingsPage /></Lazy>} />
+          <Route path="/settings/import" element={<Lazy><DataImportPage /></Lazy>} />
+        </Route>
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+      <ToastHost />
+    </>
   );
 }

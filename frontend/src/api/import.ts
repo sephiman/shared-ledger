@@ -74,6 +74,7 @@ export function usePreviewTransactions(householdId: string) {
       );
       return res.data;
     },
+    meta: { silentSuccess: true },
   });
 }
 
@@ -106,6 +107,7 @@ export function usePreviewMovements(householdId: string) {
       );
       return res.data;
     },
+    meta: { silentSuccess: true },
   });
 }
 
@@ -137,6 +139,7 @@ export function usePreviewRecurring(householdId: string) {
       );
       return res.data;
     },
+    meta: { silentSuccess: true },
   });
 }
 
@@ -167,6 +170,7 @@ export function usePreviewSnapshots(householdId: string) {
       );
       return res.data;
     },
+    meta: { silentSuccess: true },
   });
 }
 
