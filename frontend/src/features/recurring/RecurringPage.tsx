@@ -246,11 +246,67 @@ export function RecurringPage() {
           ) : templates.length === 0 ? (
             <p className="text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+            <>
+              <ul className="space-y-2 md:hidden">
+                {templates.map((tpl) => (
+                  <li key={tpl.id} className="rounded-md border border-border p-3 dark:border-gray-700">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium">
+                          <span className="mr-1.5" aria-hidden>{categoryIcon(tpl.categoryCode)}</span>
+                          {categoryLabelByCode(tpl.categoryCode, categories, t)}
+                        </p>
+                        {tpl.description && (
+                          <p className="mt-0.5 truncate text-sm text-gray-600 dark:text-gray-300">{tpl.description}</p>
+                        )}
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          {t(`recurring.${tpl.cadence}`)} · {t("recurring.next")}: {tpl.nextFireDate ? formatDate(tpl.nextFireDate, i18n.language) : "—"}
+                          {!tpl.active && <> · {t("common.no")}</>}
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="font-medium">{formatMoney(tpl.amount, household.currency, i18n.language)}</span>
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            className="px-2"
+                            aria-label={t("recurring.run_now")}
+                            title={t("recurring.run_now")}
+                            onClick={() => materialize.mutate(tpl.id)}
+                          >
+                            <span aria-hidden>▶️</span>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            className="px-2"
+                            aria-label={t("common.edit")}
+                            title={t("common.edit")}
+                            onClick={() => startEdit(tpl)}
+                          >
+                            <span aria-hidden>✏️</span>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            className="px-2"
+                            aria-label={t("common.delete")}
+                            title={t("common.delete")}
+                            onClick={() => {
+                              if (window.confirm(t("common.delete") + "?")) void del.mutate(tpl.id);
+                            }}
+                          >
+                            <span aria-hidden>🗑️</span>
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <table className="hidden w-full text-sm md:table">
                 <thead className="text-left text-gray-500 dark:text-gray-400">
                   <tr>
                     <th className="py-2">{t("common.category")}</th>
+                    <th>{t("common.description")}</th>
                     <th>{t("recurring.cadence")}</th>
                     <th className="text-right">{t("common.amount")}</th>
                     <th>{t("recurring.next")}</th>
@@ -266,28 +322,50 @@ export function RecurringPage() {
                         <span className="mr-1.5" aria-hidden>{categoryIcon(tpl.categoryCode)}</span>
                         {categoryLabelByCode(tpl.categoryCode, categories, t)}
                       </td>
+                      <td className="text-gray-600 dark:text-gray-300">{tpl.description ?? "—"}</td>
                       <td>{t(`recurring.${tpl.cadence}`)}</td>
                       <td className="text-right">{formatMoney(tpl.amount, household.currency, i18n.language)}</td>
                       <td>{tpl.nextFireDate ? formatDate(tpl.nextFireDate, i18n.language) : "—"}</td>
                       <td>{tpl.lastMaterializedThrough ? formatDate(tpl.lastMaterializedThrough, i18n.language) : "—"}</td>
                       <td>{tpl.active ? t("common.yes") : t("common.no")}</td>
-                      <td className="space-x-2 text-right">
-                        <Button variant="ghost" onClick={() => materialize.mutate(tpl.id)}>{t("recurring.run_now")}</Button>
-                        <Button variant="ghost" onClick={() => startEdit(tpl)}>{t("common.edit")}</Button>
-                        <Button
-                          variant="ghost"
-                          onClick={() => {
-                            if (window.confirm(t("common.delete") + "?")) void del.mutate(tpl.id);
-                          }}
-                        >
-                          {t("common.delete")}
-                        </Button>
+                      <td className="text-right">
+                        <div className="inline-flex gap-1">
+                          <Button
+                            variant="ghost"
+                            className="px-2"
+                            aria-label={t("recurring.run_now")}
+                            title={t("recurring.run_now")}
+                            onClick={() => materialize.mutate(tpl.id)}
+                          >
+                            <span aria-hidden>▶️</span>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            className="px-2"
+                            aria-label={t("common.edit")}
+                            title={t("common.edit")}
+                            onClick={() => startEdit(tpl)}
+                          >
+                            <span aria-hidden>✏️</span>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            className="px-2"
+                            aria-label={t("common.delete")}
+                            title={t("common.delete")}
+                            onClick={() => {
+                              if (window.confirm(t("common.delete") + "?")) void del.mutate(tpl.id);
+                            }}
+                          >
+                            <span aria-hidden>🗑️</span>
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </div>
+            </>
           )}
         </CardBody>
       </Card>

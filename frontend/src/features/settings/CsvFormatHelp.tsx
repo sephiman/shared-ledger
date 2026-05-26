@@ -66,6 +66,9 @@ function TransactionFormat() {
       <Section title={t("import.format.tx.expense_codes_label")}>
         <CategoryCodeList items={expense} />
       </Section>
+      <p className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-100">
+        {t("import.format.tx.unknown_category_note")}
+      </p>
       <Section title={t("import.format.example_label")}>
         <CodeBlock>{example}</CodeBlock>
       </Section>
@@ -108,10 +111,11 @@ function SnapshotFormat() {
       </Section>
       <Section title={t("import.format.snap.asset_codes_label")}>
         <AssetCodeList items={assets} />
+        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{t("import.format.snap.asset_codes_note")}</p>
       </Section>
       <Section title={t("import.format.snap.liabilities_label")}>
         <LiabilityNameList items={activeLiabilities} />
-        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{t("import.format.snap.liabilities_note")}</p>
+        <p className="mt-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-100">{t("import.format.snap.liabilities_note")}</p>
       </Section>
       <Section title={t("import.format.example_label")}>
         <CodeBlock>{example}</CodeBlock>
@@ -155,10 +159,11 @@ function MovementFormat() {
       </Section>
       <Section title={t("import.format.snap.asset_codes_label")}>
         <AssetCodeList items={assets} />
+        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{t("import.format.snap.asset_codes_note")}</p>
       </Section>
       <Section title={t("import.format.snap.liabilities_label")}>
         <LiabilityNameList items={activeLiabilities} />
-        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{t("import.format.snap.liabilities_note")}</p>
+        <p className="mt-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-100">{t("import.format.snap.liabilities_note")}</p>
       </Section>
       <Section title={t("import.format.example_label")}>
         <CodeBlock>{exampleRows.join("\n")}</CodeBlock>

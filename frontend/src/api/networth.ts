@@ -133,6 +133,19 @@ export function useCreateSnapshot(householdId: string) {
   });
 }
 
+export function useUpdateSnapshot(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, input }: { id: string; input: SnapshotInput }) =>
+      (await apiClient.patch<Snapshot>(`/households/${householdId}/snapshots/${id}`, input)).data,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["snapshots", householdId] });
+      void qc.invalidateQueries({ queryKey: ["snapshot-prefill", householdId] });
+      void qc.invalidateQueries({ queryKey: ["fire-projection", householdId] });
+    },
+  });
+}
+
 export function useDeleteSnapshot(householdId: string) {
   const qc = useQueryClient();
   return useMutation({
@@ -159,6 +172,18 @@ export function useCreateMovement(householdId: string) {
   return useMutation({
     mutationFn: async (input: MovementInput) =>
       (await apiClient.post<Movement>(`/households/${householdId}/movements`, input)).data,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["movements", householdId] });
+      void qc.invalidateQueries({ queryKey: ["fire-projection", householdId] });
+    },
+  });
+}
+
+export function useUpdateMovement(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, input }: { id: string; input: MovementInput }) =>
+      (await apiClient.patch<Movement>(`/households/${householdId}/movements/${id}`, input)).data,
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["movements", householdId] });
       void qc.invalidateQueries({ queryKey: ["fire-projection", householdId] });

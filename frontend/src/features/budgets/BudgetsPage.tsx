@@ -111,67 +111,128 @@ export function BudgetsPage() {
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("budget.monthly_description")}</p>
         </CardHeader>
         <CardBody>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-gray-500 dark:text-gray-400">
-                <tr>
-                  <th className="py-2">{t("common.category")}</th>
-                  <th className="text-right">{t("budget.budget")}</th>
-                  <th className="text-right">{t("budget.spent")}</th>
-                  <th className="text-right">{t("budget.projection")}</th>
-                  <th className="text-right">{t("budget.percent")}</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {expenseCategories.map((c) => {
-                  const row = summary?.rows.find((r) => r.categoryCode === c.code);
-                  const isEditingHere = editing?.code === c.code && editing.mode === "monthly";
-                  const monthlyAmount = monthlyByCat.get(c.code)?.amount;
-                  return (
-                    <tr key={c.code} className="border-t border-border">
-                      <td className="py-2">
-                        <span className="mr-1.5" aria-hidden>{categoryIcon(c.code)}</span>
-                        {categoryLabel(c, t)}
-                      </td>
-                      <td className="text-right">
-                        {isEditingHere ? (
-                          <div className="flex flex-col items-end gap-1">
-                            <div className="flex items-center justify-end gap-2">
-                              <Input
-                                className="w-24 text-right"
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                value={editing!.amount}
-                                invalid={!!amountError}
-                                onChange={(e) => { setEditing({ ...editing!, amount: e.target.value }); if (amountError) setAmountError(null); }}
-                              />
-                              <Button onClick={saveOne}>{t("common.save")}</Button>
-                              <Button variant="ghost" onClick={cancelEdit}>{t("common.cancel")}</Button>
-                            </div>
-                            <FieldError message={amountError} />
+          <ul className="space-y-2 md:hidden">
+            {expenseCategories.map((c) => {
+              const row = summary?.rows.find((r) => r.categoryCode === c.code);
+              const isEditingHere = editing?.code === c.code && editing.mode === "monthly";
+              const monthlyAmount = monthlyByCat.get(c.code)?.amount;
+              return (
+                <li key={c.code} className="rounded-md border border-border p-3 dark:border-gray-700">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-medium">
+                      <span className="mr-1.5" aria-hidden>{categoryIcon(c.code)}</span>
+                      {categoryLabel(c, t)}
+                    </p>
+                    {!isEditingHere && (
+                      <Button
+                        variant="ghost"
+                        className="px-2"
+                        aria-label={t("common.edit")}
+                        title={t("common.edit")}
+                        onClick={() => startEdit(c.code, "monthly", monthlyAmount ?? "")}
+                      >
+                        <span aria-hidden>✏️</span>
+                      </Button>
+                    )}
+                  </div>
+                  {isEditingHere ? (
+                    <div className="mt-2 flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <Input
+                          className="flex-1 text-right"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={editing!.amount}
+                          invalid={!!amountError}
+                          onChange={(e) => { setEditing({ ...editing!, amount: e.target.value }); if (amountError) setAmountError(null); }}
+                        />
+                        <Button onClick={saveOne}>{t("common.save")}</Button>
+                        <Button variant="ghost" onClick={cancelEdit}>{t("common.cancel")}</Button>
+                      </div>
+                      <FieldError message={amountError} />
+                    </div>
+                  ) : (
+                    <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 text-sm">
+                      <span className="text-gray-500 dark:text-gray-400">{t("budget.budget")}</span>
+                      <span className="text-right">{monthlyAmount ? formatMoney(monthlyAmount, household.currency, i18n.language) : "—"}</span>
+                      <span className="text-gray-500 dark:text-gray-400">{t("budget.spent")}</span>
+                      <span className="text-right">{row ? formatMoney(row.spent, household.currency, i18n.language) : "—"}</span>
+                      <span className="text-gray-500 dark:text-gray-400">{t("budget.projection")}</span>
+                      <span className="text-right">{row ? formatMoney(row.projection, household.currency, i18n.language) : "—"}</span>
+                      <span className="text-gray-500 dark:text-gray-400">{t("budget.percent")}</span>
+                      <span className={`text-right font-medium ${row ? color(row.percent) : ""}`}>{row ? row.percent.toFixed(0) + "%" : "—"}</span>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          <table className="hidden w-full text-sm md:table">
+            <thead className="text-left text-gray-500 dark:text-gray-400">
+              <tr>
+                <th className="py-2">{t("common.category")}</th>
+                <th className="text-right">{t("budget.budget")}</th>
+                <th className="text-right">{t("budget.spent")}</th>
+                <th className="text-right">{t("budget.projection")}</th>
+                <th className="text-right">{t("budget.percent")}</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {expenseCategories.map((c) => {
+                const row = summary?.rows.find((r) => r.categoryCode === c.code);
+                const isEditingHere = editing?.code === c.code && editing.mode === "monthly";
+                const monthlyAmount = monthlyByCat.get(c.code)?.amount;
+                return (
+                  <tr key={c.code} className="border-t border-border">
+                    <td className="py-2">
+                      <span className="mr-1.5" aria-hidden>{categoryIcon(c.code)}</span>
+                      {categoryLabel(c, t)}
+                    </td>
+                    <td className="text-right">
+                      {isEditingHere ? (
+                        <div className="flex flex-col items-end gap-1">
+                          <div className="flex items-center justify-end gap-2">
+                            <Input
+                              className="w-24 text-right"
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={editing!.amount}
+                              invalid={!!amountError}
+                              onChange={(e) => { setEditing({ ...editing!, amount: e.target.value }); if (amountError) setAmountError(null); }}
+                            />
+                            <Button onClick={saveOne}>{t("common.save")}</Button>
+                            <Button variant="ghost" onClick={cancelEdit}>{t("common.cancel")}</Button>
                           </div>
-                        ) : (
-                          <span>{monthlyAmount ? formatMoney(monthlyAmount, household.currency, i18n.language) : "—"}</span>
-                        )}
-                      </td>
-                      <td className="text-right">{row ? formatMoney(row.spent, household.currency, i18n.language) : "—"}</td>
-                      <td className="text-right">{row ? formatMoney(row.projection, household.currency, i18n.language) : "—"}</td>
-                      <td className={`text-right font-medium ${row ? color(row.percent) : ""}`}>{row ? row.percent.toFixed(0) + "%" : "—"}</td>
-                      <td className="text-right">
-                        {!isEditingHere && (
-                          <Button variant="ghost" onClick={() => startEdit(c.code, "monthly", monthlyAmount ?? "")}>
-                            {t("common.edit")}
-                          </Button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                          <FieldError message={amountError} />
+                        </div>
+                      ) : (
+                        <span>{monthlyAmount ? formatMoney(monthlyAmount, household.currency, i18n.language) : "—"}</span>
+                      )}
+                    </td>
+                    <td className="text-right">{row ? formatMoney(row.spent, household.currency, i18n.language) : "—"}</td>
+                    <td className="text-right">{row ? formatMoney(row.projection, household.currency, i18n.language) : "—"}</td>
+                    <td className={`text-right font-medium ${row ? color(row.percent) : ""}`}>{row ? row.percent.toFixed(0) + "%" : "—"}</td>
+                    <td className="text-right">
+                      {!isEditingHere && (
+                        <Button
+                          variant="ghost"
+                          className="px-2"
+                          aria-label={t("common.edit")}
+                          title={t("common.edit")}
+                          onClick={() => startEdit(c.code, "monthly", monthlyAmount ?? "")}
+                        >
+                          <span aria-hidden>✏️</span>
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </CardBody>
       </Card>
 
@@ -181,60 +242,112 @@ export function BudgetsPage() {
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("budget.annual_description")}</p>
         </CardHeader>
         <CardBody>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-gray-500 dark:text-gray-400">
-                <tr>
-                  <th className="py-2">{t("common.category")}</th>
-                  <th className="text-right">{t("budget.annual")}</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {expenseCategories.map((c) => {
-                  const isEditingHere = editing?.code === c.code && editing.mode === "annual";
-                  const annualAmount = annualByCat.get(c.code)?.amount;
-                  return (
-                    <tr key={c.code} className="border-t border-border">
-                      <td className="py-2">
-                        <span className="mr-1.5" aria-hidden>{categoryIcon(c.code)}</span>
-                        {categoryLabel(c, t)}
-                      </td>
-                      <td className="text-right">
-                        {isEditingHere ? (
-                          <div className="flex flex-col items-end gap-1">
-                            <div className="flex items-center justify-end gap-2">
-                              <Input
-                                className="w-24 text-right"
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                value={editing!.amount}
-                                invalid={!!amountError}
-                                onChange={(e) => { setEditing({ ...editing!, amount: e.target.value }); if (amountError) setAmountError(null); }}
-                              />
-                              <Button onClick={saveOne}>{t("common.save")}</Button>
-                              <Button variant="ghost" onClick={cancelEdit}>{t("common.cancel")}</Button>
-                            </div>
-                            <FieldError message={amountError} />
+          <ul className="space-y-2 md:hidden">
+            {expenseCategories.map((c) => {
+              const isEditingHere = editing?.code === c.code && editing.mode === "annual";
+              const annualAmount = annualByCat.get(c.code)?.amount;
+              return (
+                <li key={c.code} className="rounded-md border border-border p-3 dark:border-gray-700">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-medium">
+                      <span className="mr-1.5" aria-hidden>{categoryIcon(c.code)}</span>
+                      {categoryLabel(c, t)}
+                    </p>
+                    {isEditingHere ? null : (
+                      <div className="flex items-center gap-2">
+                        <span>{annualAmount ? formatMoney(annualAmount, household.currency, i18n.language) : "—"}</span>
+                        <Button
+                          variant="ghost"
+                          className="px-2"
+                          aria-label={t("common.edit")}
+                          title={t("common.edit")}
+                          onClick={() => startEdit(c.code, "annual", annualAmount ?? "")}
+                        >
+                          <span aria-hidden>✏️</span>
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                  {isEditingHere && (
+                    <div className="mt-2 flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <Input
+                          className="flex-1 text-right"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={editing!.amount}
+                          invalid={!!amountError}
+                          onChange={(e) => { setEditing({ ...editing!, amount: e.target.value }); if (amountError) setAmountError(null); }}
+                        />
+                        <Button onClick={saveOne}>{t("common.save")}</Button>
+                        <Button variant="ghost" onClick={cancelEdit}>{t("common.cancel")}</Button>
+                      </div>
+                      <FieldError message={amountError} />
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          <table className="hidden w-full text-sm md:table">
+            <thead className="text-left text-gray-500 dark:text-gray-400">
+              <tr>
+                <th className="py-2">{t("common.category")}</th>
+                <th className="text-right">{t("budget.annual")}</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {expenseCategories.map((c) => {
+                const isEditingHere = editing?.code === c.code && editing.mode === "annual";
+                const annualAmount = annualByCat.get(c.code)?.amount;
+                return (
+                  <tr key={c.code} className="border-t border-border">
+                    <td className="py-2">
+                      <span className="mr-1.5" aria-hidden>{categoryIcon(c.code)}</span>
+                      {categoryLabel(c, t)}
+                    </td>
+                    <td className="text-right">
+                      {isEditingHere ? (
+                        <div className="flex flex-col items-end gap-1">
+                          <div className="flex items-center justify-end gap-2">
+                            <Input
+                              className="w-24 text-right"
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={editing!.amount}
+                              invalid={!!amountError}
+                              onChange={(e) => { setEditing({ ...editing!, amount: e.target.value }); if (amountError) setAmountError(null); }}
+                            />
+                            <Button onClick={saveOne}>{t("common.save")}</Button>
+                            <Button variant="ghost" onClick={cancelEdit}>{t("common.cancel")}</Button>
                           </div>
-                        ) : (
-                          <span>{annualAmount ? formatMoney(annualAmount, household.currency, i18n.language) : "—"}</span>
-                        )}
-                      </td>
-                      <td className="text-right">
-                        {!isEditingHere && (
-                          <Button variant="ghost" onClick={() => startEdit(c.code, "annual", annualAmount ?? "")}>
-                            {t("common.edit")}
-                          </Button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                          <FieldError message={amountError} />
+                        </div>
+                      ) : (
+                        <span>{annualAmount ? formatMoney(annualAmount, household.currency, i18n.language) : "—"}</span>
+                      )}
+                    </td>
+                    <td className="text-right">
+                      {!isEditingHere && (
+                        <Button
+                          variant="ghost"
+                          className="px-2"
+                          aria-label={t("common.edit")}
+                          title={t("common.edit")}
+                          onClick={() => startEdit(c.code, "annual", annualAmount ?? "")}
+                        >
+                          <span aria-hidden>✏️</span>
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </CardBody>
       </Card>
     </div>

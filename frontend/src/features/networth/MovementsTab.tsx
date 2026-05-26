@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
 import { useAssetClasses } from "@/api/catalog";
@@ -7,11 +7,26 @@ import {
   useDeleteMovement,
   useLiabilities,
   useMovements,
+  useUpdateMovement,
+  type Movement,
   type MovementInput,
 } from "@/api/networth";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select, Textarea } from "@/components/ui/primitives";
 import { formatDate, isoToday } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
+
+type PanelMode = { kind: "closed" } | { kind: "create" } | { kind: "edit"; m: Movement };
+
+function defaultDraft(): MovementInput {
+  return {
+    movementDate: isoToday(),
+    type: "contribution",
+    assetClassCode: null,
+    liabilityId: null,
+    amount: "",
+    description: null,
+  };
+}
 
 export function MovementsTab() {
   const { t, i18n } = useTranslation();
@@ -20,25 +35,40 @@ export function MovementsTab() {
   const { data: assetClasses = [] } = useAssetClasses();
   const { data: liabilities = [] } = useLiabilities(household.householdId);
   const create = useCreateMovement(household.householdId);
+  const update = useUpdateMovement(household.householdId);
   const del = useDeleteMovement(household.householdId);
-  const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState<MovementInput>({
-    movementDate: isoToday(),
-    type: "contribution",
-    assetClassCode: null,
-    liabilityId: null,
-    amount: "",
-    description: null,
-  });
+  const [panel, setPanel] = useState<PanelMode>({ kind: "closed" });
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const [draft, setDraft] = useState<MovementInput>(defaultDraft);
   const [errors, setErrors] = useState<{ date?: string; target?: string; amount?: string }>({});
 
-  function openForm() {
-    setOpen(true);
+  useEffect(() => {
+    if (panel.kind === "edit") {
+      panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [panel]);
+
+  function openCreate() {
+    setPanel({ kind: "create" });
+    setDraft(defaultDraft());
+    setErrors({});
+  }
+
+  function openEdit(m: Movement) {
+    setPanel({ kind: "edit", m });
+    setDraft({
+      movementDate: m.movementDate,
+      type: m.type,
+      assetClassCode: m.assetClassCode,
+      liabilityId: m.liabilityId,
+      amount: m.amount,
+      description: m.description,
+    });
     setErrors({});
   }
 
   function closeForm() {
-    setOpen(false);
+    setPanel({ kind: "closed" });
     setErrors({});
   }
 
@@ -60,10 +90,12 @@ export function MovementsTab() {
     const normalized: MovementInput = { ...draft };
     if (draft.type === "debt_payment") normalized.assetClassCode = null;
     else normalized.liabilityId = null;
-    await create.mutateAsync(normalized);
-    setOpen(false);
-    setErrors({});
-    setDraft({ ...draft, amount: "", description: null });
+    if (panel.kind === "edit") {
+      await update.mutateAsync({ id: panel.m.id, input: normalized });
+    } else {
+      await create.mutateAsync(normalized);
+    }
+    closeForm();
   }
 
   function targetLabel(m: { type: string; assetClassCode: string | null; liabilityId: string | null }) {
@@ -84,13 +116,16 @@ export function MovementsTab() {
           >
             {t("common.export_csv")}
           </a>
-          <Button onClick={openForm}>{t("common.create")}</Button>
+          <Button onClick={panel.kind === "create" ? closeForm : openCreate}>
+            {panel.kind === "create" ? t("common.cancel") : t("common.create")}
+          </Button>
         </div>
       </div>
-      {open && (
+      {panel.kind !== "closed" && (
+        <div ref={panelRef}>
         <Card>
           <CardHeader>
-            <p className="font-medium">{t("networth.movements")}</p>
+            <p className="font-medium">{panel.kind === "edit" ? t("common.edit") : t("networth.movements")}</p>
           </CardHeader>
           <CardBody className="space-y-3">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -159,7 +194,7 @@ export function MovementsTab() {
               </div>
               <div className="md:col-span-2">
                 <Label>{t("common.description")}</Label>
-                <Textarea value={draft.description ?? ""} onChange={(e) => setDraft({ ...draft, description: e.target.value })} rows={2} />
+                <Textarea value={draft.description ?? ""} onChange={(e) => setDraft({ ...draft, description: e.target.value || null })} rows={2} />
               </div>
             </div>
             <div className="flex justify-end gap-2">
@@ -168,6 +203,7 @@ export function MovementsTab() {
             </div>
           </CardBody>
         </Card>
+        </div>
       )}
 
       <Card>
@@ -175,37 +211,97 @@ export function MovementsTab() {
           {!page || page.items.length === 0 ? (
             <p className="text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="text-left text-gray-500 dark:text-gray-400">
-                <tr>
-                  <th className="py-2">{t("common.date")}</th>
-                  <th>{t("networth.movement_type")}</th>
-                  <th>{t("common.category")}</th>
-                  <th className="text-right">{t("common.amount")}</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
+            <>
+              <ul className="space-y-2 md:hidden">
                 {page.items.map((m) => (
-                  <tr key={m.id} className="border-t border-border">
-                    <td className="py-2">{formatDate(m.movementDate, i18n.language)}</td>
-                    <td>{t(`networth.${m.type}`)}</td>
-                    <td>{targetLabel(m)}</td>
-                    <td className="text-right">{formatMoney(m.amount, household.currency, i18n.language)}</td>
-                    <td className="text-right">
-                      <Button
-                        variant="ghost"
-                        onClick={() => {
-                          if (window.confirm(t("common.delete") + "?")) void del.mutate(m.id);
-                        }}
-                      >
-                        {t("common.delete")}
-                      </Button>
-                    </td>
-                  </tr>
+                  <li key={m.id} className="rounded-md border border-border p-3 dark:border-gray-700">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium">{targetLabel(m)}</p>
+                        {m.description && (
+                          <p className="mt-0.5 truncate text-sm text-gray-600 dark:text-gray-300">{m.description}</p>
+                        )}
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          {t(`networth.${m.type}`)} · {formatDate(m.movementDate, i18n.language)}
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="font-medium">{formatMoney(m.amount, household.currency, i18n.language)}</span>
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            className="px-2"
+                            aria-label={t("common.edit")}
+                            title={t("common.edit")}
+                            onClick={() => openEdit(m)}
+                          >
+                            <span aria-hidden>✏️</span>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            className="px-2"
+                            aria-label={t("common.delete")}
+                            title={t("common.delete")}
+                            onClick={() => {
+                              if (window.confirm(t("common.delete") + "?")) void del.mutate(m.id);
+                            }}
+                          >
+                            <span aria-hidden>🗑️</span>
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </li>
                 ))}
-              </tbody>
-            </table>
+              </ul>
+              <table className="hidden w-full text-sm md:table">
+                <thead className="text-left text-gray-500 dark:text-gray-400">
+                  <tr>
+                    <th className="py-2">{t("common.date")}</th>
+                    <th>{t("networth.movement_type")}</th>
+                    <th>{t("common.category")}</th>
+                    <th>{t("common.description")}</th>
+                    <th className="text-right">{t("common.amount")}</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {page.items.map((m) => (
+                    <tr key={m.id} className="border-t border-border">
+                      <td className="py-2">{formatDate(m.movementDate, i18n.language)}</td>
+                      <td>{t(`networth.${m.type}`)}</td>
+                      <td>{targetLabel(m)}</td>
+                      <td className="text-gray-600 dark:text-gray-300">{m.description ?? "—"}</td>
+                      <td className="text-right">{formatMoney(m.amount, household.currency, i18n.language)}</td>
+                      <td className="text-right">
+                        <div className="inline-flex gap-1">
+                          <Button
+                            variant="ghost"
+                            className="px-2"
+                            aria-label={t("common.edit")}
+                            title={t("common.edit")}
+                            onClick={() => openEdit(m)}
+                          >
+                            <span aria-hidden>✏️</span>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            className="px-2"
+                            aria-label={t("common.delete")}
+                            title={t("common.delete")}
+                            onClick={() => {
+                              if (window.confirm(t("common.delete") + "?")) void del.mutate(m.id);
+                            }}
+                          >
+                            <span aria-hidden>🗑️</span>
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
           )}
         </CardBody>
       </Card>

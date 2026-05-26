@@ -484,6 +484,7 @@
         "updated_at": "Optional ISO instant in UTC. Defaults to now if empty.",
         "income_codes_label": "Income category codes (use with direction=income)",
         "expense_codes_label": "Expense category codes (use with direction=expense)",
+        "unknown_category_note": "If a category_code in your CSV is not listed above, the row will be rejected. Create it first as a Custom category in Settings → Categories.",
         "dedup": "Duplicate detection: rows whose (date, direction, category_code, amount, description) match an existing transaction are skipped automatically.",
         "in_file_dedup": "If the same row appears more than once within the file, every copy is imported. To keep each transaction distinct, “ (2)”, “ (3)”, … is appended to the description of the duplicates (or “(2)”, “(3)”, … if the description was empty). The preview lists every row whose description was changed before you confirm. Trade-off: once an identical row exists in the database, every later upload of that same row is skipped — even when it appears twice in the new file alongside the existing one. To add a genuine second copy, give it a distinct description or delete the existing row first."
       },
@@ -495,6 +496,7 @@
         "key": "If kind=asset: one of the asset class codes below. If kind=liability: the exact name of an active liability defined in this household (case-sensitive).",
         "value": "Non-negative decimal (0 is allowed). Comma is the canonical decimal separator; dot is also accepted on import.",
         "asset_codes_label": "Asset class codes",
+        "asset_codes_note": "Asset class codes are predefined and cannot be customized. Rows referencing a code that is not listed above will be rejected.",
         "liabilities_label": "Liabilities",
         "liabilities_note": "Liability rows must reference the exact name of a liability that already exists and is active in this household. Inactive or unknown names will be rejected. Create or activate liabilities in Net worth → Liabilities first.",
         "no_liabilities": "No active liabilities in this household yet.",

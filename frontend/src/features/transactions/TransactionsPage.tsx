@@ -155,8 +155,56 @@ export function TransactionsPage() {
           ) : page.items.length === 0 ? (
             <p className="text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+            <>
+              <ul className="space-y-2 md:hidden">
+                {page.items.map((tx) => (
+                  <li key={tx.id} className="rounded-md border border-border p-3 dark:border-gray-700">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium">
+                          <span className="mr-1.5" aria-hidden>{categoryIcon(tx.categoryCode)}</span>
+                          {categoryLabelByCode(tx.categoryCode, categories, t)}
+                        </p>
+                        <p className="mt-0.5 truncate text-sm text-gray-600 dark:text-gray-300">
+                          {tx.description ?? t("tx.no_description")}
+                        </p>
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          {formatDate(tx.occurrenceDate, i18n.language)}
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className={`font-medium ${tx.direction === "income" ? "text-green-600 dark:text-green-400" : "text-gray-900 dark:text-gray-100"}`}>
+                          {tx.direction === "income" ? "+" : "-"}
+                          {formatMoney(tx.amount, household.currency, i18n.language)}
+                        </span>
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            className="px-2"
+                            aria-label={t("common.edit")}
+                            title={t("common.edit")}
+                            onClick={() => startEdit(tx)}
+                          >
+                            <span aria-hidden>✏️</span>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            className="px-2"
+                            aria-label={t("common.delete")}
+                            title={t("common.delete")}
+                            onClick={() => {
+                              if (window.confirm(t("tx.delete_confirm"))) void del.mutate(tx.id);
+                            }}
+                          >
+                            <span aria-hidden>🗑️</span>
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <table className="hidden w-full text-sm md:table">
                 <thead className="text-left text-gray-500 dark:text-gray-400">
                   <tr>
                     <th className="py-2">{t("common.date")}</th>
@@ -207,7 +255,7 @@ export function TransactionsPage() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </>
           )}
         </CardBody>
       </Card>

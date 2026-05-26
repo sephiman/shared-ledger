@@ -484,6 +484,7 @@
         "updated_at": "Instante ISO opcional en UTC. Si está vacío, se usa el momento actual.",
         "income_codes_label": "Códigos de categoría de ingreso (usar con direction=income)",
         "expense_codes_label": "Códigos de categoría de gasto (usar con direction=expense)",
+        "unknown_category_note": "Si un category_code de tu CSV no aparece en las listas anteriores, la fila se rechazará. Créalo antes como categoría personalizada en Ajustes → Categorías.",
         "dedup": "Detección de duplicados: las filas cuya combinación (date, direction, category_code, amount, description) coincide con una transacción existente se omiten automáticamente.",
         "in_file_dedup": "Si la misma fila aparece más de una vez dentro del archivo, todas las copias se importan. Para que cada transacción quede distinta, se añade « (2)», « (3)», … al final de la descripción de las duplicadas (o «(2)», «(3)», … si la descripción estaba vacía). La vista previa lista cada fila cuya descripción se modificó antes de confirmar. Contrapartida: una vez que una fila idéntica está en la base de datos, cualquier subida posterior de esa misma fila se omite — incluso cuando aparece dos veces en el nuevo archivo junto a la existente. Para añadir una segunda copia real, dale una descripción distinta o elimina antes la fila existente."
       },
@@ -495,6 +496,7 @@
         "key": "Si kind=asset: uno de los códigos de clase de activo de abajo. Si kind=liability: el nombre exacto de un pasivo activo definido en esta unidad familiar (sensible a mayúsculas).",
         "value": "Decimal no negativo (se permite 0). La coma es el separador decimal canónico; también se acepta el punto al importar.",
         "asset_codes_label": "Códigos de clase de activo",
+        "asset_codes_note": "Los códigos de clase de activo son predefinidos y no se pueden personalizar. Cualquier fila que use un código que no aparezca arriba se rechazará.",
         "liabilities_label": "Pasivos",
         "liabilities_note": "Las filas de tipo liability deben usar el nombre exacto de un pasivo que ya exista y esté activo en esta unidad familiar. Los pasivos inactivos o desconocidos se rechazarán. Crea o activa primero los pasivos en Patrimonio → Pasivos.",
         "no_liabilities": "Aún no hay pasivos activos en esta unidad familiar.",

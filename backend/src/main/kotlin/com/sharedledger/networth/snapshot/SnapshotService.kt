@@ -64,6 +64,38 @@ class SnapshotService(
     }
 
     @Transactional
+    fun update(householdId: UUID, id: UUID, request: SnapshotRequest, by: User): SnapshotDto {
+        val snapshot = snapshots.findById(id).orElseThrow { AppException.notFound("SNAPSHOT_NOT_FOUND") }
+        if (snapshot.householdId != householdId) throw AppException.notFound("SNAPSHOT_NOT_FOUND")
+
+        val expectedClasses = assetClasses.findAllByOrderBySortOrderAsc().map { it.code }.toSet()
+        val givenClasses = request.assets.map { it.assetClassCode }.toSet()
+        if (!givenClasses.containsAll(expectedClasses)) throw AppException.badRequest("SNAPSHOT_MISSING_ASSET_VALUES")
+
+        snapshot.snapshotDate = request.snapshotDate
+        snapshot.note = request.note
+        snapshot.updatedByUserId = by.id
+
+        snapshot.assetValues.clear()
+        snapshot.assetValues.addAll(request.assets.map {
+            SnapshotAssetValue(
+                id = SnapshotAssetValueId(snapshot.id, it.assetClassCode),
+                value = Money.normalize(it.value),
+            )
+        })
+        snapshot.liabilityBalances.clear()
+        snapshot.liabilityBalances.addAll(request.liabilities.map {
+            SnapshotLiabilityBalance(
+                id = SnapshotLiabilityBalanceId(snapshot.id, it.liabilityId),
+                balance = Money.normalize(it.balance),
+            )
+        })
+
+        snapshots.save(snapshot)
+        return toDto(snapshot)
+    }
+
+    @Transactional
     fun delete(householdId: UUID, id: UUID) {
         val s = snapshots.findById(id).orElseThrow { AppException.notFound("SNAPSHOT_NOT_FOUND") }
         if (s.householdId != householdId) throw AppException.notFound("SNAPSHOT_NOT_FOUND")
@@ -105,22 +137,6 @@ class SnapshotService(
             }
         }
         return sb.toString()
-    }
-
-    @Transactional(readOnly = true)
-    fun evolution(householdId: UUID, from: LocalDate, to: LocalDate): List<EvolutionPoint> {
-        return snapshots.findInRange(householdId, from, to).map { snapshot ->
-            val byClass = snapshot.assetValues.associate { it.id.assetClassCode to it.value }
-            val totalAssets = byClass.values.fold(BigDecimal.ZERO) { acc, v -> acc + v }
-            val totalLiabilities = snapshot.liabilityBalances.fold(BigDecimal.ZERO) { acc, b -> acc + b.balance }
-            EvolutionPoint(
-                snapshotDate = snapshot.snapshotDate,
-                byClass = byClass,
-                totalAssets = Money.normalize(totalAssets),
-                totalLiabilities = Money.normalize(totalLiabilities),
-                netWorth = Money.normalize(totalAssets - totalLiabilities),
-            )
-        }
     }
 
     fun toDto(snapshot: Snapshot): SnapshotDto {

@@ -11,6 +11,7 @@ import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -60,6 +61,16 @@ class SnapshotController(
         val by = currentUser.requireUser()
         val dto = service.create(householdId, body, by)
         return ResponseEntity.status(201).body(dto)
+    }
+
+    @PatchMapping("/{id}")
+    fun update(
+        @PathVariable householdId: UUID,
+        @PathVariable id: UUID,
+        @Valid @RequestBody body: SnapshotRequest,
+    ): SnapshotDto {
+        val by = currentUser.requireUser()
+        return service.update(householdId, id, body, by)
     }
 
     @DeleteMapping("/{id}")

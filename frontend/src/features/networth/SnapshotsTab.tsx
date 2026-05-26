@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Decimal from "decimal.js";
 import { useActiveHousehold } from "@/auth/AuthContext";
@@ -9,13 +9,17 @@ import {
   useLiabilities,
   useSnapshotPrefill,
   useSnapshots,
+  useUpdateSnapshot,
   type AssetValue,
   type LiabilityBalance,
+  type Snapshot,
 } from "@/api/networth";
 import { asApiError } from "@/api/client";
-import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Textarea } from "@/components/ui/primitives";
+import { Button, Card, CardBody, CardHeader, FieldError, Input, Label } from "@/components/ui/primitives";
 import { formatMoney } from "@/lib/money";
 import { formatDate, isoToday } from "@/lib/dates";
+
+type PanelMode = { kind: "closed" } | { kind: "create" } | { kind: "edit"; s: Snapshot };
 
 export function SnapshotsTab() {
   const { t, i18n } = useTranslation();
@@ -25,9 +29,11 @@ export function SnapshotsTab() {
   const { data: assetClasses = [] } = useAssetClasses();
   const { data: liabilities = [] } = useLiabilities(household.householdId);
   const create = useCreateSnapshot(household.householdId);
+  const update = useUpdateSnapshot(household.householdId);
   const del = useDeleteSnapshot(household.householdId);
 
-  const [editing, setEditing] = useState<boolean>(false);
+  const [panel, setPanel] = useState<PanelMode>({ kind: "closed" });
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const [date, setDate] = useState(isoToday());
   const [note, setNote] = useState("");
   const [assets, setAssets] = useState<Record<string, string>>({});
@@ -36,8 +42,14 @@ export function SnapshotsTab() {
   const [error, setError] = useState<string | null>(null);
   const [dateError, setDateError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (panel.kind === "edit") {
+      panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [panel]);
+
   function startNew() {
-    setEditing(true);
+    setPanel({ kind: "create" });
     setDate(isoToday());
     setNote("");
     const a: Record<string, string> = {};
@@ -57,6 +69,31 @@ export function SnapshotsTab() {
     setDateError(null);
   }
 
+  function startEdit(s: Snapshot) {
+    setPanel({ kind: "edit", s });
+    setDate(s.snapshotDate);
+    setNote(s.note ?? "");
+    const a: Record<string, string> = {};
+    for (const cls of assetClasses) {
+      const v = s.assets.find((x) => x.assetClassCode === cls.code);
+      a[cls.code] = v?.value ?? "0";
+    }
+    setAssets(a);
+    const l: Record<string, string> = {};
+    const liabilityIdsInSnapshot = new Set(s.liabilities.map((x) => x.liabilityId));
+    for (const balance of s.liabilities) {
+      l[balance.liabilityId] = balance.balance;
+    }
+    // include any currently-active liabilities that aren't in the snapshot yet
+    for (const liability of liabilities.filter((x) => x.active)) {
+      if (!liabilityIdsInSnapshot.has(liability.id)) l[liability.id] = "0";
+    }
+    setLiab(l);
+    setConfirmLarge(false);
+    setError(null);
+    setDateError(null);
+  }
+
   function delta(prev: string | undefined, next: string): { abs: string; pct: string; large: boolean } {
     const p = new Decimal(prev ?? 0);
     const n = new Decimal(next || 0);
@@ -64,6 +101,10 @@ export function SnapshotsTab() {
     if (p.isZero()) return { abs: abs.toFixed(2), pct: n.isZero() ? "0" : "—", large: !n.isZero() };
     const pct = abs.div(p.abs()).times(100);
     return { abs: abs.toFixed(2), pct: pct.toFixed(1) + "%", large: pct.abs().gt(50) };
+  }
+
+  function closePanel() {
+    setPanel({ kind: "closed" });
   }
 
   async function save() {
@@ -74,16 +115,32 @@ export function SnapshotsTab() {
     }
     setDateError(null);
     const assetItems: AssetValue[] = assetClasses.map((cls) => ({ assetClassCode: cls.code, value: assets[cls.code] || "0" }));
-    const liabItems: LiabilityBalance[] = liabilities.filter((x) => x.active).map((x) => ({ liabilityId: x.id, balance: liab[x.id] || "0" }));
+    const liabIds = panel.kind === "edit"
+      ? Object.keys(liab)
+      : liabilities.filter((x) => x.active).map((x) => x.id);
+    const liabItems: LiabilityBalance[] = liabIds.map((id) => ({ liabilityId: id, balance: liab[id] || "0" }));
     try {
-      await create.mutateAsync({
-        snapshotDate: date,
-        note: note || null,
-        assets: assetItems,
-        liabilities: liabItems,
-        confirmLargeChanges: confirmLarge,
-      });
-      setEditing(false);
+      if (panel.kind === "edit") {
+        await update.mutateAsync({
+          id: panel.s.id,
+          input: {
+            snapshotDate: date,
+            note: note || null,
+            assets: assetItems,
+            liabilities: liabItems,
+            confirmLargeChanges: true,
+          },
+        });
+      } else {
+        await create.mutateAsync({
+          snapshotDate: date,
+          note: note || null,
+          assets: assetItems,
+          liabilities: liabItems,
+          confirmLargeChanges: confirmLarge,
+        });
+      }
+      closePanel();
     } catch (err) {
       const api = asApiError(err);
       if (api.code === "SNAPSHOT_REQUIRES_DELTA_CONFIRMATION") {
@@ -105,6 +162,7 @@ export function SnapshotsTab() {
   }, [prefill]);
 
   const anyLarge = useMemo(() => {
+    if (panel.kind !== "create") return false;
     if (!prefill?.previous) return false;
     for (const cls of assetClasses) {
       const d = delta(previousAssets[cls.code], assets[cls.code] ?? "0");
@@ -115,7 +173,12 @@ export function SnapshotsTab() {
       if (d.large) return true;
     }
     return false;
-  }, [assets, liab, assetClasses, liabilities, previousAssets, previousLiabilities, prefill]);
+  }, [panel.kind, assets, liab, assetClasses, liabilities, previousAssets, previousLiabilities, prefill]);
+
+  const liabilityName = (id: string) => liabilities.find((x) => x.id === id)?.name ?? id;
+  const liabilityIdsInForm = panel.kind === "edit"
+    ? Object.keys(liab)
+    : liabilities.filter((x) => x.active).map((x) => x.id);
 
   return (
     <div className="space-y-4">
@@ -129,14 +192,17 @@ export function SnapshotsTab() {
           >
             {t("common.export_csv")}
           </a>
-          <Button onClick={startNew}>{t("networth.new_snapshot")}</Button>
+          <Button onClick={panel.kind === "create" ? closePanel : startNew}>
+            {panel.kind === "create" ? t("common.cancel") : t("networth.new_snapshot")}
+          </Button>
         </div>
       </div>
 
-      {editing && (
+      {panel.kind !== "closed" && (
+        <div ref={panelRef}>
         <Card>
           <CardHeader>
-            <p className="font-medium">{t("networth.new_snapshot")}</p>
+            <p className="font-medium">{panel.kind === "edit" ? t("common.edit") : t("networth.new_snapshot")}</p>
           </CardHeader>
           <CardBody className="space-y-3">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -159,7 +225,7 @@ export function SnapshotsTab() {
               <p className="mb-2 text-sm font-medium">{t("networth.total_assets")}</p>
               <div className="space-y-2">
                 {assetClasses.map((cls) => {
-                  const d = delta(previousAssets[cls.code], assets[cls.code] ?? "0");
+                  const d = panel.kind === "create" ? delta(previousAssets[cls.code], assets[cls.code] ?? "0") : null;
                   return (
                     <div key={cls.code} className="flex items-center gap-2">
                       <Label className="mb-0 w-32">{t(`asset.${cls.code}`)}</Label>
@@ -169,7 +235,9 @@ export function SnapshotsTab() {
                         value={assets[cls.code] ?? ""}
                         onChange={(e) => setAssets({ ...assets, [cls.code]: e.target.value })}
                       />
-                      <span className={`w-24 text-right text-xs ${d.large ? "text-amber-600" : "text-gray-500 dark:text-gray-400"}`}>{d.abs} ({d.pct})</span>
+                      {d && (
+                        <span className={`w-24 text-right text-xs ${d.large ? "text-amber-600" : "text-gray-500 dark:text-gray-400"}`}>{d.abs} ({d.pct})</span>
+                      )}
                     </div>
                   );
                 })}
@@ -178,18 +246,20 @@ export function SnapshotsTab() {
             <div>
               <p className="mb-2 text-sm font-medium">{t("networth.total_liabilities")}</p>
               <div className="space-y-2">
-                {liabilities.filter((x) => x.active).map((l) => {
-                  const d = delta(previousLiabilities[l.id], liab[l.id] ?? "0");
+                {liabilityIdsInForm.map((id) => {
+                  const d = panel.kind === "create" ? delta(previousLiabilities[id], liab[id] ?? "0") : null;
                   return (
-                    <div key={l.id} className="flex items-center gap-2">
-                      <Label className="mb-0 w-32">{l.name}</Label>
+                    <div key={id} className="flex items-center gap-2">
+                      <Label className="mb-0 w-32">{liabilityName(id)}</Label>
                       <Input
                         type="number"
                         step="0.01"
-                        value={liab[l.id] ?? ""}
-                        onChange={(e) => setLiab({ ...liab, [l.id]: e.target.value })}
+                        value={liab[id] ?? ""}
+                        onChange={(e) => setLiab({ ...liab, [id]: e.target.value })}
                       />
-                      <span className={`w-24 text-right text-xs ${d.large ? "text-amber-600" : "text-gray-500 dark:text-gray-400"}`}>{d.abs} ({d.pct})</span>
+                      {d && (
+                        <span className={`w-24 text-right text-xs ${d.large ? "text-amber-600" : "text-gray-500 dark:text-gray-400"}`}>{d.abs} ({d.pct})</span>
+                      )}
                     </div>
                   );
                 })}
@@ -206,11 +276,12 @@ export function SnapshotsTab() {
             )}
             <FieldError message={error} />
             <div className="flex justify-end gap-2">
-              <Button variant="secondary" onClick={() => setEditing(false)}>{t("common.cancel")}</Button>
+              <Button variant="secondary" onClick={closePanel}>{t("common.cancel")}</Button>
               <Button onClick={save} disabled={anyLarge && !confirmLarge}>{t("common.save")}</Button>
             </div>
           </CardBody>
         </Card>
+        </div>
       )}
 
       <Card>
@@ -218,37 +289,99 @@ export function SnapshotsTab() {
           {snapshots.length === 0 ? (
             <p className="text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="text-left text-gray-500 dark:text-gray-400">
-                <tr>
-                  <th className="py-2">{t("networth.snapshot_date")}</th>
-                  <th className="text-right">{t("networth.total_assets")}</th>
-                  <th className="text-right">{t("networth.total_liabilities")}</th>
-                  <th className="text-right">{t("networth.net_worth")}</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
+            <>
+              <ul className="space-y-2 md:hidden">
                 {snapshots.slice().reverse().map((s) => (
-                  <tr key={s.id} className="border-t border-border">
-                    <td className="py-2">{formatDate(s.snapshotDate, i18n.language)}</td>
-                    <td className="text-right">{formatMoney(s.totalAssets, household.currency, i18n.language)}</td>
-                    <td className="text-right">{formatMoney(s.totalLiabilities, household.currency, i18n.language)}</td>
-                    <td className="text-right font-medium">{formatMoney(s.netWorth, household.currency, i18n.language)}</td>
-                    <td className="text-right">
-                      <Button
-                        variant="ghost"
-                        onClick={() => {
-                          if (window.confirm(t("common.delete") + "?")) void del.mutate(s.id);
-                        }}
-                      >
-                        {t("common.delete")}
-                      </Button>
-                    </td>
-                  </tr>
+                  <li key={s.id} className="rounded-md border border-border p-3 dark:border-gray-700">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium">{formatDate(s.snapshotDate, i18n.language)}</p>
+                        {s.note && (
+                          <p className="mt-0.5 truncate text-sm text-gray-600 dark:text-gray-300">{s.note}</p>
+                        )}
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          {t("networth.total_assets")}: {formatMoney(s.totalAssets, household.currency, i18n.language)} ·
+                          {" "}
+                          {t("networth.total_liabilities")}: {formatMoney(s.totalLiabilities, household.currency, i18n.language)}
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="font-medium">{formatMoney(s.netWorth, household.currency, i18n.language)}</span>
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            className="px-2"
+                            aria-label={t("common.edit")}
+                            title={t("common.edit")}
+                            onClick={() => startEdit(s)}
+                          >
+                            <span aria-hidden>✏️</span>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            className="px-2"
+                            aria-label={t("common.delete")}
+                            title={t("common.delete")}
+                            onClick={() => {
+                              if (window.confirm(t("common.delete") + "?")) void del.mutate(s.id);
+                            }}
+                          >
+                            <span aria-hidden>🗑️</span>
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </li>
                 ))}
-              </tbody>
-            </table>
+              </ul>
+              <table className="hidden w-full text-sm md:table">
+                <thead className="text-left text-gray-500 dark:text-gray-400">
+                  <tr>
+                    <th className="py-2">{t("networth.snapshot_date")}</th>
+                    <th>{t("networth.snapshot_note")}</th>
+                    <th className="text-right">{t("networth.total_assets")}</th>
+                    <th className="text-right">{t("networth.total_liabilities")}</th>
+                    <th className="text-right">{t("networth.net_worth")}</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {snapshots.slice().reverse().map((s) => (
+                    <tr key={s.id} className="border-t border-border">
+                      <td className="py-2">{formatDate(s.snapshotDate, i18n.language)}</td>
+                      <td className="text-gray-600 dark:text-gray-300">{s.note ?? "—"}</td>
+                      <td className="text-right">{formatMoney(s.totalAssets, household.currency, i18n.language)}</td>
+                      <td className="text-right">{formatMoney(s.totalLiabilities, household.currency, i18n.language)}</td>
+                      <td className="text-right font-medium">{formatMoney(s.netWorth, household.currency, i18n.language)}</td>
+                      <td className="text-right">
+                        <div className="inline-flex gap-1">
+                          <Button
+                            variant="ghost"
+                            className="px-2"
+                            aria-label={t("common.edit")}
+                            title={t("common.edit")}
+                            onClick={() => startEdit(s)}
+                          >
+                            <span aria-hidden>✏️</span>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            className="px-2"
+                            aria-label={t("common.delete")}
+                            title={t("common.delete")}
+                            onClick={() => {
+                              if (window.confirm(t("common.delete") + "?")) void del.mutate(s.id);
+                            }}
+                          >
+                            <span aria-hidden>🗑️</span>
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
           )}
         </CardBody>
       </Card>
