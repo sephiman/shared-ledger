@@ -70,6 +70,7 @@ function TransactionFormat() {
         <CodeBlock>{example}</CodeBlock>
       </Section>
       <p className="text-xs text-gray-500 dark:text-gray-400">{t("import.format.tx.dedup")}</p>
+      <p className="text-xs text-gray-500 dark:text-gray-400">{t("import.format.tx.in_file_dedup")}</p>
     </>
   );
 }
@@ -163,6 +164,7 @@ function MovementFormat() {
         <CodeBlock>{exampleRows.join("\n")}</CodeBlock>
       </Section>
       <p className="text-xs text-gray-500 dark:text-gray-400">{t("import.format.mov.dedup")}</p>
+      <p className="text-xs text-gray-500 dark:text-gray-400">{t("import.format.mov.in_file_dedup")}</p>
     </>
   );
 }

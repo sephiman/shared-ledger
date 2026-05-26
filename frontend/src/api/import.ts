@@ -13,6 +13,12 @@ export interface SkippedRow {
   summary: string;
 }
 
+export interface AdjustedRow {
+  row: number;
+  originalSummary: string;
+  newDescription: string;
+}
+
 export interface PreviewSummary {
   totalRows: number;
   wouldInsert: number;
@@ -23,6 +29,9 @@ export interface PreviewSummary {
   truncatedErrors: boolean;
   skippedRows: SkippedRow[];
   truncatedSkipped: boolean;
+  adjustedDescriptions: AdjustedRow[];
+  adjustedCount: number;
+  truncatedAdjusted: boolean;
   sumIncome?: string | null;
   sumExpense?: string | null;
   sumAssets?: string | null;
@@ -41,6 +50,9 @@ export interface ExecuteResult {
   failedRowsCsv?: string | null;
   skippedRows: SkippedRow[];
   truncatedSkipped: boolean;
+  adjustedDescriptions: AdjustedRow[];
+  adjustedCount: number;
+  truncatedAdjusted: boolean;
 }
 
 export type SnapshotPolicy = "skip" | "replace" | "abort";

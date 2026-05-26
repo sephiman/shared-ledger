@@ -390,7 +390,9 @@ Global `category_code` values:
 - **Health**: `health.medical`, `health.pharmacy`.
 - **Personal**: `personal.personal_care`, `personal.education`, `personal.other`.
 
-Rows that match an existing transaction on `(date, direction, category_code, amount, description)` are skipped automatically — re-importing the same file is safe.
+Rows that match an existing transaction on `(date, direction, category_code, amount, description)` are skipped automatically — re-importing the same file is safe. When the same file contains the same row more than once, every copy is imported with ` (2)`, ` (3)`, … appended to the description so each transaction stays unique, and the preview lists every renamed row before you confirm.
+
+> **Trade-off.** Because the dedup key includes the description, the importer can't tell whether two rows that look identical are actually two separate transactions or one transaction listed twice — so once a row exists in the DB, every later upload of an identical row is skipped, including rows that appear twice in the *same* upload alongside the DB copy. To add a genuine second copy, give it a distinct description (or delete the existing row first).
 
 Example:
 
@@ -451,7 +453,9 @@ Header (exact column names, any order): `date,type,asset_class_code,liability_na
 | `description` | no | Free text, up to 500 characters. |
 | `created_at` | no | ISO-8601 instant. Leave blank to use the current time. |
 
-Rows that match an existing movement on `(date, type, target, amount, description)` are skipped automatically.
+Rows that match an existing movement on `(date, type, target, amount, description)` are skipped automatically. When the same file contains the same row more than once, every copy is imported with ` (2)`, ` (3)`, … appended to the description so each movement stays unique, and the preview lists every renamed row before you confirm.
+
+> **Trade-off.** Same caveat as transactions: the dedup key includes the description, so once a row exists in the DB, every later upload of an identical row is skipped. To add a genuine second copy, give it a distinct description (or delete the existing row first).
 
 Example:
 

@@ -426,11 +426,11 @@
     "settings_description": "Importa transacciones e instantáneas previamente exportadas a esta unidad familiar.",
     "page_description": "Sube un CSV exportado desde esta aplicación. Primero se valida; no se escribe nada hasta confirmar.",
     "transactions": "Transacciones",
-    "transactions_description": "Mismo formato que Transacciones → Exportar CSV. Los duplicados (misma fecha, importe, categoría, tipo y descripción) se omiten automáticamente.",
+    "transactions_description": "Mismo formato que Transacciones → Exportar CSV. Los duplicados de datos existentes se omiten automáticamente; las filas duplicadas dentro del mismo archivo se importan todas añadiendo un sufijo numérico a la descripción.",
     "snapshots": "Instantáneas de patrimonio",
     "snapshots_description": "Mismo formato que Instantáneas → Exportar CSV. Cada fecha forma una instantánea; elige qué hacer si la fecha ya existe.",
     "movements": "Movimientos de patrimonio",
-    "movements_description": "Mismo formato que Movimientos → Exportar CSV. Los duplicados (misma fecha, tipo, destino, importe y descripción) se omiten automáticamente.",
+    "movements_description": "Mismo formato que Movimientos → Exportar CSV. Los duplicados de datos existentes se omiten automáticamente; las filas duplicadas dentro del mismo archivo se importan todas añadiendo un sufijo numérico a la descripción.",
     "validate": "Validar",
     "confirm": "Importar",
     "file": "Archivo",
@@ -451,6 +451,10 @@
     "skipped_found": "{{count}} filas coinciden con datos existentes y se omitirán",
     "skipped_truncated": "Mostrando las primeras {{shown}}.",
     "skipped_summary": "Coincide con existente",
+    "adjusted_found": "{{count}} filas están duplicadas dentro del archivo — se añadirá (2), (3), … a sus descripciones para que cada una quede única",
+    "adjusted_truncated": "Mostrando las primeras {{shown}}.",
+    "adjusted_original": "Original",
+    "adjusted_new": "Nueva descripción",
     "row": "Fila",
     "field": "Campo",
     "message": "Mensaje",
@@ -480,7 +484,8 @@
         "updated_at": "Instante ISO opcional en UTC. Si está vacío, se usa el momento actual.",
         "income_codes_label": "Códigos de categoría de ingreso (usar con direction=income)",
         "expense_codes_label": "Códigos de categoría de gasto (usar con direction=expense)",
-        "dedup": "Detección de duplicados: las filas cuya combinación (date, direction, category_code, amount, description) coincide con una transacción existente se omiten automáticamente."
+        "dedup": "Detección de duplicados: las filas cuya combinación (date, direction, category_code, amount, description) coincide con una transacción existente se omiten automáticamente.",
+        "in_file_dedup": "Si la misma fila aparece más de una vez dentro del archivo, todas las copias se importan. Para que cada transacción quede distinta, se añade « (2)», « (3)», … al final de la descripción de las duplicadas (o «(2)», «(3)», … si la descripción estaba vacía). La vista previa lista cada fila cuya descripción se modificó antes de confirmar. Contrapartida: una vez que una fila idéntica está en la base de datos, cualquier subida posterior de esa misma fila se omite — incluso cuando aparece dos veces en el nuevo archivo junto a la existente. Para añadir una segunda copia real, dale una descripción distinta o elimina antes la fila existente."
       },
       "snap": {
         "intro": "CSV en dialecto europeo: UTF-8, punto y coma (;) como separador de columnas, coma (,) como separador decimal, comillas según RFC-4180. La primera fila es la cabecera literal indicada abajo. Una instantánea de patrimonio en una fecha se forma agrupando todas las filas con la misma fecha. Cada instantánea debe incluir una fila de valor para CADA clase de activo Y para CADA pasivo activo de la unidad familiar; si no, esa fecha se rechaza.",
@@ -504,7 +509,8 @@
         "amount": "Decimal positivo. La coma es el separador decimal canónico; también se acepta el punto al importar. Sin signo — el efecto lo determina la columna type.",
         "description": "Texto libre opcional de hasta 500 caracteres.",
         "created_at": "Instante ISO opcional en UTC (p. ej. 2026-05-25T10:30:00Z). Si está vacío, se usa el momento actual.",
-        "dedup": "Detección de duplicados: las filas cuya combinación (date, type, destino, amount, description) coincide con un movimiento existente se omiten automáticamente. El destino es el asset_class_code o el pasivo."
+        "dedup": "Detección de duplicados: las filas cuya combinación (date, type, destino, amount, description) coincide con un movimiento existente se omiten automáticamente. El destino es el asset_class_code o el pasivo.",
+        "in_file_dedup": "Si la misma fila aparece más de una vez dentro del archivo, todas las copias se importan. Para que cada movimiento quede distinto, se añade « (2)», « (3)», … al final de la descripción de las duplicadas (o «(2)», «(3)», … si la descripción estaba vacía). La vista previa lista cada fila cuya descripción se modificó antes de confirmar. Contrapartida: una vez que una fila idéntica está en la base de datos, cualquier subida posterior de esa misma fila se omite — incluso cuando aparece dos veces en el nuevo archivo junto a la existente. Para añadir una segunda copia real, dale una descripción distinta o elimina antes la fila existente."
       }
     }
   },

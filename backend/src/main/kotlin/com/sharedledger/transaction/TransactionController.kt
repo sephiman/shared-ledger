@@ -1,6 +1,9 @@
 package com.sharedledger.transaction
 
+import com.sharedledger.common.Csv
 import com.sharedledger.common.PageResponse
+import com.sharedledger.common.errors.AppException
+import com.sharedledger.household.HouseholdRepository
 import com.sharedledger.identity.auth.CurrentUser
 import jakarta.validation.Valid
 import org.springframework.format.annotation.DateTimeFormat
@@ -24,6 +27,7 @@ import java.util.UUID
 class TransactionController(
     private val service: TransactionService,
     private val currentUser: CurrentUser,
+    private val households: HouseholdRepository,
 ) {
 
     @GetMapping
@@ -105,9 +109,11 @@ class TransactionController(
                 sort = "date_asc",
             )
         )
+        val household = households.findById(householdId).orElseThrow { AppException.notFound("HOUSEHOLD_NOT_FOUND") }
+        val filename = Csv.exportFilename(LocalDate.now(), household.name, "transactions")
         return ResponseEntity.ok()
             .contentType(MediaType.parseMediaType("text/csv; charset=utf-8"))
-            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"transactions.csv\"")
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"$filename\"")
             .body(csv)
     }
 }

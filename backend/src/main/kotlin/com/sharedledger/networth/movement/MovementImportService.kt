@@ -5,7 +5,9 @@ import com.sharedledger.common.Csv
 import com.sharedledger.common.CsvReader
 import com.sharedledger.common.Money
 import com.sharedledger.common.errors.AppException
+import com.sharedledger.common.import.AdjustedRow
 import com.sharedledger.common.import.ExecuteResult
+import com.sharedledger.common.import.InFileDuplicateResolver
 import com.sharedledger.common.import.MAX_ERRORS_REPORTED
 import com.sharedledger.common.import.MAX_SKIPPED_REPORTED
 import com.sharedledger.common.import.PreviewSummary
@@ -61,9 +63,7 @@ class MovementImportService(
         for (row in parsed.validRows) {
             val key = dedupKey(row.date, row.type, row.assetClassCode, row.liabilityId, row.amount, row.description)
             if (parsed.existingKeys.contains(key)) {
-                val target = row.assetClassCode ?: row.liabilityId?.toString() ?: "—"
-                val desc = row.description?.take(40) ?: ""
-                val summary = "${row.date} · ${row.type.name} · $target · ${Money.normalize(row.amount).toPlainString()}${if (desc.isNotEmpty()) " · $desc" else ""}"
+                val summary = rowSummary(row.date, row.type.name, row.assetClassCode, row.liabilityId, row.amount, row.description)
                 log.info("Movement import skipped row {}: duplicate — {}", row.rowNumber, summary)
                 if (skippedList.size < MAX_SKIPPED_REPORTED) skippedList.add(SkippedRow(row.rowNumber, summary))
                 continue
@@ -103,6 +103,9 @@ class MovementImportService(
             replaced = 0,
             skippedRows = skippedList,
             truncatedSkipped = totalSkipped > skippedList.size,
+            adjustedDescriptions = parsed.adjustedRows,
+            adjustedCount = parsed.adjustedCount,
+            truncatedAdjusted = parsed.adjustedCount > parsed.adjustedRows.size,
         )
     }
 
@@ -116,13 +119,15 @@ class MovementImportService(
             return ParsedFile(
                 totalRows = parsed.rows.size,
                 errors = headerErrors,
-                validRows = emptyList(),
+                validRows = mutableListOf(),
                 existingKeys = mutableSetOf(),
                 sumContributions = BigDecimal.ZERO,
                 sumWithdrawals = BigDecimal.ZERO,
                 sumDebtPayments = BigDecimal.ZERO,
                 dateFrom = null,
                 dateTo = null,
+                adjustedRows = emptyList(),
+                adjustedCount = 0,
             )
         }
 
@@ -239,6 +244,16 @@ class MovementImportService(
                 }
         } else mutableSetOf()
 
+        val resolution = InFileDuplicateResolver.resolveAll(
+            rows = validRows,
+            existingKeys = existingKeys,
+            keyOf = { row, desc -> dedupKey(row.date, row.type, row.assetClassCode, row.liabilityId, row.amount, desc) },
+            descriptionOf = { it.description },
+            rowNumberOf = { it.rowNumber },
+            withDescription = { row, desc -> row.copy(description = desc) },
+            summarize = { row -> rowSummary(row.date, row.type.name, row.assetClassCode, row.liabilityId, row.amount, row.description) },
+        )
+
         return ParsedFile(
             totalRows = parsed.rows.size,
             errors = errors,
@@ -249,7 +264,22 @@ class MovementImportService(
             sumDebtPayments = sumDebtPayments,
             dateFrom = minDate,
             dateTo = maxDate,
+            adjustedRows = resolution.adjustedRows,
+            adjustedCount = resolution.adjustedCount,
         )
+    }
+
+    private fun rowSummary(
+        date: LocalDate,
+        type: String,
+        assetClassCode: String?,
+        liabilityId: UUID?,
+        amount: BigDecimal,
+        description: String?,
+    ): String {
+        val target = assetClassCode ?: liabilityId?.toString() ?: "—"
+        val desc = description?.take(40) ?: ""
+        return "$date · $type · $target · ${Money.normalize(amount).toPlainString()}${if (desc.isNotEmpty()) " · $desc" else ""}"
     }
 
     private fun validateHeaders(actual: List<String>): List<RowError> {
@@ -302,13 +332,15 @@ class MovementImportService(
     private data class ParsedFile(
         val totalRows: Int,
         val errors: List<RowError>,
-        val validRows: List<ParsedRow>,
+        val validRows: MutableList<ParsedRow>,
         val existingKeys: MutableSet<String>,
         val sumContributions: BigDecimal,
         val sumWithdrawals: BigDecimal,
         val sumDebtPayments: BigDecimal,
         val dateFrom: LocalDate?,
         val dateTo: LocalDate?,
+        val adjustedRows: List<AdjustedRow>,
+        val adjustedCount: Int,
     ) {
         fun toPreview(): PreviewSummary {
             val skippedList = mutableListOf<SkippedRow>()
@@ -336,6 +368,9 @@ class MovementImportService(
                 truncatedErrors = errors.size >= MAX_ERRORS_REPORTED,
                 skippedRows = skippedList,
                 truncatedSkipped = wouldSkip > skippedList.size,
+                adjustedDescriptions = adjustedRows,
+                adjustedCount = adjustedCount,
+                truncatedAdjusted = adjustedCount > adjustedRows.size,
                 sumContributions = sumContributions,
                 sumWithdrawals = sumWithdrawals,
                 sumDebtPayments = sumDebtPayments,

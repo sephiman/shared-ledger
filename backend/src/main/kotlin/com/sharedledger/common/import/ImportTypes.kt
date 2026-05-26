@@ -18,6 +18,12 @@ data class SkippedRow(
     val summary: String,
 )
 
+data class AdjustedRow(
+    val row: Int,
+    val originalSummary: String,
+    val newDescription: String,
+)
+
 data class PreviewSummary(
     val totalRows: Int,
     val wouldInsert: Int,
@@ -28,6 +34,9 @@ data class PreviewSummary(
     val truncatedErrors: Boolean,
     val skippedRows: List<SkippedRow> = emptyList(),
     val truncatedSkipped: Boolean = false,
+    val adjustedDescriptions: List<AdjustedRow> = emptyList(),
+    val adjustedCount: Int = 0,
+    val truncatedAdjusted: Boolean = false,
     @JsonFormat(shape = JsonFormat.Shape.STRING)
     val sumIncome: BigDecimal? = null,
     @JsonFormat(shape = JsonFormat.Shape.STRING)
@@ -53,4 +62,7 @@ data class ExecuteResult(
     val failedRowsCsv: String? = null,
     val skippedRows: List<SkippedRow> = emptyList(),
     val truncatedSkipped: Boolean = false,
+    val adjustedDescriptions: List<AdjustedRow> = emptyList(),
+    val adjustedCount: Int = 0,
+    val truncatedAdjusted: Boolean = false,
 )

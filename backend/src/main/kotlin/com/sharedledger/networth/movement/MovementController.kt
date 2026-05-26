@@ -1,6 +1,9 @@
 package com.sharedledger.networth.movement
 
+import com.sharedledger.common.Csv
 import com.sharedledger.common.PageResponse
+import com.sharedledger.common.errors.AppException
+import com.sharedledger.household.HouseholdRepository
 import com.sharedledger.identity.auth.CurrentUser
 import jakarta.validation.Valid
 import org.springframework.format.annotation.DateTimeFormat
@@ -24,6 +27,7 @@ import java.util.UUID
 class MovementController(
     private val service: MovementService,
     private val currentUser: CurrentUser,
+    private val households: HouseholdRepository,
 ) {
 
     @GetMapping
@@ -68,9 +72,11 @@ class MovementController(
     @GetMapping("/export.csv")
     fun exportCsv(@PathVariable householdId: UUID): ResponseEntity<String> {
         val csv = service.exportCsv(householdId)
+        val household = households.findById(householdId).orElseThrow { AppException.notFound("HOUSEHOLD_NOT_FOUND") }
+        val filename = Csv.exportFilename(LocalDate.now(), household.name, "movements")
         return ResponseEntity.ok()
             .contentType(MediaType.parseMediaType("text/csv; charset=utf-8"))
-            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"movements.csv\"")
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"$filename\"")
             .body(csv)
     }
 

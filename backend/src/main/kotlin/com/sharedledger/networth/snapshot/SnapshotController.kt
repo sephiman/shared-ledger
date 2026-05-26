@@ -1,6 +1,8 @@
 package com.sharedledger.networth.snapshot
 
+import com.sharedledger.common.Csv
 import com.sharedledger.common.errors.AppException
+import com.sharedledger.household.HouseholdRepository
 import com.sharedledger.identity.auth.CurrentUser
 import jakarta.validation.Valid
 import org.springframework.format.annotation.DateTimeFormat
@@ -23,6 +25,7 @@ import java.util.UUID
 class SnapshotController(
     private val service: SnapshotService,
     private val currentUser: CurrentUser,
+    private val households: HouseholdRepository,
 ) {
 
     @GetMapping
@@ -68,9 +71,11 @@ class SnapshotController(
     @GetMapping("/export.csv")
     fun exportCsv(@PathVariable householdId: UUID): ResponseEntity<String> {
         val csv = service.exportCsv(householdId)
+        val household = households.findById(householdId).orElseThrow { AppException.notFound("HOUSEHOLD_NOT_FOUND") }
+        val filename = Csv.exportFilename(LocalDate.now(), household.name, "snapshots")
         return ResponseEntity.ok()
             .contentType(MediaType.parseMediaType("text/csv; charset=utf-8"))
-            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"snapshots.csv\"")
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"$filename\"")
             .body(csv)
     }
 }

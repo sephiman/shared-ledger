@@ -5,7 +5,9 @@ import com.sharedledger.common.Csv
 import com.sharedledger.common.CsvReader
 import com.sharedledger.common.Money
 import com.sharedledger.common.errors.AppException
+import com.sharedledger.common.import.AdjustedRow
 import com.sharedledger.common.import.ExecuteResult
+import com.sharedledger.common.import.InFileDuplicateResolver
 import com.sharedledger.common.import.MAX_ERRORS_REPORTED
 import com.sharedledger.common.import.MAX_SKIPPED_REPORTED
 import com.sharedledger.common.import.PreviewSummary
@@ -96,6 +98,9 @@ class TransactionImportService(
             replaced = 0,
             skippedRows = skippedList,
             truncatedSkipped = totalSkipped > skippedList.size,
+            adjustedDescriptions = parsed.adjustedRows,
+            adjustedCount = parsed.adjustedCount,
+            truncatedAdjusted = parsed.adjustedCount > parsed.adjustedRows.size,
         )
     }
 
@@ -115,13 +120,15 @@ class TransactionImportService(
                 headers = parsed.headers,
                 totalRows = parsed.rows.size,
                 errors = headerErrors,
-                validRows = emptyList(),
+                validRows = mutableListOf(),
                 existingKeys = mutableSetOf(),
                 categoryGroups = emptyMap(),
                 sumIncome = BigDecimal.ZERO,
                 sumExpense = BigDecimal.ZERO,
                 dateFrom = null,
                 dateTo = null,
+                adjustedRows = emptyList(),
+                adjustedCount = 0,
             )
         }
 
@@ -208,6 +215,16 @@ class TransactionImportService(
                 .mapTo(mutableSetOf()) { dedupKey(it.occurrenceDate, it.direction, it.categoryCode, it.amount, it.description) }
         } else mutableSetOf()
 
+        val resolution = InFileDuplicateResolver.resolveAll(
+            rows = validRows,
+            existingKeys = existingKeys,
+            keyOf = { row, desc -> dedupKey(row.date, row.direction, row.categoryCode, row.amount, desc) },
+            descriptionOf = { it.description },
+            rowNumberOf = { it.rowNumber },
+            withDescription = { row, desc -> row.copy(description = desc) },
+            summarize = { row -> rowSummary(row.date, row.direction.name, row.categoryCode, row.amount, row.description) },
+        )
+
         val categoryGroups = catalog.mapValues { it.value.group ?: "ungrouped" }
 
         return ParsedFile(
@@ -221,6 +238,8 @@ class TransactionImportService(
             sumExpense = sumExpense,
             dateFrom = minDate,
             dateTo = maxDate,
+            adjustedRows = resolution.adjustedRows,
+            adjustedCount = resolution.adjustedCount,
         )
     }
 
@@ -274,13 +293,15 @@ class TransactionImportService(
         val headers: List<String>,
         val totalRows: Int,
         val errors: List<RowError>,
-        val validRows: List<ParsedRow>,
+        val validRows: MutableList<ParsedRow>,
         val existingKeys: MutableSet<String>,
         val categoryGroups: Map<String, String>,
         val sumIncome: BigDecimal,
         val sumExpense: BigDecimal,
         val dateFrom: LocalDate?,
         val dateTo: LocalDate?,
+        val adjustedRows: List<AdjustedRow>,
+        val adjustedCount: Int,
     ) {
         fun toPreview(): PreviewSummary {
             val skippedList = mutableListOf<SkippedRow>()
@@ -307,6 +328,9 @@ class TransactionImportService(
                 truncatedErrors = errors.size >= MAX_ERRORS_REPORTED,
                 skippedRows = skippedList,
                 truncatedSkipped = wouldSkip > skippedList.size,
+                adjustedDescriptions = adjustedRows,
+                adjustedCount = adjustedCount,
+                truncatedAdjusted = adjustedCount > adjustedRows.size,
                 sumIncome = sumIncome,
                 sumExpense = sumExpense,
                 dateFrom = dateFrom?.toString(),

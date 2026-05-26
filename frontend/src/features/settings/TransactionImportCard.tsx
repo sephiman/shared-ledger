@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
 import { asApiError } from "@/api/client";
-import { useExecuteTransactions, usePreviewTransactions, type ExecuteResult, type PreviewSummary } from "@/api/import";
+import { useExecuteTransactions, usePreviewTransactions, type AdjustedRow, type ExecuteResult, type PreviewSummary } from "@/api/import";
 import { Button, Card, CardBody, CardHeader, FieldError } from "@/components/ui/primitives";
 import { CsvFormatHelp } from "./CsvFormatHelp";
 import { FilePicker } from "./FilePicker";
@@ -149,6 +149,39 @@ function PreviewPanel({ preview, dataset }: { preview: PreviewSummary; dataset: 
       {preview.skippedRows.length > 0 && (
         <SkippedRowsTable rows={preview.skippedRows} truncated={preview.truncatedSkipped} totalCount={preview.wouldSkip} />
       )}
+      {preview.adjustedCount > 0 && (
+        <AdjustedRowsTable rows={preview.adjustedDescriptions} truncated={preview.truncatedAdjusted} totalCount={preview.adjustedCount} />
+      )}
+    </div>
+  );
+}
+
+function AdjustedRowsTable({ rows, truncated, totalCount }: { rows: AdjustedRow[]; truncated: boolean; totalCount: number }) {
+  const { t } = useTranslation();
+  return (
+    <div>
+      <p className="font-medium text-amber-700">{t("import.adjusted_found", { count: totalCount })}</p>
+      {truncated && <p className="text-xs text-gray-500 dark:text-gray-400">{t("import.adjusted_truncated", { shown: rows.length })}</p>}
+      <div className="mt-1 max-h-64 overflow-auto">
+        <table className="w-full text-xs">
+          <thead className="text-left text-gray-500 dark:text-gray-400">
+            <tr>
+              <th className="py-1">{t("import.row")}</th>
+              <th>{t("import.adjusted_original")}</th>
+              <th>{t("import.adjusted_new")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i} className="border-t border-border">
+                <td className="py-1">{r.row || "—"}</td>
+                <td className="text-gray-700 dark:text-gray-200">{r.originalSummary}</td>
+                <td className="text-gray-700 dark:text-gray-200">{r.newDescription}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -192,6 +225,9 @@ function ResultPanel({ result, onReset }: { result: ExecuteResult; onReset: () =
       </p>
       {result.skippedRows.length > 0 && (
         <SkippedRowsTable rows={result.skippedRows} truncated={result.truncatedSkipped} totalCount={result.skipped} />
+      )}
+      {result.adjustedCount > 0 && (
+        <AdjustedRowsTable rows={result.adjustedDescriptions} truncated={result.truncatedAdjusted} totalCount={result.adjustedCount} />
       )}
       <Button variant="secondary" onClick={onReset}>{t("import.import_another")}</Button>
     </div>

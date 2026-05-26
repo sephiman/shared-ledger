@@ -426,11 +426,11 @@
     "settings_description": "Import previously exported transactions and snapshots back into this household.",
     "page_description": "Upload a CSV exported from this app. Validation runs first; nothing is written until you confirm.",
     "transactions": "Transactions",
-    "transactions_description": "Same format as Transactions → Export CSV. Duplicates (same date, amount, category, direction, and description) are skipped automatically.",
+    "transactions_description": "Same format as Transactions → Export CSV. Duplicates of existing data are skipped automatically; rows duplicated within the same file are all imported with a numeric suffix appended to the description.",
     "snapshots": "Net worth snapshots",
     "snapshots_description": "Same format as Snapshots → Export CSV. Each date is one snapshot; choose what to do if a date already exists.",
     "movements": "Net worth movements",
-    "movements_description": "Same format as Movements → Export CSV. Duplicates (same date, type, target, amount, and description) are skipped automatically.",
+    "movements_description": "Same format as Movements → Export CSV. Duplicates of existing data are skipped automatically; rows duplicated within the same file are all imported with a numeric suffix appended to the description.",
     "validate": "Validate",
     "confirm": "Import",
     "file": "File",
@@ -451,6 +451,10 @@
     "skipped_found": "{{count}} rows match existing data and will be skipped",
     "skipped_truncated": "Showing first {{shown}}.",
     "skipped_summary": "Matched existing",
+    "adjusted_found": "{{count}} rows are duplicated within the file — their descriptions will be tagged with (2), (3), … so each one stays unique",
+    "adjusted_truncated": "Showing first {{shown}}.",
+    "adjusted_original": "Original",
+    "adjusted_new": "New description",
     "row": "Row",
     "field": "Field",
     "message": "Message",
@@ -480,7 +484,8 @@
         "updated_at": "Optional ISO instant in UTC. Defaults to now if empty.",
         "income_codes_label": "Income category codes (use with direction=income)",
         "expense_codes_label": "Expense category codes (use with direction=expense)",
-        "dedup": "Duplicate detection: rows whose (date, direction, category_code, amount, description) match an existing transaction are skipped automatically."
+        "dedup": "Duplicate detection: rows whose (date, direction, category_code, amount, description) match an existing transaction are skipped automatically.",
+        "in_file_dedup": "If the same row appears more than once within the file, every copy is imported. To keep each transaction distinct, “ (2)”, “ (3)”, … is appended to the description of the duplicates (or “(2)”, “(3)”, … if the description was empty). The preview lists every row whose description was changed before you confirm. Trade-off: once an identical row exists in the database, every later upload of that same row is skipped — even when it appears twice in the new file alongside the existing one. To add a genuine second copy, give it a distinct description or delete the existing row first."
       },
       "snap": {
         "intro": "European-CSV dialect: UTF-8, semicolon (;) column separator, comma (,) as decimal mark, RFC-4180 quoting. First row is the literal header shown below. A snapshot of net worth on a given date is built by grouping rows that share the same date. Each snapshot must include a value row for every asset class AND for every active liability of the household, otherwise the whole date is rejected.",
@@ -504,7 +509,8 @@
         "amount": "Positive decimal. Comma is the canonical decimal separator; dot is also accepted on import. No sign — the type column determines the effect.",
         "description": "Optional free text up to 500 characters.",
         "created_at": "Optional ISO instant in UTC (e.g. 2026-05-25T10:30:00Z). Defaults to now if empty.",
-        "dedup": "Duplicate detection: rows whose (date, type, target, amount, description) match an existing movement are skipped automatically. target is the asset_class_code or the liability."
+        "dedup": "Duplicate detection: rows whose (date, type, target, amount, description) match an existing movement are skipped automatically. target is the asset_class_code or the liability.",
+        "in_file_dedup": "If the same row appears more than once within the file, every copy is imported. To keep each movement distinct, “ (2)”, “ (3)”, … is appended to the description of the duplicates (or “(2)”, “(3)”, … if the description was empty). The preview lists every row whose description was changed before you confirm. Trade-off: once an identical row exists in the database, every later upload of that same row is skipped — even when it appears twice in the new file alongside the existing one. To add a genuine second copy, give it a distinct description or delete the existing row first."
       }
     }
   },

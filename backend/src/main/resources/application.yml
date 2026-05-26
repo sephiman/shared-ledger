@@ -45,6 +45,7 @@ server:
         http-only: true
         secure: ${APP_COOKIE_SECURE:true}
         same-site: lax
+        max-age: 30d
   forward-headers-strategy: framework
   shutdown: graceful
 
