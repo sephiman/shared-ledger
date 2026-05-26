@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Decimal from "decimal.js";
 import { useActiveHousehold } from "@/auth/AuthContext";
@@ -41,6 +41,16 @@ export function SnapshotsTab() {
   const [confirmLarge, setConfirmLarge] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dateError, setDateError] = useState<string | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  function toggleExpanded(id: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (panel.kind === "edit") {
@@ -291,53 +301,72 @@ export function SnapshotsTab() {
           ) : (
             <>
               <ul className="space-y-2 md:hidden">
-                {snapshots.slice().reverse().map((s) => (
-                  <li key={s.id} className="rounded-md border border-border p-3 dark:border-gray-700">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium">{formatDate(s.snapshotDate, i18n.language)}</p>
-                        {s.note && (
-                          <p className="mt-0.5 truncate text-sm text-gray-600 dark:text-gray-300">{s.note}</p>
-                        )}
-                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                          {t("networth.total_assets")}: {formatMoney(s.totalAssets, household.currency, i18n.language)} ·
-                          {" "}
-                          {t("networth.total_liabilities")}: {formatMoney(s.totalLiabilities, household.currency, i18n.language)}
-                        </p>
-                      </div>
-                      <div className="flex flex-col items-end gap-1">
-                        <span className="font-medium">{formatMoney(s.netWorth, household.currency, i18n.language)}</span>
-                        <div className="flex gap-1">
-                          <Button
-                            variant="ghost"
-                            className="px-2"
-                            aria-label={t("common.edit")}
-                            title={t("common.edit")}
-                            onClick={() => startEdit(s)}
-                          >
-                            <span aria-hidden>✏️</span>
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            className="px-2"
-                            aria-label={t("common.delete")}
-                            title={t("common.delete")}
-                            onClick={() => {
-                              if (window.confirm(t("common.delete") + "?")) void del.mutate(s.id);
-                            }}
-                          >
-                            <span aria-hidden>🗑️</span>
-                          </Button>
+                {snapshots.slice().reverse().map((s) => {
+                  const isOpen = expandedIds.has(s.id);
+                  return (
+                    <li key={s.id} className="rounded-md border border-border dark:border-gray-700">
+                      <button
+                        type="button"
+                        onClick={() => toggleExpanded(s.id)}
+                        aria-expanded={isOpen}
+                        className="block w-full p-3 text-left"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium">
+                              <span className="mr-1 inline-block w-3 text-xs text-gray-400" aria-hidden>{isOpen ? "▾" : "▸"}</span>
+                              {formatDate(s.snapshotDate, i18n.language)}
+                            </p>
+                            {s.note && (
+                              <p className="mt-0.5 truncate text-sm text-gray-600 dark:text-gray-300">{s.note}</p>
+                            )}
+                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                              {t("networth.total_assets")}: {formatMoney(s.totalAssets, household.currency, i18n.language)} ·
+                              {" "}
+                              {t("networth.total_liabilities")}: {formatMoney(s.totalLiabilities, household.currency, i18n.language)}
+                            </p>
+                          </div>
+                          <div className="flex flex-col items-end gap-1">
+                            <span className="font-medium">{formatMoney(s.netWorth, household.currency, i18n.language)}</span>
+                            <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                              <Button
+                                variant="ghost"
+                                className="px-2"
+                                aria-label={t("common.edit")}
+                                title={t("common.edit")}
+                                onClick={() => startEdit(s)}
+                              >
+                                <span aria-hidden>✏️</span>
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                className="px-2"
+                                aria-label={t("common.delete")}
+                                title={t("common.delete")}
+                                onClick={() => {
+                                  if (window.confirm(t("common.delete") + "?")) void del.mutate(s.id);
+                                }}
+                              >
+                                <span aria-hidden>🗑️</span>
+                              </Button>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                  </li>
-                ))}
+                      </button>
+                      {isOpen && (
+                        <div className="border-t border-border px-3 py-2 dark:border-gray-700">
+                          <SnapshotComposition snapshot={s} liabilities={liabilities} />
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
               <table className="hidden w-full text-sm md:table">
                 <thead className="text-left text-gray-500 dark:text-gray-400">
                   <tr>
-                    <th className="py-2">{t("networth.snapshot_date")}</th>
+                    <th className="w-6 py-2"></th>
+                    <th>{t("networth.snapshot_date")}</th>
                     <th>{t("networth.snapshot_note")}</th>
                     <th className="text-right">{t("networth.total_assets")}</th>
                     <th className="text-right">{t("networth.total_liabilities")}</th>
@@ -346,45 +375,113 @@ export function SnapshotsTab() {
                   </tr>
                 </thead>
                 <tbody>
-                  {snapshots.slice().reverse().map((s) => (
-                    <tr key={s.id} className="border-t border-border">
-                      <td className="py-2">{formatDate(s.snapshotDate, i18n.language)}</td>
-                      <td className="text-gray-600 dark:text-gray-300">{s.note ?? "—"}</td>
-                      <td className="text-right">{formatMoney(s.totalAssets, household.currency, i18n.language)}</td>
-                      <td className="text-right">{formatMoney(s.totalLiabilities, household.currency, i18n.language)}</td>
-                      <td className="text-right font-medium">{formatMoney(s.netWorth, household.currency, i18n.language)}</td>
-                      <td className="text-right">
-                        <div className="inline-flex gap-1">
-                          <Button
-                            variant="ghost"
-                            className="px-2"
-                            aria-label={t("common.edit")}
-                            title={t("common.edit")}
-                            onClick={() => startEdit(s)}
-                          >
-                            <span aria-hidden>✏️</span>
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            className="px-2"
-                            aria-label={t("common.delete")}
-                            title={t("common.delete")}
-                            onClick={() => {
-                              if (window.confirm(t("common.delete") + "?")) void del.mutate(s.id);
-                            }}
-                          >
-                            <span aria-hidden>🗑️</span>
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {snapshots.slice().reverse().map((s) => {
+                    const isOpen = expandedIds.has(s.id);
+                    return (
+                      <Fragment key={s.id}>
+                        <tr
+                          className="cursor-pointer border-t border-border hover:bg-gray-50 dark:hover:bg-gray-700/40"
+                          onClick={() => toggleExpanded(s.id)}
+                          aria-expanded={isOpen}
+                        >
+                          <td className="py-2 text-center text-xs text-gray-400" aria-hidden>{isOpen ? "▾" : "▸"}</td>
+                          <td className="py-2">{formatDate(s.snapshotDate, i18n.language)}</td>
+                          <td className="text-gray-600 dark:text-gray-300">{s.note ?? "—"}</td>
+                          <td className="text-right">{formatMoney(s.totalAssets, household.currency, i18n.language)}</td>
+                          <td className="text-right">{formatMoney(s.totalLiabilities, household.currency, i18n.language)}</td>
+                          <td className="text-right font-medium">{formatMoney(s.netWorth, household.currency, i18n.language)}</td>
+                          <td className="text-right" onClick={(e) => e.stopPropagation()}>
+                            <div className="inline-flex gap-1">
+                              <Button
+                                variant="ghost"
+                                className="px-2"
+                                aria-label={t("common.edit")}
+                                title={t("common.edit")}
+                                onClick={() => startEdit(s)}
+                              >
+                                <span aria-hidden>✏️</span>
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                className="px-2"
+                                aria-label={t("common.delete")}
+                                title={t("common.delete")}
+                                onClick={() => {
+                                  if (window.confirm(t("common.delete") + "?")) void del.mutate(s.id);
+                                }}
+                              >
+                                <span aria-hidden>🗑️</span>
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                        {isOpen && (
+                          <tr className="border-t border-border bg-gray-50/50 dark:bg-gray-900/30">
+                            <td></td>
+                            <td colSpan={6} className="px-2 py-3">
+                              <SnapshotComposition snapshot={s} liabilities={liabilities} />
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </>
           )}
         </CardBody>
       </Card>
+    </div>
+  );
+}
+
+function SnapshotComposition({
+  snapshot,
+  liabilities,
+}: {
+  snapshot: Snapshot;
+  liabilities: { id: string; name: string }[];
+}) {
+  const { t, i18n } = useTranslation();
+  const household = useActiveHousehold();
+  const liabilityName = (id: string) => liabilities.find((x) => x.id === id)?.name ?? id;
+  return (
+    <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+      <div>
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+          {t("networth.total_assets")}
+        </p>
+        {snapshot.assets.length === 0 ? (
+          <p className="text-xs text-gray-500 dark:text-gray-400">—</p>
+        ) : (
+          <ul className="space-y-0.5">
+            {snapshot.assets.map((a) => (
+              <li key={a.assetClassCode} className="flex justify-between gap-3">
+                <span className="text-gray-600 dark:text-gray-300">{t(`asset.${a.assetClassCode}`, a.assetClassCode)}</span>
+                <span className="font-mono tabular-nums">{formatMoney(a.value, household.currency, i18n.language)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <div>
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+          {t("networth.total_liabilities")}
+        </p>
+        {snapshot.liabilities.length === 0 ? (
+          <p className="text-xs text-gray-500 dark:text-gray-400">—</p>
+        ) : (
+          <ul className="space-y-0.5">
+            {snapshot.liabilities.map((l) => (
+              <li key={l.liabilityId} className="flex justify-between gap-3">
+                <span className="text-gray-600 dark:text-gray-300">{liabilityName(l.liabilityId)}</span>
+                <span className="font-mono tabular-nums">{formatMoney(l.balance, household.currency, i18n.language)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }
