@@ -152,7 +152,7 @@ export function QuickAddForm({ householdId, initial, onSaved, onCancel }: QuickA
           <option value="">—</option>
           {eligibleCategories.map((c) => (
             <option key={c.code} value={c.code}>
-              {categoryIcon(c.code)} {categoryLabel(c, t)}
+              {categoryLabel(c, t)} {categoryIcon(c.code)}
             </option>
           ))}
         </Select>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
@@ -48,16 +48,22 @@ export function TransactionsPage() {
   const [searchParams] = useSearchParams();
   const [filters, setFilters] = useState<TransactionFilters>(() => initialFiltersFromUrl(searchParams));
   const [panel, setPanel] = useState<PanelMode>({ kind: "closed" });
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const { data: page, isLoading } = useTransactions(household.householdId, filters);
   const { data: categories = [] } = useCategories(household.householdId);
   const del = useDeleteTransaction(household.householdId);
+
+  useEffect(() => {
+    if (panel.kind === "edit") {
+      panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [panel]);
 
   const closePanel = () => setPanel({ kind: "closed" });
   const toggleCreate = () =>
     setPanel((p) => (p.kind === "create" ? { kind: "closed" } : { kind: "create" }));
   const startEdit = (tx: Transaction) => {
     setPanel({ kind: "edit", tx });
-    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   return (
@@ -82,6 +88,7 @@ export function TransactionsPage() {
       </div>
 
       {panel.kind !== "closed" && (
+        <div ref={panelRef}>
         <Card>
           <CardHeader>
             <p className="font-medium">{panel.kind === "edit" ? t("tx.edit_title") : t("tx.new")}</p>
@@ -95,6 +102,7 @@ export function TransactionsPage() {
             />
           </CardBody>
         </Card>
+        </div>
       )}
 
       <Card>
@@ -134,7 +142,7 @@ export function TransactionsPage() {
                   .sort((a, b) => categoryLabel(a, t).localeCompare(categoryLabel(b, t), i18n.language, { sensitivity: "base" }))
                   .map((c) => (
                     <option key={c.code} value={c.code}>
-                      {categoryIcon(c.code)} {categoryLabel(c, t)}
+                      {categoryLabel(c, t)} {categoryIcon(c.code)}
                     </option>
                   ))}
               </Select>

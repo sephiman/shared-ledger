@@ -99,13 +99,13 @@ export function ExplorerTab() {
                 {!scope && <option value="">{t("common.loading")}</option>}
                 {scopeOptions.groups.map((g) => (
                   <option key={`group:${g.code}`} value={`group:${g.code}`}>
-                    {`${groupIcon(g.code)} ${g.label}`}
+                    {`${g.label} ${groupIcon(g.code)}`}
                   </option>
                 ))}
                 <option disabled value="">────────</option>
                 {scopeOptions.categories.map((c) => (
                   <option key={`category:${c.code}`} value={`category:${c.code}`}>
-                    {`${categoryIcon(c.code)} ${c.label}`}
+                    {`${c.label} ${categoryIcon(c.code)}`}
                   </option>
                 ))}
               </Select>

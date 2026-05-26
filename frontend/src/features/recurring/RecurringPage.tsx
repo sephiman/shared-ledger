@@ -150,7 +150,7 @@ export function RecurringPage() {
                     .sort((a, b) => categoryLabel(a, t).localeCompare(categoryLabel(b, t), i18n.language, { sensitivity: "base" }))
                     .map((c) => (
                       <option key={c.code} value={c.code}>
-                        {categoryIcon(c.code)} {categoryLabel(c, t)}
+                        {categoryLabel(c, t)} {categoryIcon(c.code)}
                       </option>
                     ))}
                 </Select>
