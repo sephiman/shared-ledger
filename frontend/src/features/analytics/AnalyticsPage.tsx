@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
-import { NavLink, Navigate, Route, Routes } from "react-router-dom";
-import { cn } from "@/lib/cn";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { TabBar } from "@/components/ui/TabBar";
 import { DailyTab } from "./DailyTab";
 import { ExplorerTab } from "./ExplorerTab";
 import { CompositionTab } from "./CompositionTab";
@@ -19,28 +19,16 @@ const TABS: TabDef[] = [
 
 export function AnalyticsPage() {
   const { t } = useTranslation();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const current = location.pathname.split("/")[2] ?? "";
+  const activeTab = TABS.some((it) => it.slug === current) ? current : "daily";
+  const items = TABS.map((it) => ({ value: it.slug, label: t(it.labelKey) }));
+
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-semibold">{t("analytics.title")}</h1>
-      <div className="sticky top-0 z-20 -mx-4 flex flex-wrap gap-1 border-b border-border bg-gray-50 px-4 dark:bg-gray-900">
-        {TABS.map((it) => (
-          <NavLink
-            key={it.slug}
-            to={`/analytics/${it.slug}`}
-            end
-            className={({ isActive }) =>
-              cn(
-                "px-3 py-2 text-sm font-medium",
-                isActive
-                  ? "border-b-2 border-primary text-primary"
-                  : "text-gray-600 dark:text-gray-300",
-              )
-            }
-          >
-            {t(it.labelKey)}
-          </NavLink>
-        ))}
-      </div>
+      <TabBar items={items} value={activeTab} onChange={(slug) => navigate(`/analytics/${slug}`)} ariaLabel={t("analytics.title")} />
       <Routes>
         <Route index element={<Navigate to="/analytics/daily" replace />} />
         <Route path="daily" element={<DailyTab />} />
