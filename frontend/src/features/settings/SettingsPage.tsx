@@ -10,6 +10,7 @@ import { useTheme, type ThemePreference } from "@/lib/theme";
 import { categoryIcon } from "@/lib/categoryGroup";
 import { CreateHouseholdDialog } from "@/features/household/CreateHouseholdDialog";
 import { CustomCategoryDialog } from "./CustomCategoryDialog";
+import { NotificationsCard } from "./NotificationsCard";
 import { getCurrencyOptions } from "@/lib/currency";
 
 export function SettingsPage() {
@@ -378,6 +379,8 @@ export function SettingsPage() {
           </CardBody>
         </Card>
       )}
+
+      {isOwner && <NotificationsCard householdId={household.householdId} />}
 
       <Card>
         <CardHeader>

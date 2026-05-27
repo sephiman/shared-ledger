@@ -101,3 +101,7 @@ app:
     timezone: UTC
   fire:
     monte-carlo-trials: ${FIRE_MONTE_CARLO_TRIALS:10000}
+  telegram:
+    base-url: ${TELEGRAM_API_BASE_URL:https://api.telegram.org}
+    timeout-ms: ${TELEGRAM_TIMEOUT_MS:5000}
+    token-key: ${TELEGRAM_TOKEN_KEY:}

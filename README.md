@@ -207,6 +207,29 @@ Projection output:
 - Liabilities management: name + active flag (full CRUD).
 - Members & invitations: issue and revoke invitations, see pending ones (owners only).
 - FIRE settings (owners only).
+- **Notifications** (owners only): configure the per-household Telegram integration (see below).
+
+### Notifications (Telegram)
+
+Each household can optionally push a Telegram message to a chosen chat whenever significant
+data changes. Configured per household, owner-only, under **Settings → Notifications**.
+
+- **Setup**: paste a bot token (from @BotFather) and a chat ID. The token is stored encrypted
+  and never shown again — the form only reports whether one is configured. A **Test notification**
+  button sends a fixed message and shows Telegram's immediate response inline. A collapsible help
+  section walks through obtaining the token and chat ID.
+- **Master toggle** pauses all notifications without losing the configuration, plus a **per-entity
+  toggle** each (covering create/update/delete) for: transactions, snapshots, movements, loan
+  payments, recurring-transaction execution, and recurring-loan-schedule execution.
+- **What fires**: a member's create/update/delete on those entities, and the daily scheduler
+  materializing recurring transactions / loan-schedule payments (sent as one aggregated summary
+  per run). **CSV imports never notify**, regardless of toggles, to avoid floods on bulk loads.
+- **Message content**: a localized header (household locale), the same fields shown on that
+  entity's mobile card (with category-group emoji), and an author line — the member's email, or
+  "Recurring schedule (created by <owner>)" for scheduled runs. Light Telegram Markdown.
+- **Delivery failures** are out of scope of the app: every dispatch attempt (and the Telegram API
+  response) is written to the structured log pipeline; the app does not retry or surface failures
+  in the UI. If a household sees nothing, the owner uses the Test button to verify configuration.
 
 ---
 
@@ -244,6 +267,7 @@ Projection output:
   - `sl_invitations_issued_total{role}`, `sl_invitations_accepted_total{role}`
   - `sl_analytics_request_seconds{endpoint}` (timers for month, year, year-over-year, year-by-year, forecast, dashboard_extras, allocation, top_movers, recurring_share, heatmap, contribution_series, and FIRE projection)
 - **Health probes**: `/actuator/health/liveness` and `/readiness`.
+- **Telegram dispatch** is logged per attempt as structured `telegram_notify` lines (`household`, `entity`, `action`, `ok`, and the Telegram `description` on failure) — the only place delivery outcomes are observed; there is no in-app failure surfacing or retry.
 - Grafana/Prometheus/Loki stack is **not** part of this repo. The app exposes the data; the operator wires up their own monitoring against the endpoints.
 
 ### Operations
@@ -303,6 +327,7 @@ Edit `.env` and set at minimum:
 | `BOOTSTRAP_HOUSEHOLD_*` | First household details. |
 | `REGISTRATION_MODE` | `open`, `invite-only` (recommended), or `closed`. |
 | `APP_COOKIE_SECURE` | `true` in production. Set to `false` only when running on plain HTTP for local dev. |
+| `TELEGRAM_TOKEN_KEY` | Base64 AES key (16/24/32 bytes) used to encrypt stored Telegram bot tokens at rest. Generate with `openssl rand -base64 32`. Required only if a household saves a bot token; keep it stable (rotating it makes stored tokens undecryptable). Optional: `TELEGRAM_API_BASE_URL`, `TELEGRAM_TIMEOUT_MS`. |
 
 The `.env` file is git-ignored. `docker compose` reads it implicitly and the backend reads variables from it (via `env_file`).
 

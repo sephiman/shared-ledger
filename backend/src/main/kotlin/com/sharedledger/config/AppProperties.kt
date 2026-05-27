@@ -10,6 +10,7 @@ data class AppProperties(
     val invitations: Invitations = Invitations(),
     val scheduler: Scheduler = Scheduler(),
     val fire: Fire = Fire(),
+    val telegram: Telegram = Telegram(),
 ) {
     data class Security(
         val cookieSecure: Boolean = true,
@@ -51,5 +52,12 @@ data class AppProperties(
 
     data class Fire(
         val monteCarloTrials: Int = 10000,
+    )
+
+    data class Telegram(
+        val baseUrl: String = "https://api.telegram.org",
+        val timeoutMs: Long = 5000,
+        // Base64-encoded AES key (16/24/32 bytes) for encrypting bot tokens at rest.
+        val tokenKey: String = "",
     )
 }

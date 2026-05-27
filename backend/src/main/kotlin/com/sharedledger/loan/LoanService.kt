@@ -4,6 +4,9 @@ import com.sharedledger.common.Csv
 import com.sharedledger.common.Money
 import com.sharedledger.common.errors.AppException
 import com.sharedledger.identity.user.User
+import com.sharedledger.notification.NotifyAction
+import com.sharedledger.notification.NotifyActor
+import com.sharedledger.notification.NotificationPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
@@ -16,6 +19,7 @@ class LoanService(
     private val loans: LoanRepository,
     private val payments: LoanPaymentRepository,
     private val schedules: LoanScheduleRepository,
+    private val notifications: NotificationPublisher,
 ) {
 
     @Transactional
@@ -153,7 +157,9 @@ class LoanService(
             createdByUserId = by.id,
             updatedByUserId = by.id,
         )
-        return payments.save(payment)
+        payments.save(payment)
+        notifications.loanPayment(payment, loan.householdId, loan.borrowerName, NotifyAction.CREATE, NotifyActor.Human(by.email))
+        return payment
     }
 
     @Transactional
@@ -171,6 +177,7 @@ class LoanService(
         payment.amount = Money.normalize(request.amount)
         payment.description = request.description?.takeIf { it.isNotBlank() }
         payment.updatedByUserId = by.id
+        notifications.loanPayment(payment, loan.householdId, loan.borrowerName, NotifyAction.UPDATE, NotifyActor.Human(by.email))
         return payment
     }
 
@@ -180,6 +187,7 @@ class LoanService(
         val payment = loadPayment(loan.id, paymentId)
         payment.deletedAt = Instant.now()
         payment.updatedByUserId = by.id
+        notifications.loanPayment(payment, loan.householdId, loan.borrowerName, NotifyAction.DELETE, NotifyActor.Human(by.email))
     }
 
     @Transactional(readOnly = true)

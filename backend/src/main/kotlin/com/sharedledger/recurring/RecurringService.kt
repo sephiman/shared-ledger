@@ -5,6 +5,8 @@ import com.sharedledger.common.Csv
 import com.sharedledger.common.Money
 import com.sharedledger.common.errors.AppException
 import com.sharedledger.identity.user.User
+import com.sharedledger.notification.NotifyActor
+import com.sharedledger.notification.NotificationPublisher
 import com.sharedledger.observability.AppMetrics
 import com.sharedledger.transaction.Transaction
 import com.sharedledger.transaction.TransactionRepository
@@ -20,6 +22,7 @@ class RecurringService(
     private val categoryService: CategoryService,
     private val transactions: TransactionRepository,
     private val metrics: AppMetrics,
+    private val notifications: NotificationPublisher,
 ) {
 
     @Transactional
@@ -166,6 +169,7 @@ class RecurringService(
         // Marker reflects "materialized through" regardless of path (manual or scheduler).
         template.lastMaterializedThrough = today
         template.updatedByUserId = by.id
+        notifications.recurringTransactions(template, created, NotifyActor.Human(by.email))
         return created
     }
 

@@ -6,6 +6,9 @@ import com.sharedledger.common.Money
 import com.sharedledger.common.PageResponse
 import com.sharedledger.common.errors.AppException
 import com.sharedledger.identity.user.User
+import com.sharedledger.notification.NotifyAction
+import com.sharedledger.notification.NotifyActor
+import com.sharedledger.notification.NotificationPublisher
 import com.sharedledger.observability.AppMetrics
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
@@ -21,6 +24,7 @@ class TransactionService(
     private val repository: TransactionRepository,
     private val categoryService: CategoryService,
     private val metrics: AppMetrics,
+    private val notifications: NotificationPublisher,
 ) {
 
     @Transactional
@@ -38,6 +42,7 @@ class TransactionService(
         )
         repository.save(tx)
         metrics.transactionCreated(request.direction.name, category.group ?: "ungrouped")
+        notifications.transaction(tx, NotifyAction.CREATE, NotifyActor.Human(by.email))
         return tx
     }
 
@@ -51,6 +56,7 @@ class TransactionService(
         tx.amount = Money.normalize(request.amount)
         tx.description = request.description
         tx.updatedByUserId = by.id
+        notifications.transaction(tx, NotifyAction.UPDATE, NotifyActor.Human(by.email))
         return tx
     }
 
@@ -59,6 +65,7 @@ class TransactionService(
         val tx = loadOwn(householdId, id)
         tx.deletedAt = Instant.now()
         tx.updatedByUserId = by.id
+        notifications.transaction(tx, NotifyAction.DELETE, NotifyActor.Human(by.email))
     }
 
     @Transactional(readOnly = true)

@@ -75,7 +75,7 @@ class SnapshotController(
 
     @DeleteMapping("/{id}")
     fun delete(@PathVariable householdId: UUID, @PathVariable id: UUID): ResponseEntity<Void> {
-        service.delete(householdId, id)
+        service.delete(householdId, id, currentUser.requireUser())
         return ResponseEntity.noContent().build()
     }
 

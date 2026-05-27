@@ -38,7 +38,7 @@ class SnapshotPersistenceTest @Autowired constructor(
         snapshot.assetValues.add(SnapshotAssetValue(SnapshotAssetValueId(snapshot.id, "etfs"), BigDecimal("1000.00")))
         repo.save(snapshot)
 
-        service.delete(household.id, snapshot.id)
+        service.delete(household.id, snapshot.id, user)
 
         assertThat(repo.findById(snapshot.id)).isEmpty
     }

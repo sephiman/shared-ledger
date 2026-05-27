@@ -2,6 +2,8 @@ package com.sharedledger.loan
 
 import com.sharedledger.common.errors.AppException
 import com.sharedledger.identity.user.User
+import com.sharedledger.notification.NotifyActor
+import com.sharedledger.notification.NotificationPublisher
 import org.slf4j.LoggerFactory
 import org.slf4j.MDC
 import org.springframework.dao.DataIntegrityViolationException
@@ -24,6 +26,7 @@ class LoanScheduleMaterializer(
     private val schedules: LoanScheduleRepository,
     private val payments: LoanPaymentRepository,
     private val txManager: PlatformTransactionManager,
+    private val notifications: NotificationPublisher,
 ) {
     private val log = LoggerFactory.getLogger(LoanScheduleMaterializer::class.java)
 
@@ -42,10 +45,10 @@ class LoanScheduleMaterializer(
         if (loan.householdId != householdId) throw AppException.notFound("LOAN_NOT_FOUND")
         if (loan.status != LoanStatus.active) return 0
         val schedule = schedules.findByLoanId(loan.id) ?: throw AppException.notFound("LOAN_SCHEDULE_NOT_FOUND")
-        return materializeOne(schedule, today, fallbackUserId = by.id)
+        return materializeOne(schedule, today, firedBy = by)
     }
 
-    private fun materializeOne(schedule: LoanSchedule, today: LocalDate, fallbackUserId: UUID? = null): Int {
+    private fun materializeOne(schedule: LoanSchedule, today: LocalDate, firedBy: User? = null): Int {
         val scheduleId = schedule.id.toString()
         MDC.put("loanScheduleId", scheduleId)
         try {
@@ -65,7 +68,7 @@ class LoanScheduleMaterializer(
                 return 0
             }
 
-            val userId = fallbackUserId ?: loan.updatedByUserId
+            val userId = firedBy?.id ?: loan.updatedByUserId
             var created = 0
             for (date in dates) {
                 try {
@@ -92,6 +95,10 @@ class LoanScheduleMaterializer(
                 refreshed.lastMaterializedThrough = today
                 schedules.save(refreshed)
             }
+            val actor = firedBy?.let { NotifyActor.Human(it.email) } ?: NotifyActor.Schedule(loan.householdId)
+            notifications.recurringLoanPayments(
+                loan.householdId, loan.borrowerName, schedule.expectedAmount, created, actor,
+            )
             return created
         } catch (ex: Exception) {
             log.error("Loan schedule materialization failed for schedule {}", scheduleId, ex)

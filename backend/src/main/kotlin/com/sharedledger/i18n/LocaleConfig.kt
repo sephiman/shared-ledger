@@ -3,8 +3,10 @@ package com.sharedledger.i18n
 import com.sharedledger.identity.user.UserRepository
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import org.springframework.context.MessageSource
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.context.support.ResourceBundleMessageSource
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.web.servlet.DispatcherServlet
 import org.springframework.web.servlet.LocaleResolver
@@ -15,6 +17,18 @@ class LocaleConfig {
 
     @Bean(name = [DispatcherServlet.LOCALE_RESOLVER_BEAN_NAME])
     fun localeResolver(users: UserRepository): LocaleResolver = UserAwareLocaleResolver(users)
+
+    /**
+     * Explicit message source for `i18n/messages_*.properties`. Declared here (rather than relying
+     * on auto-configuration) so backend message resolution — used by Telegram notifications, which
+     * must render real localized text rather than fall back to the raw key — works deterministically.
+     */
+    @Bean
+    fun messageSource(): MessageSource = ResourceBundleMessageSource().apply {
+        setBasename("i18n/messages")
+        setDefaultEncoding("UTF-8")
+        setFallbackToSystemLocale(false)
+    }
 }
 
 class UserAwareLocaleResolver(private val users: UserRepository) : LocaleResolver {

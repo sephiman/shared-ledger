@@ -1,6 +1,8 @@
 package com.sharedledger.recurring
 
 import com.sharedledger.loan.LoanScheduleMaterializer
+import com.sharedledger.notification.NotifyActor
+import com.sharedledger.notification.NotificationPublisher
 import com.sharedledger.observability.AppMetrics
 import com.sharedledger.transaction.Transaction
 import com.sharedledger.transaction.TransactionRepository
@@ -21,6 +23,7 @@ class RecurringMaterializer(
     private val metrics: AppMetrics,
     private val txManager: PlatformTransactionManager,
     private val loanScheduleMaterializer: LoanScheduleMaterializer,
+    private val notifications: NotificationPublisher,
 ) {
     private val log = LoggerFactory.getLogger(RecurringMaterializer::class.java)
 
@@ -89,6 +92,8 @@ class RecurringMaterializer(
                 refreshed.lastMaterializedThrough = cap
                 templates.save(refreshed)
             }
+            // Per-row writes are already committed; publish one aggregated summary for the run.
+            notifications.recurringTransactions(template, created, NotifyActor.Schedule(template.householdId))
             return created
         } catch (ex: Exception) {
             metrics.recurringFailure(template_id)

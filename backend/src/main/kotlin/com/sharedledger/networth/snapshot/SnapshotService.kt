@@ -6,6 +6,9 @@ import com.sharedledger.common.Money
 import com.sharedledger.common.errors.AppException
 import com.sharedledger.identity.user.User
 import com.sharedledger.networth.liability.LiabilityRepository
+import com.sharedledger.notification.NotifyAction
+import com.sharedledger.notification.NotifyActor
+import com.sharedledger.notification.NotificationPublisher
 import com.sharedledger.observability.AppMetrics
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -20,6 +23,7 @@ class SnapshotService(
     private val liabilities: LiabilityRepository,
     private val assetClasses: AssetClassRepository,
     private val metrics: AppMetrics,
+    private val notifications: NotificationPublisher,
 ) {
 
     @Transactional
@@ -60,7 +64,9 @@ class SnapshotService(
 
         snapshots.save(snapshot)
         metrics.snapshotCreated()
-        return toDto(snapshot)
+        val dto = toDto(snapshot)
+        notifications.snapshot(dto, householdId, NotifyAction.CREATE, NotifyActor.Human(by.email))
+        return dto
     }
 
     @Transactional
@@ -92,14 +98,18 @@ class SnapshotService(
         })
 
         snapshots.save(snapshot)
-        return toDto(snapshot)
+        val dto = toDto(snapshot)
+        notifications.snapshot(dto, householdId, NotifyAction.UPDATE, NotifyActor.Human(by.email))
+        return dto
     }
 
     @Transactional
-    fun delete(householdId: UUID, id: UUID) {
+    fun delete(householdId: UUID, id: UUID, by: User) {
         val s = snapshots.findById(id).orElseThrow { AppException.notFound("SNAPSHOT_NOT_FOUND") }
         if (s.householdId != householdId) throw AppException.notFound("SNAPSHOT_NOT_FOUND")
+        val dto = toDto(s)
         snapshots.delete(s)
+        notifications.snapshot(dto, householdId, NotifyAction.DELETE, NotifyActor.Human(by.email))
     }
 
     @Transactional(readOnly = true)

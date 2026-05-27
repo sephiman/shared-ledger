@@ -6,6 +6,9 @@ import com.sharedledger.common.PageResponse
 import com.sharedledger.common.errors.AppException
 import com.sharedledger.identity.user.User
 import com.sharedledger.networth.liability.LiabilityRepository
+import com.sharedledger.notification.NotifyAction
+import com.sharedledger.notification.NotifyActor
+import com.sharedledger.notification.NotificationPublisher
 import com.sharedledger.observability.AppMetrics
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -20,6 +23,7 @@ class MovementService(
     private val queries: MovementQueryRepository,
     private val liabilities: LiabilityRepository,
     private val metrics: AppMetrics,
+    private val notifications: NotificationPublisher,
 ) {
 
     @Transactional
@@ -42,6 +46,7 @@ class MovementService(
             targetClass = request.assetClassCode,
             targetLiabilityId = request.liabilityId?.toString(),
         )
+        notifications.movement(movement, NotifyAction.CREATE, NotifyActor.Human(by.email))
         return movement
     }
 
@@ -56,6 +61,7 @@ class MovementService(
         movement.amount = Money.normalize(request.amount)
         movement.description = request.description
         movement.updatedByUserId = by.id
+        notifications.movement(movement, NotifyAction.UPDATE, NotifyActor.Human(by.email))
         return movement
     }
 
@@ -64,6 +70,7 @@ class MovementService(
         val m = loadOwn(householdId, id)
         m.deletedAt = Instant.now()
         m.updatedByUserId = by.id
+        notifications.movement(m, NotifyAction.DELETE, NotifyActor.Human(by.email))
     }
 
     @Transactional(readOnly = true)
