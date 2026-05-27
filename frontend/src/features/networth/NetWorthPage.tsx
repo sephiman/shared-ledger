@@ -40,13 +40,13 @@ export function NetWorthPage() {
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-semibold">{t("networth.title")}</h1>
-      <div className="flex gap-1 border-b border-border">
+      <div className="flex gap-1 overflow-x-auto border-b border-border">
         {tabs.map((it) => (
           <button
             key={it.id}
             onClick={() => selectTab(it.id)}
             className={cn(
-              "px-3 py-2 text-sm font-medium",
+              "whitespace-nowrap px-3 py-2 text-sm font-medium",
               tab === it.id ? "border-b-2 border-primary text-primary" : "text-gray-600 dark:text-gray-300",
             )}
           >

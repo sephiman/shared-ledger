@@ -40,7 +40,8 @@ export function YearOverYearTab() {
         {!data || data.years.length === 0 ? (
           <p className="text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[28rem] text-sm">
             <thead className="text-left text-gray-500 dark:text-gray-400">
               <tr>
                 <th className="py-2"></th>
@@ -85,6 +86,7 @@ export function YearOverYearTab() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </CardBody>
     </Card>

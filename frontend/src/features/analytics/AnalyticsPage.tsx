@@ -22,7 +22,7 @@ export function AnalyticsPage() {
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-semibold">{t("analytics.title")}</h1>
-      <div className="sticky top-0 z-10 -mx-4 flex flex-wrap gap-1 border-b border-border bg-gray-50 px-4 dark:bg-gray-900">
+      <div className="sticky top-0 z-20 -mx-4 flex flex-wrap gap-1 border-b border-border bg-gray-50 px-4 dark:bg-gray-900">
         {TABS.map((it) => (
           <NavLink
             key={it.slug}
