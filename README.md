@@ -608,3 +608,11 @@ shared-ledger/
 ├── .env.example
 └── README.md
 ```
+
+## License
+
+Copyright © 2026 Sephilabs.
+
+This project is licensed under the **GNU Affero General Public License v3.0** (AGPL-3.0-only). See [LICENSE](LICENSE) for the full text.
+
+The AGPL extends the GPL with a network-use clause: if you run a modified version of this software as a network service, you must make the complete corresponding source code of your modified version available to its users. Use, study, and modification are otherwise free under the terms of the license.
