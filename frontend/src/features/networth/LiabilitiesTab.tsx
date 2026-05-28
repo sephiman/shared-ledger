@@ -66,34 +66,49 @@ export function LiabilitiesTab() {
           {items.length === 0 ? (
             <p className="text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="text-left text-gray-500 dark:text-gray-400">
-                <tr>
-                  <th className="py-2">{t("networth.liability_name")}</th>
-                  <th>{t("common.active")}</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((it) => (
-                  <tr key={it.id} className="border-t border-border">
-                    <td className="py-2">{it.name}</td>
-                    <td>{it.active ? t("common.yes") : t("common.no")}</td>
-                    <td className="space-x-2 text-right">
-                      <Button variant="ghost" onClick={() => startEdit({ id: it.id, name: it.name, active: it.active })}>{t("common.edit")}</Button>
-                      <Button
-                        variant="ghost"
-                        onClick={() => {
-                          if (window.confirm(t("common.delete") + "?")) void del.mutate(it.id);
-                        }}
-                      >
-                        {t("common.delete")}
-                      </Button>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-left text-gray-500 dark:text-gray-400">
+                  <tr>
+                    <th className="py-2">{t("networth.liability_name")}</th>
+                    <th>{t("common.active")}</th>
+                    <th></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {items.map((it) => (
+                    <tr key={it.id} className="border-t border-border">
+                      <td className="py-2">{it.name}</td>
+                      <td>{it.active ? t("common.yes") : t("common.no")}</td>
+                      <td className="text-right">
+                        <div className="inline-flex gap-1">
+                          <Button
+                            variant="ghost"
+                            className="px-2"
+                            aria-label={t("common.edit")}
+                            title={t("common.edit")}
+                            onClick={() => startEdit({ id: it.id, name: it.name, active: it.active })}
+                          >
+                            <span aria-hidden>✏️</span>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            className="px-2"
+                            aria-label={t("common.delete")}
+                            title={t("common.delete")}
+                            onClick={() => {
+                              if (window.confirm(t("common.delete") + "?")) void del.mutate(it.id);
+                            }}
+                          >
+                            <span aria-hidden>🗑️</span>
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </CardBody>
       </Card>

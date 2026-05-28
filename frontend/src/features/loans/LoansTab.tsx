@@ -57,32 +57,34 @@ export function LoansTab() {
           {loans.length === 0 ? (
             <p className="text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="text-left text-gray-500 dark:text-gray-400">
-                <tr>
-                  <th className="py-2">{t("loans.borrower_name")}</th>
-                  <th>{t("loans.start_date")}</th>
-                  <th>{t("loans.interest_type")}</th>
-                  <th>{t("loans.status")}</th>
-                  <th className="text-right">{t("loans.total_outstanding")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loans.map((l) => (
-                  <tr
-                    key={l.id}
-                    className="cursor-pointer border-t border-border hover:bg-gray-50 dark:hover:bg-gray-700/40"
-                    onClick={() => setSelectedId(l.id)}
-                  >
-                    <td className="py-2 font-medium">{l.borrowerName}</td>
-                    <td>{formatDate(l.startDate, locale)}</td>
-                    <td>{t(`loans.interest_${l.interestType}`)}</td>
-                    <td>{t(`loans.status_${l.status}`)}</td>
-                    <td className="text-right font-mono tabular-nums">{money(l.totalOutstanding)}</td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-left text-gray-500 dark:text-gray-400">
+                  <tr>
+                    <th className="py-2">{t("loans.borrower_name")}</th>
+                    <th>{t("loans.start_date")}</th>
+                    <th>{t("loans.interest_type")}</th>
+                    <th>{t("loans.status")}</th>
+                    <th className="text-right">{t("loans.total_outstanding")}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {loans.map((l) => (
+                    <tr
+                      key={l.id}
+                      className="cursor-pointer border-t border-border hover:bg-gray-50 dark:hover:bg-gray-700/40"
+                      onClick={() => setSelectedId(l.id)}
+                    >
+                      <td className="py-2 font-medium">{l.borrowerName}</td>
+                      <td>{formatDate(l.startDate, locale)}</td>
+                      <td>{t(`loans.interest_${l.interestType}`)}</td>
+                      <td>{t(`loans.status_${l.status}`)}</td>
+                      <td className="text-right font-mono tabular-nums">{money(l.totalOutstanding)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </CardBody>
       </Card>

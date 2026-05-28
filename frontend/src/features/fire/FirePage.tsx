@@ -300,26 +300,28 @@ export function FirePage() {
             <p className="font-medium">{t("fire.summary")}</p>
           </CardHeader>
           <CardBody>
-            <table className="w-full text-sm">
-              <thead className="text-left text-gray-500 dark:text-gray-400">
-                <tr>
-                  <th className="py-2">{t("fire.scenario")}</th>
-                  <th>{t("fire.target_hit_deterministic")}</th>
-                  <th>{t("fire.probability")}</th>
-                  <th>{t("fire.median_hit")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {projection.scenarios.map((s, idx) => (
-                  <tr key={`${s.meanPercent}_${s.stdDevPercent}_${idx}`} className="border-t border-border">
-                    <td className="py-2">{s.meanPercent}% ±{s.stdDevPercent}%</td>
-                    <td>{s.targetHitYear ?? "—"}</td>
-                    <td>{(s.probabilityOfReachingTarget * 100).toFixed(0)}%</td>
-                    <td>{s.medianYearReachingTarget ?? "—"}</td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-left text-gray-500 dark:text-gray-400">
+                  <tr>
+                    <th className="py-2">{t("fire.scenario")}</th>
+                    <th>{t("fire.target_hit_deterministic")}</th>
+                    <th>{t("fire.probability")}</th>
+                    <th>{t("fire.median_hit")}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {projection.scenarios.map((s, idx) => (
+                    <tr key={`${s.meanPercent}_${s.stdDevPercent}_${idx}`} className="border-t border-border">
+                      <td className="py-2">{s.meanPercent}% ±{s.stdDevPercent}%</td>
+                      <td>{s.targetHitYear ?? "—"}</td>
+                      <td>{(s.probabilityOfReachingTarget * 100).toFixed(0)}%</td>
+                      <td>{s.medianYearReachingTarget ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
               {t("fire.target_amount")}: {formatMoney(projection.settings.targetAmount, household.currency, i18n.language)}
             </p>

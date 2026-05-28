@@ -151,6 +151,7 @@ class TelegramNotificationIntegrationTest @Autowired constructor(
                 direction = Direction.expense,
                 categoryCode = "groceries.groceries",
                 amount = BigDecimal("25.00"),
+                description = "Monthly groceries",
                 cadence = Cadence.monthly,
                 dayOfMonth = 1,
                 startDate = LocalDate.now().minusMonths(2).withDayOfMonth(1),
@@ -164,6 +165,7 @@ class TelegramNotificationIntegrationTest @Autowired constructor(
         awaitSent(1)
         val text = client.sent.single().text
         assertThat(text).contains("Recurring transactions created")
+        assertThat(text).contains("Monthly groceries")
         assertThat(text).contains("Recurring schedule (created by ${owner.email})")
     }
 

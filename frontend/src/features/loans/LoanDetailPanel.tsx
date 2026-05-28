@@ -125,43 +125,58 @@ export function LoanDetailPanel({ householdId, loanId, currency, locale, onClose
                 {detail.payments.length === 0 ? (
                   <p className="text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
                 ) : (
-                  <table className="w-full text-sm">
-                    <thead className="text-left text-gray-500 dark:text-gray-400">
-                      <tr>
-                        <th className="py-1">{t("loans.payment_date")}</th>
-                        <th className="text-right">{t("loans.amount")}</th>
-                        <th className="text-right">{t("loans.interest_paid")}</th>
-                        <th className="text-right">{t("loans.principal_paid")}</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {detail.payments.map((p) => (
-                        <tr key={p.id} className="border-t border-border">
-                          <td className="py-1">
-                            {formatDate(p.paymentDate, locale)}
-                            {p.scheduleId && <span className="ml-1 text-xs text-gray-400">⟳</span>}
-                          </td>
-                          <td className="text-right font-mono tabular-nums">{money(p.amount)}</td>
-                          <td className="text-right font-mono tabular-nums">{money(p.interestPaid)}</td>
-                          <td className="text-right font-mono tabular-nums">{money(p.principalPaid)}</td>
-                          <td className="space-x-1 text-right">
-                            <Button variant="ghost" onClick={() => setPaymentForm({ editing: p })}>{t("common.edit")}</Button>
-                            <Button
-                              variant="ghost"
-                              onClick={() => {
-                                if (window.confirm(t("common.delete") + "?")) {
-                                  deletePayment.mutate({ loanId, paymentId: p.id });
-                                }
-                              }}
-                            >
-                              {t("common.delete")}
-                            </Button>
-                          </td>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="text-left text-gray-500 dark:text-gray-400">
+                        <tr>
+                          <th className="py-1">{t("loans.payment_date")}</th>
+                          <th className="text-right">{t("loans.amount")}</th>
+                          <th className="text-right">{t("loans.interest_paid")}</th>
+                          <th className="text-right">{t("loans.principal_paid")}</th>
+                          <th></th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {detail.payments.map((p) => (
+                          <tr key={p.id} className="border-t border-border">
+                            <td className="py-1">
+                              {formatDate(p.paymentDate, locale)}
+                              {p.scheduleId && <span className="ml-1 text-xs text-gray-400">⟳</span>}
+                            </td>
+                            <td className="text-right font-mono tabular-nums">{money(p.amount)}</td>
+                            <td className="text-right font-mono tabular-nums">{money(p.interestPaid)}</td>
+                            <td className="text-right font-mono tabular-nums">{money(p.principalPaid)}</td>
+                            <td className="text-right">
+                              <div className="inline-flex gap-1">
+                                <Button
+                                  variant="ghost"
+                                  className="px-2"
+                                  aria-label={t("common.edit")}
+                                  title={t("common.edit")}
+                                  onClick={() => setPaymentForm({ editing: p })}
+                                >
+                                  <span aria-hidden>✏️</span>
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  className="px-2"
+                                  aria-label={t("common.delete")}
+                                  title={t("common.delete")}
+                                  onClick={() => {
+                                    if (window.confirm(t("common.delete") + "?")) {
+                                      deletePayment.mutate({ loanId, paymentId: p.id });
+                                    }
+                                  }}
+                                >
+                                  <span aria-hidden>🗑️</span>
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </CardBody>
             </Card>

@@ -122,6 +122,7 @@ class NotificationPublisher(
                     CardField("common.direction", FieldValue.Keyed("common.${template.direction.name}")),
                     CardField("common.amount", FieldValue.Money(template.amount)),
                     CardField("recurring.cadence", FieldValue.Keyed("recurring.${template.cadence.name}")),
+                    CardField("common.description", FieldValue.Text(template.description)),
                 ),
             ),
         )
