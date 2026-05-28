@@ -125,8 +125,52 @@ export function LoanDetailPanel({ householdId, loanId, currency, locale, onClose
                 {detail.payments.length === 0 ? (
                   <p className="text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
+                  <>
+                    <ul className="space-y-2 md:hidden">
+                      {detail.payments.map((p) => (
+                        <li key={p.id} className="rounded-md border border-border p-3 dark:border-gray-700">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1 break-words">
+                              <p className="text-sm font-medium">
+                                {formatDate(p.paymentDate, locale)}
+                                {p.scheduleId && <span className="ml-1 text-xs text-gray-400">⟳</span>}
+                              </p>
+                              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                {t("loans.interest_paid")}: {money(p.interestPaid)} · {t("loans.principal_paid")}: {money(p.principalPaid)}
+                              </p>
+                            </div>
+                            <div className="flex flex-col items-end gap-1">
+                              <span className="font-mono tabular-nums">{money(p.amount)}</span>
+                              <div className="flex gap-1">
+                                <Button
+                                  variant="ghost"
+                                  className="px-2"
+                                  aria-label={t("common.edit")}
+                                  title={t("common.edit")}
+                                  onClick={() => setPaymentForm({ editing: p })}
+                                >
+                                  <span aria-hidden>✏️</span>
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  className="px-2"
+                                  aria-label={t("common.delete")}
+                                  title={t("common.delete")}
+                                  onClick={() => {
+                                    if (window.confirm(t("common.delete") + "?")) {
+                                      deletePayment.mutate({ loanId, paymentId: p.id });
+                                    }
+                                  }}
+                                >
+                                  <span aria-hidden>🗑️</span>
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                    <table className="hidden w-full text-sm md:table">
                       <thead className="text-left text-gray-500 dark:text-gray-400">
                         <tr>
                           <th className="py-1">{t("loans.payment_date")}</th>
@@ -176,7 +220,7 @@ export function LoanDetailPanel({ householdId, loanId, currency, locale, onClose
                         ))}
                       </tbody>
                     </table>
-                  </div>
+                  </>
                 )}
               </CardBody>
             </Card>

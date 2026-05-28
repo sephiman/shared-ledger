@@ -44,7 +44,11 @@ class TelegramMessageFormatter(
         schedule: Boolean,
     ): String {
         val entitySlug = entitySlug(event.entity)
-        val header = messages.resolve("notif.header.$entitySlug.summary", arrayOf(event.count), locale = locale)
+        val header = if (event.count == 1) {
+            messages.resolve("notif.header.$entitySlug.single", locale = locale)
+        } else {
+            messages.resolve("notif.header.$entitySlug.summary", arrayOf(event.count), locale = locale)
+        }
         return build(header, leadingEmoji(event.entity, event.fields), event.fields, householdId, locale, currency, authorEmail, schedule)
     }
 

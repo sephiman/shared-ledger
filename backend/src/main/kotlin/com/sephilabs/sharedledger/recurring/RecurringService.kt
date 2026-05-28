@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.util.UUID
 
 @Service
@@ -135,7 +136,10 @@ class RecurringService(
         val template = loadOwn(householdId, templateId)
         val today = LocalDate.now()
         val cadenceCap = template.endDate?.let { if (it.isBefore(today)) it else today } ?: today
-        val from = template.lastMaterializedThrough?.plusDays(1) ?: template.startDate
+        // Null watermark falls back to the entity's last edit, not template.startDate,
+        // so a backdated startDate never triggers retroactive back-fill.
+        val from = template.lastMaterializedThrough?.plusDays(1)
+            ?: template.updatedAt.atZone(ZoneId.systemDefault()).toLocalDate()
 
         // Cadence catch-up over (lastMaterializedThrough, cadenceCap]; plus today (force-fire).
         val cadenceDates =

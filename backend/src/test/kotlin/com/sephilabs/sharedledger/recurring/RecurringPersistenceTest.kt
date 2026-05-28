@@ -70,6 +70,7 @@ class RecurringPersistenceTest @Autowired constructor(
             sampleRequest(startDate = LocalDate.now()),
             user,
         )
+        // Fresh templates start with a null watermark; the UI surfaces this as "—".
         assertThat(repo.findById(template.id).orElseThrow().lastMaterializedThrough).isNull()
 
         service.fireNow(household.id, template.id, user)
@@ -81,7 +82,8 @@ class RecurringPersistenceTest @Autowired constructor(
     @Test
     fun `fireNow catches up missed cadence occurrences before firing today`() {
         val (user, household) = seed()
-        // Template that started 4 months before today, monthly on the 1st, never materialized.
+        // Template that started 4 months before today, monthly on the 1st, with an
+        // explicit watermark anchoring the catch-up window to the start date.
         // fireNow should catch up the missed 1sts AND fire today.
         val fourMonthsAgo = LocalDate.now().minusMonths(4).withDayOfMonth(1)
         val template = service.create(
@@ -89,6 +91,10 @@ class RecurringPersistenceTest @Autowired constructor(
             sampleRequest(startDate = fourMonthsAgo).copy(dayOfMonth = 1),
             user,
         )
+        repo.findById(template.id).orElseThrow().apply {
+            lastMaterializedThrough = fourMonthsAgo.minusDays(1)
+            repo.save(this)
+        }
 
         val created = service.fireNow(household.id, template.id, user)
 

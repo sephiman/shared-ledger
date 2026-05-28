@@ -57,8 +57,27 @@ export function LoansTab() {
           {loans.length === 0 ? (
             <p className="text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+            <>
+              <ul className="space-y-2 md:hidden">
+                {loans.map((l) => (
+                  <li
+                    key={l.id}
+                    className="cursor-pointer rounded-md border border-border p-3 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-700/40"
+                    onClick={() => setSelectedId(l.id)}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1 break-words">
+                        <p className="font-medium">{l.borrowerName}</p>
+                        <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                          {formatDate(l.startDate, locale)} · {t(`loans.interest_${l.interestType}`)} · {t(`loans.status_${l.status}`)}
+                        </p>
+                      </div>
+                      <span className="font-mono tabular-nums">{money(l.totalOutstanding)}</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <table className="hidden w-full text-sm md:table">
                 <thead className="text-left text-gray-500 dark:text-gray-400">
                   <tr>
                     <th className="py-2">{t("loans.borrower_name")}</th>
@@ -84,7 +103,7 @@ export function LoansTab() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </>
           )}
         </CardBody>
       </Card>

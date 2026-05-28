@@ -14,6 +14,7 @@ import org.springframework.stereotype.Component
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.LocalDate
+import java.time.ZoneId
 import java.util.UUID
 
 @Component
@@ -54,7 +55,10 @@ class RecurringMaterializer(
         MDC.put("templateId", template_id)
         try {
             val cap = template.endDate?.let { if (it.isBefore(today)) it else today } ?: today
-            val from = template.lastMaterializedThrough?.plusDays(1) ?: template.startDate
+            // Null watermark falls back to the entity's last edit, not template.startDate,
+            // so a backdated startDate never triggers retroactive back-fill.
+            val from = template.lastMaterializedThrough?.plusDays(1)
+                ?: template.updatedAt.atZone(ZoneId.systemDefault()).toLocalDate()
             if (from.isAfter(cap)) return 0
 
             val dates = RecurringDateMath.occurrencesInRange(template, from, cap)

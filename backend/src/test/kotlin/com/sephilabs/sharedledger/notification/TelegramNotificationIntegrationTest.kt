@@ -13,6 +13,7 @@ import com.sephilabs.sharedledger.identity.user.UserRepository
 import com.sephilabs.sharedledger.recurring.Cadence
 import com.sephilabs.sharedledger.recurring.RecurringMaterializer
 import com.sephilabs.sharedledger.recurring.RecurringService
+import com.sephilabs.sharedledger.recurring.RecurringTemplateRepository
 import com.sephilabs.sharedledger.recurring.RecurringTemplateRequest
 import com.sephilabs.sharedledger.transaction.Direction
 import com.sephilabs.sharedledger.transaction.TransactionImportService
@@ -63,6 +64,7 @@ class TelegramNotificationIntegrationTest @Autowired constructor(
     private val transactions: TransactionService,
     private val transactionImport: TransactionImportService,
     private val recurring: RecurringService,
+    private val templates: RecurringTemplateRepository,
     private val materializer: RecurringMaterializer,
     private val controller: TelegramSettingsController,
     private val client: RecordingTelegramClient,
@@ -140,7 +142,7 @@ class TelegramNotificationIntegrationTest @Autowired constructor(
     }
 
     @Test
-    fun `scheduler materialization sends one summary attributed to the owner`() {
+    fun `materialization summary header drops the count when exactly one row is created`() {
         val (owner, household) = seed()
         members.save(HouseholdMember(HouseholdMemberId(household.id, owner.id), HouseholdRole.owner))
         seedSettings(household.id, owner.id)
@@ -150,14 +152,53 @@ class TelegramNotificationIntegrationTest @Autowired constructor(
             RecurringTemplateRequest(
                 direction = Direction.expense,
                 categoryCode = "groceries.groceries",
+                amount = BigDecimal("12.34"),
+                description = "Daily coffee",
+                cadence = Cadence.monthly,
+                dayOfMonth = 1,
+                startDate = LocalDate.now(),
+            ),
+            owner,
+        )
+        val templateId = templates.findAllByHouseholdId(household.id).single().id
+
+        val created = recurring.fireNow(household.id, templateId, owner)
+
+        assertThat(created).isEqualTo(1)
+        awaitSent(1)
+        val text = client.sent.single().text
+        assertThat(text).contains("Recurring transaction created")
+        assertThat(text).doesNotContain("(1)")
+        assertThat(text).doesNotContain("Recurring transactions created")
+    }
+
+    @Test
+    fun `scheduler materialization sends one summary attributed to the owner`() {
+        val (owner, household) = seed()
+        members.save(HouseholdMember(HouseholdMemberId(household.id, owner.id), HouseholdRole.owner))
+        seedSettings(household.id, owner.id)
+
+        val backdatedStart = LocalDate.now().minusMonths(2).withDayOfMonth(1)
+        val template = recurring.create(
+            household.id,
+            RecurringTemplateRequest(
+                direction = Direction.expense,
+                categoryCode = "groceries.groceries",
                 amount = BigDecimal("25.00"),
                 description = "Monthly groceries",
                 cadence = Cadence.monthly,
                 dayOfMonth = 1,
-                startDate = LocalDate.now().minusMonths(2).withDayOfMonth(1),
+                startDate = backdatedStart,
             ),
             owner,
         )
+        // Anchor the watermark to the start date so the materializer's catch-up branch
+        // emits the missed monthly occurrences (the null-watermark fallback uses updatedAt
+        // = real-now, which would emit nothing).
+        templates.findById(template.id).orElseThrow().apply {
+            lastMaterializedThrough = backdatedStart.minusDays(1)
+            templates.save(this)
+        }
 
         val created = materializer.runForHousehold(household.id, LocalDate.now())
         assertThat(created).isGreaterThanOrEqualTo(1)

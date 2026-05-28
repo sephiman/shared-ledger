@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold, useAuth } from "@/auth/AuthContext";
@@ -193,122 +193,114 @@ export function SettingsPage() {
             </div>
           </CardHeader>
           <CardBody>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <tbody>
-                  {user.households.map((h) => {
-                  const isDefault = h.householdId === user.defaultHouseholdId;
-                  const isActive = h.householdId === activeHouseholdId;
-                  const isOwnerHere = h.role === "owner";
-                  const isDeleting = deleteTargetId === h.householdId;
-                  return (
-                    <Fragment key={h.householdId}>
-                      <tr className="border-t border-border first:border-t-0">
-                        <td className="py-2">
-                          <span className="font-medium">{h.name}</span>
-                          <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">{h.currency}</span>
-                          {isDefault && (
-                            <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
-                              {t("settings.default_badge")}
-                            </span>
-                          )}
-                          {isActive && (
-                            <span className="ml-2 rounded bg-sky-100 px-1.5 py-0.5 text-xs text-sky-800 dark:bg-sky-900/50 dark:text-sky-200">
-                              {t("settings.active_badge")}
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-2 text-right">
-                          {!isActive && (
-                            <Button
-                              variant="ghost"
-                              onClick={() => setActiveHouseholdId(h.householdId)}
-                            >
-                              {t("household.switch_to")}
-                            </Button>
-                          )}
+            <ul className="space-y-2">
+              {user.households.map((h) => {
+                const isDefault = h.householdId === user.defaultHouseholdId;
+                const isActive = h.householdId === activeHouseholdId;
+                const isOwnerHere = h.role === "owner";
+                const isDeleting = deleteTargetId === h.householdId;
+                return (
+                  <li key={h.householdId} className="rounded-md border border-border p-3 dark:border-gray-700">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="min-w-0 break-words">
+                        <span className="font-medium">{h.name}</span>
+                        <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">{h.currency}</span>
+                        {isDefault && (
+                          <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
+                            {t("settings.default_badge")}
+                          </span>
+                        )}
+                        {isActive && (
+                          <span className="ml-2 rounded bg-sky-100 px-1.5 py-0.5 text-xs text-sky-800 dark:bg-sky-900/50 dark:text-sky-200">
+                            {t("settings.active_badge")}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {!isActive && (
                           <Button
                             variant="ghost"
-                            disabled={isDefault || setDefault.isPending}
+                            onClick={() => setActiveHouseholdId(h.householdId)}
+                          >
+                            {t("household.switch_to")}
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          disabled={isDefault || setDefault.isPending}
+                          onClick={async () => {
+                            await setDefault.mutateAsync(h.householdId);
+                            await refresh();
+                          }}
+                        >
+                          {t("settings.set_default")}
+                        </Button>
+                        {isOwnerHere && (
+                          <Button
+                            variant="ghost"
+                            disabled={isDefault || deleteHh.isPending}
+                            title={isDefault ? t("settings.delete_household_blocked") : undefined}
+                            onClick={() => {
+                              setDeleteError(null);
+                              setDeleteConfirm("");
+                              setDeleteTargetId(h.householdId);
+                            }}
+                            className="text-red-600 dark:text-red-400"
+                          >
+                            {t("settings.delete_household")}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    {isDeleting && (
+                      <div className="mt-3 space-y-3 rounded-md border border-red-300 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950/30">
+                        <p className="text-sm text-red-800 dark:text-red-300">{t("settings.delete_household_confirm")}</p>
+                        <div>
+                          <Label>{t("settings.wipe_confirm_prompt")}</Label>
+                          <Input
+                            value={deleteConfirm}
+                            onChange={(e) => { setDeleteConfirm(e.target.value); if (deleteError) setDeleteError(null); }}
+                            placeholder="delete"
+                            autoFocus
+                          />
+                        </div>
+                        {deleteError && <FieldError message={deleteError} />}
+                        <div className="flex gap-2">
+                          <Button
+                            variant="danger"
+                            disabled={deleteConfirm !== "delete" || deleteHh.isPending}
                             onClick={async () => {
-                              await setDefault.mutateAsync(h.householdId);
-                              await refresh();
+                              setDeleteError(null);
+                              try {
+                                if (isActive) {
+                                  const fallback = user.households.find((x) => x.householdId !== h.householdId);
+                                  if (fallback) setActiveHouseholdId(fallback.householdId);
+                                }
+                                await deleteHh.mutateAsync(h.householdId);
+                                await refresh();
+                                setDeleteTargetId(null);
+                                setDeleteConfirm("");
+                              } catch (err) {
+                                const api = asApiError(err);
+                                setDeleteError(t(`errors.${api.code}`, api.message));
+                              }
                             }}
                           >
-                            {t("settings.set_default")}
+                            {t("settings.delete_household")}
                           </Button>
-                          {isOwnerHere && (
-                            <Button
-                              variant="ghost"
-                              disabled={isDefault || deleteHh.isPending}
-                              title={isDefault ? t("settings.delete_household_blocked") : undefined}
-                              onClick={() => {
-                                setDeleteError(null);
-                                setDeleteConfirm("");
-                                setDeleteTargetId(h.householdId);
-                              }}
-                              className="text-red-600 dark:text-red-400"
-                            >
-                              {t("settings.delete_household")}
-                            </Button>
-                          )}
-                        </td>
-                      </tr>
-                      {isDeleting && (
-                        <tr className="border-t border-border">
-                          <td colSpan={2} className="py-3">
-                            <div className="space-y-3 rounded-md border border-red-300 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950/30">
-                              <p className="text-sm text-red-800 dark:text-red-300">{t("settings.delete_household_confirm")}</p>
-                              <div>
-                                <Label>{t("settings.wipe_confirm_prompt")}</Label>
-                                <Input
-                                  value={deleteConfirm}
-                                  onChange={(e) => { setDeleteConfirm(e.target.value); if (deleteError) setDeleteError(null); }}
-                                  placeholder="delete"
-                                  autoFocus
-                                />
-                              </div>
-                              {deleteError && <FieldError message={deleteError} />}
-                              <div className="flex gap-2">
-                                <Button
-                                  variant="danger"
-                                  disabled={deleteConfirm !== "delete" || deleteHh.isPending}
-                                  onClick={async () => {
-                                    setDeleteError(null);
-                                    try {
-                                      if (isActive) {
-                                        const fallback = user.households.find((x) => x.householdId !== h.householdId);
-                                        if (fallback) setActiveHouseholdId(fallback.householdId);
-                                      }
-                                      await deleteHh.mutateAsync(h.householdId);
-                                      await refresh();
-                                      setDeleteTargetId(null);
-                                      setDeleteConfirm("");
-                                    } catch (err) {
-                                      const api = asApiError(err);
-                                      setDeleteError(t(`errors.${api.code}`, api.message));
-                                    }
-                                  }}
-                                >
-                                  {t("settings.delete_household")}
-                                </Button>
-                                <Button
-                                  variant="secondary"
-                                  onClick={() => { setDeleteTargetId(null); setDeleteConfirm(""); setDeleteError(null); }}
-                                >
-                                  {t("common.cancel")}
-                                </Button>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                          <Button
+                            variant="secondary"
+                            onClick={() => { setDeleteTargetId(null); setDeleteConfirm(""); setDeleteError(null); }}
+                          >
+                            {t("common.cancel")}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
             <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">{t("settings.delete_household_blocked")}</p>
             {deleteError && <FieldError message={deleteError} />}
           </CardBody>
@@ -405,107 +397,97 @@ export function SettingsPage() {
           {customCategories.length === 0 ? (
             <p className="text-sm text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <tbody>
-                  {customCategories.map((c) => {
-                  const isDeleting = customDeleteTarget === c.code;
-                  return (
-                    <Fragment key={c.code}>
-                      <tr className="border-t border-border first:border-t-0">
-                        <td className="py-2">
-                          <span className="mr-1.5" aria-hidden>{categoryIcon(c.code)}</span>
-                          <span className="font-medium">{c.name}</span>
-                          <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
-                            {c.kind === "expense" ? t(`category_group.${c.group}`) : t("common.income")}
+            <ul className="space-y-2">
+              {customCategories.map((c) => {
+                const isDeleting = customDeleteTarget === c.code;
+                return (
+                  <li key={c.code} className="rounded-md border border-border p-3 dark:border-gray-700">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="min-w-0 break-words">
+                        <span className="mr-1.5" aria-hidden>{categoryIcon(c.code)}</span>
+                        <span className="font-medium">{c.name}</span>
+                        <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+                          {c.kind === "expense" ? t(`category_group.${c.group}`) : t("common.income")}
+                        </span>
+                        {c.essential && (
+                          <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200">
+                            {t("settings.custom_category_essential")}
                           </span>
-                          {c.essential && (
-                            <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200">
-                              {t("settings.custom_category_essential")}
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-2 text-right">
-                          {isOwner && (
-                            <div className="inline-flex gap-1">
-                              <Button
-                                variant="ghost"
-                                className="px-2"
-                                aria-label={t("common.edit")}
-                                title={t("common.edit")}
-                                onClick={() => { setCustomEditing(c); setCustomDialogOpen(true); }}
-                              >
-                                <span aria-hidden>✏️</span>
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                className="px-2 text-red-600 dark:text-red-400"
-                                aria-label={t("common.delete")}
-                                title={t("common.delete")}
-                                onClick={() => {
-                                  setCustomDeleteError(null);
-                                  setCustomDeleteConfirm("");
-                                  setCustomDeleteTarget(c.code);
-                                }}
-                              >
-                                <span aria-hidden>🗑️</span>
-                              </Button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                      {isDeleting && (
-                        <tr className="border-t border-border">
-                          <td colSpan={2} className="py-3">
-                            <div className="space-y-3 rounded-md border border-red-300 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950/30">
-                              <p className="text-sm text-red-800 dark:text-red-300">
-                                {t("settings.delete_custom_category_warning")}
-                              </p>
-                              <div>
-                                <Label>{t("settings.wipe_confirm_prompt")}</Label>
-                                <Input
-                                  value={customDeleteConfirm}
-                                  onChange={(e) => { setCustomDeleteConfirm(e.target.value); if (customDeleteError) setCustomDeleteError(null); }}
-                                  placeholder="delete"
-                                  autoFocus
-                                />
-                              </div>
-                              {customDeleteError && <FieldError message={customDeleteError} />}
-                              <div className="flex gap-2">
-                                <Button
-                                  variant="danger"
-                                  disabled={customDeleteConfirm !== "delete" || deleteCustom.isPending}
-                                  onClick={async () => {
-                                    setCustomDeleteError(null);
-                                    try {
-                                      await deleteCustom.mutateAsync(c.code);
-                                      setCustomDeleteTarget(null);
-                                      setCustomDeleteConfirm("");
-                                    } catch (err) {
-                                      const api = asApiError(err);
-                                      setCustomDeleteError(t(`errors.${api.code}`, api.message));
-                                    }
-                                  }}
-                                >
-                                  {t("common.delete")}
-                                </Button>
-                                <Button
-                                  variant="secondary"
-                                  onClick={() => { setCustomDeleteTarget(null); setCustomDeleteConfirm(""); setCustomDeleteError(null); }}
-                                >
-                                  {t("common.cancel")}
-                                </Button>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
+                        )}
+                      </div>
+                      {isOwner && (
+                        <div className="inline-flex gap-1">
+                          <Button
+                            variant="ghost"
+                            className="px-2"
+                            aria-label={t("common.edit")}
+                            title={t("common.edit")}
+                            onClick={() => { setCustomEditing(c); setCustomDialogOpen(true); }}
+                          >
+                            <span aria-hidden>✏️</span>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            className="px-2 text-red-600 dark:text-red-400"
+                            aria-label={t("common.delete")}
+                            title={t("common.delete")}
+                            onClick={() => {
+                              setCustomDeleteError(null);
+                              setCustomDeleteConfirm("");
+                              setCustomDeleteTarget(c.code);
+                            }}
+                          >
+                            <span aria-hidden>🗑️</span>
+                          </Button>
+                        </div>
                       )}
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                    </div>
+                    {isDeleting && (
+                      <div className="mt-3 space-y-3 rounded-md border border-red-300 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950/30">
+                        <p className="text-sm text-red-800 dark:text-red-300">
+                          {t("settings.delete_custom_category_warning")}
+                        </p>
+                        <div>
+                          <Label>{t("settings.wipe_confirm_prompt")}</Label>
+                          <Input
+                            value={customDeleteConfirm}
+                            onChange={(e) => { setCustomDeleteConfirm(e.target.value); if (customDeleteError) setCustomDeleteError(null); }}
+                            placeholder="delete"
+                            autoFocus
+                          />
+                        </div>
+                        {customDeleteError && <FieldError message={customDeleteError} />}
+                        <div className="flex gap-2">
+                          <Button
+                            variant="danger"
+                            disabled={customDeleteConfirm !== "delete" || deleteCustom.isPending}
+                            onClick={async () => {
+                              setCustomDeleteError(null);
+                              try {
+                                await deleteCustom.mutateAsync(c.code);
+                                setCustomDeleteTarget(null);
+                                setCustomDeleteConfirm("");
+                              } catch (err) {
+                                const api = asApiError(err);
+                                setCustomDeleteError(t(`errors.${api.code}`, api.message));
+                              }
+                            }}
+                          >
+                            {t("common.delete")}
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            onClick={() => { setCustomDeleteTarget(null); setCustomDeleteConfirm(""); setCustomDeleteError(null); }}
+                          >
+                            {t("common.cancel")}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </CardBody>
       </Card>
@@ -516,35 +498,54 @@ export function SettingsPage() {
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("settings.members_list_description")}</p>
         </CardHeader>
         <CardBody>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-gray-500 dark:text-gray-400">
-                <tr>
-                  <th className="py-2">{t("auth.email")}</th>
-                  <th>{t("settings.invitation_role")}</th>
-                  <th>{t("settings.joined_at")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {members.length === 0 ? (
-                  <tr><td colSpan={3} className="py-2 text-gray-500 dark:text-gray-400">{t("common.empty")}</td></tr>
-                ) : members.map((m) => (
-                  <tr key={m.userId} className="border-t border-border">
-                    <td className="py-2">
+          {members.length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
+          ) : (
+            <>
+              <ul className="space-y-2 md:hidden">
+                {members.map((m) => (
+                  <li key={m.userId} className="rounded-md border border-border p-3 dark:border-gray-700">
+                    <p className="break-words font-medium">
                       {m.email}
                       {user?.id === m.userId && (
                         <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                           {t("settings.you")}
                         </span>
                       )}
-                    </td>
-                    <td>{t(`settings.${m.role}`)}</td>
-                    <td>{new Date(m.joinedAt).toLocaleDateString()}</td>
-                  </tr>
+                    </p>
+                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                      {t(`settings.${m.role}`)} · {new Date(m.joinedAt).toLocaleDateString()}
+                    </p>
+                  </li>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </ul>
+              <table className="hidden w-full text-sm md:table">
+                <thead className="text-left text-gray-500 dark:text-gray-400">
+                  <tr>
+                    <th className="py-2">{t("auth.email")}</th>
+                    <th>{t("settings.invitation_role")}</th>
+                    <th>{t("settings.joined_at")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {members.map((m) => (
+                    <tr key={m.userId} className="border-t border-border">
+                      <td className="py-2">
+                        {m.email}
+                        {user?.id === m.userId && (
+                          <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                            {t("settings.you")}
+                          </span>
+                        )}
+                      </td>
+                      <td>{t(`settings.${m.role}`)}</td>
+                      <td>{new Date(m.joinedAt).toLocaleDateString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
         </CardBody>
       </Card>
 
@@ -586,32 +587,49 @@ export function SettingsPage() {
                 <p className="mt-2 text-xs text-gray-600 dark:text-gray-300">{window.location.origin}/register?invite={issuedToken}</p>
               </div>
             )}
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-left text-gray-500 dark:text-gray-400">
-                  <tr>
-                    <th className="py-2">{t("settings.invitation_role")}</th>
-                    <th>{t("auth.email")}</th>
-                    <th>{t("common.date")}</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {invitations.length === 0 ? (
-                    <tr><td colSpan={4} className="py-2 text-gray-500 dark:text-gray-400">{t("common.empty")}</td></tr>
-                  ) : invitations.map((i) => (
-                    <tr key={i.id} className="border-t border-border">
-                      <td className="py-2">{t(`settings.${i.role}`)}</td>
-                      <td>{i.email ?? "—"}</td>
-                      <td>{new Date(i.expiresAt).toLocaleDateString()}</td>
-                      <td className="text-right">
+            {invitations.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
+            ) : (
+              <>
+                <ul className="space-y-2 md:hidden">
+                  {invitations.map((i) => (
+                    <li key={i.id} className="rounded-md border border-border p-3 dark:border-gray-700">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1 break-words">
+                          <p className="font-medium">{i.email ?? "—"}</p>
+                          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                            {t(`settings.${i.role}`)} · {new Date(i.expiresAt).toLocaleDateString()}
+                          </p>
+                        </div>
                         <Button variant="ghost" onClick={() => revoke.mutate(i.id)}>{t("settings.revoke")}</Button>
-                      </td>
-                    </tr>
+                      </div>
+                    </li>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </ul>
+                <table className="hidden w-full text-sm md:table">
+                  <thead className="text-left text-gray-500 dark:text-gray-400">
+                    <tr>
+                      <th className="py-2">{t("settings.invitation_role")}</th>
+                      <th>{t("auth.email")}</th>
+                      <th>{t("common.date")}</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invitations.map((i) => (
+                      <tr key={i.id} className="border-t border-border">
+                        <td className="py-2">{t(`settings.${i.role}`)}</td>
+                        <td>{i.email ?? "—"}</td>
+                        <td>{new Date(i.expiresAt).toLocaleDateString()}</td>
+                        <td className="text-right">
+                          <Button variant="ghost" onClick={() => revoke.mutate(i.id)}>{t("settings.revoke")}</Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
           </CardBody>
         </Card>
       )}

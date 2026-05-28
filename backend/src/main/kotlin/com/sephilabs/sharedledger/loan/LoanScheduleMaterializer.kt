@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.LocalDate
+import java.time.ZoneId
 import java.util.UUID
 
 /**
@@ -45,20 +46,30 @@ class LoanScheduleMaterializer(
         if (loan.householdId != householdId) throw AppException.notFound("LOAN_NOT_FOUND")
         if (loan.status != LoanStatus.active) return 0
         val schedule = schedules.findByLoanId(loan.id) ?: throw AppException.notFound("LOAN_SCHEDULE_NOT_FOUND")
-        return materializeOne(schedule, today, firedBy = by)
+        return materializeOne(schedule, today, firedBy = by, forceFireToday = true)
     }
 
-    private fun materializeOne(schedule: LoanSchedule, today: LocalDate, firedBy: User? = null): Int {
+    private fun materializeOne(
+        schedule: LoanSchedule,
+        today: LocalDate,
+        firedBy: User? = null,
+        forceFireToday: Boolean = false,
+    ): Int {
         val scheduleId = schedule.id.toString()
         MDC.put("loanScheduleId", scheduleId)
         try {
             val loan = loans.findById(schedule.loanId).orElse(null) ?: return 0
             if (loan.deletedAt != null || loan.status != LoanStatus.active) return 0
 
-            val from = schedule.lastMaterializedThrough?.plusDays(1) ?: loan.startDate
-            if (from.isAfter(today)) return 0
+            // Null watermark falls back to the entity's last edit, not the loan's startDate,
+            // so a backdated startDate never triggers retroactive back-fill.
+            val from = schedule.lastMaterializedThrough?.plusDays(1)
+                ?: schedule.updatedAt.atZone(ZoneId.systemDefault()).toLocalDate()
 
-            val dates = LoanScheduleDateMath.occurrencesInRange(schedule, loan.startDate, from, today)
+            val cadenceDates: List<LocalDate> = if (from.isAfter(today)) emptyList()
+                else LoanScheduleDateMath.occurrencesInRange(schedule, loan.startDate, from, today)
+            val dates: List<LocalDate> = if (forceFireToday) (cadenceDates + today).toSortedSet().toList()
+                else cadenceDates
             if (dates.isEmpty()) {
                 runInTx {
                     val refreshed = schedules.findById(schedule.id).orElse(schedule)
