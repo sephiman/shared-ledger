@@ -51,10 +51,7 @@ class AuthController(
             throw AppException.tooManyRequests()
         }
         try {
-            val auth = authManager.authenticate(UsernamePasswordAuthenticationToken(body.email, body.password))
-            val context = SecurityContextHolder.createEmptyContext().apply { authentication = auth }
-            SecurityContextHolder.setContext(context)
-            contextRepo.saveContext(context, request, response)
+            openSession(body.email, body.password, request, response)
             val user = users.findByEmailIgnoreCase(body.email) ?: throw BadCredentialsException("INVALID_CREDENTIALS")
             authService.recordLogin(user.id)
             metrics.loginAttempt("success")
@@ -65,6 +62,19 @@ class AuthController(
         }
     }
 
+    /**
+     * Authenticate and persist the SecurityContext into the HTTP session so the
+     * SESSION cookie is written on the response. Shared by login and register —
+     * registering must drop the new user into a real authenticated session, not
+     * rely on the client issuing a follow-up /login.
+     */
+    private fun openSession(email: String, password: String, request: HttpServletRequest, response: HttpServletResponse) {
+        val auth = authManager.authenticate(UsernamePasswordAuthenticationToken(email, password))
+        val context = SecurityContextHolder.createEmptyContext().apply { authentication = auth }
+        SecurityContextHolder.setContext(context)
+        contextRepo.saveContext(context, request, response)
+    }
+
     @PostMapping("/logout")
     fun logout(request: HttpServletRequest): Map<String, String> {
         request.getSession(false)?.invalidate()
@@ -73,8 +83,16 @@ class AuthController(
     }
 
     @PostMapping("/register")
-    fun register(@Valid @RequestBody body: RegisterRequest): ResponseEntity<MeResponse> {
+    fun register(
+        @Valid @RequestBody body: RegisterRequest,
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+    ): ResponseEntity<MeResponse> {
         val user = authService.register(body)
+        // Establish the session immediately so registration is self-contained:
+        // the new user is authenticated without depending on a follow-up /login.
+        openSession(user.email, body.password, request, response)
+        authService.recordLogin(user.id)
         return ResponseEntity.status(201).body(buildMe(user))
     }
 

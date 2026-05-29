@@ -3,11 +3,14 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/auth/AuthContext";
 import { asApiError } from "@/api/client";
+import { useTheme } from "@/lib/theme";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label } from "@/components/ui/primitives";
 
 export function LoginPage() {
   const { login } = useAuth();
   const { t } = useTranslation();
+  const { resolvedTheme } = useTheme();
+  const logoSrc = resolvedTheme === "dark" ? "/SharedLedgerDark.png" : "/SharedLedgerLight.png";
   const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState("");
@@ -18,9 +21,10 @@ export function LoginPage() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
+    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 dark:bg-gray-900">
       <Card className="w-full max-w-sm">
-        <CardHeader>
+        <CardHeader className="flex flex-col items-center gap-3">
+          <img src={logoSrc} alt={t("app.name")} className="h-12 w-auto" />
           <h1 className="text-lg font-semibold">{t("auth.login")}</h1>
         </CardHeader>
         <CardBody>
