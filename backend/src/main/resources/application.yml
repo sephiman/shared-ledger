@@ -20,12 +20,6 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
-  session:
-    store-type: jdbc
-    jdbc:
-      initialize-schema: never
-      table-name: SPRING_SESSION
-    timeout: 30d
   servlet:
     multipart:
       enabled: true

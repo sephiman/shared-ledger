@@ -57,4 +57,77 @@ class AuthRegistrationFlowTest @Autowired constructor(
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.email").value(email))
     }
+
+    @Test
+    fun `login authenticates a user against the stored argon2 hash`() {
+        val email = "login${System.nanoTime()}@example.com"
+        val password = "password1234"
+        register(email, password)
+
+        // Exercise the real /login path (authManager.authenticate against the persisted hash).
+        // A 200 here proves the encoder used at verification matches the one that wrote the hash —
+        // ruling out the password-encoder mismatch that would surface as a 401 INVALID_CREDENTIALS.
+        mockMvc.perform(
+            post("/api/auth/login").with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{ "email": "$email", "password": "$password", "rememberMe": true }"""),
+        ).andExpect(status().isOk)
+            .andExpect(jsonPath("$.email").value(email))
+
+        // And a wrong password must be rejected with 401, not accepted.
+        mockMvc.perform(
+            post("/api/auth/login").with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{ "email": "$email", "password": "wrong-password", "rememberMe": true }"""),
+        ).andExpect(status().isUnauthorized)
+    }
+
+    @Test
+    fun `login succeeds when the request already carries a valid authenticated session`() {
+        // Reproduces the prod scenario: durable sessions mean the browser still holds a valid
+        // SESSION cookie when the user lands on /login. Logging in WHILE that session is attached
+        // must still authenticate. On master (in-memory) a restart invalidated the cookie, so this
+        // path was never exercised; durable sessions made it the normal case.
+        val email = "relogin${System.nanoTime()}@example.com"
+        val password = "password1234"
+        val registered = mockMvc.perform(
+            post("/api/auth/register").with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "email": "$email",
+                      "password": "$password",
+                      "locale": "en",
+                      "household": { "name": "Home", "currency": "EUR", "defaultLocale": "en" }
+                    }
+                    """.trimIndent(),
+                ),
+        ).andExpect(status().isCreated).andReturn()
+        val existingSession = registered.request.session as MockHttpSession
+
+        mockMvc.perform(
+            post("/api/auth/login").with(csrf()).session(existingSession)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{ "email": "$email", "password": "$password", "rememberMe": true }"""),
+        ).andExpect(status().isOk)
+            .andExpect(jsonPath("$.email").value(email))
+    }
+
+    private fun register(email: String, password: String) {
+        mockMvc.perform(
+            post("/api/auth/register").with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "email": "$email",
+                      "password": "$password",
+                      "locale": "en",
+                      "household": { "name": "Home", "currency": "EUR", "defaultLocale": "en" }
+                    }
+                    """.trimIndent(),
+                ),
+        ).andExpect(status().isCreated)
+    }
 }
