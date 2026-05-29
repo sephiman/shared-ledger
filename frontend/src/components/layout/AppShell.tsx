@@ -21,7 +21,7 @@ export function AppShell() {
   const logoSrc = resolvedTheme === "dark" ? "/SharedLedgerDark.png" : "/SharedLedgerLight.png";
 
   return (
-    <div className="flex flex-col h-screen">
+    <div className="flex flex-col h-dvh">
       <header className="border-b border-border bg-white dark:bg-gray-800 dark:border-gray-700">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
           <img src={logoSrc} alt={t("app.name")} className="h-10 w-auto shrink-0" />
