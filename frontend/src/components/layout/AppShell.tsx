@@ -50,7 +50,7 @@ export function AppShell() {
         </nav>
       </header>
       <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900">
-        <div className="mx-auto max-w-6xl px-4 py-6">
+        <div className="mx-auto max-w-6xl px-4 pt-6 pb-[calc(env(safe-area-inset-bottom)+5rem)]">
           <Outlet />
         </div>
       </main>
