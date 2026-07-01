@@ -58,10 +58,21 @@ data class TrailingPoint(
     val month: Int,
     @JsonFormat(shape = JsonFormat.Shape.STRING) val income: BigDecimal,
     @JsonFormat(shape = JsonFormat.Shape.STRING) val expenses: BigDecimal,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val netSavings: BigDecimal,
     val savingsRate: Double,
 )
 
-data class TrailingResponse(val points: List<TrailingPoint>)
+// Household-total averages/median across the returned range. The denominator is the
+// number of months in the range (points.size) — zero months are included, mirroring
+// the Explorer per-category averaging convention.
+data class TrailingSummary(
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val avgIncome: BigDecimal,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val avgExpenses: BigDecimal,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val avgNetSavings: BigDecimal,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val medianNetSavings: BigDecimal,
+)
+
+data class TrailingResponse(val points: List<TrailingPoint>, val summary: TrailingSummary)
 
 data class ForecastPoint(
     val year: Int,

@@ -71,6 +71,49 @@ class AnalyticsServiceTest @Autowired constructor(
     }
 
     @Test
+    fun `trailing12 reports net savings per month and range averages`() {
+        val (user, household) = seed()
+        val asOf = YearMonth.of(2025, 6)
+        // asOf month: income 2000, expenses 500 -> net 1500
+        addTx(household, user, asOf.atDay(5), Direction.income, "income.salary", "2000.00")
+        addTx(household, user, asOf.atDay(10), Direction.expense, "home.rent", "500.00")
+        // one month earlier: income 1000, expenses 1200 -> net -200
+        val prev = asOf.minusMonths(1)
+        addTx(household, user, prev.atDay(5), Direction.income, "income.salary", "1000.00")
+        addTx(household, user, prev.atDay(10), Direction.expense, "home.rent", "1200.00")
+
+        val r = service.trailing12(household.id, asOf)
+
+        assertThat(r.points).hasSize(12)
+        val last = r.points.last()
+        assertThat(last.year).isEqualTo(asOf.year)
+        assertThat(last.month).isEqualTo(asOf.monthValue)
+        assertThat(last.netSavings).isEqualByComparingTo("1500.00")
+        val prevPoint = r.points.first { it.year == prev.year && it.month == prev.monthValue }
+        assertThat(prevPoint.netSavings).isEqualByComparingTo("-200.00")
+
+        // Averages divide by 12 months (the 10 empty months count toward the denominator).
+        assertThat(r.summary.avgIncome).isEqualByComparingTo("250.00") // 3000 / 12
+        assertThat(r.summary.avgExpenses).isEqualByComparingTo("141.67") // 1700 / 12, HALF_EVEN
+        assertThat(r.summary.avgNetSavings).isEqualByComparingTo("108.33") // 1300 / 12
+        // 10 zero months + (-200) + 1500 -> sorted median of 12 values is 0
+        assertThat(r.summary.medianNetSavings).isEqualByComparingTo("0.00")
+    }
+
+    @Test
+    fun `trailing12 with no transactions yields zero averages without dividing by zero`() {
+        val (_, household) = seed()
+        val r = service.trailing12(household.id, YearMonth.of(2025, 6))
+
+        assertThat(r.points).hasSize(12)
+        assertThat(r.points).allMatch { it.netSavings.signum() == 0 }
+        assertThat(r.summary.avgIncome).isEqualByComparingTo("0.00")
+        assertThat(r.summary.avgExpenses).isEqualByComparingTo("0.00")
+        assertThat(r.summary.avgNetSavings).isEqualByComparingTo("0.00")
+        assertThat(r.summary.medianNetSavings).isEqualByComparingTo("0.00")
+    }
+
+    @Test
     fun `recurring share splits by template reference`() {
         val (user, household) = seed()
         val template = recurring.create(household.id, RecurringTemplateRequest(

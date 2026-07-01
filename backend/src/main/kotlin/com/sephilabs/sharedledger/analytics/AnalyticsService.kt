@@ -26,6 +26,15 @@ private fun savingsRate(income: BigDecimal, expenses: BigDecimal): Double =
         (income - expenses).divide(income, 4, RoundingMode.HALF_EVEN).toDouble() * 100.0
     else 0.0
 
+// Median of a series of amounts (2 dp, HALF_EVEN). Even-length series average the two middle values.
+private fun median(values: List<BigDecimal>): BigDecimal {
+    val sorted = values.sorted()
+    return if (sorted.isEmpty()) BigDecimal.ZERO
+    else if (sorted.size % 2 == 1) sorted[sorted.size / 2]
+    else sorted[sorted.size / 2 - 1].add(sorted[sorted.size / 2])
+        .divide(BigDecimal.valueOf(2L), 2, RoundingMode.HALF_EVEN)
+}
+
 @Service
 class AnalyticsService(
     private val transactions: TransactionRepository,
@@ -141,11 +150,31 @@ class AnalyticsService(
             val tx = transactions.findByHouseholdIdAndOccurrenceDateBetween(householdId, cursor.atDay(1), cursor.atEndOfMonth())
             val inc = tx.filter { it.direction == Direction.income }.sumOf { it.amount }
             val exp = tx.filter { it.direction == Direction.expense }.sumOf { it.amount }
-            val rate = if (inc.signum() > 0) (inc - exp).divide(inc, 4, RoundingMode.HALF_EVEN).toDouble() * 100.0 else 0.0
-            points += TrailingPoint(cursor.year, cursor.monthValue, Money.normalize(inc), Money.normalize(exp), rate)
+            val net = inc - exp
+            val rate = if (inc.signum() > 0) net.divide(inc, 4, RoundingMode.HALF_EVEN).toDouble() * 100.0 else 0.0
+            points += TrailingPoint(
+                cursor.year,
+                cursor.monthValue,
+                Money.normalize(inc),
+                Money.normalize(exp),
+                Money.normalize(net),
+                rate,
+            )
             cursor = cursor.plusMonths(1)
         }
-        return TrailingResponse(points)
+        // Averages divide by the number of months in the range (zero months included),
+        // matching the Explorer per-category averaging convention.
+        val denom = points.size.coerceAtLeast(1).toBigDecimal()
+        val avgIncome = points.fold(BigDecimal.ZERO) { acc, p -> acc + p.income }.divide(denom, 2, RoundingMode.HALF_EVEN)
+        val avgExpenses = points.fold(BigDecimal.ZERO) { acc, p -> acc + p.expenses }.divide(denom, 2, RoundingMode.HALF_EVEN)
+        val avgNetSavings = points.fold(BigDecimal.ZERO) { acc, p -> acc + p.netSavings }.divide(denom, 2, RoundingMode.HALF_EVEN)
+        val summary = TrailingSummary(
+            avgIncome = avgIncome,
+            avgExpenses = avgExpenses,
+            avgNetSavings = avgNetSavings,
+            medianNetSavings = median(points.map { it.netSavings }),
+        )
+        return TrailingResponse(points, summary)
     }
 
     @Transactional(readOnly = true)
@@ -729,11 +758,7 @@ class AnalyticsService(
         val totalAcrossRange = currentSeries.fold(BigDecimal.ZERO) { acc, m -> acc + m.amount }
         val denom = currentSeries.size.coerceAtLeast(1).toBigDecimal()
         val averagePerMonth = totalAcrossRange.divide(denom, 2, RoundingMode.HALF_EVEN)
-        val sorted = currentSeries.map { it.amount }.sorted()
-        val median = if (sorted.isEmpty()) BigDecimal.ZERO
-        else if (sorted.size % 2 == 1) sorted[sorted.size / 2]
-        else sorted[sorted.size / 2 - 1].add(sorted[sorted.size / 2])
-            .divide(BigDecimal.valueOf(2L), 2, RoundingMode.HALF_EVEN)
+        val medianAmount = median(currentSeries.map { it.amount })
 
         val highest = currentSeries.maxByOrNull { it.amount }?.takeIf { it.amount.signum() > 0 }
             ?.let { ExplorerMonthLabel(it.year, it.month, it.amount) }
@@ -783,7 +808,7 @@ class AnalyticsService(
             priorMonths = priorSeries,
             priorYearsAvailable = priorYearsAvailable.coerceAtLeast(0),
             averagePerMonth = Money.normalize(averagePerMonth),
-            medianPerMonth = Money.normalize(median),
+            medianPerMonth = Money.normalize(medianAmount),
             highestMonth = highest,
             lowestNonZeroMonth = lowestNonZero,
             topDescriptions = topDescriptions,

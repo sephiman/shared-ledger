@@ -51,7 +51,20 @@ export interface TrailingPoint {
   month: number;
   income: string;
   expenses: string;
+  netSavings: string;
   savingsRate: number;
+}
+
+export interface TrailingSummary {
+  avgIncome: string;
+  avgExpenses: string;
+  avgNetSavings: string;
+  medianNetSavings: string;
+}
+
+export interface TrailingResponse {
+  points: TrailingPoint[];
+  summary: TrailingSummary;
 }
 
 export interface ForecastResponse {
@@ -103,7 +116,7 @@ export function useYearByYear(householdId: string, years: number[]) {
 export function useTrailing12(householdId: string) {
   return useQuery({
     queryKey: ["analytics", householdId, "trailing"],
-    queryFn: async () => (await apiClient.get<{ points: TrailingPoint[] }>(`/households/${householdId}/analytics/trailing-12`)).data,
+    queryFn: async () => (await apiClient.get<TrailingResponse>(`/households/${householdId}/analytics/trailing-12`)).data,
   });
 }
 
