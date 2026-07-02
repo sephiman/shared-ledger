@@ -158,6 +158,7 @@ class LoanService(
             updatedByUserId = by.id,
         )
         payments.save(payment)
+        settleIfPaidOff(loan, by)
         notifications.loanPayment(payment, loan.householdId, loan.borrowerName, NotifyAction.CREATE, NotifyActor.Human(by.email))
         return payment
     }
@@ -177,6 +178,7 @@ class LoanService(
         payment.amount = Money.normalize(request.amount)
         payment.description = request.description?.takeIf { it.isNotBlank() }
         payment.updatedByUserId = by.id
+        settleIfPaidOff(loan, by)
         notifications.loanPayment(payment, loan.householdId, loan.borrowerName, NotifyAction.UPDATE, NotifyActor.Human(by.email))
         return payment
     }
@@ -310,6 +312,22 @@ class LoanService(
             )
         }
         return sb.toString()
+    }
+
+    /**
+     * Settles the loan when its balance reaches zero after a payment write. The balance is
+     * evaluated as of the latest payment date (not just today) so future-dated payments are
+     * inside the calculator's window; once principal hits zero no further interest accrues,
+     * so a zero balance at that date is final.
+     */
+    private fun settleIfPaidOff(loan: Loan, by: User) {
+        val livePayments = payments.findAllByLoanIdOrderByPaymentDateAsc(loan.id)
+        val lastPaymentDate = livePayments.maxOfOrNull { it.paymentDate } ?: return
+        val asOf = maxOf(lastPaymentDate, LocalDate.now())
+        val outstanding = LoanBalanceCalculator.compute(loan, livePayments, asOf)
+        if (outstanding.totalOutstanding.signum() == 0) {
+            transitionStatus(loan.householdId, loan.id, LoanStatus.settled, lastPaymentDate, by)
+        }
     }
 
     private fun transitionStatus(
