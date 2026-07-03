@@ -92,7 +92,7 @@ export function TransactionImportCard() {
   );
 }
 
-function PreviewPanel({ preview, dataset }: { preview: PreviewSummary; dataset: "transactions" | "snapshots" | "movements" | "recurring" | "loans" | "loan_payments" }) {
+function PreviewPanel({ preview, dataset }: { preview: PreviewSummary; dataset: "transactions" | "snapshots" | "movements" | "recurring" | "loans" | "loan_payments" | "portfolio" }) {
   const { t } = useTranslation();
   return (
     <div className="space-y-3 rounded border border-border p-3 text-sm">
@@ -118,6 +118,11 @@ function PreviewPanel({ preview, dataset }: { preview: PreviewSummary; dataset: 
       {dataset === "movements" && (
         <p className="text-gray-600 dark:text-gray-300">
           {t("networth.contribution")}: {preview.sumContributions ?? "0,00"} · {t("networth.withdrawal")}: {preview.sumWithdrawals ?? "0,00"} · {t("networth.debt_payment")}: {preview.sumDebtPayments ?? "0,00"}
+        </p>
+      )}
+      {dataset === "portfolio" && (
+        <p className="text-gray-600 dark:text-gray-300">
+          {t("portfolio.cost_basis")}: {preview.sumAssets ?? "0,00"}
         </p>
       )}
       {preview.errorCount > 0 && (

@@ -10,6 +10,12 @@ import com.sephilabs.sharedledger.household.HouseholdRepository
 import com.sephilabs.sharedledger.household.HouseholdRole
 import com.sephilabs.sharedledger.identity.user.User
 import com.sephilabs.sharedledger.identity.user.UserRepository
+import com.sephilabs.sharedledger.portfolio.HoldingAssetClass
+import com.sephilabs.sharedledger.portfolio.HoldingRequest
+import com.sephilabs.sharedledger.portfolio.HoldingService
+import com.sephilabs.sharedledger.portfolio.LotRequest
+import com.sephilabs.sharedledger.portfolio.LotType
+import com.sephilabs.sharedledger.portfolio.PortfolioImportService
 import com.sephilabs.sharedledger.recurring.Cadence
 import com.sephilabs.sharedledger.recurring.RecurringMaterializer
 import com.sephilabs.sharedledger.recurring.RecurringService
@@ -67,6 +73,8 @@ class TelegramNotificationIntegrationTest @Autowired constructor(
     private val templates: RecurringTemplateRepository,
     private val materializer: RecurringMaterializer,
     private val controller: TelegramSettingsController,
+    private val holdings: HoldingService,
+    private val portfolioImport: PortfolioImportService,
     private val client: RecordingTelegramClient,
 ) : IntegrationTestBase() {
 
@@ -236,6 +244,68 @@ class TelegramNotificationIntegrationTest @Autowired constructor(
         val result = controller.test(household.id)
         assertThat(result.ok).isTrue()
         assertThat(client.sent.last().chatId).isEqualTo("chat-999")
+    }
+
+    @Test
+    fun `portfolio buy and sell dispatch trade notifications`() {
+        val (user, household) = seed()
+        seedSettings(household.id, user.id)
+        // Unlinked holding: no price provider is touched.
+        val holding = holdings.create(
+            household.id,
+            HoldingRequest(assetClass = HoldingAssetClass.crypto, symbol = "BTC"),
+            user,
+        )
+
+        holdings.addLot(
+            household.id, holding.id,
+            LotRequest(type = LotType.BUY, tradedOn = LocalDate.of(2025, 3, 1), quantity = BigDecimal("1"), unitPrice = BigDecimal("40000")),
+            user,
+        )
+        awaitSent(1)
+        assertThat(client.sent.last().text)
+            .contains("Trade recorded").contains("Buy").contains("BTC").contains("by ${user.email}")
+            .contains("40000 EUR")
+
+        holdings.addLot(
+            household.id, holding.id,
+            LotRequest(type = LotType.SELL, tradedOn = LocalDate.of(2025, 4, 1), quantity = BigDecimal("0.5"), unitPrice = BigDecimal("50000")),
+            user,
+        )
+        awaitSent(2)
+        assertThat(client.sent.last().text).contains("Trade recorded").contains("Sell").contains("50000 EUR")
+    }
+
+    @Test
+    fun `holdings toggle off suppresses trades`() {
+        val (user, household) = seed()
+        seedSettings(household.id, user.id) { notifyHoldings = false }
+        val holding = holdings.create(
+            household.id,
+            HoldingRequest(assetClass = HoldingAssetClass.crypto, symbol = "ETH"),
+            user,
+        )
+
+        holdings.addLot(
+            household.id, holding.id,
+            LotRequest(type = LotType.BUY, tradedOn = LocalDate.of(2025, 3, 1), quantity = BigDecimal("1"), unitPrice = BigDecimal("2000")),
+            user,
+        )
+        sleepBriefly()
+        assertThat(client.sent).isEmpty()
+    }
+
+    @Test
+    fun `portfolio imports are silent`() {
+        val (user, household) = seed()
+        seedSettings(household.id, user.id)
+
+        val csv = "type;asset_class;symbol;label;native_currency;isin;traded_on;quantity;unit_price;cost_currency;fee;note\n" +
+            "BUY;crypto;SOL;;EUR;;2025-03-01;10;100;EUR;;\n"
+        val result = portfolioImport.execute(household.id, csv.byteInputStream(Charsets.UTF_8), user)
+        assertThat(result.inserted).isEqualTo(1)
+        sleepBriefly()
+        assertThat(client.sent).withFailMessage("portfolio imports must not notify").isEmpty()
     }
 
     private fun expense() = TransactionRequest(

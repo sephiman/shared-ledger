@@ -45,6 +45,8 @@ export default function App() {
           <Route path="/recurring" element={<Lazy><RecurringPage /></Lazy>} />
           <Route path="/budgets" element={<Lazy><BudgetsPage /></Lazy>} />
           <Route path="/networth/*" element={<Lazy><NetWorthPage /></Lazy>} />
+          {/* Portfolio was merged into the Wealth hub; keep old links working. */}
+          <Route path="/portfolio/*" element={<Navigate to="/networth?tab=holdings" replace />} />
           <Route path="/analytics/*" element={<Lazy><AnalyticsPage /></Lazy>} />
           <Route path="/fire" element={<Lazy><FirePage /></Lazy>} />
           <Route path="/settings" element={<Lazy><SettingsPage /></Lazy>} />

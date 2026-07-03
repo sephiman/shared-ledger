@@ -55,6 +55,12 @@ data class SnapshotAssetValueId(
     @Column(name = "asset_class_code") var assetClassCode: String = "",
 ) : Serializable
 
+const val VALUE_SOURCE_COMPUTED = "computed"
+const val VALUE_SOURCE_OVERRIDDEN = "overridden"
+
+// A scheduled snapshot copied this manual class forward from the previous snapshot.
+const val VALUE_SOURCE_CARRIED_OVER = "carried_over"
+
 @Entity
 @Table(name = "snapshot_asset_values")
 class SnapshotAssetValue(
@@ -63,6 +69,10 @@ class SnapshotAssetValue(
 
     @Column(name = "value", nullable = false, precision = 15, scale = 2)
     var value: BigDecimal,
+
+    // 'computed' when auto-filled from portfolio holdings, 'overridden' when user-entered.
+    @Column(name = "value_source", nullable = false, length = 16)
+    var valueSource: String = VALUE_SOURCE_OVERRIDDEN,
 )
 
 @Embeddable

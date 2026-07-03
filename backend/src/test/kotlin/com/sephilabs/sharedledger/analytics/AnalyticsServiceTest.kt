@@ -417,12 +417,12 @@ class AnalyticsServiceTest @Autowired constructor(
 
     /**
      * SnapshotService.create rejects a request that omits any asset class from the catalog,
-     * so tests must include all six (cash, index_funds, etfs, stocks, crypto, pension).
+     * so tests must include all six (cash, fund, etfs, stocks, crypto, pension).
      * Pass the codes/values that matter for the test; the rest default to 0.
      */
     private fun fullAssetSet(vararg values: Pair<String, String>): List<AssetValueInput> {
         val overrides = values.toMap()
-        return listOf("cash", "index_funds", "etfs", "stocks", "crypto", "pension").map { code ->
+        return listOf("cash", "fund", "etfs", "stocks", "crypto", "pension").map { code ->
             AssetValueInput(code, BigDecimal(overrides[code] ?: "0.00"))
         }
     }

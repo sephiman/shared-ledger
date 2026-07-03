@@ -5,7 +5,7 @@ import java.time.LocalDate
 import java.util.UUID
 
 /** The notifiable entity kinds, each mapping to one per-household toggle. */
-enum class NotifyEntity { TRANSACTION, SNAPSHOT, MOVEMENT, LOAN_PAYMENT, RECURRING_TXN, RECURRING_LOAN }
+enum class NotifyEntity { TRANSACTION, SNAPSHOT, MOVEMENT, LOAN_PAYMENT, HOLDING, RECURRING_TXN, RECURRING_LOAN }
 
 /** The action performed on a notifiable entity. */
 enum class NotifyAction { CREATE, UPDATE, DELETE }

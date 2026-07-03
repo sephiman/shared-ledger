@@ -41,7 +41,7 @@ class FireSettings(
 
     @Column(name = "qualifying_asset_classes", nullable = false, columnDefinition = "text[]")
     @JdbcTypeCode(SqlTypes.ARRAY)
-    var qualifyingAssetClasses: Array<String> = arrayOf("index_funds", "etfs", "stocks", "crypto", "pension"),
+    var qualifyingAssetClasses: Array<String> = arrayOf("fund", "etfs", "stocks", "crypto", "pension"),
 
     @Column(name = "updated_by_user_id")
     var updatedByUserId: UUID? = null,

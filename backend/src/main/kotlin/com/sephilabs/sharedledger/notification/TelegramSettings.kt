@@ -40,6 +40,9 @@ class TelegramSettings(
     @Column(name = "notify_loan_payments", nullable = false)
     var notifyLoanPayments: Boolean = true,
 
+    @Column(name = "notify_holdings", nullable = false)
+    var notifyHoldings: Boolean = true,
+
     @Column(name = "notify_recurring_txn", nullable = false)
     var notifyRecurringTxn: Boolean = true,
 
@@ -67,6 +70,7 @@ class TelegramSettings(
             NotifyEntity.SNAPSHOT -> notifySnapshots
             NotifyEntity.MOVEMENT -> notifyMovements
             NotifyEntity.LOAN_PAYMENT -> notifyLoanPayments
+            NotifyEntity.HOLDING -> notifyHoldings
             NotifyEntity.RECURRING_TXN -> notifyRecurringTxn
             NotifyEntity.RECURRING_LOAN -> notifyRecurringLoan
         }

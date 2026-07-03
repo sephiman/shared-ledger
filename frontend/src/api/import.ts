@@ -225,6 +225,37 @@ export function useExecuteLoanPayments(householdId: string) {
   });
 }
 
+export function usePreviewPortfolio(householdId: string) {
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const res = await apiClient.post<PreviewSummary>(
+        `/households/${householdId}/portfolio/import/preview`,
+        asForm(file),
+        { headers: { "Content-Type": null } },
+      );
+      return res.data;
+    },
+    meta: { silentSuccess: true },
+  });
+}
+
+export function useExecutePortfolio(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const res = await apiClient.post<ExecuteResult>(
+        `/households/${householdId}/portfolio/import/execute`,
+        asForm(file),
+        { headers: { "Content-Type": null } },
+      );
+      return res.data;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["portfolio", householdId] });
+    },
+  });
+}
+
 export function usePreviewSnapshots(householdId: string) {
   return useMutation({
     mutationFn: async ({ file, policy }: { file: File; policy: SnapshotPolicy }) => {

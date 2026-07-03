@@ -11,6 +11,7 @@ import { categoryIcon } from "@/lib/categoryGroup";
 import { CreateHouseholdDialog } from "@/features/household/CreateHouseholdDialog";
 import { CustomCategoryDialog } from "./CustomCategoryDialog";
 import { NotificationsCard } from "./NotificationsCard";
+import { AutoSnapshotCard } from "./AutoSnapshotCard";
 import { getCurrencyOptions } from "@/lib/currency";
 
 export function SettingsPage() {
@@ -373,6 +374,8 @@ export function SettingsPage() {
           </CardBody>
         </Card>
       )}
+
+      {isOwner && <AutoSnapshotCard householdId={household.householdId} />}
 
       {isOwner && <NotificationsCard householdId={household.householdId} />}
 

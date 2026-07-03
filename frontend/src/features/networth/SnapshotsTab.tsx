@@ -14,6 +14,7 @@ import {
   type LiabilityBalance,
   type Snapshot,
 } from "@/api/networth";
+import { usePortfolioValuation } from "@/api/portfolio";
 import { asApiError } from "@/api/client";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label } from "@/components/ui/primitives";
 import { formatMoney } from "@/lib/money";
@@ -42,6 +43,34 @@ export function SnapshotsTab() {
   const [error, setError] = useState<string | null>(null);
   const [dateError, setDateError] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  // Market classes currently auto-filled from portfolio holdings ("computed").
+  const [computedClasses, setComputedClasses] = useState<Set<string>>(new Set());
+  const [editedClasses, setEditedClasses] = useState<Set<string>>(new Set());
+
+  const { data: portfolioValuation } = usePortfolioValuation(
+    household.householdId,
+    date,
+    panel.kind !== "closed",
+  );
+
+  // Auto-fill market classes from holdings valued at the snapshot date; a class the
+  // user already edited in this panel keeps the manual value (overridden).
+  useEffect(() => {
+    if (panel.kind !== "create" || !portfolioValuation) return;
+    setAssets((prev) => {
+      const next = { ...prev };
+      const computed = new Set<string>();
+      for (const [code, value] of Object.entries(portfolioValuation.byClass)) {
+        if (!editedClasses.has(code)) {
+          next[code] = value;
+          computed.add(code);
+        }
+      }
+      setComputedClasses(computed);
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [portfolioValuation, panel.kind]);
 
   function toggleExpanded(id: string) {
     setExpandedIds((prev) => {
@@ -62,6 +91,8 @@ export function SnapshotsTab() {
     setPanel({ kind: "create" });
     setDate(isoToday());
     setNote("");
+    setComputedClasses(new Set());
+    setEditedClasses(new Set());
     const a: Record<string, string> = {};
     for (const cls of assetClasses) {
       const prev = prefill?.previous?.assets.find((x) => x.assetClassCode === cls.code);
@@ -83,6 +114,8 @@ export function SnapshotsTab() {
     setPanel({ kind: "edit", s });
     setDate(s.snapshotDate);
     setNote(s.note ?? "");
+    setComputedClasses(new Set(s.assets.filter((x) => x.valueSource === "computed").map((x) => x.assetClassCode)));
+    setEditedClasses(new Set());
     const a: Record<string, string> = {};
     for (const cls of assetClasses) {
       const v = s.assets.find((x) => x.assetClassCode === cls.code);
@@ -124,7 +157,15 @@ export function SnapshotsTab() {
       return;
     }
     setDateError(null);
-    const assetItems: AssetValue[] = assetClasses.map((cls) => ({ assetClassCode: cls.code, value: assets[cls.code] || "0" }));
+    const assetItems: AssetValue[] = assetClasses.map((cls) => ({
+      assetClassCode: cls.code,
+      value: assets[cls.code] || "0",
+      valueSource: computedClasses.has(cls.code)
+        ? "computed"
+        : portfolioValuation?.byClass[cls.code] != null
+          ? "overridden"
+          : null,
+    }));
     const liabIds = panel.kind === "edit"
       ? Object.keys(liab)
       : liabilities.filter((x) => x.active).map((x) => x.id);
@@ -243,8 +284,24 @@ export function SnapshotsTab() {
                         type="number"
                         step="0.01"
                         value={assets[cls.code] ?? ""}
-                        onChange={(e) => setAssets({ ...assets, [cls.code]: e.target.value })}
+                        onChange={(e) => {
+                          setAssets({ ...assets, [cls.code]: e.target.value });
+                          setEditedClasses((prev) => new Set(prev).add(cls.code));
+                          setComputedClasses((prev) => {
+                            const next = new Set(prev);
+                            next.delete(cls.code);
+                            return next;
+                          });
+                        }}
                       />
+                      {computedClasses.has(cls.code) && (
+                        <span
+                          className="rounded-full bg-sky-50 px-2 py-0.5 text-xs text-primary dark:bg-sky-900/40 dark:text-sky-300"
+                          title={t("networth.value_source_computed_hint")}
+                        >
+                          {t("networth.value_source_computed")}
+                        </span>
+                      )}
                       {d && (
                         <span className={`w-24 text-right text-xs ${d.large ? "text-amber-600" : "text-gray-500 dark:text-gray-400"}`}>{d.abs} ({d.pct})</span>
                       )}
@@ -275,6 +332,11 @@ export function SnapshotsTab() {
                 })}
               </div>
             </div>
+            {portfolioValuation?.anyStale && (
+              <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
+                {t("networth.stale_prices_disclaimer")}
+              </div>
+            )}
             {anyLarge && (
               <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
                 <p>{t("networth.delta_warning")}</p>
@@ -458,7 +520,17 @@ function SnapshotComposition({
           <ul className="space-y-0.5">
             {snapshot.assets.map((a) => (
               <li key={a.assetClassCode} className="flex justify-between gap-3">
-                <span className="text-gray-600 dark:text-gray-300">{t(`asset.${a.assetClassCode}`, a.assetClassCode)}</span>
+                <span className="text-gray-600 dark:text-gray-300">
+                  {t(`asset.${a.assetClassCode}`, a.assetClassCode)}
+                  {a.valueSource === "carried_over" && (
+                    <span
+                      className="ml-2 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+                      title={t("networth.value_source_carried_over_hint")}
+                    >
+                      {t("networth.value_source_carried_over")}
+                    </span>
+                  )}
+                </span>
                 <span className="font-mono tabular-nums">{formatMoney(a.value, household.currency, i18n.language)}</span>
               </li>
             ))}

@@ -6,6 +6,26 @@ spring:
       ddl-auto: validate
 
 app:
+  auto-snapshot:
+    # Never fires in tests; the job is invoked directly.
+    cron: "0 0 0 29 2 ?"
+  portfolio:
+    # Never fire in tests; refresh methods are invoked directly.
+    crypto-refresh-cron: "0 0 0 29 2 ?"
+    fx-refresh-cron: "0 0 0 29 2 ?"
+    equity-refresh-cron: "0 0 0 29 2 ?"
+    coingecko:
+      min-request-interval-ms: 0
+    binance:
+      min-request-interval-ms: 0
+    yahoo:
+      min-request-interval-ms: 0
+    eodhd:
+      min-request-interval-ms: 0
+    twelvedata:
+      min-request-interval-ms: 0
+    frankfurter:
+      min-request-interval-ms: 0
   telegram:
     # Deterministic 32-byte AES key (base64 of "01234567890123456789012345678901") for tests.
     token-key: "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE="

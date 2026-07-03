@@ -7,6 +7,7 @@ export interface TelegramSettings {
   notifySnapshots: boolean;
   notifyMovements: boolean;
   notifyLoanPayments: boolean;
+  notifyHoldings: boolean;
   notifyRecurringTxn: boolean;
   notifyRecurringLoan: boolean;
   chatId: string | null;
@@ -19,6 +20,7 @@ export interface TelegramSettingsUpdate {
   notifySnapshots: boolean;
   notifyMovements: boolean;
   notifyLoanPayments: boolean;
+  notifyHoldings: boolean;
   notifyRecurringTxn: boolean;
   notifyRecurringLoan: boolean;
   chatId: string | null;

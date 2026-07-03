@@ -10,6 +10,7 @@ import com.sephilabs.sharedledger.notification.NotifyAction
 import com.sephilabs.sharedledger.notification.NotifyActor
 import com.sephilabs.sharedledger.notification.NotificationPublisher
 import com.sephilabs.sharedledger.observability.AppMetrics
+import com.sephilabs.sharedledger.portfolio.PortfolioValuationService
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
@@ -22,12 +23,30 @@ class SnapshotService(
     private val snapshots: SnapshotRepository,
     private val liabilities: LiabilityRepository,
     private val assetClasses: AssetClassRepository,
+    private val portfolioValuation: PortfolioValuationService,
     private val metrics: AppMetrics,
     private val notifications: NotificationPublisher,
 ) {
 
     @Transactional
-    fun create(householdId: UUID, request: SnapshotRequest, by: User): SnapshotDto {
+    fun create(householdId: UUID, request: SnapshotRequest, by: User): SnapshotDto =
+        createInternal(householdId, request, by.id, NotifyActor.Human(by.email))
+
+    /**
+     * Creates a snapshot on behalf of the scheduled job. Identical to [create] — same
+     * autofill and freeze — except it is attributed to [ownerUserId] (the household owner,
+     * since there is no acting user) and notified as a scheduled action.
+     */
+    @Transactional
+    fun createScheduled(householdId: UUID, request: SnapshotRequest, ownerUserId: UUID): SnapshotDto =
+        createInternal(householdId, request, ownerUserId, NotifyActor.Schedule(householdId))
+
+    private fun createInternal(
+        householdId: UUID,
+        request: SnapshotRequest,
+        createdByUserId: UUID,
+        actor: NotifyActor,
+    ): SnapshotDto {
         val expectedClasses = assetClasses.findAllByOrderBySortOrderAsc().map { it.code }.toSet()
         val givenClasses = request.assets.map { it.assetClassCode }.toSet()
         if (!givenClasses.containsAll(expectedClasses)) throw AppException.badRequest("SNAPSHOT_MISSING_ASSET_VALUES")
@@ -46,14 +65,12 @@ class SnapshotService(
             householdId = householdId,
             snapshotDate = request.snapshotDate,
             note = request.note,
-            createdByUserId = by.id,
-            updatedByUserId = by.id,
+            createdByUserId = createdByUserId,
+            updatedByUserId = createdByUserId,
         )
+        val computedByClass = portfolioValuation.valuationAt(householdId, request.snapshotDate).byClass
         snapshot.assetValues = request.assets.map {
-            SnapshotAssetValue(
-                id = SnapshotAssetValueId(snapshot.id, it.assetClassCode),
-                value = Money.normalize(it.value),
-            )
+            toAssetValue(snapshot.id, it, computedByClass[it.assetClassCode])
         }.toMutableList()
         snapshot.liabilityBalances = request.liabilities.map {
             SnapshotLiabilityBalance(
@@ -63,9 +80,10 @@ class SnapshotService(
         }.toMutableList()
 
         snapshots.save(snapshot)
+        portfolioValuation.freezeValuations(snapshot.id, householdId, request.snapshotDate)
         metrics.snapshotCreated()
         val dto = toDto(snapshot)
-        notifications.snapshot(dto, householdId, NotifyAction.CREATE, NotifyActor.Human(by.email))
+        notifications.snapshot(dto, householdId, NotifyAction.CREATE, actor)
         return dto
     }
 
@@ -82,12 +100,10 @@ class SnapshotService(
         snapshot.note = request.note
         snapshot.updatedByUserId = by.id
 
+        val computedByClass = portfolioValuation.valuationAt(householdId, request.snapshotDate).byClass
         snapshot.assetValues.clear()
         snapshot.assetValues.addAll(request.assets.map {
-            SnapshotAssetValue(
-                id = SnapshotAssetValueId(snapshot.id, it.assetClassCode),
-                value = Money.normalize(it.value),
-            )
+            toAssetValue(snapshot.id, it, computedByClass[it.assetClassCode])
         })
         snapshot.liabilityBalances.clear()
         snapshot.liabilityBalances.addAll(request.liabilities.map {
@@ -98,6 +114,8 @@ class SnapshotService(
         })
 
         snapshots.save(snapshot)
+        // Re-freeze: past snapshots stay correctable, and a new date needs new valuations.
+        portfolioValuation.freezeValuations(snapshot.id, householdId, request.snapshotDate)
         val dto = toDto(snapshot)
         notifications.snapshot(dto, householdId, NotifyAction.UPDATE, NotifyActor.Human(by.email))
         return dto
@@ -149,8 +167,42 @@ class SnapshotService(
         return sb.toString()
     }
 
+    /**
+     * Resolves the stored value and source for one asset class. An explicit 'computed'
+     * uses the server-computed portfolio value (rejecting classes without holdings);
+     * a null source is inferred: matching the computed value to the cent means computed.
+     */
+    private fun toAssetValue(
+        snapshotId: UUID,
+        input: AssetValueInput,
+        computedForClass: BigDecimal?,
+    ): SnapshotAssetValue {
+        val source = when (input.valueSource) {
+            null ->
+                if (computedForClass != null && Money.normalize(input.value).compareTo(computedForClass) == 0) {
+                    VALUE_SOURCE_COMPUTED
+                } else {
+                    VALUE_SOURCE_OVERRIDDEN
+                }
+            VALUE_SOURCE_COMPUTED -> {
+                if (computedForClass == null) throw AppException.badRequest("SNAPSHOT_VALUE_SOURCE_INVALID")
+                VALUE_SOURCE_COMPUTED
+            }
+            VALUE_SOURCE_OVERRIDDEN -> VALUE_SOURCE_OVERRIDDEN
+            // Set only by the scheduled job when copying a manual class forward.
+            VALUE_SOURCE_CARRIED_OVER -> VALUE_SOURCE_CARRIED_OVER
+            else -> throw AppException.badRequest("SNAPSHOT_VALUE_SOURCE_INVALID")
+        }
+        val value = if (source == VALUE_SOURCE_COMPUTED) computedForClass!! else Money.normalize(input.value)
+        return SnapshotAssetValue(
+            id = SnapshotAssetValueId(snapshotId, input.assetClassCode),
+            value = value,
+            valueSource = source,
+        )
+    }
+
     fun toDto(snapshot: Snapshot): SnapshotDto {
-        val assets = snapshot.assetValues.map { AssetValueDto(it.id.assetClassCode, it.value) }
+        val assets = snapshot.assetValues.map { AssetValueDto(it.id.assetClassCode, it.value, it.valueSource) }
         val liabilities = snapshot.liabilityBalances.map { LiabilityBalanceDto(it.id.liabilityId, it.balance) }
         val totalAssets = assets.fold(BigDecimal.ZERO) { acc, a -> acc + a.value }
         val totalLiabilities = liabilities.fold(BigDecimal.ZERO) { acc, l -> acc + l.balance }

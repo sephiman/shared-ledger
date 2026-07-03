@@ -22,6 +22,15 @@ services:
       TELEGRAM_TOKEN_KEY: ${TELEGRAM_TOKEN_KEY:-}
       TELEGRAM_API_BASE_URL: ${TELEGRAM_API_BASE_URL:-https://api.telegram.org}
       TELEGRAM_TIMEOUT_MS: ${TELEGRAM_TIMEOUT_MS:-5000}
+      COINGECKO_API_KEY: ${COINGECKO_API_KEY:-}
+      EQUITY_PRICE_PROVIDER: ${EQUITY_PRICE_PROVIDER:-yahoo}
+      EODHD_API_KEY: ${EODHD_API_KEY:-}
+      TWELVEDATA_API_KEY: ${TWELVEDATA_API_KEY:-}
+      COINGECKO_API_BASE_URL: ${COINGECKO_API_BASE_URL:-https://api.coingecko.com}
+      BINANCE_API_BASE_URL: ${BINANCE_API_BASE_URL:-https://api.binance.com}
+      YAHOO_API_BASE_URL: ${YAHOO_API_BASE_URL:-https://query1.finance.yahoo.com}
+      EODHD_API_BASE_URL: ${EODHD_API_BASE_URL:-https://eodhd.com}
+      FRANKFURTER_API_BASE_URL: ${FRANKFURTER_API_BASE_URL:-https://api.frankfurter.dev}
       JAVA_OPTS: ${JAVA_OPTS:-}
     networks:
       - my-network

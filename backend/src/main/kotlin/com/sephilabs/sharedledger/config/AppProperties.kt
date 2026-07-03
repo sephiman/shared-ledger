@@ -9,8 +9,10 @@ data class AppProperties(
     val bootstrap: Bootstrap = Bootstrap(),
     val invitations: Invitations = Invitations(),
     val scheduler: Scheduler = Scheduler(),
+    val autoSnapshot: AutoSnapshot = AutoSnapshot(),
     val fire: Fire = Fire(),
     val telegram: Telegram = Telegram(),
+    val portfolio: Portfolio = Portfolio(),
 ) {
     data class Security(
         val cookieSecure: Boolean = true,
@@ -50,6 +52,15 @@ data class AppProperties(
         val timezone: String = "UTC",
     )
 
+    data class AutoSnapshot(
+        // Daily check; per-household frequency decides whether today is a due date.
+        val cron: String = "0 0 6 * * *",
+        // Which day scheduled weekly snapshots land on.
+        val weeklyDay: java.time.DayOfWeek = java.time.DayOfWeek.MONDAY,
+        // Day-of-month for monthly snapshots; clamped to the month's length.
+        val monthlyDay: Int = 1,
+    )
+
     data class Fire(
         val monteCarloTrials: Int = 10000,
     )
@@ -59,5 +70,71 @@ data class AppProperties(
         val timeoutMs: Long = 5000,
         // Base64-encoded AES key (16/24/32 bytes) for encrypting bot tokens at rest.
         val tokenKey: String = "",
+    )
+
+    enum class EquityProviderKind { YAHOO, EODHD, TWELVE_DATA }
+
+    data class Portfolio(
+        val coingecko: PriceProviderConfig = PriceProviderConfig(
+            baseUrl = "https://api.coingecko.com",
+            minRequestIntervalMs = 2500,
+        ),
+        // Binance public data (keyless): crypto history fallback when CoinGecko can't
+        // serve a range (365-day Demo ceiling) or is down. USDT quotes treated as USD.
+        val binance: PriceProviderConfig = PriceProviderConfig(
+            baseUrl = "https://api.binance.com",
+            minRequestIntervalMs = 300,
+        ),
+        // Yahoo Finance (unofficial, keyless): no hard daily quota, long history, native
+        // EUR for Xetra listings. Fragile and ToS-gray — official alternatives below.
+        val yahoo: PriceProviderConfig = PriceProviderConfig(
+            baseUrl = "https://query1.finance.yahoo.com",
+            minRequestIntervalMs = 1500,
+        ),
+        val yahooFallbackBaseUrl: String = "https://query2.finance.yahoo.com",
+        // EODHD (official alternative): free tier covers UCITS ETFs but only 20 calls/day
+        // and 1 year of history — set equity-history-ceiling-days: 365 when selected.
+        val eodhd: PriceProviderConfig = PriceProviderConfig(
+            baseUrl = "https://eodhd.com",
+            minRequestIntervalMs = 1000,
+        ),
+        // Twelve Data (official alternative): free plan does NOT cover European UCITS ETFs.
+        val twelvedata: PriceProviderConfig = PriceProviderConfig(
+            baseUrl = "https://api.twelvedata.com",
+            // Free tier: 8 requests/minute.
+            minRequestIntervalMs = 8000,
+        ),
+        val frankfurter: PriceProviderConfig = PriceProviderConfig(
+            baseUrl = "https://api.frankfurter.dev",
+            minRequestIntervalMs = 500,
+        ),
+        val equityProvider: EquityProviderKind = EquityProviderKind.YAHOO,
+        val cryptoRefreshCron: String = "0 5 * * * *",
+        val fxRefreshCron: String = "0 30 0 * * *",
+        // Must run after the FX refresh: non-EUR equity valuations need the day's rate.
+        val equityRefreshCron: String = "0 0 1 * * *",
+        // CoinGecko Demo plan serves at most 365 days of history.
+        val cryptoHistoryCeilingDays: Long = 365,
+        // 0 = uncapped (Yahoo serves long history; backfill reaches the earliest lot).
+        // Set 365 when equity-provider is EODHD (its free tier caps at 1 year).
+        val equityHistoryCeilingDays: Long = 0,
+        val backfillOnLink: Boolean = true,
+        // Household base currency prices/rates are quoted in.
+        val vsCurrency: String = "eur",
+        // A valuation whose price observation is older than this is flagged stale.
+        val stalePriceThresholdDays: Long = 7,
+        // Lot-matching method for sells. Only FIFO is implemented; AVERAGE is reserved.
+        val costMethod: CostMethod = CostMethod.FIFO,
+    ) {
+        val baseCurrency: String get() = vsCurrency.uppercase()
+    }
+
+    enum class CostMethod { FIFO, AVERAGE }
+
+    data class PriceProviderConfig(
+        val baseUrl: String = "",
+        val apiKey: String = "",
+        val timeoutMs: Long = 10000,
+        val minRequestIntervalMs: Long = 1000,
     )
 }

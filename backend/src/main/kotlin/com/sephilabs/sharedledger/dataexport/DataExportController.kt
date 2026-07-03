@@ -6,6 +6,7 @@ import com.sephilabs.sharedledger.household.HouseholdRepository
 import com.sephilabs.sharedledger.loan.LoanService
 import com.sephilabs.sharedledger.networth.movement.MovementService
 import com.sephilabs.sharedledger.networth.snapshot.SnapshotService
+import com.sephilabs.sharedledger.portfolio.HoldingService
 import com.sephilabs.sharedledger.recurring.RecurringService
 import com.sephilabs.sharedledger.transaction.TransactionSearchCriteria
 import com.sephilabs.sharedledger.transaction.TransactionService
@@ -31,6 +32,7 @@ class DataExportController(
     private val movements: MovementService,
     private val snapshots: SnapshotService,
     private val loans: LoanService,
+    private val portfolio: HoldingService,
     private val households: HouseholdRepository,
 ) {
 
@@ -59,6 +61,7 @@ class DataExportController(
             Csv.exportFilename(today, household.name, "snapshots") to snapshots.exportCsv(householdId),
             Csv.exportFilename(today, household.name, "loans") to loans.exportLoansCsv(householdId),
             Csv.exportFilename(today, household.name, "loan-payments") to loans.exportPaymentsCsv(householdId),
+            Csv.exportFilename(today, household.name, "portfolio") to portfolio.exportCsv(householdId),
         )
 
         val out = ByteArrayOutputStream()

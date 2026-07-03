@@ -27,6 +27,7 @@ data class TelegramSettingsDto(
     val notifySnapshots: Boolean,
     val notifyMovements: Boolean,
     val notifyLoanPayments: Boolean,
+    val notifyHoldings: Boolean,
     val notifyRecurringTxn: Boolean,
     val notifyRecurringLoan: Boolean,
     val chatId: String?,
@@ -39,6 +40,7 @@ data class TelegramSettingsUpdateRequest(
     val notifySnapshots: Boolean = true,
     val notifyMovements: Boolean = true,
     val notifyLoanPayments: Boolean = true,
+    val notifyHoldings: Boolean = true,
     val notifyRecurringTxn: Boolean = true,
     val notifyRecurringLoan: Boolean = true,
     @field:Size(max = 64, message = "validation.invalid")
@@ -80,6 +82,7 @@ class TelegramSettingsController(
         settings.notifySnapshots = body.notifySnapshots
         settings.notifyMovements = body.notifyMovements
         settings.notifyLoanPayments = body.notifyLoanPayments
+        settings.notifyHoldings = body.notifyHoldings
         settings.notifyRecurringTxn = body.notifyRecurringTxn
         settings.notifyRecurringLoan = body.notifyRecurringLoan
         settings.chatId = body.chatId?.takeIf { it.isNotBlank() }
@@ -107,6 +110,7 @@ class TelegramSettingsController(
         notifySnapshots = notifySnapshots,
         notifyMovements = notifyMovements,
         notifyLoanPayments = notifyLoanPayments,
+        notifyHoldings = notifyHoldings,
         notifyRecurringTxn = notifyRecurringTxn,
         notifyRecurringLoan = notifyRecurringLoan,
         chatId = chatId,
@@ -119,6 +123,7 @@ class TelegramSettingsController(
         notifySnapshots = true,
         notifyMovements = true,
         notifyLoanPayments = true,
+        notifyHoldings = true,
         notifyRecurringTxn = true,
         notifyRecurringLoan = true,
         chatId = null,

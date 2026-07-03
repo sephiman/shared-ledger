@@ -1,18 +1,13 @@
 package com.sephilabs.sharedledger.networth.snapshot
 
+import com.sephilabs.sharedledger.catalog.AssetClassAliases
 import com.sephilabs.sharedledger.catalog.AssetClassRepository
 import com.sephilabs.sharedledger.common.Csv
 import com.sephilabs.sharedledger.common.CsvReader
 import com.sephilabs.sharedledger.common.Money
 import com.sephilabs.sharedledger.common.errors.AppException
-import com.sephilabs.sharedledger.common.import.ExecuteResult
-import com.sephilabs.sharedledger.common.import.MAX_ERRORS_REPORTED
-import com.sephilabs.sharedledger.common.import.MAX_SKIPPED_REPORTED
-import com.sephilabs.sharedledger.common.import.PreviewSummary
-import com.sephilabs.sharedledger.common.import.RowError
-import com.sephilabs.sharedledger.common.import.SkippedRow
+import com.sephilabs.sharedledger.common.import.*
 import com.sephilabs.sharedledger.identity.user.User
-import com.sephilabs.sharedledger.networth.liability.Liability
 import com.sephilabs.sharedledger.networth.liability.LiabilityRepository
 import com.sephilabs.sharedledger.observability.AppMetrics
 import org.slf4j.LoggerFactory
@@ -22,7 +17,7 @@ import java.io.InputStream
 import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
-import java.util.UUID
+import java.util.*
 
 enum class SnapshotDuplicatePolicy { skip, replace, abort }
 
@@ -162,7 +157,7 @@ class SnapshotImportService(
             if (kind != "asset" && kind != "liability") {
                 rowErrors += RowError(rowNo, "IMPORT_KIND_INVALID", "kind", raw["kind"])
             }
-            val key = raw["key"].orEmpty()
+            val key = raw["key"].orEmpty().let { if (kind == "asset") AssetClassAliases.canonical(it) else it }
             val value = Csv.parseDecimal(raw["value"].orEmpty())
             if (value == null || value < BigDecimal.ZERO) {
                 rowErrors += RowError(rowNo, "IMPORT_VALUE_INVALID", "value", raw["value"])

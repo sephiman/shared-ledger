@@ -3,6 +3,7 @@ package com.sephilabs.sharedledger.networth.snapshot
 import com.sephilabs.sharedledger.common.Csv
 import com.sephilabs.sharedledger.common.errors.AppException
 import com.sephilabs.sharedledger.household.HouseholdRepository
+import com.sephilabs.sharedledger.household.RequireHouseholdOwner
 import com.sephilabs.sharedledger.identity.auth.CurrentUser
 import jakarta.validation.Valid
 import org.springframework.format.annotation.DateTimeFormat
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
@@ -25,9 +27,22 @@ import java.util.UUID
 @RequestMapping("/api/households/{householdId}/snapshots")
 class SnapshotController(
     private val service: SnapshotService,
+    private val autoSnapshots: AutoSnapshotService,
     private val currentUser: CurrentUser,
     private val households: HouseholdRepository,
 ) {
+
+    @GetMapping("/auto-settings")
+    fun autoSettings(@PathVariable householdId: UUID): AutoSnapshotSettingsDto =
+        autoSnapshots.getOrCreate(householdId).toDto()
+
+    @RequireHouseholdOwner
+    @PutMapping("/auto-settings")
+    fun updateAutoSettings(
+        @PathVariable householdId: UUID,
+        @Valid @RequestBody body: AutoSnapshotSettingsRequest,
+    ): AutoSnapshotSettingsDto =
+        autoSnapshots.update(householdId, body.enabled, body.frequency, currentUser.requireUser()).toDto()
 
     @GetMapping
     fun list(

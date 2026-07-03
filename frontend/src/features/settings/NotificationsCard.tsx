@@ -14,6 +14,7 @@ type EntityToggleKey =
   | "notifySnapshots"
   | "notifyMovements"
   | "notifyLoanPayments"
+  | "notifyHoldings"
   | "notifyRecurringTxn"
   | "notifyRecurringLoan";
 
@@ -22,6 +23,7 @@ const ENTITY_TOGGLES: { key: EntityToggleKey; labelKey: string }[] = [
   { key: "notifySnapshots", labelKey: "notifications.entity_snapshots" },
   { key: "notifyMovements", labelKey: "notifications.entity_movements" },
   { key: "notifyLoanPayments", labelKey: "notifications.entity_loan_payments" },
+  { key: "notifyHoldings", labelKey: "notifications.entity_holdings" },
   { key: "notifyRecurringTxn", labelKey: "notifications.entity_recurring_txn" },
   { key: "notifyRecurringLoan", labelKey: "notifications.entity_recurring_loan" },
 ];
@@ -53,6 +55,7 @@ export function NotificationsCard({ householdId }: { householdId: string }) {
     notifySnapshots: true,
     notifyMovements: true,
     notifyLoanPayments: true,
+    notifyHoldings: true,
     notifyRecurringTxn: true,
     notifyRecurringLoan: true,
     chatId: "",
@@ -71,6 +74,7 @@ export function NotificationsCard({ householdId }: { householdId: string }) {
         notifySnapshots: settings.notifySnapshots,
         notifyMovements: settings.notifyMovements,
         notifyLoanPayments: settings.notifyLoanPayments,
+        notifyHoldings: settings.notifyHoldings,
         notifyRecurringTxn: settings.notifyRecurringTxn,
         notifyRecurringLoan: settings.notifyRecurringLoan,
         chatId: settings.chatId ?? "",

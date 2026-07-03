@@ -10,7 +10,7 @@ import { ChartTooltip } from "@/components/charts/ChartTooltip";
 
 const PALETTE = ["#0ea5e9", "#22c55e", "#a855f7", "#f97316", "#ef4444", "#14b8a6"];
 
-export function AllocationTab() {
+export function AllocationTab({ title }: { title?: string } = {}) {
   const { t, i18n } = useTranslation();
   const household = useActiveHousehold();
   const { data: snapshots = [] } = useSnapshots(household.householdId);
@@ -28,7 +28,7 @@ export function AllocationTab() {
   return (
     <Card>
       <CardHeader>
-        <p className="font-medium">{t("networth.allocation")} {latest ? `· ${formatDate(latest.snapshotDate, i18n.language)}` : ""}</p>
+        <p className="font-medium">{title ?? t("networth.allocation")} {latest ? `· ${formatDate(latest.snapshotDate, i18n.language)}` : ""}</p>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("networth.allocation_description")}</p>
       </CardHeader>
       <CardBody className="h-96">

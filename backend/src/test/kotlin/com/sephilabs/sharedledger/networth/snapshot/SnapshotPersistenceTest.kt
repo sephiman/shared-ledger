@@ -24,7 +24,7 @@ class SnapshotPersistenceTest @Autowired constructor(
     private val repo: SnapshotRepository,
 ) : IntegrationTestBase() {
 
-    private val allAssetCodes = listOf("cash", "index_funds", "etfs", "stocks", "crypto", "pension")
+    private val allAssetCodes = listOf("cash", "fund", "etfs", "stocks", "crypto", "pension")
 
     @Test
     fun `delete removes the snapshot`() {

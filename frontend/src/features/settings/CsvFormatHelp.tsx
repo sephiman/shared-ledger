@@ -4,9 +4,10 @@ import { useAssetClasses, useCategories, type AssetClass, type Category } from "
 import { useLiabilities } from "@/api/networth";
 import { categoryLabel } from "@/lib/categoryLabel";
 
-type Dataset = "transactions" | "snapshots" | "movements" | "recurring" | "loans" | "loan_payments";
+type Dataset = "transactions" | "snapshots" | "movements" | "recurring" | "loans" | "loan_payments" | "portfolio";
 
 const TX_HEADER = "date;direction;category_code;amount;description;created_at;updated_at";
+const PORTFOLIO_HEADER = "type;asset_class;symbol;label;native_currency;isin;provider;provider_symbol;traded_on;quantity;unit_price;cost_currency;fee;note";
 const SNAP_HEADER = "date;note;kind;key;value";
 const MOV_HEADER = "date;type;asset_class_code;liability_name;amount;description;created_at";
 const REC_HEADER = "direction;category_code;amount;description;cadence;day_of_week;day_of_month;month_of_year;day_of_month_yearly;start_date;end_date;active";
@@ -28,6 +29,7 @@ export function CsvFormatHelp({ dataset }: { dataset: Dataset }) {
         {dataset === "recurring" && <RecurringFormat />}
         {dataset === "loans" && <LoanFormat />}
         {dataset === "loan_payments" && <LoanPaymentFormat />}
+        {dataset === "portfolio" && <PortfolioFormat />}
       </div>
     </details>
   );
@@ -311,6 +313,59 @@ function RecurringFormat() {
       </Section>
       <p className="text-xs text-gray-500 dark:text-gray-400">{t("import.format.rec.dedup")}</p>
       <p className="text-xs text-gray-500 dark:text-gray-400">{t("import.format.rec.in_file_dedup")}</p>
+    </>
+  );
+}
+
+function PortfolioFormat() {
+  const { t } = useTranslation();
+  const example = [
+    PORTFOLIO_HEADER,
+    "BUY;crypto;BTC;Bitcoin;EUR;;coingecko;bitcoin;2025-11-15;0,05;62000,00;EUR;5,00;DCA",
+    "BUY;etf;WEBN;Amundi Prime All Country;EUR;IE0009OA6R05;yahoo;WEBN.DE;2026-01-10;120;9,87;EUR;1,50;",
+    "BUY;etf;WEBN;Amundi Prime All Country;EUR;IE0009OA6R05;yahoo;WEBN.DE;2026-02-10;80;10,12;EUR;1,50;",
+    "SELL;etf;WEBN;Amundi Prime All Country;EUR;IE0009OA6R05;yahoo;WEBN.DE;2026-05-10;50;11,05;EUR;1,50;Rebalancing",
+    "BUY;stock;AAPL;Apple;USD;US0378331005;;;2026-03-05;10;180,00;USD;;",
+    "BUY;fund;MSCIW;World index fund;EUR;;;;2026-01-31;15,5;95,20;EUR;;",
+  ].join("\n");
+  return (
+    <>
+      <p>{t("import.format.portfolio.intro")}</p>
+      <Section title={t("import.format.headers_label")}>
+        <CodeBlock>{PORTFOLIO_HEADER}</CodeBlock>
+      </Section>
+      <Section title={t("import.format.columns_label")}>
+        <ColumnList
+          items={[
+            { name: "type", req: false, desc: t("import.format.portfolio.type") },
+            { name: "asset_class", req: true, desc: t("import.format.portfolio.asset_class") },
+            { name: "symbol", req: true, desc: t("import.format.portfolio.symbol") },
+            { name: "label", req: false, desc: t("import.format.portfolio.label") },
+            { name: "native_currency", req: false, desc: t("import.format.portfolio.native_currency") },
+            { name: "isin", req: false, desc: t("import.format.portfolio.isin") },
+            { name: "provider", req: false, desc: t("import.format.portfolio.provider") },
+            { name: "provider_symbol", req: false, desc: t("import.format.portfolio.provider_symbol") },
+            { name: "traded_on", req: true, desc: t("import.format.portfolio.traded_on") },
+            { name: "quantity", req: true, desc: t("import.format.portfolio.quantity") },
+            { name: "unit_price", req: true, desc: t("import.format.portfolio.unit_price") },
+            { name: "cost_currency", req: false, desc: t("import.format.portfolio.cost_currency") },
+            { name: "fee", req: false, desc: t("import.format.portfolio.fee") },
+            { name: "note", req: false, desc: t("import.format.portfolio.note") },
+          ]}
+        />
+      </Section>
+      <Section title={t("import.format.portfolio.catalogs_label")}>
+        <ul className="space-y-1 text-xs">
+          <li><code className="font-mono">type</code>: BUY / SELL</li>
+          <li><code className="font-mono">asset_class</code>: crypto / etf / stock / fund</li>
+          <li><code className="font-mono">provider</code>: coingecko / yahoo / eodhd / twelvedata</li>
+        </ul>
+      </Section>
+      <Section title={t("import.format.example_label")}>
+        <CodeBlock>{example}</CodeBlock>
+      </Section>
+      <p className="text-xs text-gray-500 dark:text-gray-400">{t("import.format.portfolio.grouping")}</p>
+      <p className="text-xs text-gray-500 dark:text-gray-400">{t("import.format.portfolio.dedup")}</p>
     </>
   );
 }

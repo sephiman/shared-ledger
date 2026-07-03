@@ -86,6 +86,47 @@ class NotificationPublisher(
         )
     }
 
+    /**
+     * A portfolio trade (BUY/SELL lot). [typeName] is the LotType name ("BUY"/"SELL");
+     * [amountBase] is the cost (BUY) or proceeds (SELL) in the household base currency.
+     * Holding lifecycle (create/link/unlink/delete) is intentionally not notified, and
+     * the CSV importer never calls this — it passes notify=false to the service.
+     */
+    fun holdingTrade(
+        householdId: UUID,
+        symbol: String,
+        typeName: String,
+        quantity: BigDecimal,
+        unitPrice: BigDecimal,
+        unitCurrency: String,
+        tradedOn: java.time.LocalDate,
+        amountBase: BigDecimal,
+        action: NotifyAction,
+        actor: NotifyActor,
+    ) {
+        events.publishEvent(
+            EntityChangeEvent(
+                householdId = householdId,
+                entity = NotifyEntity.HOLDING,
+                action = action,
+                actor = actor,
+                fields = listOf(
+                    CardField("portfolio.trade", FieldValue.Keyed("portfolio.lot_type.$typeName")),
+                    CardField("portfolio.symbol", FieldValue.Text(symbol)),
+                    CardField("portfolio.quantity", FieldValue.Text(quantity.stripTrailingZeros().toPlainString())),
+                    // Unit price is in the lot's own currency (may differ from the base), so it
+                    // carries its currency inline rather than being formatted as base money.
+                    CardField(
+                        "portfolio.unit_price",
+                        FieldValue.Text("${unitPrice.stripTrailingZeros().toPlainString()} $unitCurrency"),
+                    ),
+                    CardField("common.date", FieldValue.Day(tradedOn)),
+                    CardField("common.amount", FieldValue.Money(amountBase)),
+                ),
+            ),
+        )
+    }
+
     fun loanPayment(
         payment: LoanPayment,
         householdId: UUID,

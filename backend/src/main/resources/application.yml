@@ -93,9 +93,62 @@ app:
   scheduler:
     recurring-cron: "0 0 2 * * *"
     timezone: UTC
+  auto-snapshot:
+    # Daily check at 06:00; each household's frequency decides if today is due.
+    cron: "0 0 6 * * *"
+    # Day scheduled weekly snapshots land on, and day-of-month for monthly ones.
+    weekly-day: MONDAY
+    monthly-day: 1
   fire:
     monte-carlo-trials: ${FIRE_MONTE_CARLO_TRIALS:10000}
   telegram:
     base-url: ${TELEGRAM_API_BASE_URL:https://api.telegram.org}
     timeout-ms: ${TELEGRAM_TIMEOUT_MS:5000}
     token-key: ${TELEGRAM_TOKEN_KEY:}
+  portfolio:
+    coingecko:
+      base-url: ${COINGECKO_API_BASE_URL:https://api.coingecko.com}
+      api-key: ${COINGECKO_API_KEY:}
+      min-request-interval-ms: 2500
+    # Keyless crypto-history fallback: fills ranges beyond CoinGecko's 365-day ceiling
+    # and covers CoinGecko outages. USDT closes treated as USD, converted via ECB rates.
+    binance:
+      base-url: ${BINANCE_API_BASE_URL:https://api.binance.com}
+      min-request-interval-ms: 300
+    # Yahoo Finance (unofficial, keyless, default): no hard quota, long history,
+    # native EUR for Xetra. ToS-gray and can break without notice — switch
+    # equity-provider to eodhd or twelve_data to restore an official source.
+    yahoo:
+      base-url: ${YAHOO_API_BASE_URL:https://query1.finance.yahoo.com}
+      min-request-interval-ms: 1500
+    yahoo-fallback-base-url: ${YAHOO_API_FALLBACK_BASE_URL:https://query2.finance.yahoo.com}
+    # Official alternative; free tier covers UCITS ETFs but only 20 calls/day and
+    # 1 year of history (set equity-history-ceiling-days: 365 when selected).
+    eodhd:
+      base-url: ${EODHD_API_BASE_URL:https://eodhd.com}
+      api-key: ${EODHD_API_KEY:}
+      min-request-interval-ms: 1000
+    # Official alternative; free plan does NOT cover European UCITS ETFs.
+    twelvedata:
+      base-url: ${TWELVEDATA_API_BASE_URL:https://api.twelvedata.com}
+      api-key: ${TWELVEDATA_API_KEY:}
+      min-request-interval-ms: 8000
+    # yahoo (default) | eodhd | twelve_data
+    equity-provider: ${EQUITY_PRICE_PROVIDER:yahoo}
+    frankfurter:
+      base-url: ${FRANKFURTER_API_BASE_URL:https://api.frankfurter.dev}
+      min-request-interval-ms: 500
+    # CoinGecko Demo allows 10k requests/month. Hourly refresh = 1 batched /simple/price
+    # call per run (~720/month) regardless of coin count; history is only fetched on
+    # link/backfill or after downtime. Slow to "0 5 */2 * * *" for extra headroom.
+    crypto-refresh-cron: "0 5 * * * *"
+    fx-refresh-cron: "0 30 0 * * *"
+    # After FX (00:30), before the recurring materializer (02:00).
+    equity-refresh-cron: "0 0 1 * * *"
+    crypto-history-ceiling-days: 365
+    # 0 = uncapped (Yahoo serves long history; backfill reaches the earliest lot).
+    # Set 365 when equity-provider is eodhd.
+    equity-history-ceiling-days: 0
+    backfill-on-link: true
+    vs-currency: eur
+    stale-price-threshold-days: 7

@@ -101,6 +101,7 @@ class TelegramMessageFormatter(
         NotifyEntity.SNAPSHOT -> "snapshot"
         NotifyEntity.MOVEMENT -> "movement"
         NotifyEntity.LOAN_PAYMENT -> "loan_payment"
+        NotifyEntity.HOLDING -> "holding"
         NotifyEntity.RECURRING_TXN -> "recurring_txn"
         NotifyEntity.RECURRING_LOAN -> "recurring_loan"
     }
@@ -114,6 +115,7 @@ class TelegramMessageFormatter(
             NotifyEntity.SNAPSHOT -> "📸"
             NotifyEntity.MOVEMENT -> "🔄"
             NotifyEntity.LOAN_PAYMENT -> "💸"
+            NotifyEntity.HOLDING -> "📈"
             NotifyEntity.RECURRING_LOAN -> "📅"
             else -> "🔔"
         }

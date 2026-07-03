@@ -10,7 +10,7 @@ const NAV = [
   { to: "/recurring", key: "nav.recurring" },
   { to: "/budgets", key: "nav.budgets" },
   { to: "/analytics", key: "nav.analytics" },
-  { to: "/networth", key: "nav.networth" },
+  { to: "/networth", key: "nav.wealth" },
   { to: "/fire", key: "nav.fire" },
   { to: "/settings", key: "nav.settings" },
 ];

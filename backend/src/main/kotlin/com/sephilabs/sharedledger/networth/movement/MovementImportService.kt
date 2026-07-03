@@ -1,5 +1,6 @@
 package com.sephilabs.sharedledger.networth.movement
 
+import com.sephilabs.sharedledger.catalog.AssetClassAliases
 import com.sephilabs.sharedledger.catalog.AssetClassRepository
 import com.sephilabs.sharedledger.common.Csv
 import com.sephilabs.sharedledger.common.CsvReader
@@ -161,7 +162,7 @@ class MovementImportService(
                 rowErrors += RowError(rowNo, "IMPORT_MOVEMENT_TYPE_INVALID", "type", raw["type"])
             }
 
-            val assetCode = raw["asset_class_code"]?.takeIf { it.isNotEmpty() }
+            val assetCode = raw["asset_class_code"]?.takeIf { it.isNotEmpty() }?.let(AssetClassAliases::canonical)
             val liabilityName = raw["liability_name"]?.takeIf { it.isNotEmpty() }
             var liabilityId: UUID? = null
 

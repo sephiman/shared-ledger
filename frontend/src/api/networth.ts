@@ -7,9 +7,20 @@ export interface Liability {
   active: boolean;
 }
 
+export type ValueSource = "computed" | "overridden" | "carried_over";
+
+export type SnapshotFrequency = "daily" | "weekly" | "monthly";
+
+export interface AutoSnapshotSettings {
+  enabled: boolean;
+  frequency: SnapshotFrequency;
+}
+
 export interface AssetValue {
   assetClassCode: string;
   value: string;
+  // Present on responses; optional on requests (null lets the server infer).
+  valueSource?: ValueSource | null;
 }
 
 export interface LiabilityBalance {
@@ -153,6 +164,23 @@ export function useDeleteSnapshot(householdId: string) {
       await apiClient.delete(`/households/${householdId}/snapshots/${id}`);
     },
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["snapshots", householdId] }),
+  });
+}
+
+export function useAutoSnapshotSettings(householdId: string) {
+  return useQuery({
+    queryKey: ["auto-snapshot-settings", householdId],
+    queryFn: async () =>
+      (await apiClient.get<AutoSnapshotSettings>(`/households/${householdId}/snapshots/auto-settings`)).data,
+  });
+}
+
+export function useUpdateAutoSnapshotSettings(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: AutoSnapshotSettings) =>
+      (await apiClient.put<AutoSnapshotSettings>(`/households/${householdId}/snapshots/auto-settings`, input)).data,
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["auto-snapshot-settings", householdId] }),
   });
 }
 

@@ -1,6 +1,6 @@
 # shared-ledger
 
-Self-hosted personal-finance application for a household of one or two. Replaces a spreadsheet workflow for monthly transaction tracking and periodic net-worth snapshots, with budgets, recurring templates, loan tracking, analytics, and a FIRE projection on top.
+Self-hosted personal-finance application for a household of one or two. Replaces a spreadsheet workflow for monthly transaction tracking and periodic net-worth snapshots, with budgets, recurring templates, an investment portfolio with automatic pricing, loan tracking, analytics, and a FIRE projection on top.
 
 Single repository, two services orchestrated with Docker Compose:
 
@@ -115,6 +115,7 @@ Periodic recordings of the value of each asset class and the outstanding balance
 - The snapshot creation form **prefills from the previous snapshot** and shows delta (absolute and percent) next to each input. If any delta exceeds 50% the form requires explicit confirmation before saving — a typo guard.
 - **Evolution view**: stacked area chart of assets by class over time, with a net worth line (assets minus liabilities) overlaid. When movements exist, a dashed cumulative-contributions line is overlaid as well; the gap between it and the net-worth line is the revaluation (gain or loss), surfaced in the tooltip in both absolute terms and as a percent of contributions.
 - **Allocation view**: pie chart by asset class at the latest snapshot.
+- **Portfolio prefill**: market asset classes (crypto, ETFs, stocks, funds) are prefilled from the [Portfolio](#portfolio-investments) at the snapshot date and marked *computed*; editing a value marks it *overridden*, and a class with no priced holdings is *carried over* from the previous snapshot. A per-holding valuation is frozen into each snapshot for audit. Snapshots remain the source of truth — the prefill only removes the manual tallying.
 - Queries support a date range or an "as of" date.
 
 ### Net worth movements
@@ -138,6 +139,19 @@ What movements unlock:
 - On the FIRE chart: an optional cumulative-contributions overlay, making clear how much of net-worth growth is savings vs. market.
 
 If the operator chooses not to record movements, the app remains correct (net worth via snapshots still works); they only lose the contribution-vs-return decomposition.
+
+### Portfolio (investments)
+
+Individual market holdings — crypto, ETFs, individual stocks, and funds — tracked at the lot level with automatic pricing. Portfolio sits alongside snapshots, movements, liabilities and loans as sibling tabs under the **Wealth** hub (*Patrimonio* in Spanish).
+
+- **Holdings** carry an asset class (`crypto`, `etf`, `stock`, `fund`), a symbol, an optional label/ISIN, a native currency, and an optional link to a price provider. Each holding owns a ledger of **lots**.
+- **Lots** are BUY/SELL entries (trade date, quantity, unit price, currency, optional fee and note). Net quantity, remaining cost basis and realized P&L are computed by **replaying the ledger FIFO**; the FX rate into the household base currency is frozen at trade time. Sells are validated so a position can never be oversold.
+- **Pricing is API-only and never guessed.** Crypto via **CoinGecko** (with **Binance** as a keyless fallback beyond CoinGecko's history ceiling); equities via **Yahoo Finance** by default (keyless, covers European UCITS ETFs in EUR), with **EODHD** or **Twelve Data** selectable as documented alternatives; FX via **Frankfurter (ECB)**. Funds have no automatic provider and stay unpriced until entered manually in a snapshot.
+- **Linking** a holding to a provider symbol happens by searching in the UI (recommended — it resolves the exact provider symbol for you), by ISIN auto-match on import for equities, or by filling the provider columns in the CSV. Unlinked or unpriced holdings show a badge and count as stale.
+- **Daily price refresh** background jobs keep a shared `price_history` current (crypto intraday, FX and equities daily). Failures are isolated per symbol and self-heal on the next run; a refresh outage never crashes the app.
+- **Views**: a **Portfolio** tab (totals for invested / current value / unrealized & realized P&L / total return, a per-holding table with its lots, and an asset-type filter that re-totals per class); an **Allocation** tab (pie charts by holding, by asset class, by crypto, by stock, and by latest snapshot); and an **Evolution** tab (daily market value with invested and realized/unrealized overlays plus asset-class / holding / time-range filters, shown above the snapshot-based net-worth evolution).
+- **Snapshot integration**: see [Portfolio prefill](#net-worth-snapshots) above — market classes are prefilled from live valuations, stay editable, and are frozen per snapshot for audit.
+- **Notifications**: buy/sell lot changes can push a Telegram message (see [Notifications](#notifications-telegram)); CSV imports stay silent.
 
 ### Loans (Préstamos)
 
@@ -220,7 +234,8 @@ data changes. Configured per household, owner-only, under **Settings → Notific
   section walks through obtaining the token and chat ID.
 - **Master toggle** pauses all notifications without losing the configuration, plus a **per-entity
   toggle** each (covering create/update/delete) for: transactions, snapshots, movements, loan
-  payments, recurring-transaction execution, and recurring-loan-schedule execution.
+  payments, portfolio trades (buy/sell lots), recurring-transaction execution, and
+  recurring-loan-schedule execution.
 - **What fires**: a member's create/update/delete on those entities, and the daily scheduler
   materializing recurring transactions / loan-schedule payments (sent as one aggregated summary
   per run). **CSV imports never notify**, regardless of toggles, to avoid floods on bulk loads.
@@ -261,6 +276,7 @@ data changes. Configured per household, owner-only, under **Settings → Notific
   - `sl_movements_created_total{movement_type, target_class, target_liability_id}`
   - `sl_snapshots_created_total`
   - `sl_recurring_materialized_total{template_id}` and `sl_recurring_materialization_failures_total{template_id}`
+  - `sl_portfolio_prices_refreshed_total{provider}` and `sl_portfolio_price_refresh_failures_total{provider}`
   - `sl_login_attempts_total{outcome=success|failure|rate_limited}`
   - `sl_active_sessions` (gauge)
   - `sl_registrations_total{mode, outcome}`
@@ -328,6 +344,7 @@ Edit `.env` and set at minimum:
 | `REGISTRATION_MODE` | `open`, `invite-only` (recommended), or `closed`. |
 | `APP_COOKIE_SECURE` | `true` in production. Set to `false` only when running on plain HTTP for local dev. |
 | `TELEGRAM_TOKEN_KEY` | Base64 AES key (16/24/32 bytes) used to encrypt stored Telegram bot tokens at rest. Generate with `openssl rand -base64 32`. Required only if a household saves a bot token; keep it stable (rotating it makes stored tokens undecryptable). Optional: `TELEGRAM_API_BASE_URL`, `TELEGRAM_TIMEOUT_MS`. |
+| Portfolio pricing | All optional — holdings work unpriced without them. `EQUITY_PRICE_PROVIDER` (`yahoo` default, or `eodhd` / `twelve_data`), `COINGECKO_API_KEY` (Demo key for crypto), `EODHD_API_KEY` / `TWELVEDATA_API_KEY` (only for those providers). FX (Frankfurter) and Yahoo need no key. Base-URL overrides exist for each provider; see `.env.example`. |
 
 The `.env` file is git-ignored. `docker compose` reads it implicitly and the backend reads variables from it (via `env_file`).
 
@@ -371,19 +388,21 @@ After step 6:
 4. **Set a budget**: `/budgets` → edit the "Groceries" row for the current month, save, then verify the *Month summary* table shows it.
 5. **Take a net-worth snapshot**: `/networth` → *Snapshots* → *New snapshot* → values for every asset class, save. View *Evolution* and *Allocation*.
 6. **Record a net-worth movement**: `/networth` → *Movements* → *Create* → contribution to ETFs.
-7. **Track a loan**: `/networth` → *Préstamos* → *Nuevo préstamo* → a borrower, a principal, simple interest. Open it, register a payment, and confirm the interest/principal split shows. The Dashboard should now display the outstanding-loans tile.
-8. **Configure FIRE**: `/fire` → set target, contribution, scenarios. View the projection chart.
-9. **Invite a partner** (owners only): `/settings` → *Members & invitations* → *Issue invitation*. Copy the link `…/register?invite=<token>` and open it in another browser session.
-10. **Check observability**:
+7. **Add a portfolio holding**: `/networth` → *Portfolio* → *New holding* → a crypto (e.g. BTC), link it via the search box, add a BUY lot. Prices backfill into `price_history`; confirm the holding shows a current value and P&L. Take a new snapshot and confirm the crypto class is prefilled as *computed*.
+8. **Track a loan**: `/networth` → *Préstamos* → *Nuevo préstamo* → a borrower, a principal, simple interest. Open it, register a payment, and confirm the interest/principal split shows. The Dashboard should now display the outstanding-loans tile.
+9. **Configure FIRE**: `/fire` → set target, contribution, scenarios. View the projection chart.
+10. **Invite a partner** (owners only): `/settings` → *Members & invitations* → *Issue invitation*. Copy the link `…/register?invite=<token>` and open it in another browser session.
+11. **Check observability**:
    - `docker compose logs -f backend` shows JSON logs with `requestId`, `userId`, `householdId` populated.
    - From a container on `${SHARED_NETWORK_NAME}`: `curl http://shared-ledger-backend:9090/actuator/prometheus` returns metrics, including `sl_transactions_created_total`, `sl_snapshots_created_total`, `sl_login_attempts_total`, `sl_active_sessions`, `sl_recurring_materialized_total`.
-11. **Switch language**: top-right language picker → ES. Server validation messages localize on subsequent requests via `Accept-Language`.
+12. **Switch language**: top-right language picker → ES. Server validation messages localize on subsequent requests via `Accept-Language`.
 
 ---
 
 ## 8. Operating notes
 
 - **Daily scheduler.** The recurring materializer runs daily at 02:00 UTC (configurable via `app.scheduler.recurring-cron`). The unique partial index on `transactions(recurring_template_id, occurrence_date)` enforces idempotency; reruns never duplicate. Failures don't crash the app — they're logged with `templateId` MDC and counted in `sl_recurring_materialization_failures_total`.
+- **Portfolio price refresh.** Three background jobs keep `price_history` current: crypto intraday, FX just after midnight, and equities early morning (all cron-configurable under `app.portfolio.*`). Each is gap-filling and idempotent, isolates failures per symbol, and self-heals on the next run. An optional per-household **auto-snapshot** job can also create scheduled net-worth snapshots (off by default; daily/weekly/monthly).
 - **Sessions.** 30-day sliding sessions stored in `SPRING_SESSION`. Cookie `SESSION`, `HttpOnly`, `SameSite=Lax`, `Secure` controlled by `APP_COOKIE_SECURE`. Active session count is exposed as `sl_active_sessions`.
 - **CSRF.** The frontend reads the `XSRF-TOKEN` cookie and sends `X-XSRF-TOKEN` on every state-changing request. The frontend hits `/api/auth/csrf` to seed the cookie on app load and on logout.
 - **Rate limiting.** Login attempts are limited per source IP via Bucket4j in-memory (5/min, 20/hour by default). State resets on restart — acceptable for a self-hosted single replica.
@@ -394,13 +413,14 @@ After step 6:
 
 ## 9. Preparing CSV files for bulk import
 
-The Transactions, Snapshots, Movements, Loans and Loan-payments importers each accept a UTF-8 CSV with a fixed header row, reachable from *Settings → Data import & export*. The importer parses the file, shows a preview (rows that would be inserted, skipped as duplicates, or rejected with row-level errors), and only writes after explicit confirmation. The same screen offers a single **Export all** ZIP that bundles one CSV per dataset (transactions, recurring templates, movements, snapshots, loans, loan payments); those files re-import cleanly.
+The Transactions, Snapshots, Movements, Portfolio, Loans and Loan-payments importers each accept a UTF-8 CSV with a fixed header row, reachable from *Settings → Data import & export*. The importer parses the file, shows a preview (rows that would be inserted, skipped as duplicates, or rejected with row-level errors), and only writes after explicit confirmation. The same screen offers a single **Export all** ZIP that bundles one CSV per dataset (transactions, recurring templates, movements, snapshots, portfolio, loans, loan payments); those files re-import cleanly.
 
 The feeds capture different things:
 
 - **Transactions** — day-to-day **income and expenses** (salary, rent, groceries, restaurants). This is the operational ledger used for budgets, savings rate, and the year-over-year analytics.
 - **Snapshots** — periodic **net-worth recordings**: how much you currently hold in each asset class and what each liability still owes. This tracks **savings/wealth state** at a point in time.
 - **Movements** — capital **moved into or out of** an asset class, or principal paid down on a liability. This tracks **what gets sent to (or taken from) savings**, separately from market gains.
+- **Portfolio** — individual **investment holdings** as BUY/SELL lots (crypto, ETFs, stocks, funds). This drives per-holding valuation, P&L, and the snapshot prefill for market asset classes.
 - **Loans** and **Loan payments** — money lent to other people and the repayments received against it. Tracking-only; never touches transactions or net worth.
 
 > **Tip — converting bank statements.** Banks rarely export in the shape these importers need. The fastest path is: download the statement (CSV, OFX, PDF), open ChatGPT, Claude, or any other LLM, paste the file, and ask it to rewrite it into one of the formats below — share the column list and an example row from this section.
@@ -457,7 +477,7 @@ A snapshot is a group of rows sharing the same `date` (and `note`, if set). Each
 | `date` | yes | ISO date. The grouping key. |
 | `note` | no | Optional note for the snapshot. Must be identical across every row sharing a `date`. |
 | `kind` | yes | `asset` or `liability`. |
-| `key` | yes | For `asset`: one of `cash`, `index_funds`, `etfs`, `stocks`, `crypto`, `pension`. For `liability`: the liability's name as configured in *Settings → Liabilities* (must currently be active). |
+| `key` | yes | For `asset`: one of `cash`, `fund`, `etfs`, `stocks`, `crypto`, `pension`. For `liability`: the liability's name as configured in *Settings → Liabilities* (must currently be active). |
 | `value` | yes | Non-negative decimal with up to two decimals; `0` is allowed for an empty class or paid-off liability. |
 
 When a snapshot already exists for one of the imported dates, you pick the policy on the Import dialog: `skip` (keep what's there), `replace` (delete and re-create), or `abort` (refuse the import).
@@ -467,14 +487,14 @@ Example (two snapshots, one liability called "Archena mortgage"):
 ```csv
 date,note,kind,key,value
 2026-01-31,,asset,cash,4200.00
-2026-01-31,,asset,index_funds,18000.00
+2026-01-31,,asset,fund,18000.00
 2026-01-31,,asset,etfs,9500.00
 2026-01-31,,asset,stocks,2100.00
 2026-01-31,,asset,crypto,300.00
 2026-01-31,,asset,pension,11000.00
 2026-01-31,,liability,Archena mortgage,142300.00
 2026-02-28,Bonus paid in,asset,cash,5100.00
-2026-02-28,Bonus paid in,asset,index_funds,18750.00
+2026-02-28,Bonus paid in,asset,fund,18750.00
 2026-02-28,Bonus paid in,asset,etfs,9600.00
 2026-02-28,Bonus paid in,asset,stocks,2050.00
 2026-02-28,Bonus paid in,asset,crypto,280.00
@@ -490,7 +510,7 @@ Header (exact column names, any order): `date,type,asset_class_code,liability_na
 | --- | --- | --- |
 | `date` | yes | ISO date. Must not be more than one year in the future. |
 | `type` | yes | `contribution`, `withdrawal`, or `debt_payment`. |
-| `asset_class_code` | conditional | Required when `type` is `contribution` or `withdrawal`; must be empty otherwise. One of `cash`, `index_funds`, `etfs`, `stocks`, `crypto`, `pension`. |
+| `asset_class_code` | conditional | Required when `type` is `contribution` or `withdrawal`; must be empty otherwise. One of `cash`, `fund`, `etfs`, `stocks`, `crypto`, `pension`. |
 | `liability_name` | conditional | Required when `type` is `debt_payment`; must be empty otherwise. Must match a liability configured for the household. |
 | `amount` | yes | Positive decimal with up to two decimals. |
 | `description` | no | Free text, up to 500 characters. |
@@ -505,9 +525,44 @@ Example:
 ```csv
 date,type,asset_class_code,liability_name,amount,description,created_at
 2026-01-05,contribution,etfs,,500.00,DCA — VWCE,
-2026-01-15,contribution,index_funds,,300.00,DCA — world index,
+2026-01-15,contribution,fund,,300.00,DCA — world index,
 2026-02-01,debt_payment,,Archena mortgage,650.00,February principal,
 2026-03-10,withdrawal,stocks,,1200.00,Sold AAPL,
+```
+
+### Portfolio CSV
+
+Uses the **European-CSV dialect**: UTF-8, **semicolon (`;`) column separator**, **comma (`,`) decimal**, ISO dates. One row per lot; rows sharing `(asset_class, symbol)` group into one holding, created on demand. This is exactly what *Portfolio → Export CSV* produces.
+
+Header: `type;asset_class;symbol;label;native_currency;isin;provider;provider_symbol;traded_on;quantity;unit_price;cost_currency;fee;note`.
+
+| Column | Required | Values |
+| --- | --- | --- |
+| `type` | no | `BUY` or `SELL`. Empty defaults to `BUY`. |
+| `asset_class` | yes | `crypto`, `etf`, `stock`, or `fund`. |
+| `symbol` | yes | Your identifier for the holding (e.g. `BTC`, `WEBN`, `AAPL`); uppercased. |
+| `label` | no | Display name; taken from the first row of the holding. |
+| `native_currency` | no | ISO 4217 currency the instrument trades in. Defaults to EUR. |
+| `isin` | no | 12-char ISIN; used to auto-link stocks/ETFs on import when no provider is given. |
+| `provider` | no | `coingecko`, `yahoo`, `eodhd`, or `twelvedata`. Optional way to link the price source directly. |
+| `provider_symbol` | conditional | The holding's exact identifier at that provider (e.g. `bitcoin`, `WEBN.DE`). Required whenever `provider` is set; both must be given together or both left empty. |
+| `traded_on` | yes | Trade date, `YYYY-MM-DD`. |
+| `quantity` | yes | Positive, comma decimal, up to 12 decimals. |
+| `unit_price` | yes | Price per unit in `cost_currency` (purchase price for BUY, sale price for SELL). |
+| `cost_currency` | no | Currency of `unit_price`/`fee`. Defaults to `native_currency`. |
+| `fee` | no | Optional trade fee in `cost_currency`. |
+| `note` | no | Free text (≤ 500 chars). Not part of the duplicate check. |
+
+Provider columns are the round-trip mechanism for keeping links across export/import. For everyday use it's easiest to leave them blank and link each holding from the app's search after importing — that resolves the exact provider symbol for you. Sells must be covered by earlier buys (an oversell is a row error at preview). Rows matching an existing lot on `(type, asset_class, symbol, traded_on, quantity, unit_price, currency)` are skipped, so re-importing an export is safe.
+
+Example:
+
+```csv
+type;asset_class;symbol;label;native_currency;isin;provider;provider_symbol;traded_on;quantity;unit_price;cost_currency;fee;note
+BUY;crypto;BTC;Bitcoin;EUR;;coingecko;bitcoin;2025-11-15;0,05;62000,00;EUR;5,00;DCA
+BUY;etf;WEBN;Amundi Prime All Country;EUR;IE0009OA6R05;yahoo;WEBN.DE;2026-01-10;120;9,87;EUR;1,50;
+SELL;etf;WEBN;Amundi Prime All Country;EUR;IE0009OA6R05;yahoo;WEBN.DE;2026-05-10;50;11,05;EUR;1,50;Rebalancing
+BUY;fund;MSCIW;World index fund;EUR;;;;2026-01-31;15,5;95,20;EUR;;
 ```
 
 ### Loans CSV

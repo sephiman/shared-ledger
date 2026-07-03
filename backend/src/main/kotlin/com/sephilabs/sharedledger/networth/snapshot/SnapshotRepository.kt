@@ -49,4 +49,6 @@ interface SnapshotRepository : JpaRepository<Snapshot, UUID> {
         ORDER BY s.snapshotDate ASC, s.createdAt ASC
     """)
     fun findAllOrdered(@Param("hid") householdId: UUID): List<Snapshot>
+
+    fun existsByHouseholdIdAndSnapshotDate(householdId: UUID, snapshotDate: LocalDate): Boolean
 }

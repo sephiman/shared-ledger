@@ -70,6 +70,20 @@ class AppMetrics(private val registry: MeterRegistry) {
             .increment()
     }
 
+    fun priceRefreshed(provider: String) {
+        Counter.builder("sl_portfolio_prices_refreshed_total")
+            .tag("provider", provider)
+            .register(registry)
+            .increment()
+    }
+
+    fun priceRefreshFailure(provider: String) {
+        Counter.builder("sl_portfolio_price_refresh_failures_total")
+            .tag("provider", provider)
+            .register(registry)
+            .increment()
+    }
+
     fun analyticsTimer(endpoint: String): Timer =
         Timer.builder("sl_analytics_request_seconds")
             .tag("endpoint", endpoint)

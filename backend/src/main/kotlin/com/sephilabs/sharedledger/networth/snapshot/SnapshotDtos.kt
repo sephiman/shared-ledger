@@ -11,6 +11,8 @@ data class AssetValueInput(
     val assetClassCode: String,
     @JsonFormat(shape = JsonFormat.Shape.STRING)
     val value: BigDecimal,
+    // 'computed' | 'overridden' | null = infer by comparing against the portfolio value.
+    val valueSource: String? = null,
 )
 
 data class LiabilityBalanceInput(
@@ -31,6 +33,7 @@ data class AssetValueDto(
     val assetClassCode: String,
     @JsonFormat(shape = JsonFormat.Shape.STRING)
     val value: BigDecimal,
+    val valueSource: String = VALUE_SOURCE_OVERRIDDEN,
 )
 
 data class LiabilityBalanceDto(
@@ -69,3 +72,15 @@ data class EvolutionPoint(
     @JsonFormat(shape = JsonFormat.Shape.STRING)
     val netWorth: BigDecimal,
 )
+
+data class AutoSnapshotSettingsRequest(
+    val enabled: Boolean,
+    @field:NotNull val frequency: SnapshotFrequency,
+)
+
+data class AutoSnapshotSettingsDto(
+    val enabled: Boolean,
+    val frequency: SnapshotFrequency,
+)
+
+fun AutoSnapshotSettings.toDto() = AutoSnapshotSettingsDto(enabled = enabled, frequency = frequency)
