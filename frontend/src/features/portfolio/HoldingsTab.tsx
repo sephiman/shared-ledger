@@ -124,6 +124,12 @@ export function HoldingsTab() {
   const locale = i18n.language;
   const money = (v: string | number | null | undefined, currency = household.currency) =>
     v == null ? "—" : formatMoney(v, currency, locale);
+  // Signed money plus its percent of the cost basis, e.g. "+€1,234 (11.1%)".
+  const pnlWithPct = (v: string | null | undefined, denom: string): string => {
+    if (v == null) return "—";
+    const pct = percentOf(v, denom);
+    return `${signedMoney(v, money(v))}${pct != null ? ` (${formatNumber(pct, locale, 1)}%)` : ""}`;
+  };
 
   return (
     <div className="space-y-4">
@@ -165,24 +171,17 @@ export function HoldingsTab() {
           <Stat label={t("portfolio.current_value")} value={money(totals.totalValue)} />
           <Stat
             label={t("portfolio.unrealized_pnl")}
-            value={
-              totals.totalUnrealizedPnl != null
-                ? `${signedMoney(totals.totalUnrealizedPnl, money(totals.totalUnrealizedPnl))}${(() => {
-                    const pct = percentOf(totals.totalUnrealizedPnl, totals.totalCostBasis);
-                    return pct != null ? ` (${formatNumber(pct, locale, 1)}%)` : "";
-                  })()}`
-                : "—"
-            }
+            value={pnlWithPct(totals.totalUnrealizedPnl, totals.totalCostBasis)}
             tone={toneClass(pnlTone(totals.totalUnrealizedPnl))}
           />
           <Stat
             label={t("portfolio.realized_pnl")}
-            value={signedMoney(totals.totalRealizedPnl, money(totals.totalRealizedPnl))}
+            value={pnlWithPct(totals.totalRealizedPnl, totals.totalCostBasis)}
             tone={toneClass(pnlTone(totals.totalRealizedPnl))}
           />
           <Stat
             label={t("portfolio.total_return")}
-            value={totals.totalReturn != null ? signedMoney(totals.totalReturn, money(totals.totalReturn)) : "—"}
+            value={pnlWithPct(totals.totalReturn, totals.totalCostBasis)}
             tone={toneClass(pnlTone(totals.totalReturn))}
           />
         </div>

@@ -191,6 +191,7 @@
     "allocation_by_crypto": "Por cripto",
     "allocation_by_equity": "Por acción (ETFs y acciones)",
     "allocation_by_snapshots": "Por instantáneas",
+    "home_view_all": "Ver todo",
     "evolution": "Evolución",
     "evolution_description": "Valor de mercado de la cartera a lo largo del tiempo, junto al importe invertido restante (baja al vender).",
     "new_holding": "Nuevo activo",

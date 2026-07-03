@@ -191,6 +191,7 @@
     "allocation_by_crypto": "By crypto",
     "allocation_by_equity": "By stock (ETFs & shares)",
     "allocation_by_snapshots": "By snapshots",
+    "home_view_all": "View all",
     "evolution": "Evolution",
     "evolution_description": "Market value of the portfolio over time, next to the remaining invested amount (drops when you sell).",
     "new_holding": "New holding",
