@@ -55,6 +55,29 @@ class HouseholdLifecycleTest @Autowired constructor(
     }
 
     @Test
+    fun `creating first household adopts its language as the user profile locale`() {
+        val user = newUser()
+        loginAs(user)
+
+        controller.create(HouseholdCreateRequest(name = "Alpha", currency = "eur", defaultLocale = "es"))
+
+        val reloaded = users.findById(user.id).orElseThrow()
+        assertThat(reloaded.locale).isEqualTo("es")
+    }
+
+    @Test
+    fun `creating a second household does not change the user profile locale`() {
+        val user = newUser()
+        loginAs(user)
+
+        controller.create(HouseholdCreateRequest(name = "First", currency = "eur", defaultLocale = "es"))
+        controller.create(HouseholdCreateRequest(name = "Second", currency = "eur", defaultLocale = "en"))
+
+        val reloaded = users.findById(user.id).orElseThrow()
+        assertThat(reloaded.locale).isEqualTo("es")
+    }
+
+    @Test
     fun `setDefaultHousehold rejects non-members and persists for members`() {
         val owner = newUser()
         val outsider = newUser()

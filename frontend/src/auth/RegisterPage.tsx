@@ -121,7 +121,14 @@ export function RegisterPage() {
             </div>
             <div>
               <Label>{t("auth.household_locale")}</Label>
-              <Select value={locale} onChange={(e) => setLocale(e.target.value as "en" | "es")}>
+              <Select
+                value={locale}
+                onChange={(e) => {
+                  const next = e.target.value as "en" | "es";
+                  setLocale(next);
+                  void i18n.changeLanguage(next);
+                }}
+              >
                 <option value="en">English</option>
                 <option value="es">Español</option>
               </Select>

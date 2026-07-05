@@ -72,6 +72,7 @@ class HouseholdController(
     @Transactional
     fun create(@Valid @RequestBody body: HouseholdCreateRequest): ResponseEntity<HouseholdDto> {
         val user = currentUser.requireUser()
+        val isFirstHousehold = members.findAllByIdUserId(user.id).isEmpty()
         val household = Household(
             name = body.name.trim(),
             currency = body.currency.uppercase(),
@@ -79,6 +80,12 @@ class HouseholdController(
         )
         households.save(household)
         members.save(HouseholdMember(HouseholdMemberId(household.id, user.id), HouseholdRole.owner))
+        // On the user's first household, adopt its language as the profile locale so the UI
+        // matches the language they just chose. `user` is managed within this transaction,
+        // so the change persists via dirty checking (see AuthService.updateLocale).
+        if (isFirstHousehold) {
+            user.locale = body.defaultLocale
+        }
         val dto = HouseholdDto(household.id, household.name, household.currency, household.defaultLocale, HouseholdRole.owner.name)
         return ResponseEntity.status(201).body(dto)
     }

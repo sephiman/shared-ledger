@@ -1,32 +1,30 @@
-import { useEffect, useMemo, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { useActiveHousehold } from "@/auth/AuthContext";
-import { useExplorer, useHeatmap, type ExplorerResponse, type HeatmapResponse } from "@/api/analytics";
-import { useCategories, type Category } from "@/api/catalog";
-import { Card, CardBody, CardHeader, CheckboxTree, Label, Select, type CheckboxTreeGroup } from "@/components/ui/primitives";
+import {useEffect, useMemo, useState} from "react";
+import {useTranslation} from "react-i18next";
+import {useActiveHousehold} from "@/auth/AuthContext";
+import {type ExplorerResponse, useExplorer, useHeatmap} from "@/api/analytics";
+import {type Category, useCategories} from "@/api/catalog";
 import {
-  RangeSelector,
-  defaultRange,
-  rangeToMonths,
-  resolveRange,
-  type RangeValue,
+    Card,
+    CardBody,
+    CardHeader,
+    CheckboxTree,
+    type CheckboxTreeGroup,
+    Label,
+    Select
+} from "@/components/ui/primitives";
+import {
+    defaultRange,
+    RangeSelector,
+    rangeToMonths,
+    type RangeValue,
+    resolveRange,
 } from "@/components/ui/RangeSelector";
-import {
-  Bar,
-  CartesianGrid,
-  ComposedChart,
-  Legend,
-  Line,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import { formatCompactMoney, formatMoney, formatNumber } from "@/lib/money";
-import { monthName } from "@/lib/dates";
-import { categoryIcon, groupIcon } from "@/lib/categoryGroup";
-import { categoryLabel } from "@/lib/categoryLabel";
-import { ChartTooltip } from "@/components/charts/ChartTooltip";
+import {Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis,} from "recharts";
+import {formatCompactMoney, formatMoney, formatNumber} from "@/lib/money";
+import {monthName} from "@/lib/dates";
+import {categoryIcon, groupIcon} from "@/lib/categoryGroup";
+import {categoryLabel} from "@/lib/categoryLabel";
+import {ChartTooltip} from "@/components/charts/ChartTooltip";
 
 type Range = "12" | "24" | "all";
 

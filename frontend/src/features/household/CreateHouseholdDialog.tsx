@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useCreateHousehold } from "@/api/settings";
+import { useAuth } from "@/auth/AuthContext";
 import { asApiError } from "@/api/client";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select } from "@/components/ui/primitives";
 import { getCurrencyOptions } from "@/lib/currency";
@@ -13,6 +14,7 @@ interface Props {
 
 export function CreateHouseholdDialog({ open, onClose, onCreated }: Props) {
   const { t, i18n } = useTranslation();
+  const { user, refresh } = useAuth();
   const create = useCreateHousehold();
   const [name, setName] = useState("");
   const [currency, setCurrency] = useState("EUR");
@@ -64,11 +66,18 @@ export function CreateHouseholdDialog({ open, onClose, onCreated }: Props) {
               setErrors({});
               setSubmitError(null);
               try {
+                const wasFirstHousehold = (user?.households?.length ?? 0) === 0;
                 const created = await create.mutateAsync({
                   name: trimmedName,
                   currency: trimmedCurrency,
                   defaultLocale,
                 });
+                // The backend adopts the chosen language as the profile locale for the
+                // user's first household; mirror that in the live UI so it switches now.
+                if (wasFirstHousehold) {
+                  await i18n.changeLanguage(defaultLocale);
+                  await refresh();
+                }
                 onCreated(created.id);
                 reset();
               } catch (err) {
