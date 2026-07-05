@@ -1,23 +1,32 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
-import { useExplorer, type ExplorerResponse } from "@/api/analytics";
+import { useExplorer, useHeatmap, type ExplorerResponse, type HeatmapResponse } from "@/api/analytics";
 import { useCategories, type Category } from "@/api/catalog";
-import { Card, CardBody, CardHeader, Label, Select } from "@/components/ui/primitives";
+import { Card, CardBody, CardHeader, CheckboxTree, Label, Select, type CheckboxTreeGroup } from "@/components/ui/primitives";
+import {
+  RangeSelector,
+  defaultRange,
+  rangeToMonths,
+  resolveRange,
+  type RangeValue,
+} from "@/components/ui/RangeSelector";
 import {
   Bar,
   CartesianGrid,
   ComposedChart,
+  Legend,
   Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-import { formatMoney, formatNumber } from "@/lib/money";
+import { formatCompactMoney, formatMoney, formatNumber } from "@/lib/money";
 import { monthName } from "@/lib/dates";
 import { categoryIcon, groupIcon } from "@/lib/categoryGroup";
 import { categoryLabel } from "@/lib/categoryLabel";
+import { ChartTooltip } from "@/components/charts/ChartTooltip";
 
 type Range = "12" | "24" | "all";
 
@@ -148,6 +157,13 @@ export function ExplorerTab() {
           )}
         </CardBody>
       </Card>
+
+      <StackedExplorerPanel
+        householdId={household.householdId}
+        categories={categories}
+        currency={household.currency}
+        locale={i18n.language}
+      />
     </div>
   );
 }
@@ -315,6 +331,300 @@ function ExplorerBody({
         </p>
       )}
     </div>
+  );
+}
+
+// Distinct, reused-in-order palette for stacked bands. First entry matches the
+// single-category panel's accent so the two panels feel like one family.
+const STACK_COLORS = [
+  "#0ea5e9", // sky
+  "#f59e0b", // amber
+  "#22c55e", // green
+  "#a855f7", // purple
+  "#ef4444", // red
+  "#14b8a6", // teal
+  "#eab308", // yellow
+  "#ec4899", // pink
+  "#6366f1", // indigo
+  "#84cc16", // lime
+  "#f97316", // orange
+  "#06b6d4", // cyan
+];
+const STACK_TOTAL_COLOR = "#64748b"; // slate
+
+const TOTAL_DATA_KEY = "__total";
+
+function ymKey(year: number, month: number): number {
+  return year * 12 + (month - 1);
+}
+
+function isoMonthKey(iso: string): number {
+  return Number(iso.slice(0, 4)) * 12 + (Number(iso.slice(5, 7)) - 1);
+}
+
+interface StackBand {
+  key: string;
+  scope: ScopeValue;
+  label: string;
+  color: string;
+}
+
+/** Expense catalog as a group → categories tree, ordered like the single-category scope picker. */
+function buildScopeTree(
+  categories: Category[],
+  t: ReturnType<typeof useTranslation>["t"],
+): { code: string; label: string; categories: { code: string; label: string }[] }[] {
+  const byGroup = new Map<string, { code: string; label: string }[]>();
+  const sorted = [...categories.filter((c) => c.kind === "expense")].sort((a, b) => {
+    const ga = a.group ?? "ungrouped";
+    const gb = b.group ?? "ungrouped";
+    if (ga !== gb) return ga.localeCompare(gb);
+    return a.sortOrder - b.sortOrder;
+  });
+  for (const c of sorted) {
+    const g = c.group ?? "ungrouped";
+    const list = byGroup.get(g) ?? [];
+    list.push({ code: c.code, label: categoryLabel(c, t) });
+    byGroup.set(g, list);
+  }
+  return [...byGroup.entries()]
+    .map(([code, cats]) => ({ code, label: t(`category_group.${code}`), categories: cats }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+function StackedExplorerPanel({
+  householdId,
+  categories,
+  currency,
+  locale,
+}: {
+  householdId: string;
+  categories: Category[];
+  currency: string;
+  locale: string;
+}) {
+  const { t } = useTranslation();
+  const [selection, setSelection] = useState<string[]>([]);
+  const [range, setRange] = useState<RangeValue>(defaultRange("1y"));
+  const [showTotal, setShowTotal] = useState(true);
+
+  const months = rangeToMonths(range);
+  const { data: heatmap, isLoading } = useHeatmap(householdId, months, "expense");
+
+  const tree = useMemo(() => buildScopeTree(categories, t), [categories, t]);
+
+  // Tree checkbox states. Per group the selection holds EITHER the group band
+  // (`group:code`) OR some of its `category:code`s — never both — so a group reads
+  // as checked (band), indeterminate (some categories), or unchecked.
+  const treeGroups: CheckboxTreeGroup[] = useMemo(() => {
+    const selectedSet = new Set(selection);
+    return tree.map((g) => {
+      const groupChecked = selectedSet.has(encodeScope({ type: "group", code: g.code }));
+      const someChild = g.categories.some((c) => selectedSet.has(encodeScope({ type: "category", code: c.code })));
+      return {
+        value: g.code,
+        label: `${groupIcon(g.code)} ${g.label}`,
+        checked: groupChecked,
+        indeterminate: !groupChecked && someChild,
+        children: g.categories.map((c) => ({
+          value: c.code,
+          label: `${categoryIcon(c.code)} ${c.label}`,
+          checked: selectedSet.has(encodeScope({ type: "category", code: c.code })),
+        })),
+      };
+    });
+  }, [tree, selection]);
+
+  const toggleGroup = (groupCode: string) => {
+    const groupEnc = encodeScope({ type: "group", code: groupCode });
+    setSelection((prev) => {
+      if (prev.includes(groupEnc)) return prev.filter((v) => v !== groupEnc);
+      // Selecting the group as one band clears any of its individual category bands.
+      const childEncs = new Set(
+        (tree.find((g) => g.code === groupCode)?.categories ?? []).map((c) =>
+          encodeScope({ type: "category", code: c.code }),
+        ),
+      );
+      return [...prev.filter((v) => !childEncs.has(v)), groupEnc];
+    });
+  };
+
+  const toggleCategory = (groupCode: string, catCode: string) => {
+    const catEnc = encodeScope({ type: "category", code: catCode });
+    const groupEnc = encodeScope({ type: "group", code: groupCode });
+    setSelection((prev) => {
+      if (prev.includes(catEnc)) return prev.filter((v) => v !== catEnc);
+      // Picking a category breaks the group band down into individual bands.
+      return [...prev.filter((v) => v !== groupEnc), catEnc];
+    });
+  };
+
+  const { chartData, bands, total, monthsCount } = useMemo(() => {
+    const empty = { chartData: [] as Record<string, number | string>[], bands: [] as StackBand[], total: 0, monthsCount: 0 };
+    if (!heatmap) return empty;
+
+    const bounds = resolveRange(range);
+    const fromKey = bounds.from ? isoMonthKey(bounds.from) : -Infinity;
+    const toKey = bounds.to ? isoMonthKey(bounds.to) : Infinity;
+    const keptIdx = heatmap.months
+      .map((m, i) => ({ i, k: ymKey(m.year, m.month) }))
+      .filter(({ k }) => k >= fromKey && k <= toKey)
+      .map(({ i }) => i);
+
+    const catValues = new Map<string, (string | null)[]>();
+    const catsByGroup = new Map<string, string[]>();
+    for (const row of heatmap.categories) {
+      catValues.set(row.categoryCode, row.values);
+      const g = row.groupCode ?? "ungrouped";
+      const list = catsByGroup.get(g);
+      if (list) list.push(row.categoryCode);
+      else catsByGroup.set(g, [row.categoryCode]);
+    }
+
+    const bands: StackBand[] = selection
+      .map((enc, idx): StackBand | null => {
+        const scope = decodeScope(enc);
+        if (!scope) return null;
+        const color = STACK_COLORS[idx % STACK_COLORS.length];
+        let label: string;
+        if (scope.type === "group") {
+          label = `${groupIcon(scope.code)} ${t(`category_group.${scope.code}`)}`;
+        } else {
+          const found = categories.find((c) => c.code === scope.code);
+          label = `${categoryIcon(scope.code)} ${found ? categoryLabel(found, t) : t(`category.${scope.code}`)}`;
+        }
+        return { key: enc, scope, label, color };
+      })
+      .filter((b): b is StackBand => b !== null);
+
+    const bandAmount = (scope: ScopeValue, i: number): number => {
+      if (scope.type === "category") return Number(catValues.get(scope.code)?.[i] ?? 0);
+      let sum = 0;
+      for (const code of catsByGroup.get(scope.code) ?? []) sum += Number(catValues.get(code)?.[i] ?? 0);
+      return sum;
+    };
+
+    let total = 0;
+    const chartData = keptIdx.map((i) => {
+      const m = heatmap.months[i];
+      const row: Record<string, number | string> = {
+        period: `${monthName(m.month, locale, "short")} ${String(m.year).slice(2)}`,
+      };
+      let rowTotal = 0;
+      for (const b of bands) {
+        const amt = bandAmount(b.scope, i);
+        row[b.key] = amt;
+        rowTotal += amt;
+      }
+      row[TOTAL_DATA_KEY] = rowTotal;
+      total += rowTotal;
+      return row;
+    });
+
+    return { chartData, bands, total, monthsCount: keptIdx.length };
+  }, [heatmap, range, selection, categories, locale, t]);
+
+  const avgPerMonth = monthsCount > 0 ? total / monthsCount : 0;
+  const hasSelection = bands.length > 0;
+
+  return (
+    <Card>
+      <CardHeader>
+        <p className="font-medium">{t("analytics.stacked_title")}</p>
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("analytics.stacked_description")}</p>
+      </CardHeader>
+      <CardBody>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,18rem)_1fr]">
+          {/* Selector: always-visible checkbox tree */}
+          <div className="space-y-2">
+            <Label className="mb-0">{t("analytics.stacked_selection")}</Label>
+            <CheckboxTree groups={treeGroups} onToggleGroup={toggleGroup} onToggleLeaf={toggleCategory} />
+            <div className="flex items-center justify-between px-0.5 text-xs text-gray-500 dark:text-gray-400">
+              <span>{t("analytics.stacked_selected_count", { count: selection.length })}</span>
+              <button
+                type="button"
+                onClick={() => setSelection([])}
+                disabled={selection.length === 0}
+                className="font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40 disabled:no-underline"
+              >
+                {t("analytics.stacked_clear")}
+              </button>
+            </div>
+          </div>
+
+          {/* Chart, range and summary */}
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-end gap-3">
+              <RangeSelector value={range} onChange={setRange} />
+              <div>
+                <Label>{t("analytics.stacked_total_line")}</Label>
+                <label className="mt-2 inline-flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={showTotal}
+                    onChange={(e) => setShowTotal(e.target.checked)}
+                    className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                  />
+                  <span>{t("analytics.stacked_total_line_help")}</span>
+                </label>
+              </div>
+            </div>
+
+            {!hasSelection && (
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t("analytics.stacked_empty_selection")}</p>
+            )}
+
+            {hasSelection && (
+              <>
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  <Stat label={t("analytics.stacked_total_spent")} value={formatMoney(total, currency, locale)} />
+                  <Stat label={t("analytics.stacked_avg_per_month")} value={formatMoney(avgPerMonth, currency, locale)} />
+                </div>
+
+                {isLoading && !heatmap ? (
+                  <p className="text-gray-500 dark:text-gray-400">{t("common.loading")}</p>
+                ) : chartData.length === 0 ? (
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
+                ) : (
+                  <div className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ComposedChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="period" interval="preserveStartEnd" minTickGap={24} tick={{ fontSize: 12 }} />
+                        <YAxis
+                          width={56}
+                          tick={{ fontSize: 12 }}
+                          tickFormatter={(v) => formatCompactMoney(Number(v), currency, locale)}
+                        />
+                        <Tooltip
+                          content={(props) => (
+                            <ChartTooltip {...props} formatValue={(v) => formatMoney(Number(v), currency, locale)} />
+                          )}
+                        />
+                        <Legend />
+                        {bands.map((b) => (
+                          <Bar key={b.key} dataKey={b.key} stackId="stack" name={b.label} fill={b.color} maxBarSize={48} />
+                        ))}
+                        {showTotal && (
+                          <Line
+                            type="monotone"
+                            dataKey={TOTAL_DATA_KEY}
+                            name={t("analytics.stacked_total")}
+                            stroke={STACK_TOTAL_COLOR}
+                            strokeWidth={2}
+                            dot={false}
+                          />
+                        )}
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </CardBody>
+    </Card>
   );
 }
 

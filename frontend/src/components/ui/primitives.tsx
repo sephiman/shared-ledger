@@ -1,4 +1,4 @@
-import { forwardRef, type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type LabelHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
+import { forwardRef, useEffect, useRef, useState, type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type LabelHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 import { cn } from "@/lib/cn";
 
 /** Small non-interactive status/label pill. */
@@ -105,6 +105,135 @@ export function Label({ className, ...props }: LabelHTMLAttributes<HTMLLabelElem
 export function FieldError({ message }: { message?: string | null }) {
   if (!message) return null;
   return <p className="mt-1 text-sm text-red-600">{message}</p>;
+}
+
+/** Native checkbox with optional tri-state `indeterminate` support and consistent styling. */
+export function Checkbox({ indeterminate, className, ...props }: InputHTMLAttributes<HTMLInputElement> & { indeterminate?: boolean }) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = Boolean(indeterminate);
+  }, [indeterminate]);
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      className={cn(
+        "h-4 w-4 shrink-0 rounded border-border text-primary focus:ring-2 focus:ring-primary focus:ring-offset-0 dark:border-gray-600 dark:bg-gray-700",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+export interface CheckboxTreeLeaf {
+  value: string;
+  label: ReactNode;
+  checked: boolean;
+}
+
+export interface CheckboxTreeGroup {
+  value: string;
+  label: ReactNode;
+  checked: boolean;
+  /** Renders the group checkbox as partially selected (some, but not all, children picked). */
+  indeterminate?: boolean;
+  children: CheckboxTreeLeaf[];
+}
+
+/**
+ * Always-visible, scrollable checkbox tree: each group is a header row with a
+ * collapse/expand caret and a (possibly tri-state) checkbox; its children are
+ * nested beneath with their own checkboxes. Collapse state is managed internally;
+ * checked/indeterminate state and toggles are controlled by the caller so the
+ * selection semantics stay with the consumer.
+ */
+export function CheckboxTree({
+  groups,
+  onToggleGroup,
+  onToggleLeaf,
+  className,
+}: {
+  groups: CheckboxTreeGroup[];
+  onToggleGroup: (groupValue: string) => void;
+  onToggleLeaf: (groupValue: string, leafValue: string) => void;
+  className?: string;
+}) {
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  const toggleCollapse = (value: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return next;
+    });
+
+  return (
+    <div
+      className={cn(
+        "max-h-[28rem] divide-y divide-border overflow-auto rounded-md border border-border bg-white dark:divide-gray-700 dark:bg-gray-800 dark:border-gray-600",
+        className,
+      )}
+    >
+      {groups.map((g) => {
+        const isCollapsed = collapsed.has(g.value);
+        const hasChildren = g.children.length > 0;
+        return (
+          <div key={g.value}>
+            {/* Group header */}
+            <div className="flex items-center gap-1 bg-gray-50 px-1.5 py-1.5 dark:bg-gray-800/60">
+              {hasChildren ? (
+                <button
+                  type="button"
+                  onClick={() => toggleCollapse(g.value)}
+                  aria-expanded={!isCollapsed}
+                  aria-label={isCollapsed ? "expand" : "collapse"}
+                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-xs text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-primary dark:hover:text-gray-200"
+                >
+                  <span className={cn("inline-block transition-transform", isCollapsed ? "" : "rotate-90")}>▸</span>
+                </button>
+              ) : (
+                <span className="h-5 w-5 shrink-0" aria-hidden />
+              )}
+              <label className="flex flex-1 cursor-pointer items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                <Checkbox checked={g.checked} indeterminate={g.indeterminate} onChange={() => onToggleGroup(g.value)} />
+                <span className="truncate">{g.label}</span>
+              </label>
+            </div>
+
+            {/* Categories nested beneath, with branch connectors */}
+            {!isCollapsed && hasChildren && (
+              <div className="ml-[1.05rem] py-0.5">
+                {g.children.map((c, i) => {
+                  const isLast = i === g.children.length - 1;
+                  return (
+                    <label
+                      key={c.value}
+                      className="flex cursor-pointer items-stretch rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
+                    >
+                      <span className="relative w-4 shrink-0" aria-hidden>
+                        <span
+                          className={cn(
+                            "absolute left-1/2 top-0 border-l border-border dark:border-gray-600",
+                            isLast ? "h-1/2" : "h-full",
+                          )}
+                        />
+                        <span className="absolute left-1/2 right-0 top-1/2 border-t border-border dark:border-gray-600" />
+                      </span>
+                      <span className="flex flex-1 items-center gap-2 py-1 pr-1.5">
+                        <Checkbox checked={c.checked} onChange={() => onToggleLeaf(g.value, c.value)} />
+                        <span className="truncate">{c.label}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export function Chip({ children, onClick, active }: { children: React.ReactNode; onClick?: () => void; active?: boolean }) {
