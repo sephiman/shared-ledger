@@ -6,11 +6,13 @@ import { AuthProvider } from "@/auth/AuthContext";
 import { ThemeProvider } from "@/lib/theme";
 import App from "./App";
 import i18n from "@/i18n";
+import { asApiError } from "@/api/client";
 import { showToast } from "@/lib/toastBus";
 import "./index.css";
 
 interface MutationMeta {
   silentSuccess?: boolean;
+  silentError?: boolean;
   successMessage?: string;
 }
 
@@ -28,6 +30,13 @@ const queryClient = new QueryClient({
       if (meta?.silentSuccess) return;
       const key = meta?.successMessage ?? "common.saved";
       showToast(i18n.t(key), "success");
+    },
+    onError: (error, _vars, _ctx, mutation) => {
+      const meta = mutation.options.meta as MutationMeta | undefined;
+      if (meta?.silentError) return;
+      // Never let a mutation fail silently — surface the server's error code/message.
+      const api = asApiError(error);
+      showToast(i18n.t(`errors.${api.code}`, api.message), "error");
     },
   }),
 });

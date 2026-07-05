@@ -1,5 +1,17 @@
-import { forwardRef, type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type LabelHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
+import { forwardRef, type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type LabelHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 import { cn } from "@/lib/cn";
+
+/** Small non-interactive status/label pill. */
+export function Badge({ children, tone = "neutral", className }: { children: ReactNode; tone?: "neutral" | "amber" | "sky" | "green" | "red"; className?: string }) {
+  const tones = {
+    neutral: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300",
+    amber: "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200",
+    sky: "bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-200",
+    green: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200",
+    red: "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200",
+  };
+  return <span className={cn("inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium", tones[tone], className)}>{children}</span>;
+}
 
 export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" | "danger" | "ghost" }>(
   ({ className, variant = "primary", ...props }, ref) => {
