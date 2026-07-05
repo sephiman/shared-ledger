@@ -152,3 +152,21 @@ app:
     backfill-on-link: true
     vs-currency: eur
     stale-price-threshold-days: 7
+  enable-banking:
+    # PSD2 open-banking ingestion (Enable Banking). The whole feature stays hidden until
+    # both app-id and private-key are set (created once in the Enable Banking Control Panel).
+    base-url: ${ENABLE_BANKING_BASE_URL:https://api.enablebanking.com}
+    app-id: ${ENABLE_BANKING_APP_ID:}
+    private-key: ${ENABLE_BANKING_PRIVATE_KEY:}
+    redirect-url: ${ENABLE_BANKING_REDIRECT_URL:}
+    secret-key: ${ENABLE_BANKING_SECRET_KEY:}
+    timeout-ms: ${ENABLE_BANKING_TIMEOUT_MS:15000}
+    min-request-interval-ms: 300
+    consent-valid-days: ${ENABLE_BANKING_CONSENT_VALID_DAYS:90}
+    backfill-days: ${ENABLE_BANKING_BACKFILL_DAYS:90}
+    # Keep at 4 in production (PSD2 unattended-access cap); raise only for local testing.
+    max-calls-per-day: ${ENABLE_BANKING_MAX_CALLS_PER_DAY:4}
+    # Twice daily (07:00, 19:00), within the ≤4 calls/consent/day budget.
+    sync-cron: "0 0 7,19 * * *"
+    reminder-cron: "0 0 8 * * *"
+    reminder-days-before: 7

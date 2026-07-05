@@ -246,6 +246,55 @@ data changes. Configured per household, owner-only, under **Settings → Notific
   response) is written to the structured log pipeline; the app does not retry or surface failures
   in the UI. If a household sees nothing, the owner uses the Test button to verify configuration.
 
+Re-link reminders and batch-confirm summaries for bank ingestion (below) flow through this same
+system, gated by two extra per-household toggles (bank movements, bank connections).
+
+### Bank ingestion (open banking / PSD2)
+
+Connect real bank accounts through **Enable Banking** (a licensed PSD2 aggregator, read-only
+account information — AIS) and sync movements into a **review inbox**. Nothing enters the ledger
+automatically: confirming a pending movement is what generates a normal transaction. This is a
+connector abstraction (Enable Banking is the primary provider; Yapily is a documented alternative;
+Wise could be added via its own API) with the always-available CSV import as the fallback.
+
+- **One-time operator prerequisite** (outside the app): create an API application in the
+  [Enable Banking Control Panel](https://enablebanking.com), activate **Restricted Production**
+  (real data, free, only for linked accounts — no eIDAS/TPP licence needed), and put its
+  application id + RSA private key in the backend env (see §5). The whole feature stays hidden until
+  those are set.
+- **Linking (from Settings → Banks)**: the app first explains what will happen (redirect to the
+  bank for SCA, only movements are read, the permission expires in 90–180 days and needs
+  re-linking, only linked accounts are accessible, data stays self-hosted). The bank picker is the
+  provider's ASPSP catalogue filtered by country (not a fixed list). Choosing a bank redirects the
+  account holder to authenticate; on return the account is associated with the household.
+- **Two moments**: the account holder passes SCA at their own bank (a person, never the server);
+  the app then manages the ongoing consent session and prompts for re-link before it expires.
+  Relatives each link their own account with their own SCA — credentials are never shared.
+- **Multiple connections** per household, including several to the same bank (e.g. two Wise
+  accounts), each with its own label, holder, consent, sync cursor, status, and call budget.
+- **Sync**: scheduled 1–2×/day (never live), within the PSD2 ≤4-calls-per-consent-per-day limit,
+  idempotent by the bank's movement id. The **initial ~90-day backfill runs asynchronously** right
+  after linking. Each connection syncs independently — one expired or failing connection never
+  blocks the others — and every run is audited (success/error + new-movement count).
+- **Review inbox** (a **Pending (N)** sub-view inside Transactions, plus a nav badge and a Home
+  card, all at household level): per-movement **confirm / edit / reject** and **batch** actions.
+  Confirming reuses the normal transaction-creation logic; single confirms notify normally, batch
+  confirms send one aggregated notification. A **possible-duplicate warning** flags manual
+  transactions that look like an incoming movement (warns only, never auto-discards). Rejected
+  items don't reappear and are visible under a "rejected" filter.
+- **Categorisation**: configurable rules (counterparty / description / amount → category +
+  direction) applied during sync, and learning from corrections — confirming with a category
+  remembers "this counterparty → this category" for next time. No ML.
+- **Multi-currency** (e.g. Wise): non-EUR movements are converted to EUR at the ECB rate of the
+  booking date, keeping the original amount/currency on the pending item.
+- **Read-only**: only account/movement information is ever requested; there is no payment
+  initiation and no way to move money.
+
+The bank-ingestion Settings section, the Pending sub-view, the badge, and the Home card follow a
+three-level visibility rule: no credentials configured → nothing appears; credentials but no bank
+linked → Settings appears (to link) but the inbox/badge/card do not; at least one bank linked →
+everything appears.
+
 ---
 
 ## 2. Non-functional behavior
@@ -345,6 +394,7 @@ Edit `.env` and set at minimum:
 | `APP_COOKIE_SECURE` | `true` in production. Set to `false` only when running on plain HTTP for local dev. |
 | `TELEGRAM_TOKEN_KEY` | Base64 AES key (16/24/32 bytes) used to encrypt stored Telegram bot tokens at rest. Generate with `openssl rand -base64 32`. Required only if a household saves a bot token; keep it stable (rotating it makes stored tokens undecryptable). Optional: `TELEGRAM_API_BASE_URL`, `TELEGRAM_TIMEOUT_MS`. |
 | Portfolio pricing | All optional — holdings work unpriced without them. `EQUITY_PRICE_PROVIDER` (`yahoo` default, or `eodhd` / `twelve_data`), `COINGECKO_API_KEY` (Demo key for crypto), `EODHD_API_KEY` / `TWELVEDATA_API_KEY` (only for those providers). FX (Frankfurter) and Yahoo need no key. Base-URL overrides exist for each provider; see `.env.example`. |
+| Bank ingestion | All optional — the feature stays hidden unless configured. `ENABLE_BANKING_APP_ID` + `ENABLE_BANKING_PRIVATE_KEY` (the API application id and its PKCS#8 PEM RSA private key from the Enable Banking Control Panel; for a single env line replace newlines with `\n`), `ENABLE_BANKING_REDIRECT_URL` (your public frontend URL + `/settings/banks/callback`), and `ENABLE_BANKING_SECRET_KEY` (base64 AES key, `openssl rand -base64 32`, encrypts the stored bank session at rest; keep it stable). Optional overrides: `ENABLE_BANKING_BASE_URL`, `ENABLE_BANKING_CONSENT_VALID_DAYS`, `ENABLE_BANKING_BACKFILL_DAYS`. |
 
 The `.env` file is git-ignored. `docker compose` reads it implicitly and the backend reads variables from it (via `env_file`).
 

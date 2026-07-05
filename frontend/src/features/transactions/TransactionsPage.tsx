@@ -9,12 +9,15 @@ import {
   type TransactionFilters,
 } from "@/api/transactions";
 import { useCategories } from "@/api/catalog";
+import { useBankConnections, usePendingCount } from "@/api/banks";
 import { Button, Card, CardBody, CardHeader, Input, Label, Select } from "@/components/ui/primitives";
+import { TabBar } from "@/components/ui/TabBar";
 import { formatMoney } from "@/lib/money";
 import { formatDate } from "@/lib/dates";
 import { categoryIcon } from "@/lib/categoryGroup";
 import { categoryLabel, categoryLabelByCode } from "@/lib/categoryLabel";
 import { QuickAddForm } from "./QuickAddForm";
+import { PendingInbox } from "@/features/banks/PendingInbox";
 
 type PanelMode = { kind: "closed" } | { kind: "create" } | { kind: "edit"; tx: Transaction };
 
@@ -45,13 +48,25 @@ function initialFiltersFromUrl(searchParams: URLSearchParams): TransactionFilter
 export function TransactionsPage() {
   const { t, i18n } = useTranslation();
   const household = useActiveHousehold();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [filters, setFilters] = useState<TransactionFilters>(() => initialFiltersFromUrl(searchParams));
   const [panel, setPanel] = useState<PanelMode>({ kind: "closed" });
   const panelRef = useRef<HTMLDivElement | null>(null);
   const { data: page, isLoading } = useTransactions(household.householdId, filters);
   const { data: categories = [] } = useCategories(household.householdId);
   const del = useDeleteTransaction(household.householdId);
+
+  // The "Pending" inbox sub-view only appears once at least one bank is linked.
+  const { data: connections = [] } = useBankConnections(household.householdId);
+  const showPending = connections.length > 0;
+  const { data: pendingCount = 0 } = usePendingCount(household.householdId, showPending);
+  const tab = showPending && searchParams.get("tab") === "pending" ? "pending" : "confirmed";
+  const selectTab = (value: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (value === "confirmed") next.delete("tab");
+    else next.set("tab", value);
+    setSearchParams(next, { replace: true });
+  };
 
   useEffect(() => {
     if (panel.kind === "edit") {
@@ -73,21 +88,39 @@ export function TransactionsPage() {
           <h1 className="text-xl font-semibold">{t("tx.title")}</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("tx.description")}</p>
         </div>
-        <div className="flex gap-2">
-          <a
-            href={`/api/households/${household.householdId}/transactions/export.csv${buildExportQuery(filters)}`}
-            download
-            className="inline-flex items-center justify-center rounded-md border border-border bg-white px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 dark:hover:bg-gray-600"
-          >
-            {t("common.export_csv")}
-          </a>
-          <Button onClick={toggleCreate}>
-            {panel.kind === "create" ? t("common.cancel") : t("tx.quick_add")}
-          </Button>
-        </div>
+        {tab === "confirmed" && (
+          <div className="flex gap-2">
+            <a
+              href={`/api/households/${household.householdId}/transactions/export.csv${buildExportQuery(filters)}`}
+              download
+              className="inline-flex items-center justify-center rounded-md border border-border bg-white px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 dark:hover:bg-gray-600"
+            >
+              {t("common.export_csv")}
+            </a>
+            <Button onClick={toggleCreate}>
+              {panel.kind === "create" ? t("common.cancel") : t("tx.quick_add")}
+            </Button>
+          </div>
+        )}
       </div>
 
-      {panel.kind !== "closed" && (
+      {showPending && (
+        <TabBar
+          items={[
+            { value: "confirmed", label: t("tx.tab_confirmed") },
+            { value: "pending", label: `${t("banks.pending_tab")} (${pendingCount})` },
+          ]}
+          value={tab}
+          onChange={selectTab}
+          ariaLabel={t("tx.tabs_aria")}
+        />
+      )}
+
+      {tab === "pending" && (
+        <PendingInbox householdId={household.householdId} currency={household.currency} locale={i18n.language} />
+      )}
+
+      {tab === "confirmed" && panel.kind !== "closed" && (
         <div ref={panelRef}>
         <Card>
           <CardHeader>
@@ -105,6 +138,7 @@ export function TransactionsPage() {
         </div>
       )}
 
+      {tab === "confirmed" && (
       <Card>
         <CardHeader>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
@@ -259,6 +293,7 @@ export function TransactionsPage() {
           )}
         </CardBody>
       </Card>
+      )}
     </div>
   );
 }

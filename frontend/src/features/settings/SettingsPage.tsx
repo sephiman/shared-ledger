@@ -13,6 +13,8 @@ import { CustomCategoryDialog } from "./CustomCategoryDialog";
 import { NotificationsCard } from "./NotificationsCard";
 import { AutoSnapshotCard } from "./AutoSnapshotCard";
 import { getCurrencyOptions } from "@/lib/currency";
+import { useBankConfig } from "@/api/banks";
+import { BanksCard } from "@/features/banks/BanksCard";
 
 export function SettingsPage() {
   const { t, i18n } = useTranslation();
@@ -73,6 +75,7 @@ export function SettingsPage() {
   const [wipeConfirm, setWipeConfirm] = useState("");
   const [wipeMsg, setWipeMsg] = useState<string | null>(null);
 
+  const { data: bankConfig } = useBankConfig(household.householdId);
   const { data: allCategories = [] } = useCategories(household.householdId);
   const customCategories = allCategories.filter((c) => c.custom);
   const deleteCustom = useDeleteCustomCategory(household.householdId);
@@ -378,6 +381,10 @@ export function SettingsPage() {
       {isOwner && <AutoSnapshotCard householdId={household.householdId} />}
 
       {isOwner && <NotificationsCard householdId={household.householdId} />}
+
+      {bankConfig?.featureEnabled && (
+        <BanksCard householdId={household.householdId} isOwner={isOwner} locale={i18n.language} />
+      )}
 
       <Card>
         <CardHeader>

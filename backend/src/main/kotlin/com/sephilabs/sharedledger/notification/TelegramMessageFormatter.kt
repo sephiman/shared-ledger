@@ -104,6 +104,8 @@ class TelegramMessageFormatter(
         NotifyEntity.HOLDING -> "holding"
         NotifyEntity.RECURRING_TXN -> "recurring_txn"
         NotifyEntity.RECURRING_LOAN -> "recurring_loan"
+        NotifyEntity.BANK_MOVEMENT -> "bank_movement"
+        NotifyEntity.BANK_CONNECTION -> "bank_connection"
     }
 
     /** Category emoji when the card carries a category; otherwise a fixed per-entity emoji. */
@@ -117,6 +119,8 @@ class TelegramMessageFormatter(
             NotifyEntity.LOAN_PAYMENT -> "💸"
             NotifyEntity.HOLDING -> "📈"
             NotifyEntity.RECURRING_LOAN -> "📅"
+            NotifyEntity.BANK_MOVEMENT -> "🏦"
+            NotifyEntity.BANK_CONNECTION -> "⏰"
             else -> "🔔"
         }
     }

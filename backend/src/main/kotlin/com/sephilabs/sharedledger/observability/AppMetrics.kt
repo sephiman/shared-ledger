@@ -84,6 +84,19 @@ class AppMetrics(private val registry: MeterRegistry) {
             .increment()
     }
 
+    fun bankMovementsIngested(count: Int) {
+        if (count <= 0) return
+        Counter.builder("sl_bank_movements_ingested_total")
+            .register(registry)
+            .increment(count.toDouble())
+    }
+
+    fun bankSyncFailure() {
+        Counter.builder("sl_bank_sync_failures_total")
+            .register(registry)
+            .increment()
+    }
+
     fun analyticsTimer(endpoint: String): Timer =
         Timer.builder("sl_analytics_request_seconds")
             .tag("endpoint", endpoint)

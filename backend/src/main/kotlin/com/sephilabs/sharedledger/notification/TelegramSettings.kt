@@ -49,6 +49,12 @@ class TelegramSettings(
     @Column(name = "notify_recurring_loan", nullable = false)
     var notifyRecurringLoan: Boolean = true,
 
+    @Column(name = "notify_bank_movements", nullable = false)
+    var notifyBankMovements: Boolean = true,
+
+    @Column(name = "notify_bank_connections", nullable = false)
+    var notifyBankConnections: Boolean = true,
+
     @Column(name = "chat_id", length = 64)
     var chatId: String? = null,
 
@@ -73,6 +79,8 @@ class TelegramSettings(
             NotifyEntity.HOLDING -> notifyHoldings
             NotifyEntity.RECURRING_TXN -> notifyRecurringTxn
             NotifyEntity.RECURRING_LOAN -> notifyRecurringLoan
+            NotifyEntity.BANK_MOVEMENT -> notifyBankMovements
+            NotifyEntity.BANK_CONNECTION -> notifyBankConnections
         }
     }
 

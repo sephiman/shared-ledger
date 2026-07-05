@@ -169,6 +169,67 @@ class NotificationPublisher(
         )
     }
 
+    /**
+     * One aggregated message after a batch confirm of N pending bank movements. Single confirms go
+     * through [transaction] (the normal per-transaction notification) instead, so this only fires
+     * for batches — mirroring the recurring-materialization summary.
+     */
+    fun bankMovementsConfirmed(householdId: UUID, count: Int, actor: NotifyActor) {
+        if (count <= 0) return
+        events.publishEvent(
+            MaterializationEvent(
+                householdId = householdId,
+                entity = NotifyEntity.BANK_MOVEMENT,
+                count = count,
+                actor = actor,
+                fields = emptyList(),
+            ),
+        )
+    }
+
+    /**
+     * Heads-up after a sync ingests N new movements into the review inbox (before any confirm).
+     * Gated by the same `notify_bank_movements` toggle as the confirm summary. Uses a CREATE change
+     * event so its header ("new to review") stays distinct from the confirm summary's header.
+     */
+    fun bankMovementsToReview(householdId: UUID, count: Int, actor: NotifyActor) {
+        if (count <= 0) return
+        events.publishEvent(
+            EntityChangeEvent(
+                householdId = householdId,
+                entity = NotifyEntity.BANK_MOVEMENT,
+                action = NotifyAction.CREATE,
+                actor = actor,
+                fields = listOf(
+                    CardField("banks.new_movements", FieldValue.Text(count.toString())),
+                ),
+            ),
+        )
+    }
+
+    /** Re-link reminder for a connection whose consent is about to expire (per connection). */
+    fun bankConnectionExpiring(
+        householdId: UUID,
+        bankName: String,
+        label: String?,
+        expiresOn: java.time.LocalDate,
+        actor: NotifyActor,
+    ) {
+        events.publishEvent(
+            EntityChangeEvent(
+                householdId = householdId,
+                entity = NotifyEntity.BANK_CONNECTION,
+                action = NotifyAction.UPDATE,
+                actor = actor,
+                fields = listOf(
+                    CardField("banks.bank", FieldValue.Text(bankName)),
+                    CardField("banks.connection", FieldValue.Text(label)),
+                    CardField("banks.expires", FieldValue.Day(expiresOn)),
+                ),
+            ),
+        )
+    }
+
     fun recurringLoanPayments(
         householdId: UUID,
         borrowerName: String,

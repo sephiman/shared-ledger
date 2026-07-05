@@ -1,6 +1,7 @@
 # Env / secrets
 .env
 *.local
+*.pem
 
 # Gradle
 backend/.gradle/

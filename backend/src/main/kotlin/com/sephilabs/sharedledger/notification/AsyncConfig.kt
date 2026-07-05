@@ -45,6 +45,23 @@ class AsyncConfig : AsyncConfigurer {
         initialize()
     }
 
+    /**
+     * Bank sync fans out per-connection provider I/O (auth check + one transactions call per
+     * account). A small bounded pool keeps the linking request thread free — the initial sync runs
+     * off-thread after the connection commits (see BankConnectionLinkedListener). The test profile
+     * supplies a synchronous executor of the same name so tests can assert on results immediately.
+     */
+    @Bean("bankSyncExecutor")
+    @Profile("!test")
+    fun bankSyncExecutor(): Executor = ThreadPoolTaskExecutor().apply {
+        corePoolSize = 1
+        maxPoolSize = 2
+        queueCapacity = 200
+        setThreadNamePrefix("bank-sync-")
+        setRejectedExecutionHandler(ThreadPoolExecutor.CallerRunsPolicy())
+        initialize()
+    }
+
     override fun getAsyncUncaughtExceptionHandler(): AsyncUncaughtExceptionHandler =
         AsyncUncaughtExceptionHandler { ex, method, _ ->
             LoggerFactory.getLogger(AsyncConfig::class.java)

@@ -11,6 +11,7 @@ import {
 import { Card, CardBody, CardHeader } from "@/components/ui/primitives";
 import { LoansOverviewTile } from "./LoansOverviewTile";
 import { PortfolioOverviewTile } from "./PortfolioOverviewTile";
+import { PendingBankTile } from "./PendingBankTile";
 import { formatMoney, formatNumber } from "@/lib/money";
 import { groupIcon } from "@/lib/categoryGroup";
 import {
@@ -60,6 +61,7 @@ export function DashboardPage() {
         />
         <PortfolioOverviewTile householdId={household.householdId} currency={household.currency} locale={i18n.language} />
         <LoansOverviewTile householdId={household.householdId} currency={household.currency} locale={i18n.language} />
+        <PendingBankTile householdId={household.householdId} />
       </section>
 
       <DashboardSection

@@ -24,6 +24,13 @@ class TestBackfillExecutorConfig {
         val worker = Executors.newSingleThreadExecutor()
         return Executor { task -> worker.submit(task).get() }
     }
+
+    /** Same rationale as [backfillExecutor]: run the after-commit bank sync on a worker but block. */
+    @Bean("bankSyncExecutor")
+    fun bankSyncExecutor(): Executor {
+        val worker = Executors.newSingleThreadExecutor()
+        return Executor { task -> worker.submit(task).get() }
+    }
 }
 
 @SpringBootTest

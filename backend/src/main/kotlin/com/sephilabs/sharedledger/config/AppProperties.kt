@@ -13,6 +13,7 @@ data class AppProperties(
     val fire: Fire = Fire(),
     val telegram: Telegram = Telegram(),
     val portfolio: Portfolio = Portfolio(),
+    val enableBanking: EnableBanking = EnableBanking(),
 ) {
     data class Security(
         val cookieSecure: Boolean = true,
@@ -137,4 +138,38 @@ data class AppProperties(
         val timeoutMs: Long = 10000,
         val minRequestIntervalMs: Long = 1000,
     )
+
+    /**
+     * Enable Banking (PSD2 AIS aggregator, Restricted Production). The operator creates the API
+     * application in the Enable Banking Control Panel once and supplies its id + RSA private key
+     * via env. The feature is only exposed when both are present ([configured]) — see the
+     * three-level visibility in the Settings/Banks UI.
+     */
+    data class EnableBanking(
+        val baseUrl: String = "https://api.enablebanking.com",
+        // The API application id (JWT `kid`). Blank = feature not configured.
+        val appId: String = "",
+        // PKCS#8 PEM RSA private key used to sign the JWT bearer. Blank = feature not configured.
+        val privateKey: String = "",
+        // Where the bank sends the PSU back after SCA — the SPA callback route.
+        val redirectUrl: String = "",
+        // Base64 AES key (16/24/32 bytes) encrypting the per-connection session id at rest.
+        val secretKey: String = "",
+        val timeoutMs: Long = 15000,
+        val minRequestIntervalMs: Long = 300,
+        // Requested consent lifetime; the bank may shorten it (90–180 days in practice).
+        val consentValidDays: Long = 90,
+        // How far back to pull on the first sync (banks usually cap history to ~90 days).
+        val backfillDays: Long = 90,
+        // PSD2 unattended-access ceiling per consent per day.
+        val maxCallsPerDay: Int = 4,
+        // Twice daily, within the call budget.
+        val syncCron: String = "0 0 7,19 * * *",
+        // Daily check for consents nearing expiry.
+        val reminderCron: String = "0 0 8 * * *",
+        // Warn this many days before a consent expires so the holder can re-link in time.
+        val reminderDaysBefore: Long = 7,
+    ) {
+        val configured: Boolean get() = appId.isNotBlank() && privateKey.isNotBlank()
+    }
 }

@@ -16,6 +16,7 @@ const AnalyticsPage = lazy(() => import("@/features/analytics/AnalyticsPage").th
 const FirePage = lazy(() => import("@/features/fire/FirePage").then((m) => ({ default: m.FirePage })));
 const SettingsPage = lazy(() => import("@/features/settings/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 const DataImportPage = lazy(() => import("@/features/settings/DataImportPage").then((m) => ({ default: m.DataImportPage })));
+const BankCallbackPage = lazy(() => import("@/features/banks/BankCallbackPage").then((m) => ({ default: m.BankCallbackPage })));
 
 function LazyFallback() {
   const { t } = useTranslation();
@@ -51,6 +52,7 @@ export default function App() {
           <Route path="/fire" element={<Lazy><FirePage /></Lazy>} />
           <Route path="/settings" element={<Lazy><SettingsPage /></Lazy>} />
           <Route path="/settings/import" element={<Lazy><DataImportPage /></Lazy>} />
+          <Route path="/settings/banks/callback" element={<Lazy><BankCallbackPage /></Lazy>} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
