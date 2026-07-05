@@ -9,7 +9,9 @@ import com.sephilabs.sharedledger.notification.NotifyAction
 import com.sephilabs.sharedledger.notification.NotifyActor
 import com.sephilabs.sharedledger.notification.NotificationPublisher
 import com.sephilabs.sharedledger.portfolio.price.FxRateRepository
+import com.sephilabs.sharedledger.portfolio.price.HoldingBackfillRequested
 import com.sephilabs.sharedledger.portfolio.price.PriceRefreshService
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
@@ -25,6 +27,7 @@ class HoldingService(
     private val fxRates: FxRateRepository,
     private val priceRefresh: PriceRefreshService,
     private val notifications: NotificationPublisher,
+    private val events: ApplicationEventPublisher,
     private val props: AppProperties,
 ) {
 
@@ -59,7 +62,8 @@ class HoldingService(
             updatedByUserId = by.id,
         )
         holdings.save(holding)
-        if (holding.linked) priceRefresh.backfillForHolding(holding)
+        // Backfill runs async after commit; a provider outage must never fail the create.
+        if (holding.linked) events.publishEvent(HoldingBackfillRequested(holding.id))
         return toDto(holding)
     }
 
@@ -73,8 +77,8 @@ class HoldingService(
         }
         request.isin?.let { holding.isin = normalizeIsin(it) }
         holding.updatedByUserId = by.id
-        // Non-fatal: a provider outage must never block linking; nightly jobs will catch up.
-        priceRefresh.backfillForHolding(holding)
+        // Non-fatal: backfill runs async after commit; nightly jobs catch up on any failure.
+        events.publishEvent(HoldingBackfillRequested(holding.id))
         return toDto(holding)
     }
 
@@ -150,7 +154,8 @@ class HoldingService(
         validateLedger(ledgerEntries(holding.id) + lot.toEntry())
         lots.save(lot)
         if (previousEarliest == null || request.tradedOn.isBefore(previousEarliest)) {
-            priceRefresh.extendBackfill(holding, request.tradedOn)
+            // Head backfill runs async after commit; nightly jobs catch up on any failure.
+            events.publishEvent(HoldingBackfillRequested(holding.id, request.tradedOn))
         }
         if (notify) notifyTrade(holding, lot, NotifyAction.CREATE, by)
         return toDto(lot)
@@ -163,6 +168,7 @@ class HoldingService(
         val lot = lots.findByIdAndHoldingId(lotId, holding.id)
             ?: throw AppException.notFound("HOLDING_LOT_NOT_FOUND")
         val currency = normalizeCurrency(request.currency) ?: holding.nativeCurrency
+        val previousEarliest = lots.findMinTradedOn(holding.id)
         if (currency != lot.currency || request.tradedOn != lot.tradedOn) {
             lot.fxRateToBase = fxRateToBase(currency, request.tradedOn)
         }
@@ -175,6 +181,10 @@ class HoldingService(
         lot.note = request.note?.trim()?.takeIf { it.isNotEmpty() }
         lot.updatedByUserId = by.id
         validateLedger(ledgerEntries(holding.id, exclude = lot.id) + lot.toEntry())
+        if (previousEarliest == null || request.tradedOn.isBefore(previousEarliest)) {
+            // Editing a lot to an earlier date needs the head backfilled too.
+            events.publishEvent(HoldingBackfillRequested(holding.id, request.tradedOn))
+        }
         notifyTrade(holding, lot, NotifyAction.UPDATE, by)
         return toDto(lot)
     }

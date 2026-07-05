@@ -45,19 +45,23 @@ class PriceRefreshService(
         val linked = linkedHoldings(HoldingProvider.coingecko)
         // Ticker per coordinate (BTC for coingecko id "bitcoin") to build Binance fallback pairs.
         val tickerByCoord = linked.associate { it.providerSymbol!! to it.symbol }
+        val holdingsByCoord = linked.groupBy { it.providerSymbol!! }
         val coords = tickerByCoord.keys.toList()
         if (coords.isEmpty()) return
 
         for (id in coords) {
+            val ticker = tickerByCoord.getValue(id)
+            val group = holdingsByCoord.getValue(id)
             try {
-                gapFillCrypto(id, today)
+                gapFillCrypto(id, ticker, group, today)
             } catch (ex: ProviderException) {
                 metrics.priceRefreshFailure(CoinGeckoClient.PROVIDER)
                 log.error("Crypto gap-fill failed for {}: {}; trying Binance fallback", id, ex.message)
+                // Binance covers from the last stored day, or the earliest lot when CoinGecko
+                // never populated the series at all.
                 val maxStored = prices.findMaxPriceDate(CoinGeckoClient.PROVIDER, id, baseCurrency)
-                if (maxStored != null) {
-                    fallbackCryptoFill(id, tickerByCoord.getValue(id), maxStored.plusDays(1), today.minusDays(1), today)
-                }
+                val from = maxStored?.plusDays(1) ?: cryptoCeiling(earliestLotOf(group, today), today)
+                fallbackCryptoFill(id, ticker, from, today.minusDays(1), today)
             }
             pace(props.portfolio.coingecko.minRequestIntervalMs)
         }
@@ -87,17 +91,69 @@ class PriceRefreshService(
         for ((coordinate, group) in byCoordinate) {
             val (symbol, currency) = coordinate
             try {
-                val from = nextFetchDate(active.name, symbol, currency, group, today) ?: continue
-                val history = equity.dailyHistory(symbol, from, today)
-                val effectiveCurrency = reconcileCurrency(group, currency, history.currency, from, today)
-                storeAll(active.name, symbol, effectiveCurrency, history.prices)
-                metrics.priceRefreshed(active.name)
+                if (refreshEquitySymbol(active.name, symbol, currency, group, today)) {
+                    metrics.priceRefreshed(active.name)
+                }
             } catch (ex: ProviderException) {
                 metrics.priceRefreshFailure(active.name)
                 log.error("Equity refresh failed for {}: {}", symbol, ex.message)
             }
             pace(activeEquityConfig().minRequestIntervalMs)
         }
+    }
+
+    /**
+     * Fills an equity series in both directions so a failed request-time backfill self-heals:
+     * bootstraps the full ceiling-clamped range when nothing is stored, extends the head down
+     * to the earliest lot, and tails up to today. Returns true if anything was fetched.
+     */
+    private fun refreshEquitySymbol(
+        provider: String,
+        symbol: String,
+        currency: String,
+        group: List<Holding>,
+        today: LocalDate,
+    ): Boolean {
+        val minStored = prices.findMinPriceDate(provider, symbol, currency)
+        val maxStored = prices.findMaxPriceDate(provider, symbol, currency)
+        val desiredFrom = clampToEquityCeiling(earliestLotOf(group, today), today)
+        if (minStored == null || maxStored == null) {
+            return fetchEquityRange(provider, symbol, group, currency, desiredFrom, today, today, isHead = true)
+        }
+        var fetched = false
+        if (desiredFrom.isBefore(minStored)) {
+            log.info("Equity head gap-fill for {} [{}..{}]", symbol, desiredFrom, minStored.minusDays(1))
+            fetched = fetchEquityRange(provider, symbol, group, currency, desiredFrom, minStored.minusDays(1), today, isHead = true)
+            pace(activeEquityConfig().minRequestIntervalMs)
+        }
+        if (maxStored.isBefore(today)) {
+            fetched = fetchEquityRange(provider, symbol, group, currency, maxStored.plusDays(1), today, today, isHead = false) || fetched
+        }
+        return fetched
+    }
+
+    /**
+     * A head fetch also tops up the foreign-currency FX head so old-date valuations convert
+     * (the nightly FX job only tails). Returns false when the range is empty.
+     */
+    private fun fetchEquityRange(
+        provider: String,
+        symbol: String,
+        group: List<Holding>,
+        expectedCurrency: String,
+        from: LocalDate,
+        to: LocalDate,
+        today: LocalDate,
+        isHead: Boolean,
+    ): Boolean {
+        if (from.isAfter(to)) return false
+        val history = equity.dailyHistory(symbol, from, to)
+        val effectiveCurrency = reconcileCurrency(group, expectedCurrency, history.currency, from, today)
+        storeAll(provider, symbol, effectiveCurrency, history.prices)
+        if (isHead && effectiveCurrency != baseCurrency) {
+            runCatching { refreshFxCurrency(effectiveCurrency, today, earliestNeeded = from) }
+        }
+        return true
     }
 
     /**
@@ -261,13 +317,39 @@ class PriceRefreshService(
         }
     }
 
-    private fun gapFillCrypto(id: String, today: LocalDate) {
-        val maxStored = prices.findMaxPriceDate(CoinGeckoClient.PROVIDER, id, baseCurrency) ?: return
-        val from = maxStored.plusDays(1)
-        val to = today.minusDays(1)
-        if (from.isAfter(to)) return
-        val history = crypto.dailyHistory(id, vsCurrency, from, to)
-        storeAll(CoinGeckoClient.PROVIDER, id, baseCurrency, history)
+    /**
+     * Gap-fills a crypto series in both directions so a failed request-time backfill self-heals:
+     * bootstraps the whole ceiling-clamped range when nothing is stored, extends the head down to
+     * the earliest lot, and tails up to yesterday (today's row comes from the current-price call).
+     * A lot older than CoinGecko's history ceiling is covered by the Binance fallback.
+     */
+    private fun gapFillCrypto(id: String, ticker: String, group: List<Holding>, today: LocalDate) {
+        val currency = baseCurrency
+        val earliestLot = earliestLotOf(group, today)
+        val ceilingFrom = cryptoCeiling(earliestLot, today)
+        val yesterday = today.minusDays(1)
+        val minStored = prices.findMinPriceDate(CoinGeckoClient.PROVIDER, id, currency)
+        val maxStored = prices.findMaxPriceDate(CoinGeckoClient.PROVIDER, id, currency)
+
+        if (minStored == null || maxStored == null) {
+            if (!ceilingFrom.isAfter(yesterday)) {
+                storeAll(CoinGeckoClient.PROVIDER, id, currency, crypto.dailyHistory(id, vsCurrency, ceilingFrom, yesterday))
+            }
+        } else {
+            if (ceilingFrom.isBefore(minStored)) {
+                log.info("Crypto head gap-fill for {} [{}..{}]", id, ceilingFrom, minStored.minusDays(1))
+                storeAll(CoinGeckoClient.PROVIDER, id, currency, crypto.dailyHistory(id, vsCurrency, ceilingFrom, minStored.minusDays(1)))
+                pace(props.portfolio.coingecko.minRequestIntervalMs)
+            }
+            val tailFrom = maxStored.plusDays(1)
+            if (!tailFrom.isAfter(yesterday)) {
+                storeAll(CoinGeckoClient.PROVIDER, id, currency, crypto.dailyHistory(id, vsCurrency, tailFrom, yesterday))
+            }
+        }
+        // Lots older than the CoinGecko ceiling: Binance covers the pre-ceiling head.
+        if (earliestLot.isBefore(ceilingFrom)) {
+            fallbackCryptoFill(id, ticker, earliestLot, ceilingFrom.minusDays(1), today)
+        }
     }
 
     private fun fetchRange(holding: Holding, from: LocalDate, to: LocalDate) {
@@ -292,21 +374,11 @@ class PriceRefreshService(
         }
     }
 
-    private fun nextFetchDate(
-        provider: String,
-        symbol: String,
-        currency: String,
-        group: List<Holding>,
-        today: LocalDate,
-    ): LocalDate? {
-        val maxStored = prices.findMaxPriceDate(provider, symbol, currency)
-        if (maxStored != null) {
-            val from = maxStored.plusDays(1)
-            return if (from.isAfter(today)) null else from
-        }
-        val earliestLot = group.mapNotNull { lots.findMinTradedOn(it.id) }.minOrNull() ?: today
-        return clampToEquityCeiling(earliestLot, today)
-    }
+    private fun earliestLotOf(group: List<Holding>, default: LocalDate): LocalDate =
+        group.mapNotNull { lots.findMinTradedOn(it.id) }.minOrNull() ?: default
+
+    private fun cryptoCeiling(candidate: LocalDate, today: LocalDate): LocalDate =
+        maxOf(candidate, today.minusDays(props.portfolio.cryptoHistoryCeilingDays))
 
     private fun clampToCeiling(holding: Holding, candidate: LocalDate, today: LocalDate): LocalDate =
         when (holding.assetClass) {

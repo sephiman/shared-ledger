@@ -232,6 +232,101 @@ class PriceRefreshIntegrationTest @Autowired constructor(
         assertThat(prices.findMaxPriceDate("yahoo", symbol, "EUR")).isNull()
     }
 
+    @Test
+    fun `equity nightly fills a head gap a failed backfill left behind`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val symbol = "HEAD${System.nanoTime() % 100000}"
+        val ps = "$symbol.DE"
+        holdingService.create(
+            household.id,
+            HoldingRequest(assetClass = HoldingAssetClass.etf, symbol = symbol, provider = HoldingProvider.yahoo, providerSymbol = ps),
+            user,
+        )
+        val holdingId = holdingService.list(household.id).single { it.symbol == symbol }.id
+        // A recent tail is stored, but the older lot's head never made it (provider was down then).
+        seedEquityPrice(ps, today.minusDays(3), "100")
+        holdingService.addLot(
+            household.id, holdingId,
+            LotRequest(tradedOn = today.minusDays(10), quantity = BigDecimal("10"), unitPrice = BigDecimal("95")),
+            user,
+        )
+        assertThat(prices.findMinPriceDate("yahoo", ps, "EUR")).isEqualTo(today.minusDays(3))
+
+        // The provider now serves the history; the nightly job must close the head gap.
+        stubEquity.history[ps] = mutableListOf(
+            DailyPrice(today.minusDays(10), BigDecimal("95")),
+            DailyPrice(today.minusDays(3), BigDecimal("100")),
+            DailyPrice(today, BigDecimal("103")),
+        )
+
+        refresh.refreshEquities(today)
+
+        assertThat(prices.findMinPriceDate("yahoo", ps, "EUR")).isEqualTo(today.minusDays(10))
+        assertThat(prices.findMaxPriceDate("yahoo", ps, "EUR")).isEqualTo(today)
+    }
+
+    @Test
+    fun `crypto nightly bootstraps a series the request-time backfill never populated`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val coinId = "boot-coin-${System.nanoTime()}"
+        val holding = createLinkedCrypto(household.id, user, "BOOT${System.nanoTime() % 1000}", coinId)
+        // Lot exists but the backfill at add-time stored nothing (provider was down / not seeded yet).
+        holdingService.addLot(
+            household.id, holding.id,
+            LotRequest(tradedOn = today.minusDays(5), quantity = BigDecimal("1"), unitPrice = BigDecimal("100")),
+            user,
+        )
+        assertThat(prices.findMinPriceDate("coingecko", coinId, "EUR")).isNull()
+
+        stubCrypto.history[coinId] = mutableListOf(
+            DailyPrice(today.minusDays(5), BigDecimal("100")),
+            DailyPrice(today.minusDays(1), BigDecimal("110")),
+        )
+        stubCrypto.current[coinId] = BigDecimal("115")
+
+        refresh.refreshCrypto(today)
+
+        assertThat(prices.findMinPriceDate("coingecko", coinId, "EUR")).isEqualTo(today.minusDays(5))
+        assertThat(prices.findMaxPriceDate("coingecko", coinId, "EUR")).isEqualTo(today)
+    }
+
+    @Test
+    fun `crypto nightly fills a head gap down to an earlier lot`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val coinId = "chead-coin-${System.nanoTime()}"
+        val holding = createLinkedCrypto(household.id, user, "CHD${System.nanoTime() % 1000}", coinId)
+        refreshSeedPrice(coinId, today.minusDays(2), "100")
+        // Older lot added while the provider had no head to give: the gap persists after add.
+        holdingService.addLot(
+            household.id, holding.id,
+            LotRequest(tradedOn = today.minusDays(20), quantity = BigDecimal("1"), unitPrice = BigDecimal("80")),
+            user,
+        )
+        assertThat(prices.findMinPriceDate("coingecko", coinId, "EUR")).isEqualTo(today.minusDays(2))
+
+        stubCrypto.history[coinId] = mutableListOf(DailyPrice(today.minusDays(20), BigDecimal("80")))
+
+        refresh.refreshCrypto(today)
+
+        assertThat(prices.findMinPriceDate("coingecko", coinId, "EUR")).isEqualTo(today.minusDays(20))
+    }
+
+    private fun seedEquityPrice(providerSymbol: String, date: LocalDate, price: String) {
+        prices.save(
+            com.sephilabs.sharedledger.portfolio.price.PricePoint(
+                provider = "yahoo",
+                providerSymbol = providerSymbol,
+                currency = "EUR",
+                price = BigDecimal(price),
+                priceDate = date,
+                asOf = java.time.Instant.now(),
+            )
+        )
+    }
+
     private fun createLinkedCrypto(householdId: java.util.UUID, user: User, symbol: String, coinId: String) =
         holdingService.create(
             householdId,

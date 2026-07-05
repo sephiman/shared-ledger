@@ -4,6 +4,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.aop.interceptor.AsyncUncaughtExceptionHandler
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.context.annotation.Profile
 import org.springframework.scheduling.annotation.AsyncConfigurer
 import org.springframework.scheduling.annotation.EnableAsync
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
@@ -24,6 +25,22 @@ class AsyncConfig : AsyncConfigurer {
         maxPoolSize = 4
         queueCapacity = 200
         setThreadNamePrefix("telegram-")
+        setRejectedExecutionHandler(ThreadPoolExecutor.CallerRunsPolicy())
+        initialize()
+    }
+
+    /**
+     * Backfill fans a handful of provider calls per holding; a small bounded pool keeps request
+     * threads free, while CallerRuns degrades to synchronous under a large backlog rather than
+     * dropping work. The test profile supplies a synchronous executor of the same name instead.
+     */
+    @Bean("backfillExecutor")
+    @Profile("!test")
+    fun backfillExecutor(): Executor = ThreadPoolTaskExecutor().apply {
+        corePoolSize = 1
+        maxPoolSize = 2
+        queueCapacity = 500
+        setThreadNamePrefix("backfill-")
         setRejectedExecutionHandler(ThreadPoolExecutor.CallerRunsPolicy())
         initialize()
     }
