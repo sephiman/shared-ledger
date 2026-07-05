@@ -139,6 +139,8 @@ export interface PortfolioEvolutionPoint {
   invested: string;
   realizedPnl: string;
   unrealizedPnl: string;
+  // Cumulative time-weighted return since the range start, as a fraction (0.1234 = +12.34 %).
+  twrPct: string;
 }
 
 export interface PortfolioEvolution {

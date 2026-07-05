@@ -253,7 +253,14 @@
     "range_year": "{{count}} año",
     "range_year_other": "{{count}} años",
     "range_all": "Todo el histórico",
-    "range_custom": "Personalizado"
+    "range_custom": "Personalizado",
+    "period_summary": "Resumen del período",
+    "start": "Inicio",
+    "end": "Fin",
+    "change": "Variación",
+    "roi_twr": "ROI (TWR)",
+    "roi_twr_description": "Rentabilidad ponderada por tiempo: encadena los rendimientos diarios del mercado entre operaciones, de modo que las aportaciones y retiradas no cuentan como rentabilidad.",
+    "twr": "TWR"
   },
   "loans": {
     "header_description": "Préstamos que has hecho a otras personas. Solo seguimiento — no incluido en el patrimonio neto.",

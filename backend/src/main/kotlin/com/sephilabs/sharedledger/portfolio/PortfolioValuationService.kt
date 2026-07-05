@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 import java.math.MathContext
+import java.math.RoundingMode
 import java.time.LocalDate
 import java.util.UUID
 
@@ -206,15 +207,25 @@ class PortfolioValuationService(
             .toMutableList()
         if (sampleDates.lastOrNull() != end) sampleDates.add(end)
 
+        // Running TWR state chained across the sample dates (see the per-point comment).
+        var prevValue: BigDecimal? = null
+        var prevCumFlow = BigDecimal.ZERO
+        var twrFactor = BigDecimal.ONE
+
         val points = sampleDates
             .map { date ->
                 var value = BigDecimal.ZERO
                 var invested = BigDecimal.ZERO
                 var realized = BigDecimal.ZERO
                 var unrealized = BigDecimal.ZERO
+                // Net external cash flow into the filtered portfolio up to this date
+                // (BUY = +cost, SELL = −proceeds, in base). Assumes priced holdings, in
+                // line with `value`; TWR chains the same daily valuation below.
+                var cumFlow = BigDecimal.ZERO
                 for (holding in all) {
                     val entries = entriesByHolding.getValue(holding.id).filter { !it.tradedOn.isAfter(date) }
                     if (entries.isEmpty()) continue
+                    cumFlow = entries.fold(cumFlow) { acc, e -> acc.add(cashFlowBase(e), MathContext.DECIMAL64) }
                     val state = PortfolioValuationCalculator.replay(entries, costMethod, upTo = date)
                     // "Invested" is the remaining cost basis, so it steps down on sells.
                     invested += state.remainingCostBasisBase
@@ -229,12 +240,28 @@ class PortfolioValuationService(
                     // Only priced holdings contribute: unpriced ones would fake a full loss.
                     unrealized += holdingValue.subtract(state.remainingCostBasisBase, MathContext.DECIMAL64)
                 }
+
+                // Chain this segment's return with the cash flow since the previous sample
+                // excluded: r = (Vₑ − F) / Vₛ. The base re-anchors whenever the prior value
+                // is ≤ 0 — an unfunded range start, or a position fully sold then re-bought.
+                val segmentFlow = cumFlow.subtract(prevCumFlow, MathContext.DECIMAL64)
+                val prev = prevValue
+                if (prev != null && prev.signum() > 0) {
+                    val factor = value.subtract(segmentFlow, MathContext.DECIMAL64)
+                        .divide(prev, MathContext.DECIMAL64)
+                    if (factor.signum() > 0) twrFactor = twrFactor.multiply(factor, MathContext.DECIMAL64)
+                }
+                prevValue = value
+                prevCumFlow = cumFlow
+
                 PortfolioEvolutionPointDto(
                     date,
                     Money.normalize(value),
                     Money.normalize(invested),
                     Money.normalize(realized),
                     Money.normalize(unrealized),
+                    twrFactor.subtract(BigDecimal.ONE)
+                        .setScale(PortfolioValuationCalculator.FRACTION_SCALE, RoundingMode.HALF_EVEN),
                 )
             }
 
@@ -280,6 +307,17 @@ class PortfolioValuationService(
             )?.rate ?: return null
         }
         return PortfolioValuationCalculator.PriceInput(point.price, point.priceDate, currency, fx)
+    }
+
+    /** Signed base-currency cash flow of a ledger entry: +cost for a BUY, −proceeds for a SELL. */
+    private fun cashFlowBase(e: PortfolioValuationCalculator.LedgerEntry): BigDecimal {
+        val gross = e.quantity.multiply(e.unitPrice, MathContext.DECIMAL64)
+        val net = when (e.type) {
+            LotType.BUY -> gross.add(e.fee ?: BigDecimal.ZERO, MathContext.DECIMAL64)
+            LotType.SELL -> gross.subtract(e.fee ?: BigDecimal.ZERO, MathContext.DECIMAL64)
+        }
+        val base = net.multiply(e.fxRateToBase, MathContext.DECIMAL64)
+        return if (e.type == LotType.BUY) base else base.negate()
     }
 
     private fun lotsByHolding(all: List<Holding>): Map<UUID, List<HoldingLot>> =

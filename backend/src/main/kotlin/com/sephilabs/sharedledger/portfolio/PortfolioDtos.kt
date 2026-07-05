@@ -169,6 +169,10 @@ data class PortfolioEvolutionPointDto(
     // value − remaining cost basis, summed over holdings priced at this date.
     @JsonFormat(shape = JsonFormat.Shape.STRING)
     val unrealizedPnl: BigDecimal,
+    // Cumulative time-weighted return since the range start, as a scale-4 fraction
+    // (0.1234 = +12.34 %). Contribution/withdrawal timing is excluded; 0 at the start.
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    val twrPct: BigDecimal,
 )
 
 data class PortfolioEvolutionDto(

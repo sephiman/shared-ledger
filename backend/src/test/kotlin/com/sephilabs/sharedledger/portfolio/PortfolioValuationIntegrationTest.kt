@@ -310,6 +310,33 @@ class PortfolioValuationIntegrationTest @Autowired constructor(
         assertThat(day4.value).isEqualByComparingTo(BigDecimal("120000.00"))
     }
 
+    @Test
+    fun `TWR chains market returns and excludes the timing of contributions`() {
+        val (user, household) = seed()
+        val coinId = "btc-twr-${System.nanoTime()}"
+        val holding = createLinkedCrypto(household.id, user, "BTC", coinId)
+        // Buy 1 @ 100, price rises to 110, buy a 2nd unit at the market price of 110,
+        // price rises to 121. The mid-range contribution must not register as return.
+        addLot(household.id, holding.id, user, LocalDate.of(2026, 3, 1), "1", "100")
+        addLot(household.id, holding.id, user, LocalDate.of(2026, 3, 3), "1", "110")
+        storePrice("coingecko", coinId, "EUR", LocalDate.of(2026, 3, 1), "100")
+        storePrice("coingecko", coinId, "EUR", LocalDate.of(2026, 3, 2), "110")
+        storePrice("coingecko", coinId, "EUR", LocalDate.of(2026, 3, 3), "110")
+        storePrice("coingecko", coinId, "EUR", LocalDate.of(2026, 3, 4), "121")
+
+        val evolution = service.evolution(household.id, LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 4))
+        assertThat(evolution.points).hasSize(4)
+
+        // Start of the range is the base: 0 %.
+        assertThat(evolution.points[0].twrPct).isEqualByComparingTo(BigDecimal.ZERO)
+        // +10 % as the price moves 100 -> 110.
+        assertThat(evolution.points[1].twrPct).isEqualByComparingTo(BigDecimal("0.10"))
+        // Buying a 2nd unit at the market price leaves TWR unchanged: still +10 %.
+        assertThat(evolution.points[2].twrPct).isEqualByComparingTo(BigDecimal("0.10"))
+        // 110 -> 121 chains another +10 %: (1.10 * 1.10) - 1 = +21 %.
+        assertThat(evolution.points[3].twrPct).isEqualByComparingTo(BigDecimal("0.21"))
+    }
+
     private fun createLinkedCrypto(householdId: java.util.UUID, user: User, symbol: String, providerSymbol: String) =
         holdingService.create(
             householdId,

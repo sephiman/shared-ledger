@@ -13,19 +13,28 @@ import {
   ComposedChart,
   Legend,
   Line,
+  LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-import { formatMoney } from "@/lib/money";
-import { isoToday } from "@/lib/dates";
+import { formatCompactMoney, formatMoney, formatPercent } from "@/lib/money";
+import { formatDate, isoToday } from "@/lib/dates";
 import { ChartTooltip } from "@/components/charts/ChartTooltip";
 
 const VALUE_COLOR = "#0ea5e9";
 const INVESTED_COLOR = "#6b7280";
 const REALIZED_COLOR = "#22c55e";
 const UNREALIZED_COLOR = "#a855f7";
+const TWR_COLOR = "#f59e0b";
+const ZERO_LINE_COLOR = "#9ca3af";
+
+// Both stacked panels share one synced cursor and align their plot areas by using the
+// same left axis width, so their X axes line up under a single tick/format policy.
+const SYNC_ID = "portfolio-evolution";
+const AXIS_WIDTH = 56;
 
 const ASSET_CLASSES: HoldingAssetClass[] = ["crypto", "etf", "stock", "fund"];
 
@@ -42,6 +51,44 @@ function isoMonthsAgo(months: number): string {
   const d = new Date();
   d.setMonth(d.getMonth() - months);
   return d.toISOString().slice(0, 10);
+}
+
+function toneClass(v: number): string {
+  if (v > 0) return "text-green-600 dark:text-green-400";
+  if (v < 0) return "text-red-600 dark:text-red-400";
+  return "text-gray-500 dark:text-gray-400";
+}
+
+function StatCard({
+  label,
+  color,
+  endText,
+  startLabel,
+  startText,
+  deltaText,
+  deltaTone,
+}: {
+  label: string;
+  color: string;
+  endText: string;
+  startLabel: string;
+  startText: string;
+  deltaText: string;
+  deltaTone: number;
+}) {
+  return (
+    <div className="rounded-md border border-border p-2.5 dark:border-gray-700">
+      <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+        <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+        <span className="truncate">{label}</span>
+      </div>
+      <p className="mt-1 text-base font-semibold tabular-nums text-gray-900 dark:text-gray-100">{endText}</p>
+      <p className={`mt-0.5 text-xs font-medium tabular-nums ${toneClass(deltaTone)}`}>{deltaText}</p>
+      <p className="mt-0.5 text-xs tabular-nums text-gray-400 dark:text-gray-500">
+        {startLabel}: {startText}
+      </p>
+    </div>
+  );
 }
 
 export function PortfolioEvolutionTab() {
@@ -85,9 +132,68 @@ export function PortfolioEvolutionTab() {
         invested: Number(p.invested),
         realized: Number(p.realizedPnl),
         unrealized: Number(p.unrealizedPnl),
+        // Fraction over the wire -> percentage points for the axis and tooltip.
+        twr: Number(p.twrPct) * 100,
       })),
     [evolution],
   );
+
+  // Re-anchor the summary to the selected range: first/last points are its bounds.
+  const summaryRows = useMemo(() => {
+    if (data.length === 0) return null;
+    const first = data[0];
+    const last = data[data.length - 1];
+    const build = (start: number, end: number) => {
+      const deltaAbs = end - start;
+      const deltaPct = start !== 0 ? (deltaAbs / Math.abs(start)) * 100 : null;
+      return { start, end, deltaAbs, deltaPct };
+    };
+    return {
+      value: build(first.value, last.value),
+      invested: build(first.invested, last.invested),
+      realized: build(first.realized, last.realized),
+      unrealized: build(first.unrealized, last.unrealized),
+      twr: build(first.twr, last.twr),
+    };
+  }, [data]);
+
+  // Adapt tick format to the span: short ranges show day/month, long ranges month/year.
+  // `interval="preserveStartEnd"` + `minTickGap` let the chart drop labels to fit the width.
+  const spanDays = useMemo(() => {
+    if (data.length < 2) return 0;
+    const first = new Date(data[0].date).getTime();
+    const last = new Date(data[data.length - 1].date).getTime();
+    return Math.round((last - first) / 86_400_000);
+  }, [data]);
+  const xPattern = spanDays > 92 ? "MMM yy" : "d MMM";
+  const formatXTick = (value: string) => formatDate(value, i18n.language, xPattern);
+
+  const formatEuroTick = (value: number) => formatCompactMoney(value, household.currency, i18n.language);
+  const formatPctTick = (value: number) => formatPercent(value, i18n.language, 0);
+
+  const money = (v: number) => formatMoney(v, household.currency, i18n.language);
+  const signedMoney = (v: number) => `${v >= 0 ? "+" : ""}${money(v)}`;
+  const signedPct = (v: number, digits = 1) => `${v >= 0 ? "+" : ""}${formatPercent(v, i18n.language, digits)}`;
+  const moneyDelta = (deltaAbs: number, deltaPct: number | null) =>
+    deltaPct === null ? signedMoney(deltaAbs) : `${signedMoney(deltaAbs)} · ${signedPct(deltaPct)}`;
+
+  const valueCards = summaryRows
+    ? [
+        { label: t("portfolio.current_value"), color: VALUE_COLOR, row: summaryRows.value },
+        { label: t("portfolio.invested"), color: INVESTED_COLOR, row: summaryRows.invested },
+        { label: t("portfolio.realized_pnl"), color: REALIZED_COLOR, row: summaryRows.realized },
+        { label: t("portfolio.unrealized_pnl"), color: UNREALIZED_COLOR, row: summaryRows.unrealized },
+      ]
+    : [];
+
+  const xAxisProps = {
+    dataKey: "date",
+    tickFormatter: formatXTick,
+    interval: "preserveStartEnd" as const,
+    minTickGap: 40,
+    tickMargin: 8,
+    tick: { fontSize: 12 },
+  };
 
   return (
     <Card>
@@ -146,59 +252,119 @@ export function PortfolioEvolutionTab() {
           )}
         </div>
       </CardHeader>
-      <CardBody className="h-96">
-        {data.length === 0 ? (
+      <CardBody className="space-y-5">
+        {data.length === 0 || !summaryRows ? (
           <p className="text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
         ) : (
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
-              <YAxis />
-              <Tooltip
-                content={(props) => (
-                  <ChartTooltip
-                    {...props}
-                    formatValue={(v) => formatMoney(Number(v), household.currency, i18n.language)}
+          <>
+            <div>
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                {t("portfolio.period_summary")}
+              </p>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {valueCards.map((c) => (
+                  <StatCard
+                    key={c.label}
+                    label={c.label}
+                    color={c.color}
+                    endText={money(c.row.end)}
+                    startLabel={t("portfolio.start")}
+                    startText={money(c.row.start)}
+                    deltaText={moneyDelta(c.row.deltaAbs, c.row.deltaPct)}
+                    deltaTone={c.row.deltaAbs}
                   />
-                )}
-              />
-              <Legend />
-              <Area
-                type="monotone"
-                dataKey="value"
-                stroke={VALUE_COLOR}
-                fill={VALUE_COLOR}
-                fillOpacity={0.25}
-                name={t("portfolio.current_value")}
-              />
-              <Line
-                type="monotone"
-                dataKey="invested"
-                stroke={INVESTED_COLOR}
-                strokeWidth={1.5}
-                strokeDasharray="4 4"
-                dot={false}
-                name={t("portfolio.invested")}
-              />
-              <Line
-                type="monotone"
-                dataKey="unrealized"
-                stroke={UNREALIZED_COLOR}
-                strokeWidth={1.5}
-                dot={false}
-                name={t("portfolio.unrealized_pnl")}
-              />
-              <Line
-                type="monotone"
-                dataKey="realized"
-                stroke={REALIZED_COLOR}
-                strokeWidth={1.5}
-                dot={false}
-                name={t("portfolio.realized_pnl")}
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
+                ))}
+              </div>
+            </div>
+
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={data} syncId={SYNC_ID} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis {...xAxisProps} />
+                  <YAxis width={AXIS_WIDTH} tickFormatter={formatEuroTick} tick={{ fontSize: 12 }} />
+                  <Tooltip
+                    content={(props) => (
+                      <ChartTooltip {...props} formatValue={(v) => money(Number(v))} />
+                    )}
+                  />
+                  <Legend />
+                  <Area
+                    type="monotone"
+                    dataKey="value"
+                    stroke={VALUE_COLOR}
+                    fill={VALUE_COLOR}
+                    fillOpacity={0.25}
+                    name={t("portfolio.current_value")}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="invested"
+                    stroke={INVESTED_COLOR}
+                    strokeWidth={1.5}
+                    strokeDasharray="4 4"
+                    dot={false}
+                    name={t("portfolio.invested")}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="unrealized"
+                    stroke={UNREALIZED_COLOR}
+                    strokeWidth={1.5}
+                    dot={false}
+                    name={t("portfolio.unrealized_pnl")}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="realized"
+                    stroke={REALIZED_COLOR}
+                    strokeWidth={1.5}
+                    dot={false}
+                    name={t("portfolio.realized_pnl")}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="border-t border-border pt-4 dark:border-gray-700">
+              <p className="font-medium">{t("portfolio.roi_twr")} %</p>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("portfolio.roi_twr_description")}</p>
+              <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <StatCard
+                  label={t("portfolio.twr")}
+                  color={TWR_COLOR}
+                  endText={formatPercent(summaryRows.twr.end, i18n.language, 1)}
+                  startLabel={t("portfolio.start")}
+                  startText={formatPercent(summaryRows.twr.start, i18n.language, 1)}
+                  deltaText={signedPct(summaryRows.twr.deltaAbs)}
+                  deltaTone={summaryRows.twr.deltaAbs}
+                />
+              </div>
+              <div className="mt-3 h-44">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={data} syncId={SYNC_ID} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis {...xAxisProps} />
+                    <YAxis width={AXIS_WIDTH} tickFormatter={formatPctTick} tick={{ fontSize: 12 }} />
+                    <ReferenceLine y={0} stroke={ZERO_LINE_COLOR} strokeWidth={1} />
+                    <Tooltip
+                      content={(props) => (
+                        <ChartTooltip {...props} formatValue={(v) => formatPercent(Number(v), i18n.language, 2)} />
+                      )}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="twr"
+                      stroke={TWR_COLOR}
+                      strokeWidth={2}
+                      dot={false}
+                      name={t("portfolio.twr")}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </>
         )}
       </CardBody>
     </Card>

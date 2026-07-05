@@ -253,7 +253,14 @@
     "range_year": "{{count}} year",
     "range_year_other": "{{count}} years",
     "range_all": "All time",
-    "range_custom": "Custom"
+    "range_custom": "Custom",
+    "period_summary": "Period summary",
+    "start": "Start",
+    "end": "End",
+    "change": "Change",
+    "roi_twr": "ROI (TWR)",
+    "roi_twr_description": "Time-weighted return: chains the daily market returns between trades, so contributions and withdrawals are not counted as performance.",
+    "twr": "TWR"
   },
   "loans": {
     "header_description": "Loans you have made to others. Tracking only — not included in net worth.",
