@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatCompactMoney, formatMoney, formatPercent, toDecimal } from "./money";
+import { formatCompactMoney, formatMoney, formatPercent, formatPrice, toDecimal } from "./money";
 
 describe("money", () => {
   it("formats EUR in en locale", () => {
@@ -26,6 +26,18 @@ describe("money", () => {
   it("uses European grouping for millions in the es locale", () => {
     // es decimal separator is a comma: 1.5M -> "1,5M€".
     expect(formatCompactMoney(1_500_000, "EUR", "es")).toBe("1,5M€");
+  });
+
+  it("keeps a minimum of 2 decimals for round prices", () => {
+    expect(formatPrice("43120.5", "EUR", "en")).toContain("43,120.50");
+    expect(formatPrice("1", "EUR", "en")).toContain("1.00");
+    expect(formatPrice("0", "EUR", "en")).toContain("0.00");
+  });
+
+  it("shows full precision for tiny prices — no rounding, no significant-figure truncation", () => {
+    // Fixed 2dp would collapse this to "0.00"; every stored decimal is preserved.
+    expect(formatPrice("0.000002403511", "EUR", "en")).toContain("0.000002403511");
+    expect(formatPrice("0.5", "USD", "en")).toContain("0.50");
   });
 
   it("formats an already-scaled percentage", () => {

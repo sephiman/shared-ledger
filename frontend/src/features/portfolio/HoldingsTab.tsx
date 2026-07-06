@@ -19,7 +19,7 @@ import {
 } from "@/api/portfolio";
 import { asApiError } from "@/api/client";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select } from "@/components/ui/primitives";
-import { formatMoney, formatNumber } from "@/lib/money";
+import { formatMoney, formatNumber, formatPrice } from "@/lib/money";
 import { formatDate, isoToday } from "@/lib/dates";
 import { SymbolSearchCombobox } from "./SymbolSearchCombobox";
 import { fractionToPercent, percentOf, pnlTone, signedMoney } from "./valuation";
@@ -28,11 +28,27 @@ const ASSET_CLASSES: HoldingAssetClass[] = ["crypto", "etf", "stock", "fund"];
 
 type PanelMode = { kind: "closed" } | { kind: "create" } | { kind: "edit"; holding: Holding };
 
+/** Quantity at full stored precision: trims only pure trailing zeros (10000.000000 -> 10000),
+ *  never drops meaningful digits, and avoids exponent notation for tiny holdings. */
 function formatQty(value: string): string {
   try {
-    return new Decimal(value).toSignificantDigits(10).toString();
+    return new Decimal(value).toFixed();
   } catch {
     return value;
+  }
+}
+
+/** Average purchase cost per unit = remaining cost basis / net quantity, in base currency.
+ *  Null when the position holds nothing (closed / zero quantity) so we skip the avg line.
+ *  The quotient is bounded to 12 dp — the scale prices are stored at — so the division
+ *  tail doesn't run to decimal.js's 20 significant digits; formatPrice then trims zeros. */
+function avgCost(row: HoldingSummary): string | null {
+  try {
+    const qty = new Decimal(row.holding.netQuantity);
+    if (qty.isZero()) return null;
+    return new Decimal(row.holding.remainingCostBasis).div(qty).toDecimalPlaces(12).toString();
+  } catch {
+    return null;
   }
 }
 
@@ -124,6 +140,9 @@ export function HoldingsTab() {
   const locale = i18n.language;
   const money = (v: string | number | null | undefined, currency = household.currency) =>
     v == null ? "—" : formatMoney(v, currency, locale);
+  // Per-unit prices (current price, avg cost) at full precision — tiny coins keep every decimal.
+  const price = (v: string | number | null | undefined, currency = household.currency) =>
+    v == null ? "—" : formatPrice(v, currency, locale);
   // Signed money plus its percent of the cost basis, e.g. "+€1,234 (11.1%)".
   const pnlWithPct = (v: string | null | undefined, denom: string): string => {
     if (v == null) return "—";
@@ -276,14 +295,15 @@ export function HoldingsTab() {
                   );
                 })}
               </ul>
-              <table className="hidden w-full text-sm md:table">
+              <div className="hidden overflow-x-auto md:block">
+              <table className="w-full text-sm">
                 <thead className="text-left text-gray-500 dark:text-gray-400">
                   <tr>
                     <th className="w-6 py-2"></th>
                     <th>{t("portfolio.symbol")}</th>
                     <th className="text-right">{t("portfolio.quantity")}</th>
                     <th className="text-right">{t("portfolio.cost_basis")}</th>
-                    <th className="text-right">{t("portfolio.current_price")}</th>
+                    <th className="min-w-[9.5rem] text-right">{t("portfolio.current_price")}</th>
                     <th className="text-right">{t("portfolio.current_value")}</th>
                     <th className="text-right">{t("portfolio.unrealized_pnl")}</th>
                     <th className="text-right">{t("portfolio.realized_pnl")}</th>
@@ -293,6 +313,7 @@ export function HoldingsTab() {
                 <tbody>
                   {filtered.map((row) => {
                     const isOpen = expandedIds.has(row.holding.id);
+                    const avg = avgCost(row);
                     return (
                       <Fragment key={row.holding.id}>
                         <tr
@@ -313,24 +334,37 @@ export function HoldingsTab() {
                               </span>
                             )}
                           </td>
-                          <td className="text-right font-mono tabular-nums">{formatQty(row.holding.netQuantity)}</td>
-                          <td className="text-right">{money(row.holding.remainingCostBasis)}</td>
-                          <td className="text-right">
+                          <td className="whitespace-nowrap text-right font-mono tabular-nums">{formatQty(row.holding.netQuantity)}</td>
+                          <td className="whitespace-nowrap text-right font-mono tabular-nums">{money(row.holding.remainingCostBasis)}</td>
+                          <td className="whitespace-nowrap text-right font-mono tabular-nums align-top">
                             {row.currentPrice != null ? (
-                              <span>
-                                {money(row.currentPrice, row.priceCurrency ?? row.holding.nativeCurrency)}
-                                {row.priceAsOf && (
-                                  <span className={`ml-1 text-xs ${row.stale ? "text-amber-600" : "text-gray-400"}`}>
-                                    {formatDate(row.priceAsOf, locale)}
+                              <div className="flex flex-col items-end leading-tight">
+                                <span
+                                  className={row.stale ? "text-amber-600 dark:text-amber-400" : undefined}
+                                  title={
+                                    row.priceAsOf
+                                      ? t("portfolio.price_as_of", { date: formatDate(row.priceAsOf, locale) }) +
+                                        (row.stale ? ` · ${t("portfolio.stale_price")}` : "")
+                                      : undefined
+                                  }
+                                >
+                                  {price(row.currentPrice, row.priceCurrency ?? row.holding.nativeCurrency)}
+                                </span>
+                                {avg != null && (
+                                  <span
+                                    className="text-xs font-normal text-gray-400 dark:text-gray-500"
+                                    title={t("portfolio.avg_cost_tooltip")}
+                                  >
+                                    {t("portfolio.avg_cost_short")} {price(avg)}
                                   </span>
                                 )}
-                              </span>
+                              </div>
                             ) : (
                               <PriceBadge row={row} />
                             )}
                           </td>
-                          <td className="text-right font-medium">{money(row.currentValue)}</td>
-                          <td className={`text-right ${toneClass(pnlTone(row.unrealizedPnl))}`}>
+                          <td className="whitespace-nowrap text-right font-mono font-medium tabular-nums">{money(row.currentValue)}</td>
+                          <td className={`whitespace-nowrap text-right font-mono tabular-nums ${toneClass(pnlTone(row.unrealizedPnl))}`}>
                             {row.unrealizedPnl != null ? (
                               <>
                                 {signedMoney(row.unrealizedPnl, money(row.unrealizedPnl))}
@@ -342,10 +376,10 @@ export function HoldingsTab() {
                               </>
                             ) : "—"}
                           </td>
-                          <td className={`text-right ${toneClass(pnlTone(row.realizedPnl))}`}>
+                          <td className={`whitespace-nowrap text-right font-mono tabular-nums ${toneClass(pnlTone(row.realizedPnl))}`}>
                             {signedMoney(row.realizedPnl, money(row.realizedPnl))}
                           </td>
-                          <td className="text-right">
+                          <td className="whitespace-nowrap text-right font-mono tabular-nums">
                             {row.weight != null ? `${formatNumber(fractionToPercent(row.weight) ?? 0, locale, 1)}%` : "—"}
                           </td>
                         </tr>
@@ -369,6 +403,7 @@ export function HoldingsTab() {
                   })}
                 </tbody>
               </table>
+              </div>
             </>
           )}
         </CardBody>
@@ -601,7 +636,7 @@ function LotsEditor({ holding, currency, locale }: { holding: Holding; currency:
                   {t(`portfolio.lot_type.${lot.type}`)}
                 </span>
                 {" "}
-                {formatDate(lot.tradedOn, locale)} · {formatQty(lot.quantity)} × {formatMoney(lot.unitPrice, lot.currency, locale)}
+                {formatDate(lot.tradedOn, locale)} · {formatQty(lot.quantity)} × {formatPrice(lot.unitPrice, lot.currency, locale)}
                 {lot.fee && ` · ${t("portfolio.fee")} ${formatMoney(lot.fee, lot.currency, locale)}`}
                 {lot.note && ` · ${lot.note}`}
               </span>

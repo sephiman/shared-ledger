@@ -17,6 +17,25 @@ export function formatMoney(value: string | number | Decimal | null | undefined,
   }).format(d.toNumber());
 }
 
+/**
+ * Full-precision per-unit price. Shows every decimal the value actually carries —
+ * PEPE 0.000002403511 keeps all 12 decimals, BTC 55,567.73 keeps 2 — with NO rounding
+ * and NO significant-figure truncation; the decimal count comes from the value itself.
+ * European grouping and currency symbol. Use for unit/current prices only; EUR
+ * aggregates (totals, P&L) stay at 2 decimals via {@link formatMoney}.
+ */
+export function formatPrice(value: string | number | Decimal | null | undefined, currency: string, locale: string): string {
+  const d = toDecimal(value);
+  // Never fewer than 2 (so 5 reads as 5.00); cap at Intl's 20-fraction-digit ceiling.
+  const decimals = Math.min(20, Math.max(2, d.decimalPlaces()));
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: decimals,
+  }).format(d.toNumber());
+}
+
 export function formatNumber(value: number, locale: string, fractionDigits = 0): string {
   return new Intl.NumberFormat(locale, {
     minimumFractionDigits: fractionDigits,
