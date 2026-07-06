@@ -28,10 +28,17 @@ class BankSyncScheduler(
 
     @Scheduled(cron = "\${app.enable-banking.sync-cron}", zone = "\${app.scheduler.timezone}")
     fun syncAll() {
-        if (!props.enableBanking.configured) return
-        val due = connections.findAllByIngestionEnabledTrue()
+        if (!props.enableBanking.configured) {
+            log.info("bank_sync_run skipped=not_configured")
+            return
+        }
+        val ingesting = connections.findAllByIngestionEnabledTrue()
+        val due = ingesting
             .filter { it.status == ConnectionStatus.active || it.status == ConnectionStatus.suspended }
-        log.info("bank_sync_run connections={}", due.size)
+        log.info(
+            "bank_sync_run ingestionEnabled={} due={} skippedByStatus={}",
+            ingesting.size, due.size, ingesting.size - due.size,
+        )
         for (connection in due) {
             try {
                 syncService.sync(connection.id)

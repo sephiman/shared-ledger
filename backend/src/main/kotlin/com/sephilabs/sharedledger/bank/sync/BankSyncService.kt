@@ -83,12 +83,18 @@ class BankSyncService(
         val today = LocalDate.now()
         val maxCalls = props.enableBanking.maxCallsPerDay
         var callsUsed = if (connection.callsResetOn != today) 0 else connection.callsUsedToday
+        log.info(
+            "bank_sync_start connection={} household={} aspsp='{}' status={} callsUsed={}/{} lastSyncedAt={}",
+            connectionId, connection.householdId, connection.aspspName, connection.status,
+            callsUsed, maxCalls, connection.lastSyncedAt,
+        )
         if (maxCalls - callsUsed <= 0) {
             log.info("bank_sync_skipped connection={} reason=call_budget", connectionId)
             return 0
         }
         val sessionId = connection.sessionIdEnc?.let { crypto.decrypt(it) }
         if (sessionId == null) {
+            log.warn("bank_sync_skipped connection={} reason=no_session_id (marking error)", connectionId)
             write { markConnection(connectionId) { it.status = ConnectionStatus.error } }
             return 0
         }
@@ -98,7 +104,9 @@ class BankSyncService(
         return try {
             // ---- HTTP phase: no DB transaction is held while we talk to the provider ----
             val status = connector.sessionStatus(sessionId); callsUsed++
+            log.info("bank_sync_session connection={} consentStatus={}", connectionId, status)
             if (status != ConsentStatus.ACTIVE) {
+                log.info("bank_sync_stop connection={} reason=consent_not_active status={} (marking expired)", connectionId, status)
                 write {
                     markConnection(connectionId) {
                         it.status = ConnectionStatus.expired
@@ -110,11 +118,16 @@ class BankSyncService(
                 return 0
             }
 
+            val accountList = accounts.findAllByConnectionId(connectionId)
+            log.info("bank_sync_accounts connection={} accounts={}", connectionId, accountList.size)
             val fetched = mutableListOf<Fetched>()
-            budget@ for (account in accounts.findAllByConnectionId(connectionId)) {
+            budget@ for (account in accountList) {
                 val cursor = pending.findMaxBookingDate(connectionId, account.id)
                     ?: today.minusDays(props.enableBanking.backfillDays)
+                log.info("bank_sync_account connection={} account={} dateFrom={}", connectionId, account.id, cursor)
                 var continuationKey: String? = null
+                var pages = 0
+                var fetchedForAccount = 0
                 do {
                     if (maxCalls - callsUsed <= 0) {
                         log.info("bank_sync_paused connection={} reason=call_budget", connectionId)
@@ -122,21 +135,36 @@ class BankSyncService(
                     }
                     val page = connector.fetchMovements(sessionId, account.accountUid, cursor, continuationKey)
                     callsUsed++
+                    pages++
+                    fetchedForAccount += page.movements.size
+                    log.info(
+                        "bank_sync_page connection={} account={} page={} movements={} hasMore={}",
+                        connectionId, account.id, pages, page.movements.size, page.continuationKey != null,
+                    )
                     // FX conversion may hit the network on a cache miss — keep it out of the persist tx.
                     page.movements.forEach {
                         fetched += Fetched(account.id, it, fx.toBase(it.amount, it.currency, it.bookingDate))
                     }
                     continuationKey = page.continuationKey
                 } while (continuationKey != null)
+                log.info(
+                    "bank_sync_account_done connection={} account={} pages={} fetched={}",
+                    connectionId, account.id, pages, fetchedForAccount,
+                )
             }
+            log.info("bank_sync_fetched connection={} totalFetched={}", connectionId, fetched.size)
 
             // ---- Persist phase: one short transaction ----
             val callsAtEnd = callsUsed
             write {
                 var n = 0
+                var duplicates = 0
                 for (f in fetched) {
                     val m = f.movement
-                    if (pending.existsByConnectionIdAndBankMovementId(connectionId, m.bankMovementId)) continue
+                    if (pending.existsByConnectionIdAndBankMovementId(connectionId, m.bankMovementId)) {
+                        duplicates++
+                        continue
+                    }
                     val entity = PendingMovement(
                         householdId = connection.householdId,
                         connectionId = connectionId,
@@ -165,6 +193,10 @@ class BankSyncService(
                 }
                 finishRun(runId, SyncRunStatus.success, n)
                 metrics.bankMovementsIngested(n)
+                log.info(
+                    "bank_sync_done connection={} fetched={} new={} duplicates={} callsUsed={}/{}",
+                    connectionId, fetched.size, n, duplicates, callsAtEnd, maxCalls,
+                )
                 // Published inside the tx so the AFTER_COMMIT Telegram listener fires only on commit.
                 notifications.bankMovementsToReview(connection.householdId, n, NotifyActor.Schedule(connection.householdId))
                 n

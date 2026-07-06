@@ -101,7 +101,16 @@ class EnableBankingConnector(
             if (continuationKey != null) append("&continuation_key=").append(continuationKey)
         }
         val body = get(query)
-        val movements = body.path("transactions").mapNotNull { mapMovement(it) }
+        val raw = body.path("transactions")
+        val movements = raw.mapNotNull { mapMovement(it) }
+        if (raw.size() != movements.size) {
+            log.info(
+                "eb_fetch account={} rawTransactions={} mapped={} dropped={} (unmappable: missing date or credit_debit_indicator)",
+                accountUid, raw.size(), movements.size, raw.size() - movements.size,
+            )
+        } else {
+            log.debug("eb_fetch account={} rawTransactions={} mapped={}", accountUid, raw.size(), movements.size)
+        }
         MovementPage(movements = movements, continuationKey = body.path("continuation_key").textOrNull())
     }
 
