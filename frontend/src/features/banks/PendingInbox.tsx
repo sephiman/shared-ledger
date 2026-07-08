@@ -9,6 +9,8 @@ import {
   usePendingMovements,
   useRejectBatch,
   useRejectMovement,
+  useRestoreBatch,
+  useRestoreMovement,
   type Direction,
   type MovementStatus,
   type PendingMovement,
@@ -51,9 +53,14 @@ export function PendingInbox({ householdId, currency, locale }: { householdId: s
   const rejectOne = useRejectMovement(householdId);
   const confirmBatch = useConfirmBatch(householdId);
   const rejectBatch = useRejectBatch(householdId);
+  const restoreOne = useRestoreMovement(householdId);
+  const restoreBatch = useRestoreBatch(householdId);
   const editMovement = useEditMovement(householdId);
 
   const editable = status === "pending";
+  // Rejected items can be sent back to the inbox; enable row selection + a restore action for them.
+  const restorable = status === "rejected";
+  const selectable = editable || restorable;
   const loaded = data?.items ?? [];
   const total = data?.total ?? 0;
   const truncated = total > loaded.length;
@@ -150,6 +157,15 @@ export function PendingInbox({ householdId, currency, locale }: { householdId: s
   const rejectRow = (m: PendingMovement) =>
     rejectOne.mutate(m.id, { onSuccess: () => showToast(t("banks.rejected_toast", { count: 1 }), "success") });
 
+  const restoreSelected = () => {
+    restoreBatch.mutate(selectedIds, {
+      onSuccess: (res) => { setSelected(new Set()); showToast(t("banks.restored_toast", { count: res.restored }), "success"); },
+    });
+  };
+
+  const restoreRow = (m: PendingMovement) =>
+    restoreOne.mutate(m.id, { onSuccess: () => showToast(t("banks.restored_toast", { count: 1 }), "success") });
+
   const groups = useMemo(() => buildGroups(filtered, groupBy, categories, t, resolveCategory), [filtered, groupBy, categories, categoryById]);
   const pageCount = Math.max(1, Math.ceil(filtered.length / CLIENT_PAGE));
   const pageItems = filtered.slice(cpage * CLIENT_PAGE, cpage * CLIENT_PAGE + CLIENT_PAGE);
@@ -162,6 +178,8 @@ export function PendingInbox({ householdId, currency, locale }: { householdId: s
       locale={locale}
       categories={categories}
       editable={editable}
+      selectable={selectable}
+      restorable={restorable}
       selected={selected.has(m.id)}
       onToggle={() => toggle(m.id)}
       categoryValue={resolveCategory(m)}
@@ -170,8 +188,9 @@ export function PendingInbox({ householdId, currency, locale }: { householdId: s
       onDirectionChange={(d) => setDirection(m, d)}
       onConfirm={() => confirmRow(m)}
       onReject={() => rejectRow(m)}
+      onRestore={() => restoreRow(m)}
       onSaveDescription={(desc) => editMovement.mutate({ id: m.id, input: { description: desc } })}
-      busy={confirmOne.isPending || rejectOne.isPending}
+      busy={confirmOne.isPending || rejectOne.isPending || restoreOne.isPending}
     />
   );
 
@@ -240,10 +259,23 @@ export function PendingInbox({ householdId, currency, locale }: { householdId: s
         </div>
       )}
 
+      {/* Bulk-restore bar (rejected view) */}
+      {restorable && selectedIds.length > 0 && (
+        <div className="sticky top-0 z-10">
+          <Card className="border-primary/40 shadow">
+            <CardBody className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium">{t("banks.n_selected", { count: selectedIds.length })}</span>
+              <Button disabled={restoreBatch.isPending} onClick={restoreSelected}>{t("banks.restore")}</Button>
+              <Button variant="ghost" onClick={() => setSelected(new Set())}>{t("banks.clear_selection")}</Button>
+            </CardBody>
+          </Card>
+        </div>
+      )}
+
       {/* List */}
       <Card>
         <CardHeader className="flex flex-wrap items-center justify-between gap-2">
-          {editable && filtered.length > 0 ? (
+          {selectable && filtered.length > 0 ? (
             <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
               <input
                 type="checkbox"
@@ -319,14 +351,16 @@ function buildGroups(
 }
 
 function MovementRow({
-  movement, currency, locale, categories, editable, selected, onToggle,
-  categoryValue, onCategoryChange, direction, onDirectionChange, onConfirm, onReject, onSaveDescription, busy,
+  movement, currency, locale, categories, editable, selectable, restorable, selected, onToggle,
+  categoryValue, onCategoryChange, direction, onDirectionChange, onConfirm, onReject, onRestore, onSaveDescription, busy,
 }: {
   movement: PendingMovement;
   currency: string;
   locale: string;
   categories: Category[];
   editable: boolean;
+  selectable: boolean;
+  restorable: boolean;
   selected: boolean;
   onToggle: () => void;
   categoryValue: string;
@@ -335,6 +369,7 @@ function MovementRow({
   onDirectionChange: (d: Direction) => void;
   onConfirm: () => void;
   onReject: () => void;
+  onRestore: () => void;
   onSaveDescription: (description: string) => void;
   busy: boolean;
 }) {
@@ -350,7 +385,7 @@ function MovementRow({
   return (
     <li className="rounded-md border border-border p-3 dark:border-gray-700">
       <div className="flex items-start gap-3">
-        {editable && (
+        {selectable && (
           <input type="checkbox" className="mt-1" checked={selected} onChange={onToggle} aria-label={t("banks.select_movement")} />
         )}
         <div className="min-w-0 flex-1">
@@ -407,6 +442,12 @@ function MovementRow({
         <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
           {t("common.category")}: {categoryLabelByCode(movement.suggestedCategoryCode, categories, t)}
         </p>
+      )}
+
+      {restorable && (
+        <div className="mt-3">
+          <Button variant="secondary" disabled={busy} onClick={onRestore}>{t("banks.restore")}</Button>
+        </div>
       )}
     </li>
   );

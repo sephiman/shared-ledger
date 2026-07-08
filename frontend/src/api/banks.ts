@@ -109,6 +109,7 @@ export interface RuleInput {
 export interface BatchResult {
   confirmed: number;
   rejected: number;
+  restored: number;
   skipped: string[];
 }
 
@@ -291,6 +292,26 @@ export function useRejectBatch(householdId: string) {
   return useMutation({
     mutationFn: async (ids: string[]) =>
       (await apiClient.post<BatchResult>(`${base(householdId)}/pending/reject-batch`, { ids })).data,
+    onSuccess: () => invalidateAll(qc, householdId),
+    meta: { silentSuccess: true },
+  });
+}
+
+export function useRestoreMovement(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) =>
+      (await apiClient.post<PendingMovement>(`${base(householdId)}/pending/${id}/restore`)).data,
+    onSuccess: () => invalidateAll(qc, householdId),
+    meta: { silentSuccess: true },
+  });
+}
+
+export function useRestoreBatch(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]) =>
+      (await apiClient.post<BatchResult>(`${base(householdId)}/pending/restore-batch`, { ids })).data,
     onSuccess: () => invalidateAll(qc, householdId),
     meta: { silentSuccess: true },
   });

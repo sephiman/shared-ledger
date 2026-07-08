@@ -137,6 +137,7 @@ data class ConfirmBatchRequest(
 data class BatchResultDto(
     val confirmed: Int = 0,
     val rejected: Int = 0,
+    val restored: Int = 0,
     val skipped: List<UUID> = emptyList(),
 )
 

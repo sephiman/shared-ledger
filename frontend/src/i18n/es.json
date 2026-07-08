@@ -163,6 +163,8 @@
     "view_match": "ver coincidencia",
     "confirmed_toast": "{{count}} confirmados",
     "rejected_toast": "{{count}} rechazados",
+    "restored_toast": "{{count}} restaurados a pendientes",
+    "restore": "Restaurar",
     "truncated_note": "Mostrando {{shown}} de {{total}} — afina los filtros para ver el resto",
     "no_counterparty": "Contraparte desconocida",
     "possible_duplicate": "Posible duplicado",

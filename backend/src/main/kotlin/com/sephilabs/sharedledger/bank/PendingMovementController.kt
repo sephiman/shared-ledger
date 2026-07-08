@@ -44,6 +44,10 @@ class PendingMovementController(
     fun reject(@PathVariable householdId: UUID, @PathVariable id: UUID): PendingMovementDto =
         service.reject(householdId, id, currentUser.requireUser())
 
+    @PostMapping("/{id}/restore")
+    fun restore(@PathVariable householdId: UUID, @PathVariable id: UUID): PendingMovementDto =
+        service.restore(householdId, id)
+
     @PatchMapping("/{id}")
     fun edit(
         @PathVariable householdId: UUID,
@@ -62,4 +66,10 @@ class PendingMovementController(
         @PathVariable householdId: UUID,
         @Valid @RequestBody body: BatchIdsRequest,
     ): BatchResultDto = service.rejectBatch(householdId, body.ids, currentUser.requireUser())
+
+    @PostMapping("/restore-batch")
+    fun restoreBatch(
+        @PathVariable householdId: UUID,
+        @Valid @RequestBody body: BatchIdsRequest,
+    ): BatchResultDto = service.restoreBatch(householdId, body.ids)
 }

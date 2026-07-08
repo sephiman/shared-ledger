@@ -2,6 +2,7 @@ package com.sephilabs.sharedledger.bank
 
 import com.sephilabs.sharedledger.IntegrationTestBase
 import com.sephilabs.sharedledger.bank.connector.BankMovement
+import com.sephilabs.sharedledger.common.errors.AppException
 import com.sephilabs.sharedledger.bank.sync.BankSyncService
 import com.sephilabs.sharedledger.catalog.CategoryService
 import com.sephilabs.sharedledger.household.Household
@@ -13,6 +14,7 @@ import com.sephilabs.sharedledger.portfolio.price.FxRateRepository
 import com.sephilabs.sharedledger.transaction.Direction
 import com.sephilabs.sharedledger.transaction.TransactionRepository
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -85,6 +87,56 @@ class BankIngestionIntegrationTest @Autowired constructor(
         assertThat(pending.search(household.id, MovementStatus.rejected, null, PageRequest.of(0, 100)).content).hasSize(1)
         // Still only the one confirmed transaction.
         assertThat(transactions.findByHouseholdIdAndOccurrenceDateBetween(household.id, today.minusDays(30), today)).hasSize(1)
+    }
+
+    @Test
+    fun `a rejected item can be restored to pending, individually and by batch`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        fake.movements.addAll(
+            listOf(
+                movement("r-1", today.minusDays(2), Direction.expense, "12.50", "Shop A"),
+                movement("r-2", today.minusDays(1), Direction.expense, "8.00", "Shop B"),
+            ),
+        )
+        link(household, user)
+        assertThat(pendingService.pendingCount(household.id)).isEqualTo(2)
+
+        val items = pending.search(household.id, MovementStatus.pending, null, PageRequest.of(0, 100)).content
+        val (first, second) = items[0] to items[1]
+
+        // Reject both, then restore one individually and one via batch.
+        pendingService.reject(household.id, first.id, user)
+        pendingService.reject(household.id, second.id, user)
+        assertThat(pendingService.pendingCount(household.id)).isZero()
+
+        val restored = pendingService.restore(household.id, first.id)
+        assertThat(restored.status).isEqualTo(MovementStatus.pending)
+        assertThat(pendingService.pendingCount(household.id)).isEqualTo(1)
+
+        val batch = pendingService.restoreBatch(household.id, listOf(second.id))
+        assertThat(batch.restored).isEqualTo(1)
+        assertThat(pendingService.pendingCount(household.id)).isEqualTo(2)
+
+        // Processing audit fields are cleared and nothing is left rejected; no transactions created.
+        val back = pending.findByIdAndHouseholdId(first.id, household.id)!!
+        assertThat(back.processedAt).isNull()
+        assertThat(back.processedByUserId).isNull()
+        assertThat(pending.search(household.id, MovementStatus.rejected, null, PageRequest.of(0, 100)).content).isEmpty()
+        assertThat(transactions.findByHouseholdIdAndOccurrenceDateBetween(household.id, today.minusDays(30), today)).isEmpty()
+    }
+
+    @Test
+    fun `restoring a non-rejected item is a conflict`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        fake.movements.add(movement("nr-1", today.minusDays(1), Direction.expense, "5.00", "Shop"))
+        link(household, user)
+
+        val item = pending.search(household.id, MovementStatus.pending, null, PageRequest.of(0, 100)).content.single()
+        assertThatThrownBy { pendingService.restore(household.id, item.id) }
+            .isInstanceOf(AppException::class.java)
+            .hasMessageContaining("PENDING_MOVEMENT_NOT_REJECTED")
     }
 
     @Test

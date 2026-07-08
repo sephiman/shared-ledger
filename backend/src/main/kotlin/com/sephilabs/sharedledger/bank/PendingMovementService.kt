@@ -127,6 +127,27 @@ class PendingMovementService(
         return BatchResultDto(rejected = movements.size)
     }
 
+    /**
+     * Send a rejected item back to the pending inbox. Safe because reject creates nothing — this
+     * only clears the status flip. Confirmed items are terminal (a transaction was generated) and
+     * cannot be restored this way.
+     */
+    @Transactional
+    fun restore(householdId: UUID, id: UUID): PendingMovementDto {
+        val movement = pending.findByIdAndHouseholdId(id, householdId)
+            ?: throw AppException.notFound("PENDING_MOVEMENT_NOT_FOUND")
+        if (movement.status != MovementStatus.rejected) throw AppException.conflict("PENDING_MOVEMENT_NOT_REJECTED")
+        restoreToPending(movement)
+        return movement.toDto(connections.findById(movement.connectionId).orElse(null), account(movement), isPossibleDuplicate(movement))
+    }
+
+    @Transactional
+    fun restoreBatch(householdId: UUID, ids: List<UUID>): BatchResultDto {
+        val movements = pending.findAllByIdInAndHouseholdId(ids, householdId).filter { it.status == MovementStatus.rejected }
+        movements.forEach { restoreToPending(it) }
+        return BatchResultDto(restored = movements.size)
+    }
+
     @Transactional
     fun edit(householdId: UUID, id: UUID, request: EditMovementRequest): PendingMovementDto {
         val movement = requirePending(householdId, id)
@@ -163,6 +184,12 @@ class PendingMovementService(
         )
         val tx = transactionService.createInternal(householdId, request, by, notify)
         movement.createdTransactionId = tx.id
+    }
+
+    private fun restoreToPending(movement: PendingMovement) {
+        movement.status = MovementStatus.pending
+        movement.processedAt = null
+        movement.processedByUserId = null
     }
 
     private fun markConfirmed(movement: PendingMovement, categoryCode: String, by: User) {

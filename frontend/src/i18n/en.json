@@ -163,6 +163,8 @@
     "view_match": "view match",
     "confirmed_toast": "{{count}} confirmed",
     "rejected_toast": "{{count}} rejected",
+    "restored_toast": "{{count}} restored to pending",
+    "restore": "Restore",
     "truncated_note": "Showing {{shown}} of {{total}} — refine filters to see the rest",
     "no_counterparty": "Unknown counterparty",
     "possible_duplicate": "Possible duplicate",

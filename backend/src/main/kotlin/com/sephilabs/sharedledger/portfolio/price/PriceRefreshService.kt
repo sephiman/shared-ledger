@@ -280,9 +280,14 @@ class PriceRefreshService(
      * Binance fallback: daily USDT closes for {ticker}USDT (1 USDT = 1 USD by assumption),
      * converted into the base currency with the ECB rate of each day and upserted into
      * the SAME (coingecko, id, base) series the holding reads — the pair symbol is never
-     * persisted, so Binance naming can't collide with CoinGecko ids. Days already stored
-     * keep their CoinGecko value (the upsert overwrites, but ranges are disjoint by
-     * construction); days without an FX rate are skipped. Unknown pairs are a silent no-op.
+     * persisted, so Binance naming can't collide with CoinGecko ids. Days without an FX
+     * rate are skipped; unknown pairs are a silent no-op.
+     *
+     * Idempotent and cheap on repeat: this range sits below the CoinGecko ceiling and is fixed
+     * once filled, so a scheduled refresh must not re-pull it every run. Two guards ensure that —
+     * a short-circuit when the top of the window is already stored (it was covered by CoinGecko
+     * the day before it crossed the ceiling), and a skip of any day already present when a fetch
+     * does happen (initial fill, or a recent gap after a CoinGecko outage).
      */
     private fun fallbackCryptoFill(
         coinId: String,
@@ -292,14 +297,27 @@ class PriceRefreshService(
         today: LocalDate,
     ) {
         if (from.isAfter(to)) return
+        // Top of the window already stored → the whole range was filled on a prior run. Skip the
+        // Binance call and the multi-year re-upsert entirely (the common, steady-state path).
+        if (prices.findByProviderAndProviderSymbolAndCurrencyAndPriceDate(
+                CoinGeckoClient.PROVIDER, coinId, baseCurrency, to,
+            ) != null
+        ) {
+            return
+        }
         try {
             val pair = ticker.uppercase() + BINANCE_USD_QUOTE
             val usdCloses = cryptoFallback.dailyHistoryUsd(pair, from, to)
             if (usdCloses.isEmpty()) return
+            // Days we already hold in this window — so a forced full-range fetch writes only the gap.
+            val existing = prices.findAllByProviderAndProviderSymbolAndCurrencyAndPriceDateBetweenOrderByPriceDateAsc(
+                CoinGeckoClient.PROVIDER, coinId, baseCurrency, from, to,
+            ).mapTo(HashSet()) { it.priceDate }
             if (baseCurrency != USD) refreshFxCurrency(USD, today, earliestNeeded = from)
             val now = Instant.now()
             var stored = 0
             for (day in usdCloses) {
+                if (day.date in existing) continue
                 val rate =
                     if (baseCurrency == USD) BigDecimal.ONE
                     else fxRates.findFirstByBaseCurrencyAndQuoteCurrencyAndRateDateLessThanEqualOrderByRateDateDesc(
@@ -310,7 +328,7 @@ class PriceRefreshService(
                 stored++
             }
             metrics.priceRefreshed(BinanceClient.PROVIDER)
-            log.info("Binance fallback stored {} days for {} ({})", stored, coinId, pair)
+            if (stored > 0) log.info("Binance fallback stored {} days for {} ({})", stored, coinId, pair)
         } catch (ex: ProviderException) {
             metrics.priceRefreshFailure(BinanceClient.PROVIDER)
             log.error("Binance fallback failed for {}: {}", coinId, ex.message)

@@ -162,6 +162,43 @@ class PriceRefreshIntegrationTest @Autowired constructor(
     }
 
     @Test
+    fun `binance fallback is not re-pulled once the pre-ceiling window is filled`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val coinId = "filled-coin-${System.nanoTime()}"
+        val ticker = "FLD${System.nanoTime() % 1000}"
+        val holding = createLinkedCrypto(household.id, user, ticker, coinId)
+
+        stubCrypto.history[coinId] = mutableListOf(DailyPrice(today.minusDays(10), BigDecimal("50000")))
+        stubCrypto.current[coinId] = BigDecimal("52000")
+        // Binance covers the whole pre-ceiling window, including its top day (ceiling - 1 = today-366).
+        stubBinance.history["${ticker}USDT"] = mutableListOf(
+            DailyPrice(today.minusDays(500), BigDecimal("20000")),
+            DailyPrice(today.minusDays(366), BigDecimal("30000")),
+        )
+        stubFx.history["USD"] = mutableListOf(DailyPrice(today.minusDays(505), BigDecimal("0.90")))
+
+        // The request-time backfill fills the pre-ceiling window from Binance when the old lot lands.
+        holdingService.addLot(
+            household.id, holding.id,
+            LotRequest(tradedOn = today.minusDays(500), quantity = BigDecimal("1"), unitPrice = BigDecimal("18000")),
+            user,
+        )
+        assertThat(prices.findMinPriceDate("coingecko", coinId, "EUR")).isEqualTo(today.minusDays(500))
+        assertThat(
+            prices.findByProviderAndProviderSymbolAndCurrencyAndPriceDate("coingecko", coinId, "EUR", today.minusDays(366)),
+        ).isNotNull()
+
+        // A scheduled refresh must NOT re-pull the multi-year tail: the window top is already stored,
+        // so the fallback short-circuits before ever calling Binance.
+        stubBinance.calls.clear()
+        refresh.refreshCrypto(today)
+
+        assertThat(stubBinance.calls.count { it.first == "${ticker}USDT" }).isZero()
+        assertThat(prices.findMinPriceDate("coingecko", coinId, "EUR")).isEqualTo(today.minusDays(500))
+    }
+
+    @Test
     fun `binance covers the gap-fill when coingecko is down`() {
         val (user, household) = seed()
         val today = LocalDate.now()
