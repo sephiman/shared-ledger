@@ -107,13 +107,18 @@ export function PendingInbox({ householdId, currency, locale }: { householdId: s
   const applyCategoryToSelected = (code: string) => {
     const kind = categories.find((c) => c.code === code)?.kind;
     if (!kind) return;
-    setCategoryById((prev) => {
-      const next = { ...prev };
-      for (const m of filtered) {
-        if (selected.has(m.id) && resolveDirection(m) === kind) next[m.id] = code;
-      }
-      return next;
-    });
+    const targets = filtered.filter((m) => selected.has(m.id) && resolveDirection(m) === kind);
+    const skipped = filtered.filter((m) => selected.has(m.id)).length - targets.length;
+    if (targets.length > 0) {
+      const ids = new Set(targets.map((m) => m.id));
+      setCategoryById((prev) => {
+        const next = { ...prev };
+        for (const id of ids) next[id] = code;
+        return next;
+      });
+      showToast(t("banks.category_applied", { count: targets.length }), "success");
+    }
+    if (skipped > 0) showToast(t("banks.category_skipped_direction", { count: skipped }), "error");
   };
 
   const confirmSelected = () => {

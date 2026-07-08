@@ -174,6 +174,8 @@
     "confirm_selected": "Confirmar {{count}}",
     "reject_selected": "Rechazar {{count}}",
     "batch_skipped": "{{count}} omitidos — elige una categoría primero",
+    "category_applied": "Categoría aplicada a {{count}}",
+    "category_skipped_direction": "{{count}} omitidos — dirección distinta",
     "link_success": "Banco vinculado",
     "completing_link": "Completando vinculación…",
     "callback_missing": "Faltan datos de autorización del banco."
@@ -226,10 +228,10 @@
     "movements": "Movimientos",
     "movements_description": "Aportaciones, retiros y pagos de deuda entre instantáneas. Sirven para atribuir los cambios al flujo o al rendimiento del mercado.",
     "liabilities": "Pasivos",
-    "liabilities_description": "Deudas recurrentes (hipoteca, préstamos, líneas de crédito) que aparecen en tus instantáneas. Los inactivos no se muestran en nuevas instantáneas.",
+    "liabilities_description": "Deudas recurrentes (hipoteca, préstamos, líneas de crédito). Su saldo se refleja en tus instantáneas de Patrimonio, restándose de tu patrimonio neto. No están vinculadas a transacciones — no crean ni consumen gastos. Los pasivos inactivos no se muestran en nuevas instantáneas.",
     "loans": "Préstamos",
     "evolution": "Evolución",
-    "evolution_description": "Patrimonio neto, activos y pasivos a lo largo del tiempo a partir de tus instantáneas.",
+    "evolution_description": "Patrimonio, activos y pasivos a lo largo del tiempo a partir de tus instantáneas.",
     "allocation": "Asignación",
     "allocation_description": "Peso de cada clase de activo en tu instantánea más reciente.",
     "new_snapshot": "Nueva instantánea",
@@ -350,7 +352,7 @@
     "twr": "TWR"
   },
   "loans": {
-    "header_description": "Préstamos que has hecho a otras personas. Solo seguimiento — no incluido en el patrimonio neto.",
+    "header_description": "Dinero que prestas a otras personas — solo seguimiento. No se cuenta en tu Patrimonio (una decisión deliberada) y no está vinculado a transacciones.",
     "new_loan": "Nuevo préstamo",
     "edit_loan": "Editar préstamo",
     "borrower_name": "Prestatario",
@@ -416,7 +418,7 @@
     "home_title": "Préstamos pendientes",
     "home_active_count_one": "{{count}} préstamo activo",
     "home_active_count_other": "{{count}} préstamos activos",
-    "home_note": "Los pagos se aplican primero al interés y luego al principal. Estos importes se registran aparte del patrimonio neto.",
+    "home_note": "Los pagos se aplican primero al interés y luego al principal. Estos importes se registran aparte de tu Patrimonio.",
     "view_all": "Ver todos"
   },
   "analytics": {
