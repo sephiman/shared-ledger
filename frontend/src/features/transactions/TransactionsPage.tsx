@@ -50,6 +50,27 @@ export function TransactionsPage() {
   const household = useActiveHousehold();
   const [searchParams, setSearchParams] = useSearchParams();
   const [filters, setFilters] = useState<TransactionFilters>(() => initialFiltersFromUrl(searchParams));
+
+  // The filter params can change while this page stays mounted (e.g. the "view match" link inside
+  // the Pending tab navigates within /transactions, so the useState seed above never re-runs).
+  // Re-apply them on change. Keyed on the individual values so a tab-only change doesn't clobber
+  // filters the user edited by hand (manual edits don't touch the URL).
+  const urlFrom = searchParams.get("from") ?? undefined;
+  const urlTo = searchParams.get("to") ?? undefined;
+  const urlDirection = searchParams.get("direction") ?? undefined;
+  const urlCategoryCode = searchParams.get("categoryCode") ?? undefined;
+  const urlCategoryGroup = searchParams.get("categoryGroup") ?? undefined;
+  useEffect(() => {
+    setFilters((f) => ({
+      ...f,
+      page: 0,
+      from: urlFrom,
+      to: urlTo,
+      direction: urlDirection === "income" || urlDirection === "expense" ? urlDirection : undefined,
+      categoryCode: urlCategoryCode,
+      categoryGroup: urlCategoryGroup,
+    }));
+  }, [urlFrom, urlTo, urlDirection, urlCategoryCode, urlCategoryGroup]);
   const [panel, setPanel] = useState<PanelMode>({ kind: "closed" });
   const panelRef = useRef<HTMLDivElement | null>(null);
   const { data: page, isLoading } = useTransactions(household.householdId, filters);

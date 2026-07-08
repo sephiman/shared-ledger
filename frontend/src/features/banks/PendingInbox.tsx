@@ -19,7 +19,7 @@ import { useCategories, type Category } from "@/api/catalog";
 import { categoryLabel, categoryLabelByCode } from "@/lib/categoryLabel";
 import { Badge, Button, Card, CardBody, CardHeader, Input, Select } from "@/components/ui/primitives";
 import { formatMoney } from "@/lib/money";
-import { formatDate } from "@/lib/dates";
+import { addDaysIso, formatDate } from "@/lib/dates";
 import { showToast } from "@/lib/toastBus";
 
 type GroupBy = "none" | "connection" | "category";
@@ -27,6 +27,9 @@ type GroupBy = "none" | "connection" | "category";
 // The API caps a page at 200; we load that once and do search/group/select/paginate client-side.
 const FETCH_SIZE = 200;
 const CLIENT_PAGE = 25;
+// Mirrors the backend's DUPLICATE_WINDOW_DAYS: a possible-duplicate match can be a few days off the
+// booking date, so "view match" must filter to the same ±window, not just the exact day.
+const DUPLICATE_WINDOW_DAYS = 3;
 
 export function PendingInbox({ householdId, currency, locale }: { householdId: string; currency: string; locale: string }) {
   const { t } = useTranslation();
@@ -394,7 +397,7 @@ function MovementRow({
             {movement.possibleDuplicate && (
               <Badge tone="amber">
                 {t("banks.possible_duplicate")}
-                <Link to={`/transactions?from=${movement.bookingDate}&to=${movement.bookingDate}`} className="underline">
+                <Link to={`/transactions?from=${addDaysIso(movement.bookingDate, -DUPLICATE_WINDOW_DAYS)}&to=${addDaysIso(movement.bookingDate, DUPLICATE_WINDOW_DAYS)}`} className="underline">
                   {t("banks.view_match")}
                 </Link>
               </Badge>
