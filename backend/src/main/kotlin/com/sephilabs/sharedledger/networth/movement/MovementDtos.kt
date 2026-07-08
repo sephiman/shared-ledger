@@ -26,6 +26,8 @@ data class MovementDto(
     val type: MovementType,
     val assetClassCode: String?,
     val liabilityId: UUID?,
+    // Resolved name (incl. soft-deleted liabilities) so the UI never shows a raw UUID.
+    val liabilityName: String?,
     @JsonFormat(shape = JsonFormat.Shape.STRING)
     val amount: BigDecimal,
     val description: String?,
@@ -35,8 +37,8 @@ data class MovementDto(
     val updatedAt: Instant,
 )
 
-fun NetWorthMovement.toDto() = MovementDto(
-    id, movementDate, type, assetClassCode, liabilityId,
+fun NetWorthMovement.toDto(liabilityName: String? = null) = MovementDto(
+    id, movementDate, type, assetClassCode, liabilityId, liabilityName,
     amount, description, createdByUserId, updatedByUserId, createdAt, updatedAt,
 )
 

@@ -230,6 +230,60 @@ class NotificationPublisher(
         )
     }
 
+    /**
+     * A recorded prepayment against an amortizable liability. Reuses the LOAN_PAYMENT event/toggle
+     * (the requirement is to emit the events the bot already consumes, not add a subsystem).
+     */
+    fun amortizationPrepayment(
+        householdId: UUID,
+        liabilityName: String,
+        amount: BigDecimal,
+        newBalance: BigDecimal,
+        date: java.time.LocalDate,
+        actor: NotifyActor,
+    ) {
+        events.publishEvent(
+            EntityChangeEvent(
+                householdId = householdId,
+                entity = NotifyEntity.LOAN_PAYMENT,
+                action = NotifyAction.CREATE,
+                actor = actor,
+                fields = listOf(
+                    CardField("networth.liability_name", FieldValue.Text(liabilityName)),
+                    CardField("common.date", FieldValue.Day(date)),
+                    CardField("networth.prepayment_amount", FieldValue.Money(amount)),
+                    CardField("networth.new_balance", FieldValue.Money(newBalance)),
+                ),
+            ),
+        )
+    }
+
+    /**
+     * The monthly instalments charged by the amortization job for one liability. Reuses the
+     * RECURRING_LOAN materialization event/toggle ("recurring loan schedule execution").
+     */
+    fun amortizationInstalments(
+        householdId: UUID,
+        liabilityName: String,
+        instalment: BigDecimal,
+        count: Int,
+        actor: NotifyActor,
+    ) {
+        if (count <= 0) return
+        events.publishEvent(
+            MaterializationEvent(
+                householdId = householdId,
+                entity = NotifyEntity.RECURRING_LOAN,
+                count = count,
+                actor = actor,
+                fields = listOf(
+                    CardField("networth.liability_name", FieldValue.Text(liabilityName)),
+                    CardField("networth.instalment", FieldValue.Money(instalment)),
+                ),
+            ),
+        )
+    }
+
     fun recurringLoanPayments(
         householdId: UUID,
         borrowerName: String,

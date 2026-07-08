@@ -5,6 +5,7 @@ import com.sephilabs.sharedledger.common.Csv
 import com.sephilabs.sharedledger.common.Money
 import com.sephilabs.sharedledger.common.errors.AppException
 import com.sephilabs.sharedledger.identity.user.User
+import com.sephilabs.sharedledger.networth.asset.AssetRepository
 import com.sephilabs.sharedledger.networth.liability.LiabilityRepository
 import com.sephilabs.sharedledger.notification.NotifyAction
 import com.sephilabs.sharedledger.notification.NotifyActor
@@ -22,11 +23,23 @@ import java.util.UUID
 class SnapshotService(
     private val snapshots: SnapshotRepository,
     private val liabilities: LiabilityRepository,
+    private val assets: AssetRepository,
     private val assetClasses: AssetClassRepository,
     private val portfolioValuation: PortfolioValuationService,
+    private val namedValues: com.sephilabs.sharedledger.networth.NamedValueResolver,
     private val metrics: AppMetrics,
     private val notifications: NotificationPublisher,
 ) {
+
+    /** Computed value of each active named asset/liability at [date] — auto-fill source for the form. */
+    @Transactional(readOnly = true)
+    fun namedValuesAt(householdId: UUID, date: LocalDate): NamedValuesDto {
+        val assetMap = assets.findAllByHouseholdIdAndActiveTrueOrderByNameAsc(householdId)
+            .associate { it.id.toString() to Money.normalize(namedValues.assetValueAt(it.id, date) ?: BigDecimal.ZERO).toPlainString() }
+        val liabMap = liabilities.findAllByHouseholdIdAndActiveTrueOrderByNameAsc(householdId)
+            .associate { it.id.toString() to Money.normalize(namedValues.liabilityBalanceAt(it.id, date) ?: BigDecimal.ZERO).toPlainString() }
+        return NamedValuesDto(assetMap, liabMap)
+    }
 
     @Transactional
     fun create(householdId: UUID, request: SnapshotRequest, by: User): SnapshotDto =
@@ -56,6 +69,10 @@ class SnapshotService(
         val givenLiabilities = request.liabilities.map { it.liabilityId }.toSet()
         if (!givenLiabilities.containsAll(expectedLiabilities)) throw AppException.badRequest("SNAPSHOT_MISSING_LIABILITY_BALANCES")
 
+        val expectedNamedAssets = assets.findAllByHouseholdIdAndActiveTrueOrderByNameAsc(householdId).map { it.id }.toSet()
+        val givenNamedAssets = request.namedAssets.map { it.assetId }.toSet()
+        if (!givenNamedAssets.containsAll(expectedNamedAssets)) throw AppException.badRequest("SNAPSHOT_MISSING_NAMED_ASSET_VALUES")
+
         val previous = snapshots.findUpTo(householdId, request.snapshotDate.minusDays(1)).firstOrNull()
         if (!request.confirmLargeChanges && previous != null && hasLargeChange(previous, request)) {
             throw AppException.badRequest("SNAPSHOT_REQUIRES_DELTA_CONFIRMATION")
@@ -76,6 +93,12 @@ class SnapshotService(
             SnapshotLiabilityBalance(
                 id = SnapshotLiabilityBalanceId(snapshot.id, it.liabilityId),
                 balance = Money.normalize(it.balance),
+            )
+        }.toMutableList()
+        snapshot.namedAssetValues = request.namedAssets.map {
+            SnapshotNamedAssetValue(
+                id = SnapshotNamedAssetValueId(snapshot.id, it.assetId),
+                value = Money.normalize(it.value),
             )
         }.toMutableList()
 
@@ -110,6 +133,13 @@ class SnapshotService(
             SnapshotLiabilityBalance(
                 id = SnapshotLiabilityBalanceId(snapshot.id, it.liabilityId),
                 balance = Money.normalize(it.balance),
+            )
+        })
+        snapshot.namedAssetValues.clear()
+        snapshot.namedAssetValues.addAll(request.namedAssets.map {
+            SnapshotNamedAssetValue(
+                id = SnapshotNamedAssetValueId(snapshot.id, it.assetId),
+                value = Money.normalize(it.value),
             )
         })
 
@@ -151,13 +181,17 @@ class SnapshotService(
     @Transactional(readOnly = true)
     fun exportCsv(householdId: UUID): String {
         val all = snapshots.findAllOrdered(householdId)
-        val liabilityNames = liabilities.findAllByHouseholdIdOrderByNameAsc(householdId)
-            .associate { it.id to it.name }
+        val liabilityNames = liabilities.findAllNamesIncludingDeleted(householdId).associate { it.id to it.name }
+        val assetNames = assets.findAllNamesIncludingDeleted(householdId).associate { it.id to it.name }
         val sb = StringBuilder()
         sb.append(Csv.row("date", "note", "kind", "key", "value"))
         for (s in all) {
             for (a in s.assetValues) {
                 sb.append(Csv.row(s.snapshotDate, s.note, "asset", a.id.assetClassCode, Csv.decimal(a.value)))
+            }
+            for (a in s.namedAssetValues) {
+                val name = assetNames[a.id.assetId] ?: a.id.assetId.toString()
+                sb.append(Csv.row(s.snapshotDate, s.note, "named_asset", name, Csv.decimal(a.value)))
             }
             for (l in s.liabilityBalances) {
                 val name = liabilityNames[l.id.liabilityId] ?: l.id.liabilityId.toString()
@@ -202,9 +236,24 @@ class SnapshotService(
     }
 
     fun toDto(snapshot: Snapshot): SnapshotDto {
-        val assets = snapshot.assetValues.map { AssetValueDto(it.id.assetClassCode, it.value, it.valueSource) }
-        val liabilities = snapshot.liabilityBalances.map { LiabilityBalanceDto(it.id.liabilityId, it.balance) }
-        val totalAssets = assets.fold(BigDecimal.ZERO) { acc, a -> acc + a.value }
+        // Names are resolved including soft-deleted rows so historical snapshots never show a raw UUID.
+        val assetNames = this.assets.findAllNamesIncludingDeleted(snapshot.householdId).associate { it.id to it.name }
+        val liabilityNames = liabilities.findAllNamesIncludingDeleted(snapshot.householdId).associate { it.id to it.name }
+
+        val classes = snapshot.assetValues.map { AssetValueDto(it.id.assetClassCode, it.value, it.valueSource) }
+        val namedAssets = snapshot.namedAssetValues.map {
+            NamedAssetValueDto(it.id.assetId, assetNames[it.id.assetId] ?: it.id.assetId.toString(), it.value)
+        }.sortedBy { it.name.lowercase() }
+        val liabilities = snapshot.liabilityBalances.map {
+            LiabilityBalanceDto(
+                it.id.liabilityId,
+                liabilityNames[it.id.liabilityId] ?: it.id.liabilityId.toString(),
+                it.balance,
+            )
+        }.sortedBy { it.liabilityName.lowercase() }
+
+        val totalAssets = classes.fold(BigDecimal.ZERO) { acc, a -> acc + a.value } +
+            namedAssets.fold(BigDecimal.ZERO) { acc, a -> acc + a.value }
         val totalLiabilities = liabilities.fold(BigDecimal.ZERO) { acc, l -> acc + l.balance }
         return SnapshotDto(
             id = snapshot.id,
@@ -213,7 +262,8 @@ class SnapshotService(
             totalAssets = Money.normalize(totalAssets),
             totalLiabilities = Money.normalize(totalLiabilities),
             netWorth = Money.normalize(totalAssets - totalLiabilities),
-            assets = assets,
+            assets = classes,
+            namedAssets = namedAssets,
             liabilities = liabilities,
             createdAt = snapshot.createdAt,
         )
@@ -230,6 +280,11 @@ class SnapshotService(
         for (liab in request.liabilities) {
             val prev = prevLiab[liab.liabilityId] ?: BigDecimal.ZERO
             if (changeExceeds(prev, liab.balance, threshold)) return true
+        }
+        val prevNamed = previous.namedAssetValues.associate { it.id.assetId to it.value }
+        for (named in request.namedAssets) {
+            val prev = prevNamed[named.assetId] ?: BigDecimal.ZERO
+            if (changeExceeds(prev, named.value, threshold)) return true
         }
         return false
     }

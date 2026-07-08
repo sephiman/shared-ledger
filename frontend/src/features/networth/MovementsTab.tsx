@@ -98,9 +98,17 @@ export function MovementsTab() {
     closeForm();
   }
 
-  function targetLabel(m: { type: string; assetClassCode: string | null; liabilityId: string | null }) {
+  function targetLabel(m: {
+    type: string;
+    assetClassCode: string | null;
+    liabilityId: string | null;
+    liabilityName?: string | null;
+  }) {
     if (m.assetClassCode) return t(`asset.${m.assetClassCode}`);
-    if (m.liabilityId) return liabilities.find((x) => x.id === m.liabilityId)?.name ?? m.liabilityId;
+    if (m.liabilityId) {
+      // Prefer the server-resolved name (covers soft-deleted liabilities); fall back to the active list.
+      return m.liabilityName ?? liabilities.find((x) => x.id === m.liabilityId)?.name ?? m.liabilityId;
+    }
     return "—";
   }
 

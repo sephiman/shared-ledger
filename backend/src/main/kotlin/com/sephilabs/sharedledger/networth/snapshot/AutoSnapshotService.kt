@@ -5,6 +5,8 @@ import com.sephilabs.sharedledger.config.AppProperties
 import com.sephilabs.sharedledger.household.HouseholdMemberRepository
 import com.sephilabs.sharedledger.household.HouseholdRole
 import com.sephilabs.sharedledger.identity.user.User
+import com.sephilabs.sharedledger.networth.NamedValueResolver
+import com.sephilabs.sharedledger.networth.asset.AssetRepository
 import com.sephilabs.sharedledger.networth.liability.LiabilityRepository
 import com.sephilabs.sharedledger.portfolio.ASSET_CLASS_TO_SNAPSHOT_CODE
 import com.sephilabs.sharedledger.portfolio.PortfolioValuationService
@@ -23,6 +25,8 @@ class AutoSnapshotService(
     private val snapshotService: SnapshotService,
     private val assetClasses: AssetClassRepository,
     private val liabilities: LiabilityRepository,
+    private val assets: AssetRepository,
+    private val namedValues: NamedValueResolver,
     private val portfolioValuation: PortfolioValuationService,
     private val members: HouseholdMemberRepository,
     private val props: AppProperties,
@@ -89,6 +93,7 @@ class AutoSnapshotService(
     fun buildRequest(householdId: UUID, date: LocalDate): SnapshotRequest {
         val expectedClasses = assetClasses.findAllByOrderBySortOrderAsc().map { it.code }
         val activeLiabilities = liabilities.findAllByHouseholdIdAndActiveTrueOrderByNameAsc(householdId)
+        val activeAssets = assets.findAllByHouseholdIdAndActiveTrueOrderByNameAsc(householdId)
 
         // Fresh portfolio values, but ONLY for classes the portfolio actually priced —
         // an unpriced class (e.g. a fund with no provider) must never overwrite a real
@@ -104,8 +109,9 @@ class AutoSnapshotService(
         val previous = snapshots.findUpTo(householdId, date.minusDays(1)).firstOrNull()
         val previousAssets = previous?.assetValues?.associate { it.id.assetClassCode to it.value } ?: emptyMap()
         val previousLiabilities = previous?.liabilityBalances?.associate { it.id.liabilityId to it.balance } ?: emptyMap()
+        val previousNamedAssets = previous?.namedAssetValues?.associate { it.id.assetId to it.value } ?: emptyMap()
 
-        val assets = expectedClasses.map { code ->
+        val assetInputs = expectedClasses.map { code ->
             val computed = computedByClass[code]
             when {
                 computed != null -> AssetValueInput(code, computed, VALUE_SOURCE_COMPUTED)
@@ -115,15 +121,22 @@ class AutoSnapshotService(
                 else -> AssetValueInput(code, BigDecimal.ZERO, VALUE_SOURCE_OVERRIDDEN)
             }
         }
+        // Named liabilities read their own series first (source of truth), then carry forward, then 0.
         val liabilityInputs = activeLiabilities.map { liability ->
-            LiabilityBalanceInput(liability.id, previousLiabilities[liability.id] ?: BigDecimal.ZERO)
+            val fromSeries = namedValues.liabilityBalanceAt(liability.id, date)
+            LiabilityBalanceInput(liability.id, fromSeries ?: previousLiabilities[liability.id] ?: BigDecimal.ZERO)
+        }
+        val namedAssetInputs = activeAssets.map { asset ->
+            val fromSeries = namedValues.assetValueAt(asset.id, date)
+            NamedAssetValueInput(asset.id, fromSeries ?: previousNamedAssets[asset.id] ?: BigDecimal.ZERO)
         }
 
         return SnapshotRequest(
             snapshotDate = date,
             note = null,
-            assets = assets,
+            assets = assetInputs,
             liabilities = liabilityInputs,
+            namedAssets = namedAssetInputs,
             // The job runs unattended; a large market swing must not block it.
             confirmLargeChanges = true,
         )

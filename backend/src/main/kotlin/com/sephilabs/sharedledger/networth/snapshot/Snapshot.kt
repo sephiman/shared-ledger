@@ -47,6 +47,10 @@ class Snapshot(
     @OneToMany(cascade = [CascadeType.ALL], orphanRemoval = true, fetch = FetchType.EAGER)
     @jakarta.persistence.JoinColumn(name = "snapshot_id", insertable = false, updatable = false)
     var liabilityBalances: MutableList<SnapshotLiabilityBalance> = mutableListOf()
+
+    @OneToMany(cascade = [CascadeType.ALL], orphanRemoval = true, fetch = FetchType.EAGER)
+    @jakarta.persistence.JoinColumn(name = "snapshot_id", insertable = false, updatable = false)
+    var namedAssetValues: MutableList<SnapshotNamedAssetValue> = mutableListOf()
 }
 
 @Embeddable
@@ -89,4 +93,20 @@ class SnapshotLiabilityBalance(
 
     @Column(name = "balance", nullable = false, precision = 15, scale = 2)
     var balance: BigDecimal,
+)
+
+@Embeddable
+data class SnapshotNamedAssetValueId(
+    @Column(name = "snapshot_id") var snapshotId: UUID = UUID.randomUUID(),
+    @Column(name = "asset_id") var assetId: UUID = UUID.randomUUID(),
+) : Serializable
+
+@Entity
+@Table(name = "snapshot_named_asset_values")
+class SnapshotNamedAssetValue(
+    @EmbeddedId
+    var id: SnapshotNamedAssetValueId,
+
+    @Column(name = "value", nullable = false, precision = 15, scale = 2)
+    var value: BigDecimal,
 )

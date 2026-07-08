@@ -25,6 +25,15 @@ class Liability(
     @Column(name = "active", nullable = false)
     var active: Boolean = true,
 
+    // When true, the balance is computed by the amortization schedule (parts/revisions/prepayments)
+    // rather than the manual balance series. See the networth.amortization package.
+    @Column(name = "amortizable", nullable = false)
+    var amortizable: Boolean = false,
+
+    // Day of month the instalment is charged (1-31; clamped to the month length). Null until set.
+    @Column(name = "charge_day")
+    var chargeDay: Int? = null,
+
     @Column(name = "created_by_user_id", nullable = false)
     var createdByUserId: UUID,
 

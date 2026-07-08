@@ -49,8 +49,8 @@ class MovementController(
         @PathVariable householdId: UUID,
         @Valid @RequestBody body: MovementRequest,
     ): ResponseEntity<MovementDto> {
-        val m = service.create(householdId, body, currentUser.requireUser())
-        return ResponseEntity.status(201).body(m.toDto())
+        val dto = service.create(householdId, body, currentUser.requireUser())
+        return ResponseEntity.status(201).body(dto)
     }
 
     @GetMapping("/{id}")
@@ -61,7 +61,7 @@ class MovementController(
         @PathVariable householdId: UUID,
         @PathVariable id: UUID,
         @Valid @RequestBody body: MovementRequest,
-    ): MovementDto = service.update(householdId, id, body, currentUser.requireUser()).toDto()
+    ): MovementDto = service.update(householdId, id, body, currentUser.requireUser())
 
     @DeleteMapping("/{id}")
     fun delete(@PathVariable householdId: UUID, @PathVariable id: UUID): ResponseEntity<Void> {

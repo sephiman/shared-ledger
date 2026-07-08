@@ -68,6 +68,12 @@ class SnapshotController(
     @GetMapping("/previous-for-prefill")
     fun prefill(@PathVariable householdId: UUID): PrefillView = service.prefill(householdId)
 
+    @GetMapping("/named-values")
+    fun namedValues(
+        @PathVariable householdId: UUID,
+        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) date: LocalDate,
+    ): NamedValuesDto = service.namedValuesAt(householdId, date)
+
     @PostMapping
     fun create(
         @PathVariable householdId: UUID,

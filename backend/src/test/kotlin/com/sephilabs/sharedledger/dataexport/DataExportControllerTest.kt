@@ -57,7 +57,7 @@ class DataExportControllerTest @Autowired constructor(
         val entries = readZipEntries(body)
 
         // All datasets, all CSVs.
-        assertThat(entries.keys).hasSize(7)
+        assertThat(entries.keys).hasSize(10)
         assertThat(entries.keys).allSatisfy { name -> assertThat(name).endsWith(".csv") }
         val byDataset = entries.mapKeys { (k, _) -> datasetOf(k) }
         assertThat(byDataset.keys).containsExactlyInAnyOrder(
@@ -68,6 +68,9 @@ class DataExportControllerTest @Autowired constructor(
             "loans",
             "loan-payments",
             "portfolio",
+            "assets",
+            "liabilities",
+            "amortization",
         )
 
         // Each CSV has a header line.
@@ -103,6 +106,9 @@ class DataExportControllerTest @Autowired constructor(
             stem.endsWith("-loan-payments") -> "loan-payments"
             stem.endsWith("-loans") -> "loans"
             stem.endsWith("-portfolio") -> "portfolio"
+            stem.endsWith("-assets") -> "assets"
+            stem.endsWith("-liabilities") -> "liabilities"
+            stem.endsWith("-amortization") -> "amortization"
             else -> error("unrecognised filename: $filename")
         }
     }

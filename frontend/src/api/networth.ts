@@ -5,6 +5,35 @@ export interface Liability {
   id: string;
   name: string;
   active: boolean;
+  amortizable: boolean;
+  chargeDay?: number | null;
+  latestBalance?: string | null;
+  latestBalanceDate?: string | null;
+}
+
+export interface LiabilityUpsert {
+  id?: string;
+  name: string;
+  active: boolean;
+  amortizable: boolean;
+  chargeDay?: number | null;
+}
+
+export type AssetType = "property" | "vehicle" | "other";
+
+export interface Asset {
+  id: string;
+  name: string;
+  type: AssetType;
+  active: boolean;
+  latestValue?: string | null;
+  latestValueDate?: string | null;
+}
+
+export interface ValueEntry {
+  id: string;
+  date: string;
+  value: string;
 }
 
 export type ValueSource = "computed" | "overridden" | "carried_over";
@@ -25,7 +54,14 @@ export interface AssetValue {
 
 export interface LiabilityBalance {
   liabilityId: string;
+  liabilityName: string;
   balance: string;
+}
+
+export interface NamedAssetValue {
+  assetId: string;
+  name: string;
+  value: string;
 }
 
 export interface Snapshot {
@@ -36,6 +72,7 @@ export interface Snapshot {
   totalLiabilities: string;
   netWorth: string;
   assets: AssetValue[];
+  namedAssets: NamedAssetValue[];
   liabilities: LiabilityBalance[];
   createdAt: string;
 }
@@ -45,11 +82,22 @@ export interface PrefillView {
   activeLiabilities: string[];
 }
 
+export interface NamedAssetValueInput {
+  assetId: string;
+  value: string;
+}
+
+export interface LiabilityBalanceInput {
+  liabilityId: string;
+  balance: string;
+}
+
 export interface SnapshotInput {
   snapshotDate: string;
   note?: string | null;
   assets: AssetValue[];
-  liabilities: LiabilityBalance[];
+  liabilities: LiabilityBalanceInput[];
+  namedAssets: NamedAssetValueInput[];
   confirmLargeChanges: boolean;
 }
 
@@ -67,6 +115,7 @@ export interface Movement {
   type: "contribution" | "withdrawal" | "debt_payment";
   assetClassCode: string | null;
   liabilityId: string | null;
+  liabilityName: string | null;
   amount: string;
   description: string | null;
 }
@@ -97,11 +146,12 @@ export function useLiabilities(householdId: string) {
 export function useUpsertLiability(householdId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, name, active }: { id?: string; name: string; active: boolean }) => {
+    mutationFn: async ({ id, name, active, amortizable, chargeDay }: LiabilityUpsert) => {
+      const body = { name, active, amortizable, chargeDay: chargeDay ?? null };
       if (id) {
-        return (await apiClient.patch<Liability>(`/households/${householdId}/liabilities/${id}`, { name, active })).data;
+        return (await apiClient.patch<Liability>(`/households/${householdId}/liabilities/${id}`, body)).data;
       }
-      return (await apiClient.post<Liability>(`/households/${householdId}/liabilities`, { name, active })).data;
+      return (await apiClient.post<Liability>(`/households/${householdId}/liabilities`, body)).data;
     },
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["liabilities", householdId] }),
   });
@@ -114,6 +164,163 @@ export function useDeleteLiability(householdId: string) {
       await apiClient.delete(`/households/${householdId}/liabilities/${id}`);
     },
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["liabilities", householdId] }),
+  });
+}
+
+export function useLiabilityValues(householdId: string, liabilityId: string, enabled = true) {
+  return useQuery({
+    queryKey: ["liability-values", householdId, liabilityId],
+    enabled,
+    queryFn: async () => {
+      const raw = (await apiClient.get<{ id: string; balanceDate: string; balance: string }[]>(
+        `/households/${householdId}/liabilities/${liabilityId}/values`,
+      )).data;
+      return raw.map((e): ValueEntry => ({ id: e.id, date: e.balanceDate, value: e.balance }));
+    },
+  });
+}
+
+export function useAddLiabilityValue(householdId: string, liabilityId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ date, value }: { date: string; value: string }) =>
+      (await apiClient.post(`/households/${householdId}/liabilities/${liabilityId}/values`, {
+        balanceDate: date,
+        balance: value,
+      })).data,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["liability-values", householdId, liabilityId] });
+      void qc.invalidateQueries({ queryKey: ["liabilities", householdId] });
+    },
+  });
+}
+
+export function useUpdateLiabilityValue(householdId: string, liabilityId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ entryId, date, value }: { entryId: string; date: string; value: string }) =>
+      (await apiClient.patch(`/households/${householdId}/liabilities/${liabilityId}/values/${entryId}`, {
+        balanceDate: date,
+        balance: value,
+      })).data,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["liability-values", householdId, liabilityId] });
+      void qc.invalidateQueries({ queryKey: ["liabilities", householdId] });
+    },
+  });
+}
+
+export function useDeleteLiabilityValue(householdId: string, liabilityId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (entryId: string) => {
+      await apiClient.delete(`/households/${householdId}/liabilities/${liabilityId}/values/${entryId}`);
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["liability-values", householdId, liabilityId] });
+      void qc.invalidateQueries({ queryKey: ["liabilities", householdId] });
+    },
+  });
+}
+
+export function useAssets(householdId: string) {
+  return useQuery({
+    queryKey: ["assets", householdId],
+    queryFn: async () => (await apiClient.get<Asset[]>(`/households/${householdId}/assets`)).data,
+  });
+}
+
+export function useUpsertAsset(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, name, type, active }: { id?: string; name: string; type: AssetType; active: boolean }) => {
+      if (id) {
+        return (await apiClient.patch<Asset>(`/households/${householdId}/assets/${id}`, { name, type, active })).data;
+      }
+      return (await apiClient.post<Asset>(`/households/${householdId}/assets`, { name, type, active })).data;
+    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["assets", householdId] }),
+  });
+}
+
+export function useDeleteAsset(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await apiClient.delete(`/households/${householdId}/assets/${id}`);
+    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["assets", householdId] }),
+  });
+}
+
+export function useAssetValues(householdId: string, assetId: string, enabled = true) {
+  return useQuery({
+    queryKey: ["asset-values", householdId, assetId],
+    enabled,
+    queryFn: async () => {
+      const raw = (await apiClient.get<{ id: string; valueDate: string; value: string }[]>(
+        `/households/${householdId}/assets/${assetId}/values`,
+      )).data;
+      return raw.map((e): ValueEntry => ({ id: e.id, date: e.valueDate, value: e.value }));
+    },
+  });
+}
+
+export function useAddAssetValue(householdId: string, assetId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ date, value }: { date: string; value: string }) =>
+      (await apiClient.post(`/households/${householdId}/assets/${assetId}/values`, {
+        valueDate: date,
+        value,
+      })).data,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["asset-values", householdId, assetId] });
+      void qc.invalidateQueries({ queryKey: ["assets", householdId] });
+    },
+  });
+}
+
+export function useUpdateAssetValue(householdId: string, assetId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ entryId, date, value }: { entryId: string; date: string; value: string }) =>
+      (await apiClient.patch(`/households/${householdId}/assets/${assetId}/values/${entryId}`, {
+        valueDate: date,
+        value,
+      })).data,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["asset-values", householdId, assetId] });
+      void qc.invalidateQueries({ queryKey: ["assets", householdId] });
+    },
+  });
+}
+
+export function useDeleteAssetValue(householdId: string, assetId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (entryId: string) => {
+      await apiClient.delete(`/households/${householdId}/assets/${assetId}/values/${entryId}`);
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["asset-values", householdId, assetId] });
+      void qc.invalidateQueries({ queryKey: ["assets", householdId] });
+    },
+  });
+}
+
+export interface NamedValuesAtDate {
+  assets: Record<string, string>;
+  liabilities: Record<string, string>;
+}
+
+/** Computed value of each active named asset/liability at a date (amortizable → schedule, manual → series). */
+export function useNamedValuesAt(householdId: string, date: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["named-values", householdId, date],
+    enabled: enabled && !!date,
+    queryFn: async () =>
+      (await apiClient.get<NamedValuesAtDate>(`/households/${householdId}/snapshots/named-values`, { params: { date } })).data,
   });
 }
 

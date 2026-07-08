@@ -4,14 +4,17 @@ import Decimal from "decimal.js";
 import { useActiveHousehold } from "@/auth/AuthContext";
 import { useAssetClasses } from "@/api/catalog";
 import {
+  useAssets,
   useCreateSnapshot,
   useDeleteSnapshot,
   useLiabilities,
+  useNamedValuesAt,
   useSnapshotPrefill,
   useSnapshots,
   useUpdateSnapshot,
   type AssetValue,
-  type LiabilityBalance,
+  type LiabilityBalanceInput,
+  type NamedAssetValueInput,
   type Snapshot,
 } from "@/api/networth";
 import { usePortfolioValuation } from "@/api/portfolio";
@@ -29,6 +32,7 @@ export function SnapshotsTab() {
   const { data: prefill } = useSnapshotPrefill(household.householdId);
   const { data: assetClasses = [] } = useAssetClasses();
   const { data: liabilities = [] } = useLiabilities(household.householdId);
+  const { data: namedAssets = [] } = useAssets(household.householdId);
   const create = useCreateSnapshot(household.householdId);
   const update = useUpdateSnapshot(household.householdId);
   const del = useDeleteSnapshot(household.householdId);
@@ -39,6 +43,7 @@ export function SnapshotsTab() {
   const [note, setNote] = useState("");
   const [assets, setAssets] = useState<Record<string, string>>({});
   const [liab, setLiab] = useState<Record<string, string>>({});
+  const [named, setNamed] = useState<Record<string, string>>({});
   const [confirmLarge, setConfirmLarge] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dateError, setDateError] = useState<string | null>(null);
@@ -46,12 +51,19 @@ export function SnapshotsTab() {
   // Market classes currently auto-filled from portfolio holdings ("computed").
   const [computedClasses, setComputedClasses] = useState<Set<string>>(new Set());
   const [editedClasses, setEditedClasses] = useState<Set<string>>(new Set());
+  // Named assets / liabilities auto-filled from their computed value at the date (amortizable loans
+  // from their schedule, manual ones from their series) — same "computed" treatment as classes.
+  const [computedNamed, setComputedNamed] = useState<Set<string>>(new Set());
+  const [editedNamed, setEditedNamed] = useState<Set<string>>(new Set());
+  const [computedLiab, setComputedLiab] = useState<Set<string>>(new Set());
+  const [editedLiab, setEditedLiab] = useState<Set<string>>(new Set());
 
   const { data: portfolioValuation } = usePortfolioValuation(
     household.householdId,
     date,
     panel.kind !== "closed",
   );
+  const { data: namedValues } = useNamedValuesAt(household.householdId, date, panel.kind !== "closed");
 
   // Auto-fill market classes from holdings valued at the snapshot date; a class the
   // user already edited in this panel keeps the manual value (overridden).
@@ -71,6 +83,32 @@ export function SnapshotsTab() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portfolioValuation, panel.kind]);
+
+  // Auto-fill named assets and liabilities from their computed value at the snapshot date. An
+  // amortizable liability fills its schedule balance (not 0); a manual one its series value. A row
+  // the user already edited in this panel keeps its manual value (overridden).
+  useEffect(() => {
+    if (panel.kind !== "create" || !namedValues) return;
+    setNamed((prev) => {
+      const next = { ...prev };
+      const computed = new Set<string>();
+      for (const [id, value] of Object.entries(namedValues.assets)) {
+        if (!editedNamed.has(id)) { next[id] = value; computed.add(id); }
+      }
+      setComputedNamed(computed);
+      return next;
+    });
+    setLiab((prev) => {
+      const next = { ...prev };
+      const computed = new Set<string>();
+      for (const [id, value] of Object.entries(namedValues.liabilities)) {
+        if (!editedLiab.has(id)) { next[id] = value; computed.add(id); }
+      }
+      setComputedLiab(computed);
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [namedValues, panel.kind]);
 
   function toggleExpanded(id: string) {
     setExpandedIds((prev) => {
@@ -93,6 +131,10 @@ export function SnapshotsTab() {
     setNote("");
     setComputedClasses(new Set());
     setEditedClasses(new Set());
+    setComputedNamed(new Set());
+    setEditedNamed(new Set());
+    setComputedLiab(new Set());
+    setEditedLiab(new Set());
     const a: Record<string, string> = {};
     for (const cls of assetClasses) {
       const prev = prefill?.previous?.assets.find((x) => x.assetClassCode === cls.code);
@@ -102,9 +144,15 @@ export function SnapshotsTab() {
     const l: Record<string, string> = {};
     for (const liability of liabilities.filter((x) => x.active)) {
       const prev = prefill?.previous?.liabilities.find((x) => x.liabilityId === liability.id);
-      l[liability.id] = prev?.balance ?? "0";
+      l[liability.id] = prev?.balance ?? liability.latestBalance ?? "0";
     }
     setLiab(l);
+    const n: Record<string, string> = {};
+    for (const asset of namedAssets.filter((x) => x.active)) {
+      const prev = prefill?.previous?.namedAssets.find((x) => x.assetId === asset.id);
+      n[asset.id] = prev?.value ?? asset.latestValue ?? "0";
+    }
+    setNamed(n);
     setConfirmLarge(false);
     setError(null);
     setDateError(null);
@@ -116,6 +164,11 @@ export function SnapshotsTab() {
     setNote(s.note ?? "");
     setComputedClasses(new Set(s.assets.filter((x) => x.valueSource === "computed").map((x) => x.assetClassCode)));
     setEditedClasses(new Set());
+    // Editing an existing snapshot shows its frozen values as-is (no recompute badge).
+    setComputedNamed(new Set());
+    setEditedNamed(new Set());
+    setComputedLiab(new Set());
+    setEditedLiab(new Set());
     const a: Record<string, string> = {};
     for (const cls of assetClasses) {
       const v = s.assets.find((x) => x.assetClassCode === cls.code);
@@ -132,6 +185,15 @@ export function SnapshotsTab() {
       if (!liabilityIdsInSnapshot.has(liability.id)) l[liability.id] = "0";
     }
     setLiab(l);
+    const n: Record<string, string> = {};
+    const namedIdsInSnapshot = new Set(s.namedAssets.map((x) => x.assetId));
+    for (const nv of s.namedAssets) {
+      n[nv.assetId] = nv.value;
+    }
+    for (const asset of namedAssets.filter((x) => x.active)) {
+      if (!namedIdsInSnapshot.has(asset.id)) n[asset.id] = "0";
+    }
+    setNamed(n);
     setConfirmLarge(false);
     setError(null);
     setDateError(null);
@@ -169,7 +231,11 @@ export function SnapshotsTab() {
     const liabIds = panel.kind === "edit"
       ? Object.keys(liab)
       : liabilities.filter((x) => x.active).map((x) => x.id);
-    const liabItems: LiabilityBalance[] = liabIds.map((id) => ({ liabilityId: id, balance: liab[id] || "0" }));
+    const liabItems: LiabilityBalanceInput[] = liabIds.map((id) => ({ liabilityId: id, balance: liab[id] || "0" }));
+    const namedIds = panel.kind === "edit"
+      ? Object.keys(named)
+      : namedAssets.filter((x) => x.active).map((x) => x.id);
+    const namedItems: NamedAssetValueInput[] = namedIds.map((id) => ({ assetId: id, value: named[id] || "0" }));
     try {
       if (panel.kind === "edit") {
         await update.mutateAsync({
@@ -179,6 +245,7 @@ export function SnapshotsTab() {
             note: note || null,
             assets: assetItems,
             liabilities: liabItems,
+            namedAssets: namedItems,
             confirmLargeChanges: true,
           },
         });
@@ -188,6 +255,7 @@ export function SnapshotsTab() {
           note: note || null,
           assets: assetItems,
           liabilities: liabItems,
+          namedAssets: namedItems,
           confirmLargeChanges: confirmLarge,
         });
       }
@@ -211,6 +279,11 @@ export function SnapshotsTab() {
     prefill?.previous?.liabilities.forEach((l) => { map[l.liabilityId] = l.balance; });
     return map;
   }, [prefill]);
+  const previousNamedAssets = useMemo(() => {
+    const map: Record<string, string> = {};
+    prefill?.previous?.namedAssets.forEach((a) => { map[a.assetId] = a.value; });
+    return map;
+  }, [prefill]);
 
   const anyLarge = useMemo(() => {
     if (panel.kind !== "create") return false;
@@ -223,13 +296,21 @@ export function SnapshotsTab() {
       const d = delta(previousLiabilities[l.id], liab[l.id] ?? "0");
       if (d.large) return true;
     }
+    for (const a of namedAssets.filter((x) => x.active)) {
+      const d = delta(previousNamedAssets[a.id], named[a.id] ?? "0");
+      if (d.large) return true;
+    }
     return false;
-  }, [panel.kind, assets, liab, assetClasses, liabilities, previousAssets, previousLiabilities, prefill]);
+  }, [panel.kind, assets, liab, named, assetClasses, liabilities, namedAssets, previousAssets, previousLiabilities, previousNamedAssets, prefill]);
 
   const liabilityName = (id: string) => liabilities.find((x) => x.id === id)?.name ?? id;
+  const namedAssetName = (id: string) => namedAssets.find((x) => x.id === id)?.name ?? id;
   const liabilityIdsInForm = panel.kind === "edit"
     ? Object.keys(liab)
     : liabilities.filter((x) => x.active).map((x) => x.id);
+  const namedIdsInForm = panel.kind === "edit"
+    ? Object.keys(named)
+    : namedAssets.filter((x) => x.active).map((x) => x.id);
 
   return (
     <div className="space-y-4">
@@ -272,8 +353,10 @@ export function SnapshotsTab() {
                 <Input value={note} onChange={(e) => setNote(e.target.value)} />
               </div>
             </div>
-            <div>
-              <p className="mb-2 text-sm font-medium">{t("networth.total_assets")}</p>
+            {/* Assets — a single section with Classes and Named assets subgroups. */}
+            <div className="space-y-2">
+              <p className="text-sm font-medium">{t("networth.total_assets")}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">{t("networth.classes")}</p>
               <div className="space-y-2">
                 {assetClasses.map((cls) => {
                   const d = panel.kind === "create" ? delta(previousAssets[cls.code], assets[cls.code] ?? "0") : null;
@@ -294,14 +377,7 @@ export function SnapshotsTab() {
                           });
                         }}
                       />
-                      {computedClasses.has(cls.code) && (
-                        <span
-                          className="rounded-full bg-sky-50 px-2 py-0.5 text-xs text-primary dark:bg-sky-900/40 dark:text-sky-300"
-                          title={t("networth.value_source_computed_hint")}
-                        >
-                          {t("networth.value_source_computed")}
-                        </span>
-                      )}
+                      {computedClasses.has(cls.code) && <ComputedPill t={t} />}
                       {d && (
                         <span className={`w-24 text-right text-xs ${d.large ? "text-amber-600" : "text-gray-500 dark:text-gray-400"}`}>{d.abs} ({d.pct})</span>
                       )}
@@ -309,6 +385,35 @@ export function SnapshotsTab() {
                   );
                 })}
               </div>
+              {namedIdsInForm.length > 0 && (
+                <>
+                  <p className="mt-1 border-t border-border pt-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:border-gray-700 dark:text-gray-500">{t("networth.named_assets")}</p>
+                  <div className="space-y-2">
+                    {namedIdsInForm.map((id) => {
+                      const d = panel.kind === "create" ? delta(previousNamedAssets[id], named[id] ?? "0") : null;
+                      return (
+                        <div key={id} className="flex items-center gap-2">
+                          <Label className="mb-0 w-32">{namedAssetName(id)}</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={named[id] ?? ""}
+                            onChange={(e) => {
+                              setNamed({ ...named, [id]: e.target.value });
+                              setEditedNamed((prev) => new Set(prev).add(id));
+                              setComputedNamed((prev) => { const next = new Set(prev); next.delete(id); return next; });
+                            }}
+                          />
+                          {computedNamed.has(id) && <ComputedPill t={t} />}
+                          {d && (
+                            <span className={`w-24 text-right text-xs ${d.large ? "text-amber-600" : "text-gray-500 dark:text-gray-400"}`}>{d.abs} ({d.pct})</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
             </div>
             <div>
               <p className="mb-2 text-sm font-medium">{t("networth.total_liabilities")}</p>
@@ -322,8 +427,13 @@ export function SnapshotsTab() {
                         type="number"
                         step="0.01"
                         value={liab[id] ?? ""}
-                        onChange={(e) => setLiab({ ...liab, [id]: e.target.value })}
+                        onChange={(e) => {
+                          setLiab({ ...liab, [id]: e.target.value });
+                          setEditedLiab((prev) => new Set(prev).add(id));
+                          setComputedLiab((prev) => { const next = new Set(prev); next.delete(id); return next; });
+                        }}
                       />
+                      {computedLiab.has(id) && <ComputedPill t={t} />}
                       {d && (
                         <span className={`w-24 text-right text-xs ${d.large ? "text-amber-600" : "text-gray-500 dark:text-gray-400"}`}>{d.abs} ({d.pct})</span>
                       )}
@@ -417,7 +527,7 @@ export function SnapshotsTab() {
                       </button>
                       {isOpen && (
                         <div className="border-t border-border px-3 py-2 dark:border-gray-700">
-                          <SnapshotComposition snapshot={s} liabilities={liabilities} />
+                          <SnapshotComposition snapshot={s} />
                         </div>
                       )}
                     </li>
@@ -481,7 +591,7 @@ export function SnapshotsTab() {
                           <tr className="border-t border-border bg-gray-50/50 dark:bg-gray-900/30">
                             <td></td>
                             <td colSpan={6} className="px-2 py-3">
-                              <SnapshotComposition snapshot={s} liabilities={liabilities} />
+                              <SnapshotComposition snapshot={s} />
                             </td>
                           </tr>
                         )}
@@ -498,28 +608,39 @@ export function SnapshotsTab() {
   );
 }
 
-function SnapshotComposition({
-  snapshot,
-  liabilities,
-}: {
-  snapshot: Snapshot;
-  liabilities: { id: string; name: string }[];
-}) {
+function ComputedPill({ t }: { t: (k: string) => string }) {
+  return (
+    <span
+      className="rounded-full bg-sky-50 px-2 py-0.5 text-xs text-primary dark:bg-sky-900/40 dark:text-sky-300"
+      title={t("networth.value_source_computed_hint")}
+    >
+      {t("networth.value_source_computed")}
+    </span>
+  );
+}
+
+function SnapshotComposition({ snapshot }: { snapshot: Snapshot }) {
   const { t, i18n } = useTranslation();
   const household = useActiveHousehold();
-  const liabilityName = (id: string) => liabilities.find((x) => x.id === id)?.name ?? id;
+  const money = (v: string) => formatMoney(v, household.currency, i18n.language);
+  const hasAny = snapshot.assets.length > 0 || snapshot.namedAssets.length > 0;
   return (
     <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
       <div>
         <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
           {t("networth.total_assets")}
         </p>
-        {snapshot.assets.length === 0 ? (
+        {!hasAny ? (
           <p className="text-xs text-gray-500 dark:text-gray-400">—</p>
         ) : (
           <ul className="space-y-0.5">
+            {snapshot.assets.length > 0 && (
+              <li className="pt-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                {t("networth.classes")}
+              </li>
+            )}
             {snapshot.assets.map((a) => (
-              <li key={a.assetClassCode} className="flex justify-between gap-3">
+              <li key={`class-${a.assetClassCode}`} className="flex justify-between gap-3">
                 <span className="text-gray-600 dark:text-gray-300">
                   {t(`asset.${a.assetClassCode}`, a.assetClassCode)}
                   {a.valueSource === "carried_over" && (
@@ -531,7 +652,18 @@ function SnapshotComposition({
                     </span>
                   )}
                 </span>
-                <span className="font-mono tabular-nums">{formatMoney(a.value, household.currency, i18n.language)}</span>
+                <span className="font-mono tabular-nums">{money(a.value)}</span>
+              </li>
+            ))}
+            {snapshot.namedAssets.length > 0 && (
+              <li className="mt-1 border-t border-border pt-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:border-gray-700 dark:text-gray-500">
+                {t("networth.named_assets")}
+              </li>
+            )}
+            {snapshot.namedAssets.map((a) => (
+              <li key={`named-${a.assetId}`} className="flex justify-between gap-3">
+                <span className="text-gray-600 dark:text-gray-300">{a.name}</span>
+                <span className="font-mono tabular-nums">{money(a.value)}</span>
               </li>
             ))}
           </ul>
@@ -547,8 +679,8 @@ function SnapshotComposition({
           <ul className="space-y-0.5">
             {snapshot.liabilities.map((l) => (
               <li key={l.liabilityId} className="flex justify-between gap-3">
-                <span className="text-gray-600 dark:text-gray-300">{liabilityName(l.liabilityId)}</span>
-                <span className="font-mono tabular-nums">{formatMoney(l.balance, household.currency, i18n.language)}</span>
+                <span className="text-gray-600 dark:text-gray-300">{l.liabilityName}</span>
+                <span className="font-mono tabular-nums">{money(l.balance)}</span>
               </li>
             ))}
           </ul>

@@ -288,3 +288,44 @@ export function useExecuteSnapshots(householdId: string) {
     },
   });
 }
+
+function previewHook(path: string) {
+  return (householdId: string) =>
+    useMutation({
+      mutationFn: async (file: File) => {
+        const res = await apiClient.post<PreviewSummary>(
+          `/households/${householdId}/${path}/preview`,
+          asForm(file),
+          { headers: { "Content-Type": null } },
+        );
+        return res.data;
+      },
+      meta: { silentSuccess: true },
+    });
+}
+
+function executeHook(path: string, invalidate: string[]) {
+  return (householdId: string) => {
+    const qc = useQueryClient();
+    return useMutation({
+      mutationFn: async (file: File) => {
+        const res = await apiClient.post<ExecuteResult>(
+          `/households/${householdId}/${path}/execute`,
+          asForm(file),
+          { headers: { "Content-Type": null } },
+        );
+        return res.data;
+      },
+      onSuccess: () => {
+        for (const key of invalidate) void qc.invalidateQueries({ queryKey: [key, householdId] });
+      },
+    });
+  };
+}
+
+export const usePreviewAssets = previewHook("assets/import");
+export const useExecuteAssets = executeHook("assets/import", ["assets"]);
+export const usePreviewLiabilitiesCsv = previewHook("liabilities/import");
+export const useExecuteLiabilitiesCsv = executeHook("liabilities/import", ["liabilities"]);
+export const usePreviewAmortization = previewHook("liabilities/amortization/import");
+export const useExecuteAmortization = executeHook("liabilities/amortization/import", ["liabilities"]);

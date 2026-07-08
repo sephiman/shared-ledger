@@ -5,15 +5,16 @@ import { TabBar } from "@/components/ui/TabBar";
 import { SnapshotsTab } from "./SnapshotsTab";
 import { EvolutionTab } from "./EvolutionTab";
 import { MovementsTab } from "./MovementsTab";
+import { AssetsTab } from "./AssetsTab";
 import { LiabilitiesTab } from "./LiabilitiesTab";
 import { LoansTab } from "../loans/LoansTab";
 import { HoldingsTab } from "../portfolio/HoldingsTab";
 import { PortfolioAllocationTab } from "../portfolio/PortfolioAllocationTab";
 import { PortfolioEvolutionTab } from "../portfolio/PortfolioEvolutionTab";
 
-type Tab = "holdings" | "allocation" | "evolution" | "snapshots" | "movements" | "liabilities" | "loans";
+type Tab = "holdings" | "allocation" | "evolution" | "snapshots" | "movements" | "assets" | "liabilities" | "loans";
 
-const TABS: Tab[] = ["holdings", "allocation", "evolution", "snapshots", "movements", "liabilities", "loans"];
+const TABS: Tab[] = ["holdings", "allocation", "evolution", "snapshots", "movements", "assets", "liabilities", "loans"];
 
 export function NetWorthPage() {
   const { t } = useTranslation();
@@ -36,6 +37,7 @@ export function NetWorthPage() {
     { value: "evolution", label: t("portfolio.evolution") },
     { value: "snapshots", label: t("networth.snapshots") },
     { value: "movements", label: t("networth.movements") },
+    { value: "assets", label: t("networth.assets") },
     { value: "liabilities", label: t("networth.liabilities") },
     { value: "loans", label: t("networth.loans") },
   ];
@@ -64,6 +66,7 @@ export function NetWorthPage() {
       )}
       {tab === "snapshots" && <SnapshotsTab />}
       {tab === "movements" && <MovementsTab />}
+      {tab === "assets" && <AssetsTab />}
       {tab === "liabilities" && <LiabilitiesTab />}
       {tab === "loans" && <LoansTab />}
     </div>

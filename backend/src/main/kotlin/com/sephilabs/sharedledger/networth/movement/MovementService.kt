@@ -27,7 +27,7 @@ class MovementService(
 ) {
 
     @Transactional
-    fun create(householdId: UUID, request: MovementRequest, by: User): NetWorthMovement {
+    fun create(householdId: UUID, request: MovementRequest, by: User): MovementDto {
         validateTarget(request)
         val movement = NetWorthMovement(
             householdId = householdId,
@@ -47,11 +47,11 @@ class MovementService(
             targetLiabilityId = request.liabilityId?.toString(),
         )
         notifications.movement(movement, NotifyAction.CREATE, NotifyActor.Human(by.email))
-        return movement
+        return movement.toDto(nameFor(householdId, movement.liabilityId))
     }
 
     @Transactional
-    fun update(householdId: UUID, id: UUID, request: MovementRequest, by: User): NetWorthMovement {
+    fun update(householdId: UUID, id: UUID, request: MovementRequest, by: User): MovementDto {
         validateTarget(request)
         val movement = loadOwn(householdId, id)
         movement.movementDate = request.movementDate
@@ -62,7 +62,7 @@ class MovementService(
         movement.description = request.description
         movement.updatedByUserId = by.id
         notifications.movement(movement, NotifyAction.UPDATE, NotifyActor.Human(by.email))
-        return movement
+        return movement.toDto(nameFor(householdId, movement.liabilityId))
     }
 
     @Transactional
@@ -76,11 +76,20 @@ class MovementService(
     @Transactional(readOnly = true)
     fun search(criteria: MovementSearchCriteria): PageResponse<MovementDto> {
         val r = queries.search(criteria)
-        return PageResponse.of(r.items.map { it.toDto() }, criteria.page, criteria.size, r.total)
+        val names = liabilityNames(criteria.householdId)
+        return PageResponse.of(
+            r.items.map { it.toDto(it.liabilityId?.let { id -> names[id] }) },
+            criteria.page,
+            criteria.size,
+            r.total,
+        )
     }
 
     @Transactional(readOnly = true)
-    fun get(householdId: UUID, id: UUID): MovementDto = loadOwn(householdId, id).toDto()
+    fun get(householdId: UUID, id: UUID): MovementDto {
+        val m = loadOwn(householdId, id)
+        return m.toDto(nameFor(householdId, m.liabilityId))
+    }
 
     @Transactional(readOnly = true)
     fun cumulative(
@@ -114,12 +123,11 @@ class MovementService(
     fun exportCsv(householdId: UUID): String {
         val all = movements.findInRange(householdId, LocalDate.of(1970, 1, 1), LocalDate.now().plusYears(100))
             .sortedWith(compareBy({ it.movementDate }, { it.createdAt }))
-        val liabilityNames = liabilities.findAllByHouseholdIdOrderByNameAsc(householdId)
-            .associate { it.id to it.name }
+        val names = liabilityNames(householdId)
         val sb = StringBuilder()
         sb.append(Csv.row("date", "type", "asset_class_code", "liability_name", "amount", "description", "created_at"))
         for (m in all) {
-            val liabName = m.liabilityId?.let { liabilityNames[it] ?: it.toString() }
+            val liabName = m.liabilityId?.let { names[it] ?: it.toString() }
             sb.append(Csv.row(
                 m.movementDate,
                 m.type,
@@ -148,4 +156,11 @@ class MovementService(
         if (m.householdId != householdId) throw AppException.notFound("MOVEMENT_NOT_FOUND")
         return m
     }
+
+    // Resolves names including soft-deleted liabilities so a movement never leaks a raw UUID.
+    private fun liabilityNames(householdId: UUID): Map<UUID, String> =
+        liabilities.findAllNamesIncludingDeleted(householdId).associate { it.id to it.name }
+
+    private fun nameFor(householdId: UUID, liabilityId: UUID?): String? =
+        liabilityId?.let { liabilityNames(householdId)[it] }
 }

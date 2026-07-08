@@ -21,11 +21,18 @@ data class LiabilityBalanceInput(
     val balance: BigDecimal,
 )
 
+data class NamedAssetValueInput(
+    val assetId: UUID,
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    val value: BigDecimal,
+)
+
 data class SnapshotRequest(
     @field:NotNull val snapshotDate: LocalDate,
     val note: String? = null,
     val assets: List<AssetValueInput>,
     val liabilities: List<LiabilityBalanceInput>,
+    val namedAssets: List<NamedAssetValueInput> = emptyList(),
     val confirmLargeChanges: Boolean = false,
 )
 
@@ -38,8 +45,18 @@ data class AssetValueDto(
 
 data class LiabilityBalanceDto(
     val liabilityId: UUID,
+    // Resolved name (incl. soft-deleted liabilities) so the UI never shows a raw UUID.
+    val liabilityName: String,
     @JsonFormat(shape = JsonFormat.Shape.STRING)
     val balance: BigDecimal,
+)
+
+data class NamedAssetValueDto(
+    val assetId: UUID,
+    // Resolved name (incl. soft-deleted assets) so the UI never shows a raw UUID.
+    val name: String,
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    val value: BigDecimal,
 )
 
 data class SnapshotDto(
@@ -53,6 +70,7 @@ data class SnapshotDto(
     @JsonFormat(shape = JsonFormat.Shape.STRING)
     val netWorth: BigDecimal,
     val assets: List<AssetValueDto>,
+    val namedAssets: List<NamedAssetValueDto>,
     val liabilities: List<LiabilityBalanceDto>,
     val createdAt: Instant,
 )
@@ -60,6 +78,16 @@ data class SnapshotDto(
 data class PrefillView(
     val previous: SnapshotDto?,
     val activeLiabilities: List<UUID>,
+)
+
+/**
+ * Computed value of each active named asset and liability at a given date (amortizable liabilities
+ * from their schedule, manual ones from their series). Keyed by id; money as decimal strings. Used to
+ * auto-fill the snapshot form per date, like the portfolio valuation does for asset classes.
+ */
+data class NamedValuesDto(
+    val assets: Map<String, String>,
+    val liabilities: Map<String, String>,
 )
 
 data class EvolutionPoint(

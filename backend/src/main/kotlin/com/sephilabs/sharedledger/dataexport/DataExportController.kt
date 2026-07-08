@@ -4,6 +4,7 @@ import com.sephilabs.sharedledger.common.Csv
 import com.sephilabs.sharedledger.common.errors.AppException
 import com.sephilabs.sharedledger.household.HouseholdRepository
 import com.sephilabs.sharedledger.loan.LoanService
+import com.sephilabs.sharedledger.networth.csv.NamedCsvExportService
 import com.sephilabs.sharedledger.networth.movement.MovementService
 import com.sephilabs.sharedledger.networth.snapshot.SnapshotService
 import com.sephilabs.sharedledger.portfolio.HoldingService
@@ -33,6 +34,7 @@ class DataExportController(
     private val snapshots: SnapshotService,
     private val loans: LoanService,
     private val portfolio: HoldingService,
+    private val named: NamedCsvExportService,
     private val households: HouseholdRepository,
 ) {
 
@@ -62,6 +64,9 @@ class DataExportController(
             Csv.exportFilename(today, household.name, "loans") to loans.exportLoansCsv(householdId),
             Csv.exportFilename(today, household.name, "loan-payments") to loans.exportPaymentsCsv(householdId),
             Csv.exportFilename(today, household.name, "portfolio") to portfolio.exportCsv(householdId),
+            Csv.exportFilename(today, household.name, "assets") to named.exportAssets(householdId),
+            Csv.exportFilename(today, household.name, "liabilities") to named.exportLiabilities(householdId),
+            Csv.exportFilename(today, household.name, "amortization") to named.exportAmortization(householdId),
         )
 
         val out = ByteArrayOutputStream()

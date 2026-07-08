@@ -4,7 +4,11 @@ import { useAssetClasses, useCategories, type AssetClass, type Category } from "
 import { useLiabilities } from "@/api/networth";
 import { categoryLabel } from "@/lib/categoryLabel";
 
-type Dataset = "transactions" | "snapshots" | "movements" | "recurring" | "loans" | "loan_payments" | "portfolio";
+type Dataset = "transactions" | "snapshots" | "movements" | "recurring" | "loans" | "loan_payments" | "portfolio" | "assets" | "liabilities" | "amortization";
+
+const ASSET_HEADER = "name;type;active;value_date;value";
+const LIABILITY_HEADER = "name;active;amortizable;charge_day;balance_date;balance";
+const AMORT_HEADER = "liability_name;part_label;record_type;date;method;principal;annual_rate;term_months;instalment;amount;mode;interest;resulting_balance;start_mode;anchor_date;anchor_balance";
 
 const TX_HEADER = "date;direction;category_code;amount;description;created_at;updated_at";
 const PORTFOLIO_HEADER = "type;asset_class;symbol;label;native_currency;isin;provider;provider_symbol;traded_on;quantity;unit_price;cost_currency;fee;note";
@@ -30,8 +34,101 @@ export function CsvFormatHelp({ dataset }: { dataset: Dataset }) {
         {dataset === "loans" && <LoanFormat />}
         {dataset === "loan_payments" && <LoanPaymentFormat />}
         {dataset === "portfolio" && <PortfolioFormat />}
+        {dataset === "assets" && <AssetFormat />}
+        {dataset === "liabilities" && <LiabilityNamedFormat />}
+        {dataset === "amortization" && <AmortizationFormat />}
       </div>
     </details>
+  );
+}
+
+function AssetFormat() {
+  const { t } = useTranslation();
+  const example = [
+    ASSET_HEADER,
+    "House;property;true;2026-01-15;450000,00",
+    "House;property;true;2026-06-20;500000,00",
+    "Car;vehicle;true;2026-01-01;18000,00",
+  ].join("\n");
+  return (
+    <>
+      <p>{t("import.format.assets.intro")}</p>
+      <Section title={t("import.format.headers_label")}><CodeBlock>{ASSET_HEADER}</CodeBlock></Section>
+      <Section title={t("import.format.columns_label")}>
+        <ColumnList items={[
+          { name: "name", req: true, desc: t("import.format.assets.name") },
+          { name: "type", req: true, desc: t("import.format.assets.type") },
+          { name: "active", req: true, desc: t("import.format.assets.active") },
+          { name: "value_date", req: false, desc: t("import.format.assets.value_date") },
+          { name: "value", req: false, desc: t("import.format.assets.value") },
+        ]} />
+      </Section>
+      <Section title={t("import.format.example_label")}><CodeBlock>{example}</CodeBlock></Section>
+      <p className="text-xs text-gray-500 dark:text-gray-400">{t("import.format.assets.dedup")}</p>
+    </>
+  );
+}
+
+function LiabilityNamedFormat() {
+  const { t } = useTranslation();
+  const example = [
+    LIABILITY_HEADER,
+    "Credit card;true;false;;2026-03-31;1200,00",
+    "Mortgage;true;true;28;;",
+  ].join("\n");
+  return (
+    <>
+      <p>{t("import.format.liab.intro")}</p>
+      <Section title={t("import.format.headers_label")}><CodeBlock>{LIABILITY_HEADER}</CodeBlock></Section>
+      <Section title={t("import.format.columns_label")}>
+        <ColumnList items={[
+          { name: "name", req: true, desc: t("import.format.liab.name") },
+          { name: "active", req: true, desc: t("import.format.liab.active") },
+          { name: "amortizable", req: true, desc: t("import.format.liab.amortizable") },
+          { name: "charge_day", req: false, desc: t("import.format.liab.charge_day") },
+          { name: "balance_date", req: false, desc: t("import.format.liab.balance_date") },
+          { name: "balance", req: false, desc: t("import.format.liab.balance") },
+        ]} />
+      </Section>
+      <Section title={t("import.format.example_label")}><CodeBlock>{example}</CodeBlock></Section>
+      <p className="text-xs text-gray-500 dark:text-gray-400">{t("import.format.liab.dedup")}</p>
+    </>
+  );
+}
+
+function AmortizationFormat() {
+  const { t } = useTranslation();
+  const example = [
+    AMORT_HEADER,
+    "Mortgage;Part A;part;2026-01-01;french;200000,00;3,5000;300;;;;;;current_balance;;",
+    "Mortgage;Part A;revision;2027-01-01;;;4,0000;;;;;;;;;",
+    "Mortgage;Part A;prepayment;2026-06-01;;;;;;10000,00;reduce_term;;;;;",
+    "Mortgage;Part A;entry;2026-02-01;;299,55;;;;;;583,33;199700,45;;;",
+  ].join("\n");
+  return (
+    <>
+      <p>{t("import.format.amort.intro")}</p>
+      <Section title={t("import.format.headers_label")}><CodeBlock>{AMORT_HEADER}</CodeBlock></Section>
+      <Section title={t("import.format.columns_label")}>
+        <ColumnList items={[
+          { name: "liability_name", req: true, desc: t("import.format.amort.liability_name") },
+          { name: "part_label", req: true, desc: t("import.format.amort.part_label") },
+          { name: "record_type", req: true, desc: t("import.format.amort.record_type") },
+          { name: "date", req: true, desc: t("import.format.amort.date") },
+          { name: "…", req: false, desc: t("import.format.amort.fields") },
+        ]} />
+      </Section>
+      <Section title={t("import.format.amort.catalogs_label")}>
+        <ul className="space-y-1 text-xs">
+          <li><code className="font-mono">record_type</code>: part / revision / prepayment / entry</li>
+          <li><code className="font-mono">method</code>: french / german / interest_only / zero</li>
+          <li><code className="font-mono">mode</code>: reduce_term / reduce_instalment</li>
+          <li><code className="font-mono">start_mode</code>: current_balance / origin</li>
+        </ul>
+      </Section>
+      <Section title={t("import.format.example_label")}><CodeBlock>{example}</CodeBlock></Section>
+      <p className="text-xs text-gray-500 dark:text-gray-400">{t("import.format.amort.dedup")}</p>
+    </>
   );
 }
 

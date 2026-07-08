@@ -107,12 +107,14 @@ Planned monthly (and optionally annual) expense amounts per category, compared a
 
 ### Net worth snapshots
 
-Periodic recordings of the value of each asset class and the outstanding balance of each liability. Snapshots are the source of truth for current net worth.
+Periodic recordings of the value of each asset class, each named asset, and the outstanding balance of each liability. Snapshots are the source of truth for current net worth.
 
 - Each snapshot has a date and an optional note. Multiple per month are allowed; monthly views use the latest one per month.
-- **Asset classes** are fixed: `Cash`, `Index funds`, `ETFs`, `Stocks`, `Crypto`, `Pension`. A snapshot stores one value (defaulting to 0) per class.
-- **Liabilities** are user-defined named entities (e.g. "Archena mortgage", "Car loan") with an active flag. Every active liability appears in the snapshot form for entering its outstanding balance.
+- The **Assets** block has two subgroups shown under one heading: **Classes** — the fixed fungible classes `Cash`, `Index funds`, `ETFs`, `Stocks`, `Crypto`, `Pension` (one value per class) — and **Named assets** (see [Assets](#assets-named)) auto-filled from each asset's dated series.
+- **Liabilities** are named entities (see [Liabilities & amortizable loans](#liabilities-and-amortizable-loans)). A **simple** liability auto-fills its last known balance from its own series; an **amortizable** loan auto-fills the **computed balance from its schedule at the snapshot date** (marked *computed*, never 0). Every active liability appears in the form.
+- **Net worth = Assets (classes + named) − Liabilities.** Names (not UUIDs) are shown for named assets and liabilities, including for entities later soft-deleted.
 - The snapshot creation form **prefills from the previous snapshot** and shows delta (absolute and percent) next to each input. If any delta exceeds 50% the form requires explicit confirmation before saving — a typo guard.
+- Named assets and liabilities auto-fill from a per-date "named values" endpoint and are marked *computed*, exactly like market classes; editing a value overrides it. Values are frozen into the snapshot on save; past snapshots are never rewritten when an asset/liability is later edited.
 - **Evolution view**: stacked area chart of assets by class over time, with a net worth line (assets minus liabilities) overlaid. When movements exist, a dashed cumulative-contributions line is overlaid as well; the gap between it and the net-worth line is the revaluation (gain or loss), surfaced in the tooltip in both absolute terms and as a percent of contributions.
 - **Allocation view**: pie chart by asset class at the latest snapshot.
 - **Portfolio prefill**: market asset classes (crypto, ETFs, stocks, funds) are prefilled from the [Portfolio](#portfolio-investments) at the snapshot date and marked *computed*; editing a value marks it *overridden*, and a class with no priced holdings is *carried over* from the previous snapshot. A per-holding valuation is frozen into each snapshot for audit. Snapshots remain the source of truth — the prefill only removes the manual tallying.
@@ -142,7 +144,7 @@ If the operator chooses not to record movements, the app remains correct (net wo
 
 ### Portfolio (investments)
 
-Individual market holdings — crypto, ETFs, individual stocks, and funds — tracked at the lot level with automatic pricing. Portfolio sits alongside snapshots, movements, liabilities and loans as sibling tabs under the **Wealth** hub (*Patrimonio* in Spanish).
+Individual market holdings — crypto, ETFs, individual stocks, and funds — tracked at the lot level with automatic pricing. Portfolio sits alongside snapshots, movements, assets, liabilities and loans as sibling tabs under the **Wealth** hub (*Patrimonio* in Spanish).
 
 - **Holdings** carry an asset class (`crypto`, `etf`, `stock`, `fund`), a symbol, an optional label/ISIN, a native currency, and an optional link to a price provider. Each holding owns a ledger of **lots**.
 - **Lots** are BUY/SELL entries (trade date, quantity, unit price, currency, optional fee and note). Net quantity, remaining cost basis and realized P&L are computed by **replaying the ledger FIFO**; the FX rate into the household base currency is frozen at trade time. Sells are validated so a position can never be oversold.
@@ -152,6 +154,35 @@ Individual market holdings — crypto, ETFs, individual stocks, and funds — tr
 - **Views**: a **Portfolio** tab (totals for invested / current value / unrealized & realized P&L / total return, a per-holding table with its lots, and an asset-type filter that re-totals per class); an **Allocation** tab (pie charts by holding, by asset class, by crypto, by stock, and by latest snapshot); and an **Evolution** tab (daily market value with invested and realized/unrealized overlays plus asset-class / holding / time-range filters, shown above the snapshot-based net-worth evolution).
 - **Snapshot integration**: see [Portfolio prefill](#net-worth-snapshots) above — market classes are prefilled from live valuations, stay editable, and are frozen per snapshot for audit.
 - **Notifications**: buy/sell lot changes can push a Telegram message (see [Notifications](#notifications-telegram)); CSV imports stay silent.
+
+### Assets (named)
+
+Named things the household owns with a value of their own (property, vehicles, valuables) — distinct from the fungible asset *classes*. They live in an **Assets** tab under the Wealth hub and **add** to net worth.
+
+- Each asset has a name, a type (`property` / `vehicle` / `other`) and an active flag, plus its **own dated value series** (the source of truth): add a value at a date any time; the latest entry is the current value.
+- Mark an asset **inactive** (e.g. sold) to drop it from new snapshots; history is kept.
+- One editor at a time: item details (name/type/active) and the value-history list are separate, and the summary card always shows the current value + date (never "no value yet" once entries exist).
+- Snapshots read each active asset's value at the snapshot date (auto-filled, editable, frozen). Assets and simple liabilities share one layout — an asset **adds**, a liability **subtracts**.
+- Full CSV export/import cycle (see [Assets CSV](#assets-csv)).
+
+### Liabilities and amortizable loans
+
+Named debts that **subtract** from net worth, in a **Liabilities** tab under the Wealth hub. A liability is either **simple** or an **amortizable loan**.
+
+- **Simple liability**: name + active flag + its **own dated balance series** (like an asset, but subtracts). Same single-editor card: details vs balance-history list.
+- **Amortizable loan** (mark a liability *amortizable* and set a **charge day**, 1–31; required): the balance is **computed by a schedule**, not typed.
+  - **Multi-part**: a loan is one or more **parts** (e.g. a Florius mortgage with two parts under a unified instalment); the loan's total balance and instalment are the **sum of the parts**.
+  - **Method per part**: French (default, constant instalment), German (constant principal, decreasing instalment), interest-only (bullet), zero-interest.
+  - **Flexible part inputs**: principal + rate + **one of** {term in months, end date, instalment}; the other two are computed and shown read-only (term ↔ end date convert; entering the instalment computes the term).
+  - **Start mode per part**: *from current balance* (outstanding + balance date → project forward, no past) or *from origin* (original principal + start date → full schedule including past payment history).
+  - **Rate revisions** (dated, past dates allowed) recompute the schedule from each.
+  - **Re-anchor** (origin mode): set the real outstanding balance at a date and the schedule reprojects from there — a safety valve for drift; earlier history is kept.
+  - **Odd-days first period**: a mid-cycle start prorates the whole first instalment (interest and principal) by the fraction of the cycle the loan actually existed.
+  - **Prepayments** are a separate action (record / simulate), not part of the definition: **reduce-term** (keep the instalment, finish earlier) or **reduce-instalment** (keep the term, lower the instalment — recomputed per method); *simulate* shows interest saved, new term and new instalment without saving.
+  - **Payment history**: a read-only, month-by-month table split into **past (elapsed)** and **upcoming (projection)**, plus a **metrics** summary (principal/interest paid to date, outstanding, interest remaining, total interest over life, progress %). Corrections go only through prepayment / rate revision / re-anchor — rows are never hand-edited.
+  - **Monthly job**: a background job advances each amortizable loan on its charge day, persisting the charged instalments (interest / principal / resulting balance) as generated history — **autonomous from transactions** (neither reads nor creates any), idempotent per (part, charge date), sharing the daily recurring-materializer cron.
+- Snapshots and the tab show the **name**, never the UUID.
+- Full CSV export/import cycle (see [Liabilities CSV](#liabilities-csv) and [Amortization CSV](#amortization-csv)).
 
 ### Loans (Préstamos)
 
@@ -238,7 +269,10 @@ data changes. Configured per household, owner-only, under **Settings → Notific
   recurring-loan-schedule execution.
 - **What fires**: a member's create/update/delete on those entities, and the daily scheduler
   materializing recurring transactions / loan-schedule payments (sent as one aggregated summary
-  per run). **CSV imports never notify**, regardless of toggles, to avoid floods on bulk loads.
+  per run). Amortizable-loan events reuse the existing toggles (no new subsystem): the **monthly
+  instalment run** rides the recurring-loan toggle, and a **recorded prepayment** (with the new
+  balance) rides the loan-payments toggle. **CSV imports never notify**, regardless of toggles, to
+  avoid floods on bulk loads.
 - **Message content**: a localized header (household locale), the same fields shown on that
   entity's mobile card (with category-group emoji), and an author line — the member's email, or
   "Recurring schedule (created by <owner>)" for scheduled runs. Light Telegram Markdown.
@@ -482,6 +516,9 @@ The feeds capture different things:
 - **Movements** — capital **moved into or out of** an asset class, or principal paid down on a liability. This tracks **what gets sent to (or taken from) savings**, separately from market gains.
 - **Portfolio** — individual **investment holdings** as BUY/SELL lots (crypto, ETFs, stocks, funds). This drives per-holding valuation, P&L, and the snapshot prefill for market asset classes.
 - **Loans** and **Loan payments** — money lent to other people and the repayments received against it. Tracking-only; never touches transactions or net worth.
+- **Assets** — named things you own (property, vehicles, valuables) with their dated value history; they add to net worth.
+- **Liabilities** — named debts with their balance history and the amortizable flag/charge day; they subtract from net worth.
+- **Amortization** — the schedule of each amortizable liability: its parts, rate revisions, prepayments, and generated instalments. Paired one-to-one with the Liabilities feed (import liabilities first, then amortization).
 
 > **Tip — converting bank statements.** Banks rarely export in the shape these importers need. The fastest path is: download the statement (CSV, OFX, PDF), open ChatGPT, Claude, or any other LLM, paste the file, and ask it to rewrite it into one of the formats below — share the column list and an example row from this section.
 >
@@ -673,6 +710,69 @@ Example:
 borrower_name;loan_start_date;payment_date;amount;description
 Alice;2025-01-01;2025-02-01;200,00;First repayment
 Bob;2024-06-15;2024-07-15;500,00;
+```
+
+### Assets CSV
+
+Header: `name;type;active;value_date;value`. One row per dated value; repeat the name across an asset's rows. Leave `value_date`/`value` empty to import an asset with no history yet.
+
+| Column | Required | Values |
+| --- | --- | --- |
+| `name` | yes | Asset name; identifies the asset (reused if it already exists). |
+| `type` | yes | `property`, `vehicle` or `other`. |
+| `active` | yes | `true` / `false`. Inactive assets are excluded from new snapshots. |
+| `value_date` | no | ISO date of a value observation. |
+| `value` | if `value_date` set | Value on that date; comma decimal. |
+
+An asset is matched by name; a value row already present (same date and value) is skipped, so re-importing an export is safe.
+
+```csv
+name;type;active;value_date;value
+House;property;true;2026-01-15;450000,00
+House;property;true;2026-06-20;500000,00
+Car;vehicle;true;2026-01-01;18000,00
+```
+
+### Liabilities CSV
+
+Header: `name;active;amortizable;charge_day;balance_date;balance`. One row per dated balance. Amortizable loans carry their schedule via the [Amortization CSV](#amortization-csv) and usually leave the balance columns empty here.
+
+| Column | Required | Values |
+| --- | --- | --- |
+| `name` | yes | Liability name; identifies it (reused if it exists). |
+| `active` | yes | `true` / `false`. |
+| `amortizable` | yes | `true` when the balance is computed by a schedule. |
+| `charge_day` | if `amortizable` | Day of month (1–31) the instalment is charged. |
+| `balance_date` | no | ISO date of a manual balance (empty for amortizable). |
+| `balance` | if `balance_date` set | Balance on that date; comma decimal. |
+
+Matched by name; a balance row already present (same date and value) is skipped. **Import Liabilities before the Amortization feed** (the amortization rows reference existing liabilities).
+
+```csv
+name;active;amortizable;charge_day;balance_date;balance
+Credit card;true;false;;2026-03-31;1200,00
+Mortgage;true;true;28;;
+```
+
+### Amortization CSV
+
+The schedule of each amortizable liability — one record per row, discriminated by `record_type`. Header:
+
+`liability_name;part_label;record_type;date;method;principal;annual_rate;term_months;instalment;amount;mode;interest;resulting_balance;start_mode;anchor_date;anchor_balance`
+
+- The referenced **liability must already exist** (import Liabilities first).
+- `record_type` is one of `part`, `revision`, `prepayment`, `entry`; a part's row must come **before** its revisions/prepayments/entries. `part_label` ties a part's rows together within its liability.
+- Columns used per record type: **part** → `method`, `principal`, `annual_rate`, `term_months`, `instalment`, `start_mode`, `anchor_date`, `anchor_balance`; **revision** → `annual_rate`; **prepayment** → `amount`, `mode`; **entry** (a generated instalment) → `principal`, `interest`, `resulting_balance`.
+- Valid values: `method` = `french` / `german` / `interest_only` / `zero`; `mode` = `reduce_term` / `reduce_instalment`; `start_mode` = `current_balance` / `origin`.
+
+Existing parts (matched by start date, principal and method), revisions, prepayments and entries are skipped, so re-importing an export is safe.
+
+```csv
+liability_name;part_label;record_type;date;method;principal;annual_rate;term_months;instalment;amount;mode;interest;resulting_balance;start_mode;anchor_date;anchor_balance
+Mortgage;Part A;part;2026-01-01;french;200000,00;3,5000;300;;;;;;current_balance;;
+Mortgage;Part A;revision;2027-01-01;;;4,0000;;;;;;;;;
+Mortgage;Part A;prepayment;2026-06-01;;;;;;10000,00;reduce_term;;;;;
+Mortgage;Part A;entry;2026-02-01;;299,55;;;;;;583,33;199700,45;;;
 ```
 
 ---

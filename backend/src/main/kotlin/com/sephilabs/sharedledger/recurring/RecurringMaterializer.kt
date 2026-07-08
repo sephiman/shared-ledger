@@ -1,6 +1,7 @@
 package com.sephilabs.sharedledger.recurring
 
 import com.sephilabs.sharedledger.loan.LoanScheduleMaterializer
+import com.sephilabs.sharedledger.networth.amortization.AmortizationMaterializer
 import com.sephilabs.sharedledger.notification.NotifyActor
 import com.sephilabs.sharedledger.notification.NotificationPublisher
 import com.sephilabs.sharedledger.observability.AppMetrics
@@ -24,6 +25,7 @@ class RecurringMaterializer(
     private val metrics: AppMetrics,
     private val txManager: PlatformTransactionManager,
     private val loanScheduleMaterializer: LoanScheduleMaterializer,
+    private val amortizationMaterializer: AmortizationMaterializer,
     private val notifications: NotificationPublisher,
 ) {
     private val log = LoggerFactory.getLogger(RecurringMaterializer::class.java)
@@ -40,6 +42,7 @@ class RecurringMaterializer(
             materializeOne(template, today)
         }
         loanScheduleMaterializer.runForAll(today)
+        amortizationMaterializer.runForAll(today)
     }
 
     fun runForHousehold(householdId: UUID, today: LocalDate): Int {
