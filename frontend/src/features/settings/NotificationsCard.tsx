@@ -120,6 +120,7 @@ export function NotificationsCard({ householdId }: { householdId: string }) {
       <CardHeader>
         <p className="font-medium">{t("notifications.title")}</p>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("notifications.description")}</p>
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("notifications.language_hint")}</p>
       </CardHeader>
       <CardBody className="space-y-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">

@@ -643,6 +643,7 @@
     "master_active": "Notifications active",
     "master_paused": "Notifications paused",
     "master_hint": "Master switch. When off, no notifications are sent but the rest of the configuration is kept.",
+    "language_hint": "Notifications are sent in the household's language.",
     "entities_title": "Notify on changes to",
     "entity_transactions": "Transactions",
     "entity_snapshots": "Snapshots",

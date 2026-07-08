@@ -2,11 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold, useAuth } from "@/auth/AuthContext";
-import { useChangePassword, useDeleteHousehold, useHousehold, useHouseholdMembers, useInvitations, useIssueInvitation, useRevokeInvitation, useSetDefaultHousehold, useUpdateHousehold, useUpdateMe, useWipeHouseholdData } from "@/api/settings";
+import { useChangePassword, useDeleteHousehold, useHousehold, useHouseholdMembers, useInvitations, useIssueInvitation, useRevokeInvitation, useSetDefaultHousehold, useUpdateHousehold, useWipeHouseholdData } from "@/api/settings";
 import { useCategories, useDeleteCustomCategory, type Category } from "@/api/catalog";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select } from "@/components/ui/primitives";
 import { asApiError } from "@/api/client";
-import { useTheme, type ThemePreference } from "@/lib/theme";
 import { categoryIcon } from "@/lib/categoryGroup";
 import { CreateHouseholdDialog } from "@/features/household/CreateHouseholdDialog";
 import { CustomCategoryDialog } from "./CustomCategoryDialog";
@@ -59,10 +58,7 @@ export function SettingsPage() {
   const [inviteRole, setInviteRole] = useState<"owner" | "member">("member");
   const [issuedToken, setIssuedToken] = useState<string | null>(null);
 
-  const { theme, setTheme } = useTheme();
-
   const changePassword = useChangePassword();
-  const updateMe = useUpdateMe();
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [pwMsg, setPwMsg] = useState<string | null>(null);
@@ -96,41 +92,6 @@ export function SettingsPage() {
         </CardHeader>
         <CardBody>
           <Link to="/settings/import" className="text-sm text-primary">{t("import.open")}</Link>
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <p className="font-medium">{t("common.language")}</p>
-        </CardHeader>
-        <CardBody className="flex items-center gap-3">
-          <Select
-            value={user?.locale ?? i18n.language}
-            onChange={async (e) => {
-              await updateMe.mutateAsync(e.target.value as "en" | "es");
-              await i18n.changeLanguage(e.target.value);
-              await refresh();
-            }}
-          >
-            <option value="en">English</option>
-            <option value="es">Español</option>
-          </Select>
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <p className="font-medium">{t("settings.theme")}</p>
-        </CardHeader>
-        <CardBody className="flex items-center gap-3">
-          <Select
-            value={theme}
-            onChange={(e) => setTheme(e.target.value as ThemePreference)}
-          >
-            <option value="light">{t("settings.theme_light")}</option>
-            <option value="dark">{t("settings.theme_dark")}</option>
-            <option value="system">{t("settings.theme_system")}</option>
-          </Select>
         </CardBody>
       </Card>
 

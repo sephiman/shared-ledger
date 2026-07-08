@@ -643,6 +643,7 @@
     "master_active": "Notificaciones activas",
     "master_paused": "Notificaciones en pausa",
     "master_hint": "Interruptor principal. Si está apagado, no se envían notificaciones pero se conserva el resto de la configuración.",
+    "language_hint": "Las notificaciones se envían en el idioma del hogar.",
     "entities_title": "Notificar cambios en",
     "entity_transactions": "Transacciones",
     "entity_snapshots": "Instantáneas",

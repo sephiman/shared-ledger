@@ -63,7 +63,16 @@ class EnableBankingConnector(
 
     override fun completeAuthorization(code: String): AuthorizedSession = call {
         val body = post("/sessions", mapOf("code" to code))
-        val accounts = body.path("accounts").map { acc ->
+        val accountsNode = body.path("accounts")
+        if (!accountsNode.isArray || accountsNode.isEmpty) {
+            // No accounts on the session means the sync will have nothing to fetch — log the payload
+            // shape (not values) so a bad link is diagnosable without re-linking blind.
+            log.warn(
+                "eb_session_no_accounts accountsNodeType={} topLevelKeys={}",
+                accountsNode.nodeType, body.fieldNames().asSequence().toList(),
+            )
+        }
+        val accounts = accountsNode.map { acc ->
             AuthorizedAccount(
                 uid = acc.path("uid").textOrNull()
                     ?: acc.path("account_id").path("iban").textOrNull()
@@ -73,6 +82,7 @@ class EnableBankingConnector(
                 currency = acc.path("currency").textOrNull(),
             )
         }
+        log.info("eb_session_created accounts={}", accounts.size)
         AuthorizedSession(
             sessionId = body.path("session_id").textOrNull() ?: throw BankConnectorException("No session_id"),
             accounts = accounts,
