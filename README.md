@@ -262,6 +262,16 @@ Wise could be added via its own API) with the always-available CSV import as the
   (real data, free, only for linked accounts — no eIDAS/TPP licence needed), and put its
   application id + RSA private key in the backend env (see §5). The whole feature stays hidden until
   those are set.
+  > **Restricted Production caveat — whitelist each account.** In this mode Enable Banking only
+  > returns accounts you have explicitly linked to the *application* in the Control Panel
+  > ("Activate by linking accounts"). A holder can pass SCA at *any* bank, but if that specific
+  > account isn't whitelisted, the API silently strips it and returns an **empty account list**: the
+  > connection links and shows `active`, yet every sync fetches zero movements with no error
+  > (`bank_sync_accounts … accounts=0`). Symptom seen in practice: Wise synced but ING didn't,
+  > because only Wise had been linked to the application. **Fix:** link each account you intend to
+  > use (per bank) in the Control Panel, then re-link the connection in the app. This whitelist step
+  > is Control-Panel-only — there is **no API** to do it from the app. Applying for **full
+  > production** removes the restriction so any authorised account is returned automatically.
 - **Linking (from Settings → Banks)**: the app first explains what will happen (redirect to the
   bank for SCA, only movements are read, the permission expires in 90–180 days and needs
   re-linking, only linked accounts are accessible, data stays self-hosted). The bank picker is the
