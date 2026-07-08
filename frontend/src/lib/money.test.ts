@@ -34,6 +34,13 @@ describe("money", () => {
     expect(formatPrice("0", "EUR", "en")).toContain("0.00");
   });
 
+  it("caps prices of €1 or more at 2 decimals regardless of stored precision", () => {
+    // The extended-precision rule is only for sub-€1 values; ≥€1 reads like money.
+    expect(formatPrice("1.198734500000", "EUR", "en")).toContain("1.20");
+    expect(formatPrice("55567.732403511", "EUR", "en")).toContain("55,567.73");
+    expect(formatPrice("-2.5678", "EUR", "en")).toContain("2.57");
+  });
+
   it("shows full precision for tiny prices — no rounding, no significant-figure truncation", () => {
     // Fixed 2dp would collapse this to "0.00"; every stored decimal is preserved.
     expect(formatPrice("0.000002403511", "EUR", "en")).toContain("0.000002403511");

@@ -336,7 +336,7 @@ export function HoldingsTab() {
                           </td>
                           <td className="whitespace-nowrap text-right font-mono tabular-nums">{formatQty(row.holding.netQuantity)}</td>
                           <td className="whitespace-nowrap text-right font-mono tabular-nums">{money(row.holding.remainingCostBasis)}</td>
-                          <td className="whitespace-nowrap text-right font-mono tabular-nums align-top">
+                          <td className={`whitespace-nowrap text-right font-mono tabular-nums ${avg != null ? "align-top" : "align-middle"}`}>
                             {row.currentPrice != null ? (
                               <div className="flex flex-col items-end leading-tight">
                                 <span
