@@ -65,6 +65,19 @@ data class LotDto(
     // Cost for a BUY, proceeds for a SELL, in base currency.
     @JsonFormat(shape = JsonFormat.Shape.STRING)
     val amountBase: BigDecimal,
+    // Per-lot FIFO breakdown, in base currency. Only populated on the holding-level view.
+    // BUY: quantity of this lot still held after later sells; null for SELL.
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    val remainingQty: BigDecimal? = null,
+    // BUY: base cost basis of the remaining quantity; null for SELL.
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    val remainingCostBasis: BigDecimal? = null,
+    // BUY: realized gain on the already-sold portion (at sale prices). SELL: the sale's realized P&L.
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    val realizedPnl: BigDecimal? = null,
+    // BUY only: unrealized P&L on the remaining quantity at the current price; null when unpriced.
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    val unrealizedPnl: BigDecimal? = null,
 )
 
 data class HoldingDto(

@@ -168,6 +168,54 @@ class PortfolioValuationIntegrationTest @Autowired constructor(
     }
 
     @Test
+    fun `summary attributes per-lot realized and unrealized pnl with FIFO`() {
+        val (user, household) = seed()
+        val coinId = "btc-perlot-${System.nanoTime()}"
+        val holding = createLinkedCrypto(household.id, user, "BTC", coinId)
+        addLot(household.id, holding.id, user, LocalDate.of(2026, 1, 10), "2", "40000")
+        addLot(household.id, holding.id, user, LocalDate.of(2026, 2, 1), "1", "50000")
+        // Sells 1 BTC @ 55000: FIFO consumes it from the older (40000) buy.
+        holdingService.addLot(
+            household.id, holding.id,
+            LotRequest(
+                type = LotType.SELL,
+                tradedOn = LocalDate.of(2026, 3, 1),
+                quantity = BigDecimal("1"),
+                unitPrice = BigDecimal("55000"),
+            ),
+            user,
+        )
+        storePrice("coingecko", coinId, "EUR", LocalDate.of(2026, 3, 5), "60000")
+
+        val row = service.summary(household.id).holdings.single()
+        val buy1 = row.holding.lots.single { it.type == LotType.BUY && it.tradedOn == LocalDate.of(2026, 1, 10) }
+        val buy2 = row.holding.lots.single { it.type == LotType.BUY && it.tradedOn == LocalDate.of(2026, 2, 1) }
+        val sell = row.holding.lots.single { it.type == LotType.SELL }
+
+        // Older buy: 1 of its 2 units sold @ 55000 (realized 15000), 1 still held.
+        assertThat(buy1.remainingQty).isEqualByComparingTo(BigDecimal("1"))
+        assertThat(buy1.remainingCostBasis).isEqualByComparingTo(BigDecimal("40000.00"))
+        assertThat(buy1.realizedPnl).isEqualByComparingTo(BigDecimal("15000.00"))
+        // Unrealized on the held unit at the 60000 price.
+        assertThat(buy1.unrealizedPnl).isEqualByComparingTo(BigDecimal("20000.00"))
+        // Newer buy: untouched by the sell, fully held.
+        assertThat(buy2.remainingQty).isEqualByComparingTo(BigDecimal("1"))
+        assertThat(buy2.realizedPnl).isEqualByComparingTo(BigDecimal.ZERO)
+        assertThat(buy2.unrealizedPnl).isEqualByComparingTo(BigDecimal("10000.00"))
+        // The sell shows its own realized P&L; remaining/unrealized are not meaningful for it.
+        assertThat(sell.realizedPnl).isEqualByComparingTo(BigDecimal("15000.00"))
+        assertThat(sell.remainingQty).isNull()
+        assertThat(sell.remainingCostBasis).isNull()
+        assertThat(sell.unrealizedPnl).isNull()
+
+        // Per-lot figures reconcile with the holding-level totals shown in the row.
+        val buyUnrealized = buy1.unrealizedPnl!!.add(buy2.unrealizedPnl!!)
+        val buyRealized = buy1.realizedPnl!!.add(buy2.realizedPnl!!)
+        assertThat(buyUnrealized).isEqualByComparingTo(row.unrealizedPnl)
+        assertThat(buyRealized).isEqualByComparingTo(row.realizedPnl)
+    }
+
+    @Test
     fun `closed positions stay listed with realized pnl and zero value`() {
         val (user, household) = seed()
         val holding = holdingService.create(

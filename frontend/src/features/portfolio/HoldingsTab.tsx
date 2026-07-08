@@ -627,37 +627,65 @@ function LotsEditor({ holding, currency, locale }: { holding: Holding; currency:
         <p className="text-xs text-gray-500 dark:text-gray-400">{t("portfolio.no_lots")}</p>
       ) : (
         <ul className="space-y-1">
-          {holding.lots.map((lot) => (
-            <li key={lot.id} className="flex items-center justify-between gap-2 rounded border border-border px-2 py-1 dark:border-gray-700">
-              <span className="text-xs text-gray-600 dark:text-gray-300">
-                <span
-                  className={cnBadge(lot.type)}
-                >
-                  {t(`portfolio.lot_type.${lot.type}`)}
+          {holding.lots.map((lot) => {
+            const remaining = lot.remainingQty;
+            // A BUY whose remaining quantity no longer matches what was bought has been (partly) sold.
+            const partlySold = lot.type === "BUY" && remaining != null && !new Decimal(remaining).eq(lot.quantity);
+            // Unrealized only makes sense for a BUY that still holds something and is priced.
+            const showUnrealized =
+              lot.type === "BUY" && remaining != null && new Decimal(remaining).gt(0) && lot.unrealizedPnl != null;
+            const showRealized = lot.realizedPnl != null && pnlTone(lot.realizedPnl) !== "neutral";
+            return (
+              <li key={lot.id} className="flex items-start justify-between gap-2 rounded border border-border px-2 py-1 dark:border-gray-700">
+                <span className="text-xs text-gray-600 dark:text-gray-300">
+                  <span
+                    className={cnBadge(lot.type)}
+                  >
+                    {t(`portfolio.lot_type.${lot.type}`)}
+                  </span>
+                  {" "}
+                  {formatDate(lot.tradedOn, locale)} · {formatQty(lot.quantity)} × {formatPrice(lot.unitPrice, lot.currency, locale)}
+                  {lot.fee && ` · ${t("portfolio.fee")} ${formatMoney(lot.fee, lot.currency, locale)}`}
+                  {partlySold && (
+                    <span className="text-gray-400 dark:text-gray-500"> · {formatQty(remaining!)} {t("portfolio.held_short")}</span>
+                  )}
+                  {lot.note && ` · ${lot.note}`}
                 </span>
-                {" "}
-                {formatDate(lot.tradedOn, locale)} · {formatQty(lot.quantity)} × {formatPrice(lot.unitPrice, lot.currency, locale)}
-                {lot.fee && ` · ${t("portfolio.fee")} ${formatMoney(lot.fee, lot.currency, locale)}`}
-                {lot.note && ` · ${lot.note}`}
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="font-mono text-xs tabular-nums">{formatMoney(lot.amountBase, currency, locale)}</span>
-                <Button
-                  variant="ghost"
-                  className="px-1 py-0.5"
-                  aria-label={t("common.delete")}
-                  title={t("common.delete")}
-                  onClick={() => {
-                    if (window.confirm(t("common.delete") + "?")) {
-                      void deleteLot.mutate({ holdingId: holding.id, lotId: lot.id });
-                    }
-                  }}
-                >
-                  <span aria-hidden>🗑️</span>
-                </Button>
-              </span>
-            </li>
-          ))}
+                <span className="flex flex-col items-end gap-0.5">
+                  <span className="flex items-center gap-1">
+                    <span className="font-mono text-xs tabular-nums">{formatMoney(lot.amountBase, currency, locale)}</span>
+                    <Button
+                      variant="ghost"
+                      className="px-1 py-0.5"
+                      aria-label={t("common.delete")}
+                      title={t("common.delete")}
+                      onClick={() => {
+                        if (window.confirm(t("common.delete") + "?")) {
+                          void deleteLot.mutate({ holdingId: holding.id, lotId: lot.id });
+                        }
+                      }}
+                    >
+                      <span aria-hidden>🗑️</span>
+                    </Button>
+                  </span>
+                  {(showUnrealized || showRealized) && (
+                    <span className="flex flex-wrap items-center justify-end gap-x-2 gap-y-0.5 text-[10px] font-medium">
+                      {showUnrealized && (
+                        <span className={toneClass(pnlTone(lot.unrealizedPnl))}>
+                          {t("portfolio.unrealized_short")}: {signedMoney(lot.unrealizedPnl!, formatMoney(lot.unrealizedPnl!, currency, locale))}
+                        </span>
+                      )}
+                      {showRealized && (
+                        <span className={toneClass(pnlTone(lot.realizedPnl))}>
+                          {t("portfolio.realized_short")}: {signedMoney(lot.realizedPnl!, formatMoney(lot.realizedPnl!, currency, locale))}
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

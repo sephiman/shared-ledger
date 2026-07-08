@@ -287,7 +287,9 @@ class HoldingService(
 
     fun toDto(holding: Holding): HoldingDto {
         val lotEntities = lots.findAllByHoldingIdOrderByTradedOnAscCreatedAtAsc(holding.id)
-        val state = PortfolioValuationCalculator.replay(lotEntities.map { it.toEntry() }, props.portfolio.costMethod)
+        val entries = lotEntities.map { it.toEntry() }
+        val state = PortfolioValuationCalculator.replay(entries, props.portfolio.costMethod)
+        val breakdown = PortfolioValuationCalculator.breakdownByLot(entries, props.portfolio.costMethod)
         return HoldingDto(
             id = holding.id,
             assetClass = holding.assetClass,
@@ -299,7 +301,7 @@ class HoldingService(
             providerSymbol = holding.providerSymbol,
             linked = holding.linked,
             active = holding.active,
-            lots = lotEntities.map { toDto(it) },
+            lots = lotEntities.map { toDto(it, breakdown[it.id]) },
             netQuantity = state.netQuantity,
             remainingCostBasis = state.remainingCostBasisBase,
             realizedPnl = state.realizedPnlBase,
@@ -308,7 +310,7 @@ class HoldingService(
         )
     }
 
-    private fun toDto(lot: HoldingLot): LotDto = LotDto(
+    private fun toDto(lot: HoldingLot, breakdown: PortfolioValuationCalculator.LotBreakdown? = null): LotDto = LotDto(
         id = lot.id,
         type = lot.type,
         tradedOn = lot.tradedOn,
@@ -319,6 +321,11 @@ class HoldingService(
         fxRateToBase = lot.fxRateToBase,
         note = lot.note,
         amountBase = lotAmountBase(lot),
+        // BUY carries a remaining position; SELL only a realized figure. Unrealized is filled
+        // in later by the valuation service, which has the current price.
+        remainingQty = breakdown?.takeIf { lot.type == LotType.BUY }?.remainingQty,
+        remainingCostBasis = breakdown?.takeIf { lot.type == LotType.BUY }?.remainingCostBasisBase,
+        realizedPnl = breakdown?.realizedPnlBase,
     )
 
     /** Cost of a BUY / proceeds of a SELL in base currency, fee included. */
@@ -352,4 +359,4 @@ class HoldingService(
 }
 
 fun HoldingLot.toEntry(): PortfolioValuationCalculator.LedgerEntry =
-    PortfolioValuationCalculator.LedgerEntry(type, tradedOn, quantity, unitPrice, fee, fxRateToBase)
+    PortfolioValuationCalculator.LedgerEntry(type, tradedOn, quantity, unitPrice, fee, fxRateToBase, id)

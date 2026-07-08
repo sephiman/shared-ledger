@@ -14,11 +14,11 @@ class PortfolioValuationCalculatorTest {
 
     private val asOf = LocalDate.of(2026, 6, 30)
 
-    private fun buy(day: Int, qty: String, price: String, fee: String? = null, fx: String = "1") =
-        LedgerEntry(LotType.BUY, asOf.minusDays(200L - day), BigDecimal(qty), BigDecimal(price), fee?.let(::BigDecimal), BigDecimal(fx))
+    private fun buy(day: Int, qty: String, price: String, fee: String? = null, fx: String = "1", id: UUID? = null) =
+        LedgerEntry(LotType.BUY, asOf.minusDays(200L - day), BigDecimal(qty), BigDecimal(price), fee?.let(::BigDecimal), BigDecimal(fx), id)
 
-    private fun sell(day: Int, qty: String, price: String, fee: String? = null, fx: String = "1") =
-        LedgerEntry(LotType.SELL, asOf.minusDays(200L - day), BigDecimal(qty), BigDecimal(price), fee?.let(::BigDecimal), BigDecimal(fx))
+    private fun sell(day: Int, qty: String, price: String, fee: String? = null, fx: String = "1", id: UUID? = null) =
+        LedgerEntry(LotType.SELL, asOf.minusDays(200L - day), BigDecimal(qty), BigDecimal(price), fee?.let(::BigDecimal), BigDecimal(fx), id)
 
     @Test
     fun `buys accumulate quantity and cost basis with fees at the frozen fx rate`() {
@@ -195,6 +195,58 @@ class PortfolioValuationCalculatorTest {
         val pastThreshold = PriceInput(BigDecimal.ONE, asOf.minusDays(8), "EUR", BigDecimal.ONE)
         assertThat(PortfolioValuationCalculator.value(state, onThreshold, asOf, 7).stale).isFalse()
         assertThat(PortfolioValuationCalculator.value(state, pastThreshold, asOf, 7).stale).isTrue()
+    }
+
+    @Test
+    fun `per-lot breakdown attributes realized to consumed buys and remaining to survivors`() {
+        val b1 = UUID.randomUUID()
+        val b2 = UUID.randomUUID()
+        val s1 = UUID.randomUUID()
+        val breakdown = PortfolioValuationCalculator.breakdownByLot(
+            listOf(
+                buy(1, "10", "100", id = b1),          // per-unit 100
+                buy(2, "10", "200", id = b2),          // per-unit 200
+                // Sells 15 @ 300 with 10 fee: consumes b1 fully + 5 of b2.
+                // proceeds = 4490; per-unit proceeds = 299.3333…
+                sell(3, "15", "300", fee = "10", id = s1),
+            )
+        )
+        // b1 fully consumed: nothing held, realized = 10 × 299.3333 − 1000.
+        assertThat(breakdown.getValue(b1).remainingQty).isEqualByComparingTo(BigDecimal.ZERO)
+        assertThat(breakdown.getValue(b1).remainingCostBasisBase).isEqualByComparingTo(BigDecimal.ZERO)
+        assertThat(breakdown.getValue(b1).realizedPnlBase).isEqualByComparingTo(BigDecimal("1993.33"))
+        // b2 partly consumed: 5 units still held at 200; realized = 5 × 299.3333 − 1000.
+        assertThat(breakdown.getValue(b2).remainingQty).isEqualByComparingTo(BigDecimal("5"))
+        assertThat(breakdown.getValue(b2).remainingCostBasisBase).isEqualByComparingTo(BigDecimal("1000.00"))
+        assertThat(breakdown.getValue(b2).realizedPnlBase).isEqualByComparingTo(BigDecimal("496.67"))
+        // The sell carries the sale's own realized P&L = proceeds − FIFO cost of the buys it ate.
+        assertThat(breakdown.getValue(s1).realizedPnlBase).isEqualByComparingTo(BigDecimal("2490.00"))
+        // Per-buy realized reconciles with the sell's (and the holding's) realized total.
+        val buySum = breakdown.getValue(b1).realizedPnlBase.add(breakdown.getValue(b2).realizedPnlBase)
+        assertThat(buySum).isEqualByComparingTo(BigDecimal("2490.00"))
+    }
+
+    @Test
+    fun `per-lot breakdown of a partial sell leaves the buy holding its unsold remainder`() {
+        val b1 = UUID.randomUUID()
+        val s1 = UUID.randomUUID()
+        val breakdown = PortfolioValuationCalculator.breakdownByLot(
+            listOf(
+                buy(1, "10", "100", fee = "20", id = b1),   // per-unit cost 102
+                sell(2, "4", "110", id = s1),               // proceeds 440, cost 408
+            )
+        )
+        assertThat(breakdown.getValue(b1).remainingQty).isEqualByComparingTo(BigDecimal("6"))
+        assertThat(breakdown.getValue(b1).remainingCostBasisBase).isEqualByComparingTo(BigDecimal("612.00"))
+        assertThat(breakdown.getValue(b1).realizedPnlBase).isEqualByComparingTo(BigDecimal("32.00"))
+        assertThat(breakdown.getValue(s1).realizedPnlBase).isEqualByComparingTo(BigDecimal("32.00"))
+    }
+
+    @Test
+    fun `per-lot breakdown skips entries without an id`() {
+        // Read paths always carry ids; a synthetic entry simply gets no attribution row.
+        val breakdown = PortfolioValuationCalculator.breakdownByLot(listOf(buy(1, "1", "100")))
+        assertThat(breakdown).isEmpty()
     }
 
     @Test

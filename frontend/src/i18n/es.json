@@ -332,8 +332,10 @@
     "register_sale": "Registrar venta",
     "sale_price": "Precio de venta",
     "realized_pnl": "P&G realizado",
-    "unrealized_pnl": "P&G latente",
+    "unrealized_pnl": "P&G no realizado",
     "realized_short": "Realizado",
+    "unrealized_short": "No realizado",
+    "held_short": "en cartera",
     "closed": "Cerrada",
     "lot_type": {
       "BUY": "Compra",

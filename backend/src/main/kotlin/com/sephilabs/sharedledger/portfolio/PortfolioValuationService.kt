@@ -55,7 +55,7 @@ class PortfolioValuationService(
 
         val holdingDtos = results.map { row ->
             HoldingSummaryDto(
-                holding = holdingService.toDto(row.holding),
+                holding = withLotUnrealized(holdingService.toDto(row.holding), row.price),
                 currentPrice = row.price?.price,
                 priceCurrency = row.price?.currency,
                 priceAsOf = row.result.priceAsOf,
@@ -307,6 +307,29 @@ class PortfolioValuationService(
             )?.rate ?: return null
         }
         return PortfolioValuationCalculator.PriceInput(point.price, point.priceDate, currency, fx)
+    }
+
+    /**
+     * Fills each BUY lot's unrealized P&L = remaining quantity × current price (in base) −
+     * remaining cost basis. Left null when the holding is unpriced. Summed over the BUY lots
+     * these reconcile with the holding-level unrealized P&L (netQuantity × price − cost basis).
+     */
+    private fun withLotUnrealized(dto: HoldingDto, price: PortfolioValuationCalculator.PriceInput?): HoldingDto {
+        if (price == null) return dto
+        val perUnitBase = price.price.multiply(price.fxToBase, MathContext.DECIMAL64)
+        val lots = dto.lots.map { lot ->
+            val remainingQty = lot.remainingQty
+            val remainingCostBasis = lot.remainingCostBasis
+            if (lot.type != LotType.BUY || remainingQty == null || remainingCostBasis == null) {
+                lot
+            } else {
+                val unrealized = Money.normalize(
+                    remainingQty.multiply(perUnitBase, MathContext.DECIMAL64).subtract(remainingCostBasis, MathContext.DECIMAL64)
+                )
+                lot.copy(unrealizedPnl = unrealized)
+            }
+        }
+        return dto.copy(lots = lots)
     }
 
     /** Signed base-currency cash flow of a ledger entry: +cost for a BUY, −proceeds for a SELL. */

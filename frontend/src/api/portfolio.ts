@@ -18,6 +18,15 @@ export interface Lot {
   note: string | null;
   // Cost for a BUY, proceeds for a SELL, in base currency.
   amountBase: string;
+  // Per-lot FIFO breakdown in base currency (holding-level view only).
+  // BUY: quantity of this lot still held after later sells; null for SELL.
+  remainingQty: string | null;
+  // BUY: base cost basis of the remaining quantity; null for SELL.
+  remainingCostBasis: string | null;
+  // BUY: realized gain on the already-sold portion (at sale prices). SELL: the sale's realized P&L.
+  realizedPnl: string | null;
+  // BUY only: unrealized P&L on the remaining quantity at the current price; null when unpriced.
+  unrealizedPnl: string | null;
 }
 
 export interface Holding {

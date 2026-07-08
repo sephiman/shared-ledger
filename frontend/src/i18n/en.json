@@ -334,6 +334,8 @@
     "realized_pnl": "Realized P&L",
     "unrealized_pnl": "Unrealized P&L",
     "realized_short": "Realized",
+    "unrealized_short": "Unrealized",
+    "held_short": "held",
     "closed": "Closed",
     "lot_type": {
       "BUY": "Buy",
