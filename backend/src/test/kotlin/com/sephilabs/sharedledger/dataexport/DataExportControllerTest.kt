@@ -65,8 +65,8 @@ class DataExportControllerTest @Autowired constructor(
             "recurring-templates",
             "movements",
             "snapshots",
-            "loans",
-            "loan-payments",
+            "lendings",
+            "lending-payments",
             "portfolio",
             "assets",
             "liabilities",
@@ -103,8 +103,8 @@ class DataExportControllerTest @Autowired constructor(
             stem.endsWith("-transactions") -> "transactions"
             stem.endsWith("-movements") -> "movements"
             stem.endsWith("-snapshots") -> "snapshots"
-            stem.endsWith("-loan-payments") -> "loan-payments"
-            stem.endsWith("-loans") -> "loans"
+            stem.endsWith("-lending-payments") -> "lending-payments"
+            stem.endsWith("-lendings") -> "lendings"
             stem.endsWith("-portfolio") -> "portfolio"
             stem.endsWith("-assets") -> "assets"
             stem.endsWith("-liabilities") -> "liabilities"

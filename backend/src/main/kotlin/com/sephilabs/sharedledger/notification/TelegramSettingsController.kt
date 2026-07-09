@@ -26,10 +26,10 @@ data class TelegramSettingsDto(
     val notifyTransactions: Boolean,
     val notifySnapshots: Boolean,
     val notifyMovements: Boolean,
-    val notifyLoanPayments: Boolean,
+    val notifyLendingPayments: Boolean,
     val notifyHoldings: Boolean,
     val notifyRecurringTxn: Boolean,
-    val notifyRecurringLoan: Boolean,
+    val notifyRecurringLending: Boolean,
     val chatId: String?,
     val tokenConfigured: Boolean,
 )
@@ -39,10 +39,10 @@ data class TelegramSettingsUpdateRequest(
     val notifyTransactions: Boolean = true,
     val notifySnapshots: Boolean = true,
     val notifyMovements: Boolean = true,
-    val notifyLoanPayments: Boolean = true,
+    val notifyLendingPayments: Boolean = true,
     val notifyHoldings: Boolean = true,
     val notifyRecurringTxn: Boolean = true,
-    val notifyRecurringLoan: Boolean = true,
+    val notifyRecurringLending: Boolean = true,
     @field:Size(max = 64, message = "validation.invalid")
     val chatId: String? = null,
     // When null/blank the stored token is kept; when present it replaces and is re-encrypted.
@@ -81,10 +81,10 @@ class TelegramSettingsController(
         settings.notifyTransactions = body.notifyTransactions
         settings.notifySnapshots = body.notifySnapshots
         settings.notifyMovements = body.notifyMovements
-        settings.notifyLoanPayments = body.notifyLoanPayments
+        settings.notifyLendingPayments = body.notifyLendingPayments
         settings.notifyHoldings = body.notifyHoldings
         settings.notifyRecurringTxn = body.notifyRecurringTxn
-        settings.notifyRecurringLoan = body.notifyRecurringLoan
+        settings.notifyRecurringLending = body.notifyRecurringLending
         settings.chatId = body.chatId?.takeIf { it.isNotBlank() }
         body.botToken?.takeIf { it.isNotBlank() }?.let { settings.botTokenEnc = crypto.encrypt(it.trim()) }
         settings.updatedByUserId = user.id
@@ -109,10 +109,10 @@ class TelegramSettingsController(
         notifyTransactions = notifyTransactions,
         notifySnapshots = notifySnapshots,
         notifyMovements = notifyMovements,
-        notifyLoanPayments = notifyLoanPayments,
+        notifyLendingPayments = notifyLendingPayments,
         notifyHoldings = notifyHoldings,
         notifyRecurringTxn = notifyRecurringTxn,
-        notifyRecurringLoan = notifyRecurringLoan,
+        notifyRecurringLending = notifyRecurringLending,
         chatId = chatId,
         tokenConfigured = !botTokenEnc.isNullOrBlank(),
     )
@@ -122,10 +122,10 @@ class TelegramSettingsController(
         notifyTransactions = true,
         notifySnapshots = true,
         notifyMovements = true,
-        notifyLoanPayments = true,
+        notifyLendingPayments = true,
         notifyHoldings = true,
         notifyRecurringTxn = true,
-        notifyRecurringLoan = true,
+        notifyRecurringLending = true,
         chatId = null,
         tokenConfigured = false,
     )

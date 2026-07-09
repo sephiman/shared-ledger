@@ -133,7 +133,7 @@ export function LiabilitiesTab() {
                     <div className="min-w-0 flex-1 break-words">
                       <p className="font-medium">
                         {it.name}
-                        <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-primary">{t("networth.amortizable")}</span>
+                        <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-primary">{t("networth.amortizable_badge")}</span>
                         {!it.active && <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] uppercase tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-400">{t("common.inactive")}</span>}
                       </p>
                       {it.computedBalance != null ? (

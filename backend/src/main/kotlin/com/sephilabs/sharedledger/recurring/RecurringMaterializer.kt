@@ -1,6 +1,6 @@
 package com.sephilabs.sharedledger.recurring
 
-import com.sephilabs.sharedledger.loan.LoanScheduleMaterializer
+import com.sephilabs.sharedledger.lending.LendingScheduleMaterializer
 import com.sephilabs.sharedledger.networth.amortization.AmortizationMaterializer
 import com.sephilabs.sharedledger.notification.NotifyActor
 import com.sephilabs.sharedledger.notification.NotificationPublisher
@@ -24,7 +24,7 @@ class RecurringMaterializer(
     private val transactions: TransactionRepository,
     private val metrics: AppMetrics,
     private val txManager: PlatformTransactionManager,
-    private val loanScheduleMaterializer: LoanScheduleMaterializer,
+    private val lendingScheduleMaterializer: LendingScheduleMaterializer,
     private val amortizationMaterializer: AmortizationMaterializer,
     private val notifications: NotificationPublisher,
 ) {
@@ -41,7 +41,7 @@ class RecurringMaterializer(
         for (template in active) {
             materializeOne(template, today)
         }
-        loanScheduleMaterializer.runForAll(today)
+        lendingScheduleMaterializer.runForAll(today)
         amortizationMaterializer.runForAll(today)
     }
 

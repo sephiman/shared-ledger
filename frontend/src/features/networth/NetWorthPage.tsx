@@ -7,14 +7,14 @@ import { EvolutionTab } from "./EvolutionTab";
 import { MovementsTab } from "./MovementsTab";
 import { AssetsTab } from "./AssetsTab";
 import { LiabilitiesTab } from "./LiabilitiesTab";
-import { LoansTab } from "../loans/LoansTab";
+import { LendingsTab } from "../lendings/LendingsTab";
 import { HoldingsTab } from "../portfolio/HoldingsTab";
 import { PortfolioAllocationTab } from "../portfolio/PortfolioAllocationTab";
 import { PortfolioEvolutionTab } from "../portfolio/PortfolioEvolutionTab";
 
-type Tab = "holdings" | "allocation" | "evolution" | "snapshots" | "movements" | "assets" | "liabilities" | "loans";
+type Tab = "holdings" | "allocation" | "evolution" | "snapshots" | "movements" | "assets" | "liabilities" | "lendings";
 
-const TABS: Tab[] = ["holdings", "allocation", "evolution", "snapshots", "movements", "assets", "liabilities", "loans"];
+const TABS: Tab[] = ["holdings", "allocation", "evolution", "snapshots", "movements", "assets", "liabilities", "lendings"];
 
 export function NetWorthPage() {
   const { t } = useTranslation();
@@ -39,7 +39,7 @@ export function NetWorthPage() {
     { value: "movements", label: t("networth.movements") },
     { value: "assets", label: t("networth.assets") },
     { value: "liabilities", label: t("networth.liabilities") },
-    { value: "loans", label: t("networth.loans") },
+    { value: "lendings", label: t("networth.lent") },
   ];
 
   return (
@@ -68,7 +68,7 @@ export function NetWorthPage() {
       {tab === "movements" && <MovementsTab />}
       {tab === "assets" && <AssetsTab />}
       {tab === "liabilities" && <LiabilitiesTab />}
-      {tab === "loans" && <LoansTab />}
+      {tab === "lendings" && <LendingsTab />}
     </div>
   );
 }

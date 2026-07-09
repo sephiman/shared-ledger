@@ -13,19 +13,19 @@ type EntityToggleKey =
   | "notifyTransactions"
   | "notifySnapshots"
   | "notifyMovements"
-  | "notifyLoanPayments"
+  | "notifyLendingPayments"
   | "notifyHoldings"
   | "notifyRecurringTxn"
-  | "notifyRecurringLoan";
+  | "notifyRecurringLending";
 
 const ENTITY_TOGGLES: { key: EntityToggleKey; labelKey: string }[] = [
   { key: "notifyTransactions", labelKey: "notifications.entity_transactions" },
   { key: "notifySnapshots", labelKey: "notifications.entity_snapshots" },
   { key: "notifyMovements", labelKey: "notifications.entity_movements" },
-  { key: "notifyLoanPayments", labelKey: "notifications.entity_loan_payments" },
+  { key: "notifyLendingPayments", labelKey: "notifications.entity_lending_payments" },
   { key: "notifyHoldings", labelKey: "notifications.entity_holdings" },
   { key: "notifyRecurringTxn", labelKey: "notifications.entity_recurring_txn" },
-  { key: "notifyRecurringLoan", labelKey: "notifications.entity_recurring_loan" },
+  { key: "notifyRecurringLending", labelKey: "notifications.entity_recurring_lending" },
 ];
 
 function Toggle({ checked, disabled, onChange, label }: { checked: boolean; disabled?: boolean; onChange: (v: boolean) => void; label: string }) {
@@ -54,10 +54,10 @@ export function NotificationsCard({ householdId }: { householdId: string }) {
     notifyTransactions: true,
     notifySnapshots: true,
     notifyMovements: true,
-    notifyLoanPayments: true,
+    notifyLendingPayments: true,
     notifyHoldings: true,
     notifyRecurringTxn: true,
-    notifyRecurringLoan: true,
+    notifyRecurringLending: true,
     chatId: "",
   });
   const [token, setToken] = useState("");
@@ -73,10 +73,10 @@ export function NotificationsCard({ householdId }: { householdId: string }) {
         notifyTransactions: settings.notifyTransactions,
         notifySnapshots: settings.notifySnapshots,
         notifyMovements: settings.notifyMovements,
-        notifyLoanPayments: settings.notifyLoanPayments,
+        notifyLendingPayments: settings.notifyLendingPayments,
         notifyHoldings: settings.notifyHoldings,
         notifyRecurringTxn: settings.notifyRecurringTxn,
-        notifyRecurringLoan: settings.notifyRecurringLoan,
+        notifyRecurringLending: settings.notifyRecurringLending,
         chatId: settings.chatId ?? "",
       });
       setTokenConfigured(settings.tokenConfigured);

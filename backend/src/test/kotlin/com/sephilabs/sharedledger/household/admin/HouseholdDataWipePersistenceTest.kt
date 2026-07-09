@@ -24,9 +24,9 @@ import com.sephilabs.sharedledger.household.Household
 import com.sephilabs.sharedledger.household.HouseholdRepository
 import com.sephilabs.sharedledger.identity.user.User
 import com.sephilabs.sharedledger.identity.user.UserRepository
-import com.sephilabs.sharedledger.loan.InterestType
-import com.sephilabs.sharedledger.loan.Loan
-import com.sephilabs.sharedledger.loan.LoanRepository
+import com.sephilabs.sharedledger.lending.InterestType
+import com.sephilabs.sharedledger.lending.Lending
+import com.sephilabs.sharedledger.lending.LendingRepository
 import com.sephilabs.sharedledger.networth.amortization.AmortizationEntry
 import com.sephilabs.sharedledger.networth.amortization.AmortizationEntryRepository
 import com.sephilabs.sharedledger.networth.amortization.AmortizationPart
@@ -90,7 +90,7 @@ class HouseholdDataWipePersistenceTest @Autowired constructor(
     private val liabilityBalances: LiabilityBalanceEntryRepository,
     private val amortizationParts: AmortizationPartRepository,
     private val amortizationEntries: AmortizationEntryRepository,
-    private val loans: LoanRepository,
+    private val lendings: LendingRepository,
     private val bankConnections: BankConnectionRepository,
     private val bankAccounts: BankConnectionAccountRepository,
     private val pendingMovements: PendingMovementRepository,
@@ -109,7 +109,7 @@ class HouseholdDataWipePersistenceTest @Autowired constructor(
     private val rootTables = listOf(
         "transactions", "net_worth_movements", "snapshots",
         "recurring_templates", "budgets", "custom_categories",
-        "holdings", "assets", "liabilities", "loans",
+        "holdings", "assets", "liabilities", "lendings",
         "pending_movements", "bank_categorization_rules", "bank_auth_sessions", "bank_connections",
         "fire_settings", "telegram_settings", "auto_snapshot_settings",
     )
@@ -196,7 +196,7 @@ class HouseholdDataWipePersistenceTest @Autowired constructor(
             fxRateToBase = BigDecimal.ONE, createdByUserId = user.id, updatedByUserId = user.id,
         ))
 
-        loans.save(Loan(
+        lendings.save(Lending(
             householdId = household.id, borrowerName = "Alice", principalAmount = BigDecimal("500.00"),
             startDate = LocalDate.of(2025, 1, 1), interestType = InterestType.none,
             createdByUserId = user.id, updatedByUserId = user.id,

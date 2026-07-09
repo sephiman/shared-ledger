@@ -160,11 +160,11 @@ export function useExecuteRecurring(householdId: string) {
   });
 }
 
-export function usePreviewLoans(householdId: string) {
+export function usePreviewLendings(householdId: string) {
   return useMutation({
     mutationFn: async (file: File) => {
       const res = await apiClient.post<PreviewSummary>(
-        `/households/${householdId}/loans/import/preview`,
+        `/households/${householdId}/lendings/import/preview`,
         asForm(file),
         { headers: { "Content-Type": null } },
       );
@@ -174,29 +174,29 @@ export function usePreviewLoans(householdId: string) {
   });
 }
 
-export function useExecuteLoans(householdId: string) {
+export function useExecuteLendings(householdId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (file: File) => {
       const res = await apiClient.post<ExecuteResult>(
-        `/households/${householdId}/loans/import/execute`,
+        `/households/${householdId}/lendings/import/execute`,
         asForm(file),
         { headers: { "Content-Type": null } },
       );
       return res.data;
     },
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["loans", householdId] });
-      void qc.invalidateQueries({ queryKey: ["loans-summary", householdId] });
+      void qc.invalidateQueries({ queryKey: ["lendings", householdId] });
+      void qc.invalidateQueries({ queryKey: ["lendings-summary", householdId] });
     },
   });
 }
 
-export function usePreviewLoanPayments(householdId: string) {
+export function usePreviewLendingPayments(householdId: string) {
   return useMutation({
     mutationFn: async (file: File) => {
       const res = await apiClient.post<PreviewSummary>(
-        `/households/${householdId}/loans/payments/import/preview`,
+        `/households/${householdId}/lendings/payments/import/preview`,
         asForm(file),
         { headers: { "Content-Type": null } },
       );
@@ -206,21 +206,21 @@ export function usePreviewLoanPayments(householdId: string) {
   });
 }
 
-export function useExecuteLoanPayments(householdId: string) {
+export function useExecuteLendingPayments(householdId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (file: File) => {
       const res = await apiClient.post<ExecuteResult>(
-        `/households/${householdId}/loans/payments/import/execute`,
+        `/households/${householdId}/lendings/payments/import/execute`,
         asForm(file),
         { headers: { "Content-Type": null } },
       );
       return res.data;
     },
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["loans", householdId] });
-      void qc.invalidateQueries({ queryKey: ["loans-summary", householdId] });
-      void qc.invalidateQueries({ queryKey: ["loan", householdId] });
+      void qc.invalidateQueries({ queryKey: ["lendings", householdId] });
+      void qc.invalidateQueries({ queryKey: ["lendings-summary", householdId] });
+      void qc.invalidateQueries({ queryKey: ["lending", householdId] });
     },
   });
 }

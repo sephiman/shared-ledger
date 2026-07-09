@@ -1,6 +1,6 @@
 # shared-ledger
 
-Self-hosted personal-finance application for a household of one or two. Replaces a spreadsheet workflow for monthly transaction tracking and periodic net-worth snapshots, with budgets, recurring templates, an investment portfolio with automatic pricing, loan tracking, analytics, and a FIRE projection on top.
+Self-hosted personal-finance application for a household of one or two. Replaces a spreadsheet workflow for monthly transaction tracking and periodic net-worth snapshots, with budgets, recurring templates, an investment portfolio with automatic pricing, lending tracking, analytics, and a FIRE projection on top.
 
 Single repository, two services orchestrated with Docker Compose:
 
@@ -144,7 +144,7 @@ If the operator chooses not to record movements, the app remains correct (net wo
 
 ### Portfolio (investments)
 
-Individual market holdings — crypto, ETFs, individual stocks, and funds — tracked at the lot level with automatic pricing. Portfolio sits alongside snapshots, movements, assets, liabilities and loans as sibling tabs under the **Wealth** hub (*Patrimonio* in Spanish).
+Individual market holdings — crypto, ETFs, individual stocks, and funds — tracked at the lot level with automatic pricing. Portfolio sits alongside snapshots, movements, assets, liabilities and lendings as sibling tabs under the **Wealth** hub (*Patrimonio* in Spanish).
 
 - **Holdings** carry an asset class (`crypto`, `etf`, `stock`, `fund`), a symbol, an optional label/ISIN, a native currency, and an optional link to a price provider. Each holding owns a ledger of **lots**.
 - **Lots** are BUY/SELL entries (trade date, quantity, unit price, currency, optional fee and note). Net quantity, remaining cost basis and realized P&L are computed by **replaying the ledger FIFO**; the FX rate into the household base currency is frozen at trade time. Sells are validated so a position can never be oversold.
@@ -184,21 +184,21 @@ Named debts that **subtract** from net worth, in a **Liabilities** tab under the
 - Snapshots and the tab show the **name**, never the UUID.
 - Full CSV export/import cycle (see [Liabilities CSV](#liabilities-csv) and [Amortization CSV](#amortization-csv)).
 
-### Loans (Préstamos)
+### Lending (Prestado)
 
-Tracking-only records of money the household has **lent to other people**. They live in their own sub-tab under *Patrimonio → Préstamos*, alongside snapshots, movements and liabilities. They are deliberately kept out of the money path: a loan **never produces a transaction**, does not affect income/expense totals, and is **not included in net worth**. The household uses them purely to remember what it is owed and how repayment is progressing.
+Tracking-only records of money the household has **lent to other people**. They live in their own sub-tab under *Patrimonio → Prestado*, alongside snapshots, movements and liabilities. They are deliberately kept out of the money path: a lending **never produces a transaction**, does not affect income/expense totals, and is **not included in net worth**. The household uses them purely to remember what it is owed and how repayment is progressing.
 
-- **Loan terms**: borrower name (free text), principal (positive), start date, optional description (≤ 500 chars), and one of three mutually exclusive interest models:
-  - **No interest** — a 0 % loan.
+- **Lending terms**: borrower name (free text), principal (positive), start date, optional description (≤ 500 chars), and one of three mutually exclusive interest models:
+  - **No interest** — a 0 % lending.
   - **Simple interest** — a fixed annual rate applied to the remaining principal.
   - **Compound interest** — a fixed annual rate that capitalizes monthly or yearly.
-  - The annual rate is required for simple/compound; the compounding period is required only for compound. A borrower can hold several independent loans; the system never consolidates them.
-- **Outstanding balance**: principal plus accrued interest from the start date (per the chosen model) up to "now", minus all payments applied so far. Interest stops accruing the moment the loan is settled or written off (frozen at its closing date).
-- **Payments**: each loan has a list of received payments (date, amount, optional description). Allocation follows the standard banking order — a payment first cancels accrued interest up to its date, and only the remainder reduces principal; if it doesn't even cover the interest, no principal moves and the unpaid interest carries forward. When entering a payment the form shows, in real time, how the amount will split between interest and principal. Payments are soft-deletable and editable; any edit or deletion **recomputes the balance from scratch** over the remaining payments in chronological order.
-- **Recurring repayment schedule** (optional, one per loan): frequency (weekly / monthly / yearly), the appropriate day field, an expected amount, and an active/paused flag. A daily background job materializes expected payments into the normal payment list (idempotent via a unique partial index on `loan_payments(schedule_id, payment_date)`); it shares the recurring-transactions cron entrypoint. Materialized payments are ordinary payments — interest-first, editable, deletable. Manual and scheduled payments coexist.
-- **Status transitions** (owner-triggered): **settled** (saldado) when fully repaid, **written off** (incobrable) when it clearly won't be repaid. Both stop interest accrual and remove the loan from the active outstanding total, but the loan stays visible (and filterable) in the list. A written-off loan can be reopened.
-- **Loans page**: opens with a header stating *"Loans you have made to others. Tracking only — not included in net worth."* (localized, disclaimer preserved). Provides a status filter (active / settled / written off / all), a "Nuevo préstamo" button, a click-through detail drawer (terms, payment history, outstanding balance, schedule, per-loan actions), and two "Export CSV" buttons (one for loans, one for payments).
-- **Home panel**: a compact tile on the Dashboard, rendered only when at least one active loan exists (no empty-state placeholder). Shows the total outstanding across active loans, the active-loan count, the three largest active loans by balance, the interest-first / not-in-net-worth reminder, and a "Ver todos" link to the Loans page.
+  - The annual rate is required for simple/compound; the compounding period is required only for compound. A borrower can hold several independent lendings; the system never consolidates them.
+- **Outstanding balance**: principal plus accrued interest from the start date (per the chosen model) up to "now", minus all payments applied so far. Interest stops accruing the moment the lending is settled or written off (frozen at its closing date).
+- **Payments**: each lending has a list of received payments (date, amount, optional description). Allocation follows the standard banking order — a payment first cancels accrued interest up to its date, and only the remainder reduces principal; if it doesn't even cover the interest, no principal moves and the unpaid interest carries forward. When entering a payment the form shows, in real time, how the amount will split between interest and principal. Payments are soft-deletable and editable; any edit or deletion **recomputes the balance from scratch** over the remaining payments in chronological order.
+- **Recurring repayment schedule** (optional, one per lending): frequency (weekly / monthly / yearly), the appropriate day field, an expected amount, and an active/paused flag. A daily background job materializes expected payments into the normal payment list (idempotent via a unique partial index on `lending_payments(schedule_id, payment_date)`); it shares the recurring-transactions cron entrypoint. Materialized payments are ordinary payments — interest-first, editable, deletable. Manual and scheduled payments coexist.
+- **Status transitions** (owner-triggered): **settled** (saldado) when fully repaid, **written off** (incobrable) when it clearly won't be repaid. Both stop interest accrual and remove the lending from the active outstanding total, but the lending stays visible (and filterable) in the list. A written-off lending can be reopened.
+- **Lending page**: opens with a header stating *"Money you lend to others — tracking only. Not counted toward your Wealth (a deliberate choice) and not linked to transactions."* (localized, disclaimer preserved). Provides a status filter (active / settled / written off / all), a "Prestar dinero" button, a click-through detail drawer (terms, payment history, outstanding balance, schedule, per-lending actions), and two "Export CSV" buttons (one for lendings, one for payments).
+- **Home panel**: a compact tile on the Dashboard, rendered only when at least one active lending exists (no empty-state placeholder). Shows the total outstanding across active lendings, the active-lending count, the three largest active lendings by balance, the interest-first / not-in-net-worth reminder, and a "Ver todos" link to the Lending page.
 
 ### Analytics
 
@@ -253,7 +253,7 @@ Projection output:
 - Members & invitations: issue and revoke invitations, see pending ones (owners only).
 - FIRE settings (owners only).
 - **Notifications** (owners only): configure the per-household Telegram integration (see below).
-- **Danger zone — Delete all data** (owners only): a confirmation-gated action (type `delete`) that permanently wipes *every* piece of the household's financial data while keeping the household itself and its membership/invitations. It hard-deletes (including soft-deleted rows) transactions, budgets, recurring templates, net-worth snapshots and movements, assets, liabilities and loans (with their value/balance/amortization/schedule/payment history), the investment portfolio (holdings, lots and valuations), bank connections (with their accounts, sync runs, pending movements and categorization rules), and the FIRE, Telegram and auto-snapshot settings. Global reference data (categories, asset classes, FX rates, price history) is never touched.
+- **Danger zone — Delete all data** (owners only): a confirmation-gated action (type `delete`) that permanently wipes *every* piece of the household's financial data while keeping the household itself and its membership/invitations. It hard-deletes (including soft-deleted rows) transactions, budgets, recurring templates, net-worth snapshots and movements, assets, liabilities and lendings (with their value/balance/amortization/schedule/payment history), the investment portfolio (holdings, lots and valuations), bank connections (with their accounts, sync runs, pending movements and categorization rules), and the FIRE, Telegram and auto-snapshot settings. Global reference data (categories, asset classes, FX rates, price history) is never touched.
 
 ### Notifications (Telegram)
 
@@ -265,14 +265,14 @@ data changes. Configured per household, owner-only, under **Settings → Notific
   button sends a fixed message and shows Telegram's immediate response inline. A collapsible help
   section walks through obtaining the token and chat ID.
 - **Master toggle** pauses all notifications without losing the configuration, plus a **per-entity
-  toggle** each (covering create/update/delete) for: transactions, snapshots, movements, loan
+  toggle** each (covering create/update/delete) for: transactions, snapshots, movements, lending
   payments, portfolio trades (buy/sell lots), recurring-transaction execution, and
-  recurring-loan-schedule execution.
+  recurring-lending-schedule execution.
 - **What fires**: a member's create/update/delete on those entities, and the daily scheduler
-  materializing recurring transactions / loan-schedule payments (sent as one aggregated summary
-  per run). Amortizable-loan events reuse the existing toggles (no new subsystem): the **monthly
-  instalment run** rides the recurring-loan toggle, and a **recorded prepayment** (with the new
-  balance) rides the loan-payments toggle. **CSV imports never notify**, regardless of toggles, to
+  materializing recurring transactions / lending-schedule payments (sent as one aggregated summary
+  per run). Amortizable-liability events reuse the existing toggles (no new subsystem): the **monthly
+  instalment run** rides the recurring-lending toggle, and a **recorded prepayment** (with the new
+  balance) rides the lending-payments toggle. **CSV imports never notify**, regardless of toggles, to
   avoid floods on bulk loads.
 - **Message content**: a localized header (household locale), the same fields shown on that
   entity's mobile card (with category-group emoji), and an author line — the member's email, or
@@ -498,7 +498,7 @@ After step 6:
 5. **Take a net-worth snapshot**: `/networth` → *Snapshots* → *New snapshot* → values for every asset class, save. View *Evolution* and *Allocation*.
 6. **Record a net-worth movement**: `/networth` → *Movements* → *Create* → contribution to ETFs.
 7. **Add a portfolio holding**: `/networth` → *Portfolio* → *New holding* → a crypto (e.g. BTC), link it via the search box, add a BUY lot. Prices backfill into `price_history`; confirm the holding shows a current value and P&L. Take a new snapshot and confirm the crypto class is prefilled as *computed*.
-8. **Track a loan**: `/networth` → *Préstamos* → *Nuevo préstamo* → a borrower, a principal, simple interest. Open it, register a payment, and confirm the interest/principal split shows. The Dashboard should now display the outstanding-loans tile.
+8. **Track a lending**: `/networth` → *Prestado* → *Prestar dinero* → a borrower, a principal, simple interest. Open it, register a payment, and confirm the interest/principal split shows. The Dashboard should now display the money-lent tile.
 9. **Configure FIRE**: `/fire` → set target, contribution, scenarios. View the projection chart.
 10. **Invite a partner** (owners only): `/settings` → *Members & invitations* → *Issue invitation*. Copy the link `…/register?invite=<token>` and open it in another browser session.
 11. **Check observability**:
@@ -522,7 +522,7 @@ After step 6:
 
 ## 9. Preparing CSV files for bulk import
 
-The Transactions, Snapshots, Movements, Portfolio, Loans and Loan-payments importers each accept a UTF-8 CSV with a fixed header row, reachable from *Settings → Data import & export*. The importer parses the file, shows a preview (rows that would be inserted, skipped as duplicates, or rejected with row-level errors), and only writes after explicit confirmation. The same screen offers a single **Export all** ZIP that bundles one CSV per dataset (transactions, recurring templates, movements, snapshots, portfolio, loans, loan payments); those files re-import cleanly.
+The Transactions, Snapshots, Movements, Portfolio, Lendings and Lending-payments importers each accept a UTF-8 CSV with a fixed header row, reachable from *Settings → Data import & export*. The importer parses the file, shows a preview (rows that would be inserted, skipped as duplicates, or rejected with row-level errors), and only writes after explicit confirmation. The same screen offers a single **Export all** ZIP that bundles one CSV per dataset (transactions, recurring templates, movements, snapshots, portfolio, lendings, lending payments); those files re-import cleanly.
 
 The feeds capture different things:
 
@@ -530,7 +530,7 @@ The feeds capture different things:
 - **Snapshots** — periodic **net-worth recordings**: how much you currently hold in each asset class and what each liability still owes. This tracks **savings/wealth state** at a point in time.
 - **Movements** — capital **moved into or out of** an asset class, or principal paid down on a liability. This tracks **what gets sent to (or taken from) savings**, separately from market gains.
 - **Portfolio** — individual **investment holdings** as BUY/SELL lots (crypto, ETFs, stocks, funds). This drives per-holding valuation, P&L, and the snapshot prefill for market asset classes.
-- **Loans** and **Loan payments** — money lent to other people and the repayments received against it. Tracking-only; never touches transactions or net worth.
+- **Lendings** and **Lending payments** — money lent to other people and the repayments received against it. Tracking-only; never touches transactions or net worth.
 - **Assets** — named things you own (property, vehicles, valuables) with their dated value history; they add to net worth.
 - **Liabilities** — named debts with their balance history and the amortizable flag/charge day; they subtract from net worth.
 - **Amortization** — the schedule of each amortizable liability: its parts, rate revisions, prepayments, and generated instalments. Paired one-to-one with the Liabilities feed (import liabilities first, then amortization).
@@ -677,9 +677,9 @@ SELL;etf;WEBN;Amundi Prime All Country;EUR;IE0009OA6R05;yahoo;WEBN.DE;2026-05-10
 BUY;fund;MSCIW;World index fund;EUR;;;;2026-01-31;15,5;95,20;EUR;;
 ```
 
-### Loans CSV
+### Lendings CSV
 
-Loans and their payments use the **European-CSV dialect**: UTF-8, **semicolon (`;`) column separator**, **comma (`,`) decimal**, RFC-4180 quoting, ISO dates, positive amounts only. The first row is the literal header. This is exactly what *Préstamos → Export loans CSV* produces.
+Lendings and their payments use the **European-CSV dialect**: UTF-8, **semicolon (`;`) column separator**, **comma (`,`) decimal**, RFC-4180 quoting, ISO dates, positive amounts only. The first row is the literal header. This is exactly what *Prestado → Export lendings CSV* produces.
 
 Header: `borrower_name;principal_amount;start_date;interest_type;annual_interest_rate;compounding_period;description;status`.
 
@@ -687,42 +687,42 @@ Header: `borrower_name;principal_amount;start_date;interest_type;annual_interest
 | --- | --- | --- |
 | `borrower_name` | yes | Free text (≤ 120 chars). The person you lent to. |
 | `principal_amount` | yes | Positive decimal, comma decimal (e.g. `1000,00`). |
-| `start_date` | yes | ISO date, `YYYY-MM-DD`. Date the loan was made. |
+| `start_date` | yes | ISO date, `YYYY-MM-DD`. Date the money was lent. |
 | `interest_type` | yes | `none`, `simple`, or `compound` (lowercase). |
 | `annual_interest_rate` | conditional | Percentage points (e.g. `5,00` = 5 %). Required when `interest_type` is `simple` or `compound`; must be empty for `none`. |
 | `compounding_period` | conditional | `monthly` or `yearly`. Required when `interest_type=compound`; must be empty otherwise. |
 | `description` | no | Free text up to 500 characters. |
 | `status` | no | `active`, `settled`, or `written_off`. Defaults to `active`. |
 
-Rows whose `(borrower_name, start_date, principal_amount)` match an existing loan are skipped automatically.
+Rows whose `(borrower_name, start_date, principal_amount)` match an existing lending are skipped automatically.
 
 Example:
 
 ```csv
 borrower_name;principal_amount;start_date;interest_type;annual_interest_rate;compounding_period;description;status
-Alice;1000,00;2025-01-01;none;;;Loan for car repair;active
+Alice;1000,00;2025-01-01;none;;;Lending for car repair;active
 Bob;5000,00;2024-06-15;simple;5,00;;;active
-Carol;3000,00;2024-03-01;compound;4,50;monthly;Renovation loan;active
+Carol;3000,00;2024-03-01;compound;4,50;monthly;Renovation lending;active
 ```
 
-### Loan payments CSV
+### Lending payments CSV
 
-Header: `borrower_name;loan_start_date;payment_date;amount;description`.
+Header: `borrower_name;lending_start_date;payment_date;amount;description`.
 
 | Column | Required | Values |
 | --- | --- | --- |
-| `borrower_name` | yes | Must match an existing loan's `borrower_name`. |
-| `loan_start_date` | yes | Must match that loan's `start_date`; together with the borrower it locates the loan. |
+| `borrower_name` | yes | Must match an existing lending's `borrower_name`. |
+| `lending_start_date` | yes | Must match that lending's `start_date`; together with the borrower it locates the lending. |
 | `payment_date` | yes | ISO date of the payment received. |
 | `amount` | yes | Positive decimal, comma decimal. |
 | `description` | no | Free text. |
 
-If a row matches no loan it is rejected (`IMPORT_LOAN_UNKNOWN`); if the `(borrower_name, loan_start_date)` pair matches more than one loan the row is rejected as ambiguous (`IMPORT_LOAN_AMBIGUOUS`). Rows whose `(borrower_name, loan_start_date, payment_date, amount, description)` match an existing payment are skipped automatically.
+If a row matches no lending it is rejected (`IMPORT_LENDING_UNKNOWN`); if the `(borrower_name, lending_start_date)` pair matches more than one lending the row is rejected as ambiguous (`IMPORT_LENDING_AMBIGUOUS`). Rows whose `(borrower_name, lending_start_date, payment_date, amount, description)` match an existing payment are skipped automatically.
 
 Example:
 
 ```csv
-borrower_name;loan_start_date;payment_date;amount;description
+borrower_name;lending_start_date;payment_date;amount;description
 Alice;2025-01-01;2025-02-01;200,00;First repayment
 Bob;2024-06-15;2024-07-15;500,00;
 ```

@@ -40,7 +40,7 @@ data class Projection(
 )
 
 /**
- * Forward amortization engine. Modelled on the loans-out [com.sephilabs.sharedledger.loan.LoanBalanceCalculator]
+ * Forward amortization engine. Modelled on the lending [com.sephilabs.sharedledger.lending.LendingBalanceCalculator]
  * (event iteration, interest/principal split, Money rounding) but on clean MONTHLY periods rather than
  * day-prorated accrual, which is what a French/German mortgage schedule needs. It starts from the current
  * state ([PartTerms.principal] at [PartTerms.startDate]) and projects forward; the past is never reconstructed.

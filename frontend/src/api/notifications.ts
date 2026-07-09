@@ -6,10 +6,10 @@ export interface TelegramSettings {
   notifyTransactions: boolean;
   notifySnapshots: boolean;
   notifyMovements: boolean;
-  notifyLoanPayments: boolean;
+  notifyLendingPayments: boolean;
   notifyHoldings: boolean;
   notifyRecurringTxn: boolean;
-  notifyRecurringLoan: boolean;
+  notifyRecurringLending: boolean;
   chatId: string | null;
   tokenConfigured: boolean;
 }
@@ -19,10 +19,10 @@ export interface TelegramSettingsUpdate {
   notifyTransactions: boolean;
   notifySnapshots: boolean;
   notifyMovements: boolean;
-  notifyLoanPayments: boolean;
+  notifyLendingPayments: boolean;
   notifyHoldings: boolean;
   notifyRecurringTxn: boolean;
-  notifyRecurringLoan: boolean;
+  notifyRecurringLending: boolean;
   chatId: string | null;
   // Omit / leave blank to keep the stored token unchanged.
   botToken?: string | null;
