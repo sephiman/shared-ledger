@@ -1,6 +1,6 @@
 package com.sephilabs.sharedledger.notification
 
-import com.sephilabs.sharedledger.loan.LoanPayment
+import com.sephilabs.sharedledger.lending.LendingPayment
 import com.sephilabs.sharedledger.networth.liability.LiabilityRepository
 import com.sephilabs.sharedledger.networth.movement.MovementType
 import com.sephilabs.sharedledger.networth.movement.NetWorthMovement
@@ -127,8 +127,8 @@ class NotificationPublisher(
         )
     }
 
-    fun loanPayment(
-        payment: LoanPayment,
+    fun lendingPayment(
+        payment: LendingPayment,
         householdId: UUID,
         borrowerName: String,
         action: NotifyAction,
@@ -137,14 +137,14 @@ class NotificationPublisher(
         events.publishEvent(
             EntityChangeEvent(
                 householdId = householdId,
-                entity = NotifyEntity.LOAN_PAYMENT,
+                entity = NotifyEntity.LENDING_PAYMENT,
                 action = action,
                 actor = actor,
                 fields = listOf(
-                    CardField("loans.borrower_name", FieldValue.Text(borrowerName)),
-                    CardField("loans.payment_date", FieldValue.Day(payment.paymentDate)),
-                    CardField("loans.amount", FieldValue.Money(payment.amount)),
-                    CardField("loans.description", FieldValue.Text(payment.description)),
+                    CardField("lendings.borrower_name", FieldValue.Text(borrowerName)),
+                    CardField("lendings.payment_date", FieldValue.Day(payment.paymentDate)),
+                    CardField("lendings.amount", FieldValue.Money(payment.amount)),
+                    CardField("lendings.description", FieldValue.Text(payment.description)),
                 ),
             ),
         )
@@ -231,7 +231,7 @@ class NotificationPublisher(
     }
 
     /**
-     * A recorded prepayment against an amortizable liability. Reuses the LOAN_PAYMENT event/toggle
+     * A recorded prepayment against an amortizable liability. Reuses the LENDING_PAYMENT event/toggle
      * (the requirement is to emit the events the bot already consumes, not add a subsystem).
      */
     fun amortizationPrepayment(
@@ -245,7 +245,7 @@ class NotificationPublisher(
         events.publishEvent(
             EntityChangeEvent(
                 householdId = householdId,
-                entity = NotifyEntity.LOAN_PAYMENT,
+                entity = NotifyEntity.LENDING_PAYMENT,
                 action = NotifyAction.CREATE,
                 actor = actor,
                 fields = listOf(
@@ -260,7 +260,7 @@ class NotificationPublisher(
 
     /**
      * The monthly instalments charged by the amortization job for one liability. Reuses the
-     * RECURRING_LOAN materialization event/toggle ("recurring loan schedule execution").
+     * RECURRING_LENDING materialization event/toggle ("recurring lending schedule execution").
      */
     fun amortizationInstalments(
         householdId: UUID,
@@ -273,7 +273,7 @@ class NotificationPublisher(
         events.publishEvent(
             MaterializationEvent(
                 householdId = householdId,
-                entity = NotifyEntity.RECURRING_LOAN,
+                entity = NotifyEntity.RECURRING_LENDING,
                 count = count,
                 actor = actor,
                 fields = listOf(
@@ -284,7 +284,7 @@ class NotificationPublisher(
         )
     }
 
-    fun recurringLoanPayments(
+    fun recurringLendingPayments(
         householdId: UUID,
         borrowerName: String,
         expectedAmount: BigDecimal,
@@ -295,12 +295,12 @@ class NotificationPublisher(
         events.publishEvent(
             MaterializationEvent(
                 householdId = householdId,
-                entity = NotifyEntity.RECURRING_LOAN,
+                entity = NotifyEntity.RECURRING_LENDING,
                 count = count,
                 actor = actor,
                 fields = listOf(
-                    CardField("loans.borrower_name", FieldValue.Text(borrowerName)),
-                    CardField("loans.expected_amount", FieldValue.Money(expectedAmount)),
+                    CardField("lendings.borrower_name", FieldValue.Text(borrowerName)),
+                    CardField("lendings.expected_amount", FieldValue.Money(expectedAmount)),
                 ),
             ),
         )

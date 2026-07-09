@@ -7,7 +7,7 @@ import com.sephilabs.sharedledger.bank.PendingMovementRepository
 import com.sephilabs.sharedledger.budget.BudgetRepository
 import com.sephilabs.sharedledger.catalog.CustomCategoryRepository
 import com.sephilabs.sharedledger.fire.FireSettingsRepository
-import com.sephilabs.sharedledger.loan.LoanRepository
+import com.sephilabs.sharedledger.lending.LendingRepository
 import com.sephilabs.sharedledger.networth.asset.AssetRepository
 import com.sephilabs.sharedledger.networth.liability.LiabilityRepository
 import com.sephilabs.sharedledger.networth.movement.MovementRepository
@@ -27,7 +27,7 @@ import java.util.UUID
  * itself and its membership/invitations intact. Every root table is hard-deleted (native queries
  * that bypass @SQLRestriction so soft-deleted rows go too); child tables are cleaned up via their
  * `ON DELETE CASCADE` foreign keys (amortization parts/entries, liability & asset value series,
- * holding lots & valuations, loan schedules & payments, bank accounts & sync runs, snapshot rows).
+ * holding lots & valuations, lending schedules & payments, bank accounts & sync runs, snapshot rows).
  *
  * Delete order respects the foreign keys that are NOT cascading between root tables:
  *  - transactions before recurring_templates (transactions.recurring_template_id → recurring_templates)
@@ -46,7 +46,7 @@ class HouseholdDataWipeService(
     private val holdings: HoldingRepository,
     private val assets: AssetRepository,
     private val liabilities: LiabilityRepository,
-    private val loans: LoanRepository,
+    private val lendings: LendingRepository,
     private val pendingMovements: PendingMovementRepository,
     private val categorizationRules: CategorizationRuleRepository,
     private val bankAuthSessions: BankAuthSessionRepository,
@@ -75,7 +75,7 @@ class HouseholdDataWipeService(
         val holdingCount = holdings.hardDeleteAllByHouseholdId(householdId)
         val assetCount = assets.hardDeleteAllByHouseholdId(householdId)
         val liabilityCount = liabilities.hardDeleteAllByHouseholdId(householdId)
-        val loanCount = loans.hardDeleteAllByHouseholdId(householdId)
+        val lendingCount = lendings.hardDeleteAllByHouseholdId(householdId)
 
         // 4. Bank ingestion. Pending movements & auth sessions before connections cascade the rest.
         val pendingCount = pendingMovements.hardDeleteAllByHouseholdId(householdId)
@@ -90,10 +90,10 @@ class HouseholdDataWipeService(
 
         log.info(
             "household_data_wipe household={} by_user={} tx={} mv={} snap={} snap_liab_balances={} " +
-                "recurring={} budgets={} custom_categories={} holdings={} assets={} liabilities={} loans={} " +
+                "recurring={} budgets={} custom_categories={} holdings={} assets={} liabilities={} lendings={} " +
                 "pending={} rules={} auth_sessions={} bank_connections={} fire={} telegram={} auto_snapshot={}",
             householdId, byUserId, txCount, movementCount, snapshotCount, balanceCount,
-            recurringCount, budgetCount, customCategoryCount, holdingCount, assetCount, liabilityCount, loanCount,
+            recurringCount, budgetCount, customCategoryCount, holdingCount, assetCount, liabilityCount, lendingCount,
             pendingCount, ruleCount, authSessionCount, connectionCount, fireCount, telegramCount, autoSnapshotCount,
         )
     }

@@ -14,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
 
 /**
- * CSV export for named assets and liabilities (+ amortization). Symmetric to the portfolio/loan
+ * CSV export for named assets and liabilities (+ amortization). Symmetric to the portfolio/lending
  * exports: it dumps both the entities and their dated history so an export re-imports faithfully.
  * Amortization exports both the input data (parts/revisions/prepayments) and the generated
  * instalments, discriminated by a `record_type` column.

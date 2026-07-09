@@ -6,7 +6,7 @@ import java.util.UUID
 
 /** The notifiable entity kinds, each mapping to one per-household toggle. */
 enum class NotifyEntity {
-    TRANSACTION, SNAPSHOT, MOVEMENT, LOAN_PAYMENT, HOLDING, RECURRING_TXN, RECURRING_LOAN,
+    TRANSACTION, SNAPSHOT, MOVEMENT, LENDING_PAYMENT, HOLDING, RECURRING_TXN, RECURRING_LENDING,
     // Bank ingestion: BANK_MOVEMENT covers batch-confirm summaries, BANK_CONNECTION covers
     // consent re-link reminders.
     BANK_MOVEMENT, BANK_CONNECTION,
@@ -69,7 +69,7 @@ data class EntityChangeEvent(
  */
 data class MaterializationEvent(
     val householdId: UUID,
-    val entity: NotifyEntity, // RECURRING_TXN or RECURRING_LOAN
+    val entity: NotifyEntity, // RECURRING_TXN or RECURRING_LENDING
     val count: Int,
     val actor: NotifyActor,
     val fields: List<CardField>,

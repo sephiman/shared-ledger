@@ -5,8 +5,8 @@ import { TransactionImportCard } from "./TransactionImportCard";
 import { SnapshotImportCard } from "./SnapshotImportCard";
 import { MovementImportCard } from "./MovementImportCard";
 import { RecurringImportCard } from "./RecurringImportCard";
-import { LoanImportCard } from "./LoanImportCard";
-import { LoanPaymentImportCard } from "./LoanPaymentImportCard";
+import { LendingImportCard } from "./LendingImportCard";
+import { LendingPaymentImportCard } from "./LendingPaymentImportCard";
 import { PortfolioImportCard } from "./PortfolioImportCard";
 import { AmortizationImportCard, AssetImportCard, NamedLiabilityImportCard } from "./NamedImportCards";
 
@@ -26,8 +26,8 @@ export function DataImportPage() {
       <SnapshotImportCard />
       <MovementImportCard />
       <RecurringImportCard />
-      <LoanImportCard />
-      <LoanPaymentImportCard />
+      <LendingImportCard />
+      <LendingPaymentImportCard />
       <PortfolioImportCard />
       <AssetImportCard />
       <NamedLiabilityImportCard />

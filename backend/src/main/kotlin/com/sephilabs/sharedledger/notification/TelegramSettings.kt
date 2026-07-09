@@ -16,7 +16,7 @@ import java.util.UUID
  *
  * [botTokenEnc] holds AES-GCM ciphertext (see [TelegramCrypto]); it is never exposed
  * through the API. The per-entity toggles each cover create/update/delete for that
- * entity; [notifyRecurringTxn] / [notifyRecurringLoan] cover scheduler materialization.
+ * entity; [notifyRecurringTxn] / [notifyRecurringLending] cover scheduler materialization.
  */
 @Entity
 @Table(name = "telegram_settings")
@@ -40,8 +40,8 @@ class TelegramSettings(
     @Column(name = "notify_movements", nullable = false)
     var notifyMovements: Boolean = true,
 
-    @Column(name = "notify_loan_payments", nullable = false)
-    var notifyLoanPayments: Boolean = true,
+    @Column(name = "notify_lending_payments", nullable = false)
+    var notifyLendingPayments: Boolean = true,
 
     @Column(name = "notify_holdings", nullable = false)
     var notifyHoldings: Boolean = true,
@@ -49,8 +49,8 @@ class TelegramSettings(
     @Column(name = "notify_recurring_txn", nullable = false)
     var notifyRecurringTxn: Boolean = true,
 
-    @Column(name = "notify_recurring_loan", nullable = false)
-    var notifyRecurringLoan: Boolean = true,
+    @Column(name = "notify_recurring_lending", nullable = false)
+    var notifyRecurringLending: Boolean = true,
 
     @Column(name = "notify_bank_movements", nullable = false)
     var notifyBankMovements: Boolean = true,
@@ -78,10 +78,10 @@ class TelegramSettings(
             NotifyEntity.TRANSACTION -> notifyTransactions
             NotifyEntity.SNAPSHOT -> notifySnapshots
             NotifyEntity.MOVEMENT -> notifyMovements
-            NotifyEntity.LOAN_PAYMENT -> notifyLoanPayments
+            NotifyEntity.LENDING_PAYMENT -> notifyLendingPayments
             NotifyEntity.HOLDING -> notifyHoldings
             NotifyEntity.RECURRING_TXN -> notifyRecurringTxn
-            NotifyEntity.RECURRING_LOAN -> notifyRecurringLoan
+            NotifyEntity.RECURRING_LENDING -> notifyRecurringLending
             NotifyEntity.BANK_MOVEMENT -> notifyBankMovements
             NotifyEntity.BANK_CONNECTION -> notifyBankConnections
         }
