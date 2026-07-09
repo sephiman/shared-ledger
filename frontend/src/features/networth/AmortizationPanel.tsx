@@ -27,6 +27,11 @@ import { computeDerived, type Driver } from "./amortizationCompute";
 
 const METHODS: AmortizationMethod[] = ["french", "german", "interest_only", "zero"];
 
+// Inline text actions in a part row: read as clickable links (hand cursor, underline on hover)
+// rather than the arrow-cursor plain <button> default.
+const actionLink =
+  "cursor-pointer font-medium text-primary underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-primary rounded";
+
 type EditingPart = {
   id?: string;
   label: string;
@@ -249,10 +254,10 @@ function PartRow({
       </div>
       {/* Collapsed actions */}
       <div className="mt-1 flex flex-wrap gap-3 text-xs">
-        <button className="text-primary" onClick={() => setShow(show === "revisions" ? null : "revisions")}>{t("networth.manage_revisions")}</button>
-        <button className="text-primary" onClick={onPrepay}>{t("networth.prepay")}</button>
-        {isOrigin && <button className="text-primary" onClick={() => setShow(show === "anchor" ? null : "anchor")}>{t("networth.re_anchor")}</button>}
-        <button className="text-primary" onClick={() => setShow(show === "schedule" ? null : "schedule")}>
+        <button type="button" className={actionLink} onClick={() => setShow(show === "revisions" ? null : "revisions")}>{t("networth.manage_revisions")}</button>
+        <button type="button" className={actionLink} onClick={onPrepay}>{t("networth.prepay")}</button>
+        {isOrigin && <button type="button" className={actionLink} onClick={() => setShow(show === "anchor" ? null : "anchor")}>{t("networth.re_anchor")}</button>}
+        <button type="button" className={actionLink} onClick={() => setShow(show === "schedule" ? null : "schedule")}>
           {show === "schedule" ? t("networth.hide_schedule") : t("networth.show_schedule")}
         </button>
       </div>
@@ -306,7 +311,7 @@ function RevisionsSection({ liabilityId, part }: { liabilityId: string; part: Pa
         {part.revisions.map((r) => (
           <li key={r.id} className="flex items-center justify-between gap-2 py-0.5">
             <span>{formatDate(r.effectiveDate, i18n.language)} → {r.annualRate}%</span>
-            <button className="text-red-600" onClick={() => void delRevision.mutate({ partId: part.partId, revisionId: r.id })}>✕</button>
+            <button type="button" className="cursor-pointer text-red-600 hover:text-red-700" onClick={() => void delRevision.mutate({ partId: part.partId, revisionId: r.id })}>✕</button>
           </li>
         ))}
       </ul>
@@ -458,7 +463,7 @@ function PrepaymentDialog({
             {part.prepayments.map((p) => (
               <li key={p.id} className="flex items-center justify-between gap-2 py-0.5">
                 <span>{formatDate(p.prepaymentDate, i18n.language)} · {money(p.amount)} · {t(`networth.mode_${p.mode}`)}</span>
-                <button className="text-red-600" onClick={() => void delPrepay.mutate({ partId: part.partId, prepaymentId: p.id })}>✕</button>
+                <button type="button" className="cursor-pointer text-red-600 hover:text-red-700" onClick={() => void delPrepay.mutate({ partId: part.partId, prepaymentId: p.id })}>✕</button>
               </li>
             ))}
           </ul>
