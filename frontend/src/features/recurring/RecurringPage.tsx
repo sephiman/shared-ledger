@@ -335,7 +335,7 @@ export function RecurringPage() {
                       <td>{t(`recurring.${tpl.cadence}`)}</td>
                       <td className="text-right">{formatMoney(tpl.amount, household.currency, i18n.language)}</td>
                       <td>{tpl.nextFireDate ? formatDate(tpl.nextFireDate, i18n.language) : "—"}</td>
-                      <td>{tpl.lastMaterializedThrough ? formatDate(tpl.lastMaterializedThrough, i18n.language) : "—"}</td>
+                      <td>{tpl.lastFiredDate ? formatDate(tpl.lastFiredDate, i18n.language) : "—"}</td>
                       <td>{tpl.active ? t("common.yes") : t("common.no")}</td>
                       <td className="text-right">
                         <div className="inline-flex gap-1">

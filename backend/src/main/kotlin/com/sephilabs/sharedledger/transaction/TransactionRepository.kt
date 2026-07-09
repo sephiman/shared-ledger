@@ -22,6 +22,11 @@ interface MinMaxDateRow {
     val maxDate: LocalDate?
 }
 
+interface RecurringLastFiredRow {
+    val templateId: UUID
+    val lastFired: LocalDate
+}
+
 interface TransactionRepository :
     JpaRepository<Transaction, UUID>,
     JpaSpecificationExecutor<Transaction> {
@@ -78,4 +83,24 @@ interface TransactionRepository :
         WHERE t.householdId = :hid
     """)
     fun dateBounds(@Param("hid") householdId: UUID): MinMaxDateRow
+
+    /**
+     * Latest occurrence date actually produced by each recurring template in the household.
+     * This is the ground truth for "last fired" — a template that scanned forward without
+     * generating anything simply has no row here.
+     */
+    @Query("""
+        SELECT t.recurringTemplateId as templateId, MAX(t.occurrenceDate) as lastFired
+        FROM Transaction t
+        WHERE t.householdId = :hid AND t.recurringTemplateId IS NOT NULL
+        GROUP BY t.recurringTemplateId
+    """)
+    fun lastFiredDatesByTemplate(@Param("hid") householdId: UUID): List<RecurringLastFiredRow>
+
+    @Query("""
+        SELECT MAX(t.occurrenceDate)
+        FROM Transaction t
+        WHERE t.recurringTemplateId = :tid
+    """)
+    fun lastFiredDateForTemplate(@Param("tid") templateId: UUID): LocalDate?
 }

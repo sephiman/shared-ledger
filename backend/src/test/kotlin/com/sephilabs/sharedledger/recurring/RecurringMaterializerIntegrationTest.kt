@@ -63,6 +63,41 @@ class RecurringMaterializerIntegrationTest @Autowired constructor(
     }
 
     @Test
+    fun `lastFiredDate reflects real occurrences, not the scan watermark`() {
+        val user = users.save(User(email = "lf${System.nanoTime()}@example.com", passwordHash = "x"))
+        val household = households.save(Household(name = "H", currency = "EUR"))
+        members.save(HouseholdMember(HouseholdMemberId(household.id, user.id), HouseholdRole.owner))
+
+        val today = LocalDate.now()
+        // dayOfMonth that can't equal today, so the nightly run advances the watermark
+        // to today without generating any transaction this month.
+        val differentDay: Short = if (today.dayOfMonth == 1) 2 else 1
+        val template = service.create(
+            household.id,
+            RecurringTemplateRequest(
+                direction = Direction.expense,
+                categoryCode = "home.rent",
+                amount = BigDecimal("1000.00"),
+                cadence = Cadence.monthly,
+                dayOfMonth = differentDay,
+                startDate = today.minusYears(1),
+            ),
+            user,
+        )
+
+        materializer.runForHousehold(household.id, today)
+
+        // Watermark advanced to today...
+        assertThat(templates.findById(template.id).orElseThrow().lastMaterializedThrough).isEqualTo(today)
+        // ...but the DTO must NOT report a materialization, because nothing actually fired.
+        assertThat(service.list(household.id).single().lastFiredDate).isNull()
+
+        // Once a real transaction is produced, lastFiredDate tracks its occurrence date.
+        service.fireNow(household.id, template.id, user)
+        assertThat(service.list(household.id).single().lastFiredDate).isEqualTo(today)
+    }
+
+    @Test
     fun `materializer is idempotent across reruns`() {
         val user = users.save(User(email = "tester@example.com", passwordHash = "x"))
         val household = households.save(Household(name = "H", currency = "EUR"))

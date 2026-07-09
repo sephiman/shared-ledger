@@ -37,13 +37,14 @@ class RecurringController(
         @Valid @RequestBody body: RecurringTemplateRequest,
     ): ResponseEntity<RecurringTemplateDto> {
         val template = service.create(householdId, body, currentUser.requireUser())
-        return ResponseEntity.status(201).body(template.toDto(RecurringDateMath.nextOccurrenceAfter(template, LocalDate.now())))
+        // Freshly created: nothing has fired yet, so lastFired is null by construction.
+        return ResponseEntity.status(201).body(template.toDto(RecurringDateMath.nextOccurrenceAfter(template, LocalDate.now()), null))
     }
 
     @GetMapping("/{id}")
     fun get(@PathVariable householdId: UUID, @PathVariable id: UUID): RecurringTemplateDto {
         val t = service.get(householdId, id)
-        return t.toDto(RecurringDateMath.nextOccurrenceAfter(t, LocalDate.now()))
+        return t.toDto(RecurringDateMath.nextOccurrenceAfter(t, LocalDate.now()), service.lastFired(t.id))
     }
 
     @PatchMapping("/{id}")
@@ -53,7 +54,7 @@ class RecurringController(
         @Valid @RequestBody body: RecurringTemplateRequest,
     ): RecurringTemplateDto {
         val t = service.update(householdId, id, body, currentUser.requireUser())
-        return t.toDto(RecurringDateMath.nextOccurrenceAfter(t, LocalDate.now()))
+        return t.toDto(RecurringDateMath.nextOccurrenceAfter(t, LocalDate.now()), service.lastFired(t.id))
     }
 
     @DeleteMapping("/{id}")

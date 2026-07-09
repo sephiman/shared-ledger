@@ -41,11 +41,13 @@ data class RecurringTemplateDto(
     val startDate: LocalDate,
     val endDate: LocalDate?,
     val active: Boolean,
-    val lastMaterializedThrough: LocalDate?,
+    // Date of the last transaction this template actually generated (null until it truly fires).
+    // NOT the scan watermark — see RecurringMaterializer.lastMaterializedThrough.
+    val lastFiredDate: LocalDate?,
     val nextFireDate: LocalDate?,
 )
 
-fun RecurringTemplate.toDto(next: LocalDate?): RecurringTemplateDto = RecurringTemplateDto(
+fun RecurringTemplate.toDto(next: LocalDate?, lastFired: LocalDate?): RecurringTemplateDto = RecurringTemplateDto(
     id = id,
     direction = direction,
     categoryCode = categoryCode,
@@ -59,6 +61,6 @@ fun RecurringTemplate.toDto(next: LocalDate?): RecurringTemplateDto = RecurringT
     startDate = startDate,
     endDate = endDate,
     active = active,
-    lastMaterializedThrough = lastMaterializedThrough,
+    lastFiredDate = lastFired,
     nextFireDate = next,
 )

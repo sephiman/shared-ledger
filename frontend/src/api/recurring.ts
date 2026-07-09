@@ -15,7 +15,7 @@ export interface RecurringTemplate {
   startDate: string;
   endDate: string | null;
   active: boolean;
-  lastMaterializedThrough: string | null;
+  lastFiredDate: string | null;
   nextFireDate: string | null;
 }
 
