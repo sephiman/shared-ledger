@@ -19,9 +19,20 @@ class CategorizationService(private val rules: CategorizationRuleRepository) {
     /** First matching rule's category (lowest priority number wins), scoped to the movement's direction. */
     @Transactional(readOnly = true)
     fun suggestCategory(householdId: UUID, movement: PendingMovement): String? =
+        matchRule(orderedRules(householdId), movement)?.categoryCode
+
+    /** The household's rules in priority order (lowest number first). */
+    @Transactional(readOnly = true)
+    fun orderedRules(householdId: UUID): List<CategorizationRule> =
         rules.findAllByHouseholdIdOrderByPriorityAsc(householdId)
-            .firstOrNull { it.direction == movement.direction && it.matches(movement) }
-            ?.categoryCode
+
+    /**
+     * The first rule in [candidates] (already priority-ordered) that matches the movement, scoped to
+     * the movement's direction. Takes a preloaded list so callers processing many movements load the
+     * rules once instead of once per movement.
+     */
+    fun matchRule(candidates: List<CategorizationRule>, movement: PendingMovement): CategorizationRule? =
+        candidates.firstOrNull { it.direction == movement.direction && it.matches(movement) }
 
     /** Remember counterparty -> category for next time (idempotent upsert of a learned rule). */
     @Transactional

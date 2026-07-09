@@ -72,4 +72,9 @@ class PendingMovementController(
         @PathVariable householdId: UUID,
         @Valid @RequestBody body: BatchIdsRequest,
     ): BatchResultDto = service.restoreBatch(householdId, body.ids)
+
+    /** Run categorisation rules over the uncategorized pending movements, filling their suggestions. */
+    @PostMapping("/apply-rules")
+    fun applyRules(@PathVariable householdId: UUID): ApplyRulesResultDto =
+        service.applyRulesToPending(householdId)
 }

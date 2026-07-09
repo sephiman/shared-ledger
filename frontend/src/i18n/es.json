@@ -97,7 +97,8 @@
     "edit_title": "Editar transacción",
     "chips_title": "Recientes",
     "tab_confirmed": "Transacciones",
-    "tabs_aria": "Vista de transacciones"
+    "tabs_aria": "Vista de transacciones",
+    "clear_filters": "Limpiar filtros"
   },
   "banks": {
     "title": "Bancos",
@@ -159,6 +160,13 @@
     "group_none": "Sin agrupar",
     "group_by_connection": "Agrupar por banco",
     "group_by_category": "Agrupar por categoría",
+    "catstate_all": "Todas",
+    "catstate_uncategorized": "Sin categorizar",
+    "catstate_categorized": "Categorizadas",
+    "only_duplicates": "Solo posibles duplicados",
+    "apply_rules": "Aplicar reglas",
+    "rules_applied": "{{count}} categorizados",
+    "clear_filters": "Limpiar filtros",
     "uncategorized": "Sin categoría",
     "view_match": "ver coincidencia",
     "confirmed_toast": "{{count}} confirmados",

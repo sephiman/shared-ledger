@@ -148,6 +148,28 @@ class PendingMovementService(
         return BatchResultDto(restored = movements.size)
     }
 
+    /**
+     * Re-run the categorisation rules over the still-pending, *uncategorized* movements, filling each
+     * matching row's suggested category (and direction) from the rule. Only touches rows without a
+     * category — never overwrites an existing suggestion — and leaves everything pending (no confirm,
+     * no transaction). Useful after adding/learning rules for movements ingested before they existed.
+     */
+    @Transactional
+    fun applyRulesToPending(householdId: UUID): ApplyRulesResultDto {
+        val rules = categorization.orderedRules(householdId)
+        if (rules.isEmpty()) return ApplyRulesResultDto(categorized = 0)
+        val movements = pending.findAllByHouseholdIdAndStatus(householdId, MovementStatus.pending)
+            .filter { it.suggestedCategoryCode.isNullOrBlank() }
+        var categorized = 0
+        for (movement in movements) {
+            val rule = categorization.matchRule(rules, movement) ?: continue
+            movement.suggestedCategoryCode = rule.categoryCode
+            movement.direction = rule.direction
+            categorized++
+        }
+        return ApplyRulesResultDto(categorized = categorized)
+    }
+
     @Transactional
     fun edit(householdId: UUID, id: UUID, request: EditMovementRequest): PendingMovementDto {
         val movement = requirePending(householdId, id)

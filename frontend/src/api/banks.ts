@@ -119,6 +119,10 @@ export interface ConfirmBatchItem {
   direction?: Direction | null;
 }
 
+export interface ApplyRulesResult {
+  categorized: number;
+}
+
 export interface Page<T> {
   items: T[];
   page: number;
@@ -312,6 +316,17 @@ export function useRestoreBatch(householdId: string) {
   return useMutation({
     mutationFn: async (ids: string[]) =>
       (await apiClient.post<BatchResult>(`${base(householdId)}/pending/restore-batch`, { ids })).data,
+    onSuccess: () => invalidateAll(qc, householdId),
+    meta: { silentSuccess: true },
+  });
+}
+
+/** Run categorisation rules over the uncategorized pending movements (fills suggestions only). */
+export function useApplyRules(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () =>
+      (await apiClient.post<ApplyRulesResult>(`${base(householdId)}/pending/apply-rules`)).data,
     onSuccess: () => invalidateAll(qc, householdId),
     meta: { silentSuccess: true },
   });

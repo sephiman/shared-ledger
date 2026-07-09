@@ -17,6 +17,7 @@ import { formatDate } from "@/lib/dates";
 import { categoryIcon } from "@/lib/categoryGroup";
 import { categoryLabel, categoryLabelByCode } from "@/lib/categoryLabel";
 import { QuickAddForm } from "./QuickAddForm";
+import { hasActiveTransactionFilters } from "./txFilters";
 import { PendingInbox } from "@/features/banks/PendingInbox";
 
 type PanelMode = { kind: "closed" } | { kind: "create" } | { kind: "edit"; tx: Transaction };
@@ -94,6 +95,16 @@ export function TransactionsPage() {
       panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [panel]);
+
+  // Reset every list filter to its default. Filters set via the controls live only in state, while
+  // deep-links (e.g. from analytics) live in the URL and get re-applied by the sync effect above — so
+  // clear both to be sure nothing lingers.
+  const clearFilters = () => {
+    setFilters((f) => ({ size: f.size, page: 0 }));
+    const next = new URLSearchParams(searchParams);
+    ["from", "to", "direction", "categoryCode", "categoryGroup"].forEach((k) => next.delete(k));
+    setSearchParams(next, { replace: true });
+  };
 
   const closePanel = () => setPanel({ kind: "closed" });
   const toggleCreate = () =>
@@ -203,6 +214,11 @@ export function TransactionsPage() {
               </Select>
             </div>
           </div>
+          {hasActiveTransactionFilters(filters) && (
+            <div className="mt-3 flex justify-end">
+              <Button variant="ghost" onClick={clearFilters}>{t("tx.clear_filters")}</Button>
+            </div>
+          )}
         </CardHeader>
         <CardBody>
           {isLoading || !page ? (

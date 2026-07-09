@@ -143,6 +143,9 @@ data class BatchResultDto(
 
 data class PendingCountDto(val count: Long)
 
+/** Result of running categorisation rules over the uncategorized pending inbox. */
+data class ApplyRulesResultDto(val categorized: Int = 0)
+
 // --- Categorisation rules --------------------------------------------------------------------
 
 data class CategorizationRuleDto(

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
+  useApplyRules,
   useBankConnections,
   useConfirmBatch,
   useConfirmMovement,
@@ -17,12 +18,17 @@ import {
 } from "@/api/banks";
 import { useCategories, type Category } from "@/api/catalog";
 import { categoryLabel, categoryLabelByCode } from "@/lib/categoryLabel";
-import { Badge, Button, Card, CardBody, CardHeader, Input, Select } from "@/components/ui/primitives";
+import { Badge, Button, Card, CardBody, CardHeader, Chip, Input, Select } from "@/components/ui/primitives";
 import { formatMoney } from "@/lib/money";
 import { addDaysIso, formatDate } from "@/lib/dates";
 import { showToast } from "@/lib/toastBus";
-
-type GroupBy = "none" | "connection" | "category";
+import {
+  PENDING_FILTER_DEFAULTS,
+  filterPendingMovements,
+  hasActivePendingFilters,
+  type CategorisationState,
+  type GroupBy,
+} from "./pendingFilters";
 
 // The API caps a page at 200; we load that once and do search/group/select/paginate client-side.
 const FETCH_SIZE = 200;
@@ -34,10 +40,12 @@ const DUPLICATE_WINDOW_DAYS = 3;
 export function PendingInbox({ householdId, currency, locale }: { householdId: string; currency: string; locale: string }) {
   const { t } = useTranslation();
 
-  const [status, setStatus] = useState<MovementStatus>("pending");
-  const [connectionId, setConnectionId] = useState("");
-  const [search, setSearch] = useState("");
-  const [groupBy, setGroupBy] = useState<GroupBy>("none");
+  const [status, setStatus] = useState<MovementStatus>(PENDING_FILTER_DEFAULTS.status);
+  const [connectionId, setConnectionId] = useState(PENDING_FILTER_DEFAULTS.connectionId);
+  const [search, setSearch] = useState(PENDING_FILTER_DEFAULTS.search);
+  const [groupBy, setGroupBy] = useState<GroupBy>(PENDING_FILTER_DEFAULTS.groupBy);
+  const [categorisationState, setCategorisationState] = useState<CategorisationState>(PENDING_FILTER_DEFAULTS.categorisationState);
+  const [duplicatesOnly, setDuplicatesOnly] = useState(PENDING_FILTER_DEFAULTS.duplicatesOnly);
   const [cpage, setCpage] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [categoryById, setCategoryById] = useState<Record<string, string>>({});
@@ -59,6 +67,7 @@ export function PendingInbox({ householdId, currency, locale }: { householdId: s
   const restoreOne = useRestoreMovement(householdId);
   const restoreBatch = useRestoreBatch(householdId);
   const editMovement = useEditMovement(householdId);
+  const applyRules = useApplyRules(householdId);
 
   const editable = status === "pending";
   // Rejected items can be sent back to the inbox; enable row selection + a restore action for them.
@@ -68,25 +77,44 @@ export function PendingInbox({ householdId, currency, locale }: { householdId: s
   const total = data?.total ?? 0;
   const truncated = total > loaded.length;
 
-  const q = search.trim().toLowerCase();
-  const filtered = useMemo(
-    () =>
-      q
-        ? loaded.filter((m) =>
-            [m.counterparty, m.description, m.reference].some((v) => (v ?? "").toLowerCase().includes(q)),
-          )
-        : loaded,
-    [loaded, q],
-  );
-
   const resolveCategory = (m: PendingMovement) => categoryById[m.id] ?? m.suggestedCategoryCode ?? "";
   const resolveDirection = (m: PendingMovement): Direction => directionById[m.id] ?? m.direction;
+
+  // The possible-duplicate flag is only computed for pending items, so the "only duplicates" toggle
+  // only bites in the pending view.
+  const filtered = useMemo(
+    () =>
+      filterPendingMovements(
+        loaded,
+        { search, categorisationState, duplicatesOnly: editable && duplicatesOnly },
+        resolveCategory,
+      ),
+    [loaded, search, categorisationState, duplicatesOnly, editable, categoryById],
+  );
 
   const selectedIds = useMemo(() => filtered.filter((m) => selected.has(m.id)).map((m) => m.id), [filtered, selected]);
   const allSelected = filtered.length > 0 && filtered.every((m) => selected.has(m.id));
   const someSelected = filtered.some((m) => selected.has(m.id));
 
   const resetView = () => { setCpage(0); setSelected(new Set()); };
+
+  const filterState = { status, connectionId, search, groupBy, categorisationState, duplicatesOnly };
+
+  const clearFilters = () => {
+    setStatus(PENDING_FILTER_DEFAULTS.status);
+    setConnectionId(PENDING_FILTER_DEFAULTS.connectionId);
+    setSearch(PENDING_FILTER_DEFAULTS.search);
+    setGroupBy(PENDING_FILTER_DEFAULTS.groupBy);
+    setCategorisationState(PENDING_FILTER_DEFAULTS.categorisationState);
+    setDuplicatesOnly(PENDING_FILTER_DEFAULTS.duplicatesOnly);
+    resetView();
+  };
+
+  // Fills the suggested category for uncategorized pending movements; they stay pending afterwards.
+  const runApplyRules = () =>
+    applyRules.mutate(undefined, {
+      onSuccess: (res) => showToast(t("banks.rules_applied", { count: res.categorized }), "success"),
+    });
 
   const toggle = (id: string) =>
     setSelected((prev) => {
@@ -201,28 +229,51 @@ export function PendingInbox({ householdId, currency, locale }: { householdId: s
     <div className="space-y-3">
       {/* Filter bar */}
       <Card>
-        <CardBody className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <Select value={status} onChange={(e) => { setStatus(e.target.value as MovementStatus); resetView(); }}>
-            <option value="pending">{t("banks.filter_pending")}</option>
-            <option value="rejected">{t("banks.filter_rejected")}</option>
-            <option value="confirmed">{t("banks.filter_confirmed")}</option>
-          </Select>
-          <Select value={connectionId} onChange={(e) => { setConnectionId(e.target.value); resetView(); }}>
-            <option value="">{t("banks.all_connections")}</option>
-            {connections.map((c) => (
-              <option key={c.id} value={c.id}>{c.label ?? c.aspspName}</option>
-            ))}
-          </Select>
-          <Input
-            value={search}
-            placeholder={t("banks.search_placeholder")}
-            onChange={(e) => { setSearch(e.target.value); setCpage(0); }}
-          />
-          <Select value={groupBy} onChange={(e) => { setGroupBy(e.target.value as GroupBy); resetView(); }}>
-            <option value="none">{t("banks.group_none")}</option>
-            <option value="connection">{t("banks.group_by_connection")}</option>
-            <option value="category">{t("banks.group_by_category")}</option>
-          </Select>
+        <CardBody className="space-y-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <Select value={status} onChange={(e) => { setStatus(e.target.value as MovementStatus); resetView(); }}>
+              <option value="pending">{t("banks.filter_pending")}</option>
+              <option value="rejected">{t("banks.filter_rejected")}</option>
+              <option value="confirmed">{t("banks.filter_confirmed")}</option>
+            </Select>
+            <Select value={connectionId} onChange={(e) => { setConnectionId(e.target.value); resetView(); }}>
+              <option value="">{t("banks.all_connections")}</option>
+              {connections.map((c) => (
+                <option key={c.id} value={c.id}>{c.label ?? c.aspspName}</option>
+              ))}
+            </Select>
+            <Input
+              value={search}
+              placeholder={t("banks.search_placeholder")}
+              onChange={(e) => { setSearch(e.target.value); setCpage(0); }}
+            />
+            <Select value={groupBy} onChange={(e) => { setGroupBy(e.target.value as GroupBy); resetView(); }}>
+              <option value="none">{t("banks.group_none")}</option>
+              <option value="connection">{t("banks.group_by_connection")}</option>
+              <option value="category">{t("banks.group_by_category")}</option>
+            </Select>
+            <Select value={categorisationState} onChange={(e) => { setCategorisationState(e.target.value as CategorisationState); setCpage(0); }}>
+              <option value="all">{t("banks.catstate_all")}</option>
+              <option value="uncategorized">{t("banks.catstate_uncategorized")}</option>
+              <option value="categorized">{t("banks.catstate_categorized")}</option>
+            </Select>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {editable && (
+              <Chip active={duplicatesOnly} onClick={() => { setDuplicatesOnly((v) => !v); setCpage(0); }}>
+                {t("banks.only_duplicates")}
+              </Chip>
+            )}
+            <div className="grow" />
+            {editable && (
+              <Button variant="secondary" disabled={applyRules.isPending} onClick={runApplyRules}>
+                {t("banks.apply_rules")}
+              </Button>
+            )}
+            {hasActivePendingFilters(filterState) && (
+              <Button variant="ghost" onClick={clearFilters}>{t("banks.clear_filters")}</Button>
+            )}
+          </div>
         </CardBody>
       </Card>
 

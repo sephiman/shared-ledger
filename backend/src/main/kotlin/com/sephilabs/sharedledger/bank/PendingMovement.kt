@@ -102,6 +102,8 @@ interface PendingMovementRepository : JpaRepository<PendingMovement, UUID> {
 
     fun countByHouseholdIdAndStatus(householdId: UUID, status: MovementStatus): Long
 
+    fun findAllByHouseholdIdAndStatus(householdId: UUID, status: MovementStatus): List<PendingMovement>
+
     @Query(
         value = """
         SELECT m FROM PendingMovement m

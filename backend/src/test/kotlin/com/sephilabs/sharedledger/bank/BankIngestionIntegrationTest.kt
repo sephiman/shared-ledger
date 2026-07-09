@@ -245,6 +245,62 @@ class BankIngestionIntegrationTest @Autowired constructor(
         assertThat(bankService.config(household.id).connectionCount).isEqualTo(1)
     }
 
+    @Test
+    fun `apply-rules categorises only uncategorized pending items and leaves them pending`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val expenseCat = expenseCategory(household)
+        val otherExpenseCat = categories.listForHousehold(household.id)
+            .first { it.kind == "expense" && it.code != expenseCat }.code
+
+        fake.movements.addAll(
+            listOf(
+                movement("ar-1", today.minusDays(1), Direction.expense, "9.99", "Corner Store"),
+                movement("ar-2", today.minusDays(1), Direction.expense, "4.00", "Coffee Kiosk"),
+                movement("ar-3", today.minusDays(1), Direction.expense, "7.00", "Unmatched Shop"),
+            ),
+        )
+        link(household, user)
+
+        // Nothing was categorised at sync time (no rules existed yet).
+        val ingested = pending.search(household.id, MovementStatus.pending, null, PageRequest.of(0, 100)).content
+        assertThat(ingested).allMatch { it.suggestedCategoryCode == null }
+        val corner = ingested.first { it.counterparty == "Corner Store" }
+        val kiosk = ingested.first { it.counterparty == "Coffee Kiosk" }
+        val shop = ingested.first { it.counterparty == "Unmatched Shop" }
+
+        // Corner Store is already categorised by hand; a rule now matches the Kiosk only.
+        pendingService.edit(household.id, corner.id, EditMovementRequest(suggestedCategoryCode = otherExpenseCat))
+        categorization.create(
+            household.id,
+            CategorizationRuleRequest(
+                matchField = RuleField.counterparty,
+                matchOp = RuleOp.contains,
+                matchValue = "Kiosk",
+                categoryCode = expenseCat,
+                direction = Direction.expense,
+            ),
+            user,
+        )
+
+        val result = pendingService.applyRulesToPending(household.id)
+
+        // Only the uncategorized-and-matching item was categorised.
+        assertThat(result.categorized).isEqualTo(1)
+        assertThat(pending.findByIdAndHouseholdId(kiosk.id, household.id)!!.suggestedCategoryCode).isEqualTo(expenseCat)
+        // The pre-categorised item is left untouched (never overwritten).
+        assertThat(pending.findByIdAndHouseholdId(corner.id, household.id)!!.suggestedCategoryCode).isEqualTo(otherExpenseCat)
+        // A movement matching no rule stays uncategorized.
+        assertThat(pending.findByIdAndHouseholdId(shop.id, household.id)!!.suggestedCategoryCode).isNull()
+
+        // No confirm step: every item is still pending and no transaction was created.
+        assertThat(pendingService.pendingCount(household.id)).isEqualTo(3)
+        listOf(corner, kiosk, shop).forEach {
+            assertThat(pending.findByIdAndHouseholdId(it.id, household.id)!!.status).isEqualTo(MovementStatus.pending)
+        }
+        assertThat(transactions.findByHouseholdIdAndOccurrenceDateBetween(household.id, today.minusDays(30), today)).isEmpty()
+    }
+
     // --- helpers ---------------------------------------------------------------------------------
 
     @Test
