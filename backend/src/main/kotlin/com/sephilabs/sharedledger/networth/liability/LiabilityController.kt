@@ -41,6 +41,11 @@ data class LiabilityDto(
     @JsonFormat(shape = JsonFormat.Shape.STRING)
     val latestBalance: BigDecimal? = null,
     val latestBalanceDate: LocalDate? = null,
+    // Aggregated schedule figures for amortizable loans, so the list row shows them without opening.
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    val computedBalance: BigDecimal? = null,
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    val computedInstalment: BigDecimal? = null,
 )
 
 data class LiabilityBalanceEntryRequest(
@@ -62,12 +67,19 @@ data class LiabilityBalanceEntryDto(
 class LiabilityController(
     private val liabilities: LiabilityRepository,
     private val balances: LiabilityBalanceEntryRepository,
+    private val amortization: com.sephilabs.sharedledger.networth.amortization.AmortizationScheduleService,
     private val currentUser: CurrentUser,
 ) {
 
     @GetMapping
     fun list(@PathVariable householdId: UUID): List<LiabilityDto> =
-        liabilities.findAllByHouseholdIdOrderByNameAsc(householdId).map { it.toDto() }
+        liabilities.findAllByHouseholdIdOrderByNameAsc(householdId).map { l ->
+            val dto = l.toDto()
+            if (l.amortizable) {
+                val totals = amortization.totals(l)
+                dto.copy(computedBalance = totals.currentBalance, computedInstalment = totals.monthlyInstalment)
+            } else dto
+        }
 
     @PostMapping
     @Transactional

@@ -111,6 +111,20 @@ class AmortizationCalculatorTest {
     }
 
     @Test
+    fun `re-anchor takes precedence even when its date is not a charge day and no charge has passed since`() {
+        // Origin mode: charges on the 1st; anchor mid-month; as-of a few days later (before the next charge).
+        val t = PartTerms(BigDecimal("200000"), BigDecimal("3"), AmortizationMethod.french, 360, null, LocalDate.of(2020, 1, 10), 1)
+        val anchor = AnchorInput(LocalDate.of(2023, 6, 15), BigDecimal("150000.00"))
+        val asOf = LocalDate.of(2023, 6, 20)
+        // Without the anchor the origin schedule reports its own (lower) figure...
+        val origin = AmortizationCalculator.balanceAt(t, emptyList(), emptyList(), asOf)
+        assertThat(origin).isNotEqualByComparingTo("150000.00")
+        // ...with the anchor, the balance IS the anchored value (origin no longer overwrites it).
+        val anchored = AmortizationCalculator.balanceAt(t, emptyList(), emptyList(), asOf, anchor)
+        assertThat(anchored).isEqualByComparingTo("150000.00")
+    }
+
+    @Test
     fun `re-anchor resets the balance at its date and reprojects from there`() {
         val origin = LocalDate.now().minusYears(6).withDayOfMonth(1)
         val t = PartTerms(BigDecimal("100000"), BigDecimal("6"), AmortizationMethod.french, 360, null, origin, 1)

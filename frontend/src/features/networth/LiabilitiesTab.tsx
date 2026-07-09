@@ -11,13 +11,14 @@ import {
   useUpsertLiability,
 } from "@/api/networth";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label } from "@/components/ui/primitives";
+import { formatMoney } from "@/lib/money";
 import { NamedValueCard, type DetailsDraft } from "./NamedValueCard";
 import { AmortizationPanel } from "./AmortizationPanel";
 
 type EditingLiability = { id?: string; name: string; active: boolean; amortizable: boolean; chargeDay: string };
 
 export function LiabilitiesTab() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const household = useActiveHousehold();
   const hid = household.householdId;
   const { data: items = [] } = useLiabilities(hid);
@@ -135,7 +136,16 @@ export function LiabilitiesTab() {
                         <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-primary">{t("networth.amortizable")}</span>
                         {!it.active && <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] uppercase tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-400">{t("common.inactive")}</span>}
                       </p>
-                      <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{t("networth.amortizable_balance_hint")}</p>
+                      {it.computedBalance != null ? (
+                        <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                          <span className="font-mono tabular-nums">{formatMoney(it.computedBalance, household.currency, i18n.language)}</span>
+                          {it.computedInstalment != null && (
+                            <> · {formatMoney(it.computedInstalment, household.currency, i18n.language)}/{t("networth.per_month")}</>
+                          )}
+                        </p>
+                      ) : (
+                        <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{t("networth.amortizable_balance_hint")}</p>
+                      )}
                     </div>
                     <div className="flex gap-1">
                       <Button variant="ghost" className="px-2" title={t("networth.amortization")} onClick={() => setOpenAmort(openAmort === it.id ? null : it.id)}><span aria-hidden>📅</span></Button>

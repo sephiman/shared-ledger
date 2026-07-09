@@ -38,6 +38,24 @@ class AmortizationScheduleService(
         return Money.normalize(total)
     }
 
+    /** Aggregated current balance + monthly instalment for a liability list row (no schedule rows built). */
+    @Transactional(readOnly = true)
+    fun totals(liability: Liability, today: LocalDate = LocalDate.now()): AmortizationTotals {
+        var balance = BigDecimal.ZERO
+        var instalment = BigDecimal.ZERO
+        for (part in parts.findAllByLiabilityIdOrderByStartDateAscCreatedAtAsc(liability.id)) {
+            val terms = termsFor(liability, part)
+            val revs = revisionInputs(part.id)
+            val preps = prepaymentInputs(part.id)
+            val anchor = anchorFor(part)
+            balance += AmortizationCalculator.balanceAt(terms, revs, preps, maxOf(today, part.startDate), anchor)
+            val projection = AmortizationCalculator.project(terms, revs, preps, anchor = anchor)
+            instalment += (projection.rows.firstOrNull { !it.date.isBefore(today) } ?: projection.rows.lastOrNull())?.instalment
+                ?: BigDecimal.ZERO
+        }
+        return AmortizationTotals(Money.normalize(balance), Money.normalize(instalment))
+    }
+
     @Transactional(readOnly = true)
     fun schedule(householdId: UUID, liabilityId: UUID, today: LocalDate = LocalDate.now()): LiabilityScheduleDto {
         val liability = loadOwn(householdId, liabilityId)

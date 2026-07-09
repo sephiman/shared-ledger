@@ -9,6 +9,9 @@ export interface Liability {
   chargeDay?: number | null;
   latestBalance?: string | null;
   latestBalanceDate?: string | null;
+  // Aggregated schedule figures for amortizable loans (shown in the list row without opening).
+  computedBalance?: string | null;
+  computedInstalment?: string | null;
 }
 
 export interface LiabilityUpsert {

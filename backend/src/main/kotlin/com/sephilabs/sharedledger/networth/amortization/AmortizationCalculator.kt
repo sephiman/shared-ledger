@@ -180,9 +180,14 @@ object AmortizationCalculator {
         if (asOfDate.isBefore(terms.startDate)) return MONEY_ZERO
         val projection = project(terms, revisions, prepayments, horizon = asOfDate, anchor = anchor)
         val last = projection.rows.lastOrNull { !it.date.isAfter(asOfDate) }
+        // A re-anchor takes precedence from its date: if it's in effect at asOf and no charge has been
+        // applied since (the last charge on/before asOf predates the anchor, or there is none), the
+        // balance is exactly the anchored value — the origin schedule no longer overwrites it.
+        if (anchor != null && !anchor.date.isAfter(asOfDate) && (last == null || last.date.isBefore(anchor.date))) {
+            return Money.normalize(anchor.balance).coerceAtLeast(MONEY_ZERO)
+        }
         if (last != null) return last.balance
-        // Before the first charge: an anchor on/before the date wins, else current state less prepayments.
-        if (anchor != null && !anchor.date.isAfter(asOfDate)) return Money.normalize(anchor.balance).coerceAtLeast(MONEY_ZERO)
+        // Before the first charge: current state less any prepayment already made.
         val prepaidBefore = prepayments.filter { !it.date.isAfter(asOfDate) }.fold(BigDecimal.ZERO) { a, p -> a + p.amount }
         return Money.normalize(terms.principal.subtract(prepaidBefore, MC)).coerceAtLeast(MONEY_ZERO)
     }

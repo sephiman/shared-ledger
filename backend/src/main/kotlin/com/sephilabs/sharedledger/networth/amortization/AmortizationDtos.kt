@@ -120,6 +120,12 @@ data class LiabilityScheduleDto(
     val parts: List<PartScheduleDto>,
 )
 
+/** Just the aggregated figures for a liability list row (no schedule rows). */
+data class AmortizationTotals(
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val currentBalance: BigDecimal,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val monthlyInstalment: BigDecimal,
+)
+
 data class SimulationRequest(
     @field:NotNull val prepaymentDate: LocalDate,
     @field:NotNull @JsonFormat(shape = JsonFormat.Shape.STRING) val amount: BigDecimal,
