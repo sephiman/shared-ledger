@@ -159,9 +159,16 @@ data class AppProperties(
         val minRequestIntervalMs: Long = 300,
         // Requested consent lifetime; the bank may shorten it (90–180 days in practice).
         val consentValidDays: Long = 90,
-        // How far back to pull on the first sync (banks usually cap history to ~90 days).
+        // How far back to pull on the first sync (banks usually cap history to ~90 days). Only a
+        // fallback: the initial sync uses strategy=longest (full history), not this window.
         val backfillDays: Long = 90,
-        // PSD2 unattended-access ceiling per consent per day.
+        // Incremental (background) sync re-reads from the last sync point minus this overlap so
+        // late-booked items aren't missed; dedup makes the re-read idempotent.
+        val syncOverlapDays: Long = 3,
+        // On ASPSP_RATE_LIMIT_EXCEEDED, a background connection waits this long before retrying.
+        val rateLimitBackoffHours: Long = 6,
+        // PSD2 unattended-access ceiling per consent per day (background fetches only; interactive
+        // fetches carry PSU headers and are not counted against this budget by the bank).
         val maxCallsPerDay: Int = 4,
         // Twice daily, within the call budget.
         val syncCron: String = "0 0 7,19 * * *",

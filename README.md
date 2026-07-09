@@ -316,10 +316,24 @@ Wise could be added via its own API) with the always-available CSV import as the
   Relatives each link their own account with their own SCA — credentials are never shared.
 - **Multiple connections** per household, including several to the same bank (e.g. two Wise
   accounts), each with its own label, holder, consent, sync cursor, status, and call budget.
-- **Sync**: scheduled 1–2×/day (never live), within the PSD2 ≤4-calls-per-consent-per-day limit,
-  idempotent by the bank's movement id. The **initial ~90-day backfill runs asynchronously** right
-  after linking. Each connection syncs independently — one expired or failing connection never
-  blocks the others — and every run is audited (success/error + new-movement count).
+- **Sync** follows Enable Banking's fetch rules and comes in two shapes:
+  - **Initial (on link)** — a **full-history** sync using `strategy=longest` (the provider finds the
+    earliest available transaction and pulls everything forward). It runs asynchronously right after
+    linking but **interactively** (the holder's PSU headers are sent), so it is *not* a background
+    fetch and is *not* gated by the per-day budget — it pages through all history.
+  - **Background (scheduled, 1–2×/day, never live)** — an **incremental** sync using
+    `strategy=default` from the **last sync point minus a small overlap** (a few days, to catch
+    late-booked items) up to now. Unattended fetches are limited by the bank to **~4 per consent per
+    day**; on `ASPSP_RATE_LIMIT_EXCEEDED` the connection **backs off ~6h** and retries, surfacing the
+    status. "Sync now" from the UI is interactive (PSU) and incremental.
+  - **Pagination**: every fetch pages via `continuation_key`; the **only** stop condition is a
+    response with **no** continuation key — an empty (or short) page may still carry one, so paging
+    continues until it's absent. Page size varies by bank.
+  - **Dedup / idempotency**: movements are keyed by **(connection + bank movement id)**, where the id
+    is `entry_reference` when present, else `transaction_id`, else a stable composite — because
+    `entry_reference` can be missing or duplicated. The overlap re-read therefore never duplicates.
+  - Each connection syncs independently — one expired, backing-off, or failing connection never blocks
+    the others — and every run is audited (success/error + code + new-movement count).
 - **Review inbox** (a **Pending (N)** sub-view inside Transactions, plus a nav badge and a Home
   card, all at household level): per-movement **confirm / edit / reject** and **batch** actions.
   Confirming reuses the normal transaction-creation logic; single confirms notify normally, batch

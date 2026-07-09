@@ -8,7 +8,10 @@ import com.sephilabs.sharedledger.bank.connector.AuthorizedSession
 import com.sephilabs.sharedledger.bank.connector.BankConnector
 import com.sephilabs.sharedledger.bank.connector.BankMovement
 import com.sephilabs.sharedledger.bank.connector.ConsentStatus
+import com.sephilabs.sharedledger.bank.connector.FetchStrategy
 import com.sephilabs.sharedledger.bank.connector.MovementPage
+import com.sephilabs.sharedledger.bank.connector.PsuContext
+import com.sephilabs.sharedledger.bank.connector.RateLimitExceededException
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Primary
@@ -29,6 +32,22 @@ class FakeBankConnector : BankConnector {
     var status: ConsentStatus = ConsentStatus.ACTIVE
     val movements: MutableList<BankMovement> = mutableListOf()
 
+    /** Every fetchMovements invocation, for asserting strategy / window / interactivity / paging. */
+    data class FetchCall(
+        val strategy: FetchStrategy,
+        val dateFrom: LocalDate?,
+        val dateTo: LocalDate?,
+        val interactive: Boolean,
+        val continuationKey: String?,
+    )
+    val fetchCalls: MutableList<FetchCall> = mutableListOf()
+
+    /** When non-empty, returned in order (ignoring the date window) so pagination can be scripted. */
+    val scriptedPages: ArrayDeque<MovementPage> = ArrayDeque()
+
+    /** When >= 0, throw ASPSP_RATE_LIMIT_EXCEEDED once this many fetch calls have succeeded. */
+    var failWithRateLimitAfter: Int = -1
+
     override fun listAspsps(country: String): List<Aspsp> = aspsps.filter { it.country == country }
 
     override fun startAuthorization(request: AuthStartRequest): AuthStart {
@@ -44,10 +63,23 @@ class FakeBankConnector : BankConnector {
     override fun fetchMovements(
         sessionId: String,
         accountUid: String,
-        dateFrom: LocalDate,
+        dateFrom: LocalDate?,
+        dateTo: LocalDate?,
+        strategy: FetchStrategy,
         continuationKey: String?,
-    ): MovementPage =
-        MovementPage(movements = movements.filter { !it.bookingDate.isBefore(dateFrom) }, continuationKey = null)
+        psu: PsuContext?,
+    ): MovementPage {
+        fetchCalls += FetchCall(strategy, dateFrom, dateTo, psu != null, continuationKey)
+        if (failWithRateLimitAfter >= 0 && fetchCalls.size > failWithRateLimitAfter) {
+            throw RateLimitExceededException("ASPSP_RATE_LIMIT_EXCEEDED")
+        }
+        if (scriptedPages.isNotEmpty()) return scriptedPages.removeFirst()
+        val filtered = movements.filter {
+            (dateFrom == null || !it.bookingDate.isBefore(dateFrom)) &&
+                (dateTo == null || it.bookingDate.isBefore(dateTo))
+        }
+        return MovementPage(movements = filtered, continuationKey = null)
+    }
 }
 
 @TestConfiguration

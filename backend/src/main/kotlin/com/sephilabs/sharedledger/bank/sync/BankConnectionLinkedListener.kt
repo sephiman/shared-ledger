@@ -15,6 +15,7 @@ class BankConnectionLinkedListener(private val syncService: BankSyncService) {
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     fun onConnectionLinked(event: BankConnectionLinked) {
-        syncService.enqueue(event.connectionId)
+        // Initial link → full history (longest), run interactively with the holder's PSU context.
+        syncService.enqueue(event.connectionId, SyncMode.INITIAL, event.psu)
     }
 }

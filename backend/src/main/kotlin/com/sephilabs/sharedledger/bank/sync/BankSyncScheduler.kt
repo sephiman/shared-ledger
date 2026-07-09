@@ -9,6 +9,7 @@ import com.sephilabs.sharedledger.notification.NotifyActor
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 
@@ -32,16 +33,19 @@ class BankSyncScheduler(
             log.info("bank_sync_run skipped=not_configured")
             return
         }
+        val now = Instant.now()
         val ingesting = connections.findAllByIngestionEnabledTrue()
-        val due = ingesting
+        val eligible = ingesting
             .filter { it.status == ConnectionStatus.active || it.status == ConnectionStatus.suspended }
+        // A connection that hit the bank's rate limit waits out its backoff before we try again.
+        val due = eligible.filter { it.syncBackoffUntil?.isAfter(now) != true }
         log.info(
-            "bank_sync_run ingestionEnabled={} due={} skippedByStatus={}",
-            ingesting.size, due.size, ingesting.size - due.size,
+            "bank_sync_run ingestionEnabled={} due={} skippedByStatus={} skippedByBackoff={}",
+            ingesting.size, due.size, ingesting.size - eligible.size, eligible.size - due.size,
         )
         for (connection in due) {
             try {
-                syncService.sync(connection.id)
+                syncService.sync(connection.id, SyncMode.SCHEDULED, null)
             } catch (ex: Exception) {
                 log.error("bank_sync scheduler failed for connection {}", connection.id, ex)
             }

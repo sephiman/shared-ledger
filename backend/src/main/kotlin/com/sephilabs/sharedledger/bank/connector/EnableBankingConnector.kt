@@ -7,6 +7,7 @@ import com.sephilabs.sharedledger.transaction.Direction
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import org.springframework.web.client.RestClient
+import org.springframework.web.client.RestClientResponseException
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
@@ -34,6 +35,10 @@ class EnableBankingConnector(
 
     @Volatile
     private var lastCallAt = 0L
+
+    private companion object {
+        const val RATE_LIMIT_CODE = "ASPSP_RATE_LIMIT_EXCEEDED"
+    }
 
     override fun listAspsps(country: String): List<Aspsp> = call {
         val body = get("/aspsps?country=$country")
@@ -102,15 +107,28 @@ class EnableBankingConnector(
     override fun fetchMovements(
         sessionId: String,
         accountUid: String,
-        dateFrom: LocalDate,
+        dateFrom: LocalDate?,
+        dateTo: LocalDate?,
+        strategy: FetchStrategy,
         continuationKey: String?,
+        psu: PsuContext?,
     ): MovementPage = call {
         val query = buildString {
             append("/accounts/").append(accountUid).append("/transactions")
-            append("?date_from=").append(dateFrom.format(DateTimeFormatter.ISO_LOCAL_DATE))
+            append("?strategy=").append(if (strategy == FetchStrategy.LONGEST) "longest" else "default")
+            // longest: date_from is only a hint and date_to is ignored; default: dates bound the window.
+            dateFrom?.let { append("&date_from=").append(it.format(DateTimeFormatter.ISO_LOCAL_DATE)) }
+            if (strategy == FetchStrategy.DEFAULT) {
+                dateTo?.let { append("&date_to=").append(it.format(DateTimeFormatter.ISO_LOCAL_DATE)) }
+            }
             if (continuationKey != null) append("&continuation_key=").append(continuationKey)
         }
-        val body = get(query)
+        val headers = if (psu != null) {
+            mapOf("psu-ip-address" to psu.ipAddress, "psu-user-agent" to psu.userAgent)
+        } else {
+            emptyMap()
+        }
+        val body = get(query, headers)
         val raw = body.path("transactions")
         val movements = raw.mapNotNull { mapMovement(it) }
         if (raw.size() != movements.size) {
@@ -160,9 +178,10 @@ class EnableBankingConnector(
 
     // --- HTTP plumbing -----------------------------------------------------------------------
 
-    private fun get(path: String): JsonNode {
-        val body = client.get().uri(path).header("Authorization", "Bearer ${jwt.bearer()}")
-            .retrieve().body(String::class.java) ?: throw BankConnectorException("Empty response for $path")
+    private fun get(path: String, headers: Map<String, String> = emptyMap()): JsonNode {
+        var req = client.get().uri(path).header("Authorization", "Bearer ${jwt.bearer()}")
+        headers.forEach { (k, v) -> req = req.header(k, v) }
+        val body = req.retrieve().body(String::class.java) ?: throw BankConnectorException("Empty response for $path")
         return mapper.readTree(body)
     }
 
@@ -179,11 +198,24 @@ class EnableBankingConnector(
             block()
         } catch (ex: BankConnectorException) {
             throw ex
+        } catch (ex: RestClientResponseException) {
+            val code = errorCodeOf(ex.responseBodyAsString)
+            log.warn("Enable Banking call failed status={} code={}", ex.statusCode.value(), code)
+            if (code == RATE_LIMIT_CODE) throw RateLimitExceededException(RATE_LIMIT_CODE, ex)
+            throw BankConnectorException(code ?: (ex.message ?: "Enable Banking call failed"), ex)
         } catch (ex: Exception) {
             log.warn("Enable Banking call failed: {}", ex.message)
             throw BankConnectorException(ex.message ?: "Enable Banking call failed", ex)
         }
     }
+
+    /** Enable Banking error bodies carry the machine code under `code` (sometimes `error`). */
+    private fun errorCodeOf(body: String?): String? =
+        if (body.isNullOrBlank()) null
+        else runCatching {
+            val node = mapper.readTree(body)
+            node.path("code").textOrNull() ?: node.path("error").textOrNull()
+        }.getOrNull()
 
     @Synchronized
     private fun pace() {

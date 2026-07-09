@@ -3,6 +3,7 @@ package com.sephilabs.sharedledger.bank
 import com.sephilabs.sharedledger.bank.connector.BankConnector
 import com.sephilabs.sharedledger.bank.connector.BankConnectorException
 import com.sephilabs.sharedledger.bank.connector.BankCrypto
+import com.sephilabs.sharedledger.bank.connector.PsuContext
 import com.sephilabs.sharedledger.bank.sync.BankConnectionLinked
 import com.sephilabs.sharedledger.common.errors.AppException
 import com.sephilabs.sharedledger.config.AppProperties
@@ -85,7 +86,7 @@ class BankService(
     }
 
     @Transactional
-    fun completeLink(householdId: UUID, request: CompleteLinkRequest, by: User): BankConnectionDto {
+    fun completeLink(householdId: UUID, request: CompleteLinkRequest, by: User, psu: PsuContext? = null): BankConnectionDto {
         requireConfigured()
         val auth = authSessions.findById(request.state).orElse(null)
             ?: throw AppException.badRequest("BANK_AUTH_STATE_INVALID")
@@ -136,7 +137,7 @@ class BankService(
 
         authSessions.delete(auth)
         // Initial backfill sync runs off-thread once this transaction commits.
-        events.publishEvent(BankConnectionLinked(connection.id))
+        events.publishEvent(BankConnectionLinked(connection.id, psu))
         return connection.toDto()
     }
 

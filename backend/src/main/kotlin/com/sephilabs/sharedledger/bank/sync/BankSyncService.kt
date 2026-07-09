@@ -17,6 +17,9 @@ import com.sephilabs.sharedledger.bank.connector.BankConnectorException
 import com.sephilabs.sharedledger.bank.connector.BankCrypto
 import com.sephilabs.sharedledger.bank.connector.BankMovement
 import com.sephilabs.sharedledger.bank.connector.ConsentStatus
+import com.sephilabs.sharedledger.bank.connector.FetchStrategy
+import com.sephilabs.sharedledger.bank.connector.PsuContext
+import com.sephilabs.sharedledger.bank.connector.RateLimitExceededException
 import com.sephilabs.sharedledger.config.AppProperties
 import com.sephilabs.sharedledger.notification.NotificationPublisher
 import com.sephilabs.sharedledger.notification.NotifyActor
@@ -27,20 +30,33 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.math.BigDecimal
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 import java.util.concurrent.Executor
 
 /**
- * Idempotent per-connection sync. Resumes from the latest booking date already stored (no cursor
- * table), upserts movements by (connection, bankMovementId), applies categorisation rules, and
- * records a [BankSyncRun]. Respects the PSD2 ≤4 calls/consent/day budget and never lets one
- * connection's failure or expiry affect another.
+ * How a sync was triggered — this decides the fetch strategy and rate-limit handling:
+ * - [INITIAL]: first sync after linking. Full history ([FetchStrategy.LONGEST]), interactive
+ *   (PSU headers), so it is not gated by the background per-day budget — page through everything.
+ * - [MANUAL]: user pressed "Sync now" while online. Interactive; incremental unless nothing has
+ *   ever synced (then full, to self-heal a missed initial sync).
+ * - [SCHEDULED]: unattended background sync. Incremental ([FetchStrategy.DEFAULT] from the last
+ *   sync point minus an overlap), gated by the ≤4 calls/consent/day budget, backs off on rate limit.
+ */
+enum class SyncMode { INITIAL, MANUAL, SCHEDULED }
+
+/**
+ * Idempotent per-connection sync. The incremental window resumes from the latest booking date
+ * already stored (minus a small overlap so late-booked items aren't missed); movements are upserted
+ * by (connection, bankMovementId) so re-reads never duplicate. Records a [BankSyncRun] and never
+ * lets one connection's failure or expiry affect another.
  *
- * Provider HTTP (and the FX lookups it needs) run **outside** any DB transaction; only the short
- * persist steps use one (via [TransactionTemplate]) — so a slow bank never holds a pooled DB
- * connection open. Use [enqueue] to run off the caller's thread.
+ * Pagination follows the provider: keep calling with the returned `continuation_key` until a page
+ * returns none — an empty page may still carry one. Provider HTTP (and the FX lookups it needs) run
+ * **outside** any DB transaction; only the short persist steps use one (via [TransactionTemplate]),
+ * so a slow bank never holds a pooled DB connection open. Use [enqueue] to run off the caller's thread.
  */
 @Service
 class BankSyncService(
@@ -65,10 +81,10 @@ class BankSyncService(
     private data class Fetched(val accountId: UUID, val movement: BankMovement, val amountBase: BigDecimal)
 
     /** Run a connection off the caller's thread (used by the manual endpoint and the link listener). */
-    fun enqueue(connectionId: UUID) {
+    fun enqueue(connectionId: UUID, mode: SyncMode, psu: PsuContext? = null) {
         executor.execute {
             try {
-                sync(connectionId)
+                sync(connectionId, mode, psu)
             } catch (ex: Exception) {
                 log.error("bank_sync enqueue failed connection={}", connectionId, ex)
             }
@@ -76,21 +92,32 @@ class BankSyncService(
     }
 
     /** Runs one connection synchronously. Safe to call repeatedly; returns new movements ingested. */
-    fun sync(connectionId: UUID): Int {
+    fun sync(connectionId: UUID, mode: SyncMode = SyncMode.SCHEDULED, psu: PsuContext? = null): Int {
         val connection = connections.findById(connectionId).orElse(null) ?: return 0
         if (!connection.ingestionEnabled) return 0
 
         val today = LocalDate.now()
+        val background = mode == SyncMode.SCHEDULED
         val maxCalls = props.enableBanking.maxCallsPerDay
         var callsUsed = if (connection.callsResetOn != today) 0 else connection.callsUsedToday
         log.info(
-            "bank_sync_start connection={} household={} aspsp='{}' status={} callsUsed={}/{} lastSyncedAt={}",
-            connectionId, connection.householdId, connection.aspspName, connection.status,
+            "bank_sync_start connection={} household={} aspsp='{}' mode={} status={} callsUsed={}/{} lastSyncedAt={}",
+            connectionId, connection.householdId, connection.aspspName, mode, connection.status,
             callsUsed, maxCalls, connection.lastSyncedAt,
         )
-        if (maxCalls - callsUsed <= 0) {
-            log.info("bank_sync_skipped connection={} reason=call_budget", connectionId)
-            return 0
+        // Background gates: honour an active rate-limit backoff and the per-day budget. Interactive
+        // syncs (link/manual, PSU present) are exempt — they page through to the end.
+        if (background) {
+            connection.syncBackoffUntil?.let { until ->
+                if (Instant.now().isBefore(until)) {
+                    log.info("bank_sync_skipped connection={} reason=rate_limit_backoff until={}", connectionId, until)
+                    return 0
+                }
+            }
+            if (maxCalls - callsUsed <= 0) {
+                log.info("bank_sync_skipped connection={} reason=call_budget", connectionId)
+                return 0
+            }
         }
         val sessionId = connection.sessionIdEnc?.let { crypto.decrypt(it) }
         if (sessionId == null) {
@@ -101,17 +128,23 @@ class BankSyncService(
 
         val runId = write { syncRuns.save(BankSyncRun(connectionId = connectionId, startedAt = Instant.now())).id }
 
+        // Full history on the first sync ever (or an explicit initial link); incremental afterwards.
+        val fullHistory = mode == SyncMode.INITIAL || connection.lastSyncedAt == null
+        val strategy = if (fullHistory) FetchStrategy.LONGEST else FetchStrategy.DEFAULT
+        val fetched = mutableListOf<Fetched>()
+
         return try {
             // ---- HTTP phase: no DB transaction is held while we talk to the provider ----
-            val status = connector.sessionStatus(sessionId); callsUsed++
+            val status = connector.sessionStatus(sessionId)
+            if (background) callsUsed++
             log.info("bank_sync_session connection={} consentStatus={}", connectionId, status)
             if (status != ConsentStatus.ACTIVE) {
                 log.info("bank_sync_stop connection={} reason=consent_not_active status={} (marking expired)", connectionId, status)
+                val callsAtEnd = callsUsed
                 write {
                     markConnection(connectionId) {
                         it.status = ConnectionStatus.expired
-                        it.callsUsedToday = callsUsed
-                        it.callsResetOn = today
+                        if (background) { it.callsUsedToday = callsAtEnd; it.callsResetOn = today }
                     }
                     finishRun(runId, SyncRunStatus.success, 0)
                 }
@@ -119,22 +152,22 @@ class BankSyncService(
             }
 
             val accountList = accounts.findAllByConnectionId(connectionId)
-            log.info("bank_sync_accounts connection={} accounts={}", connectionId, accountList.size)
-            val fetched = mutableListOf<Fetched>()
+            log.info("bank_sync_accounts connection={} accounts={} strategy={}", connectionId, accountList.size, strategy)
             budget@ for (account in accountList) {
-                val cursor = pending.findMaxBookingDate(connectionId, account.id)
-                    ?: today.minusDays(props.enableBanking.backfillDays)
-                log.info("bank_sync_account connection={} account={} dateFrom={}", connectionId, account.id, cursor)
+                val (dateFrom, dateTo) = fetchWindow(strategy, connectionId, account.id, today)
+                log.info("bank_sync_account connection={} account={} dateFrom={} dateTo={}", connectionId, account.id, dateFrom, dateTo)
                 var continuationKey: String? = null
                 var pages = 0
                 var fetchedForAccount = 0
                 do {
-                    if (maxCalls - callsUsed <= 0) {
+                    if (background && maxCalls - callsUsed <= 0) {
                         log.info("bank_sync_paused connection={} reason=call_budget", connectionId)
                         break@budget
                     }
-                    val page = connector.fetchMovements(sessionId, account.accountUid, cursor, continuationKey)
-                    callsUsed++
+                    // Stop condition is ONLY "no continuation_key" — an empty/short page may still
+                    // carry one, so we keep paging until it's absent.
+                    val page = connector.fetchMovements(sessionId, account.accountUid, dateFrom, dateTo, strategy, continuationKey, psu)
+                    if (background) callsUsed++
                     pages++
                     fetchedForAccount += page.movements.size
                     log.info(
@@ -157,48 +190,38 @@ class BankSyncService(
             // ---- Persist phase: one short transaction ----
             val callsAtEnd = callsUsed
             write {
-                var n = 0
-                var duplicates = 0
-                for (f in fetched) {
-                    val m = f.movement
-                    if (pending.existsByConnectionIdAndBankMovementId(connectionId, m.bankMovementId)) {
-                        duplicates++
-                        continue
-                    }
-                    val entity = PendingMovement(
-                        householdId = connection.householdId,
-                        connectionId = connectionId,
-                        accountId = f.accountId,
-                        bankMovementId = m.bankMovementId,
-                        bookingDate = m.bookingDate,
-                        valueDate = m.valueDate,
-                        direction = m.direction,
-                        amount = f.amountBase,
-                        originalAmount = if (isBase(m.currency)) null else m.amount,
-                        originalCurrency = if (isBase(m.currency)) null else m.currency,
-                        counterparty = m.counterparty?.take(255),
-                        description = m.description?.take(500),
-                        reference = m.reference?.take(255),
-                        status = MovementStatus.pending,
-                    )
-                    entity.suggestedCategoryCode = categorization.suggestCategory(connection.householdId, entity)
-                    pending.save(entity)
-                    n++
-                }
+                val n = saveNew(connection, fetched)
                 markConnection(connectionId) {
                     it.lastSyncedAt = Instant.now()
                     it.status = ConnectionStatus.active
-                    it.callsUsedToday = callsAtEnd
-                    it.callsResetOn = today
+                    it.syncBackoffUntil = null
+                    if (background) { it.callsUsedToday = callsAtEnd; it.callsResetOn = today }
                 }
                 finishRun(runId, SyncRunStatus.success, n)
                 metrics.bankMovementsIngested(n)
-                log.info(
-                    "bank_sync_done connection={} fetched={} new={} duplicates={} callsUsed={}/{}",
-                    connectionId, fetched.size, n, duplicates, callsAtEnd, maxCalls,
-                )
+                log.info("bank_sync_done connection={} fetched={} new={} callsUsed={}/{}", connectionId, fetched.size, n, callsAtEnd, maxCalls)
                 // Published inside the tx so the AFTER_COMMIT Telegram listener fires only on commit.
                 notifications.bankMovementsToReview(connection.householdId, n, NotifyActor.Schedule(connection.householdId))
+                n
+            }
+        } catch (ex: RateLimitExceededException) {
+            // The bank refused a background fetch: persist whatever we already have (idempotent) and
+            // back off. Not a hard failure — the connection stays active and retries after the wait.
+            val backoffHours = props.enableBanking.rateLimitBackoffHours
+            log.warn("bank_sync_rate_limited connection={} fetched={} backoffHours={}", connectionId, fetched.size, backoffHours)
+            metrics.bankSyncFailure()
+            val callsAtEnd = callsUsed
+            write {
+                val n = saveNew(connection, fetched)
+                markConnection(connectionId) {
+                    it.status = ConnectionStatus.active
+                    if (n > 0) it.lastSyncedAt = Instant.now()
+                    it.syncBackoffUntil = Instant.now().plus(Duration.ofHours(backoffHours))
+                    if (background) { it.callsUsedToday = callsAtEnd; it.callsResetOn = today }
+                }
+                finishRun(runId, SyncRunStatus.error, n, "ASPSP_RATE_LIMIT_EXCEEDED", "Rate limited; backing off ${backoffHours}h")
+                metrics.bankMovementsIngested(n)
+                if (n > 0) notifications.bankMovementsToReview(connection.householdId, n, NotifyActor.Schedule(connection.householdId))
                 n
             }
         } catch (ex: Exception) {
@@ -208,8 +231,7 @@ class BankSyncService(
             write {
                 markConnection(connectionId) {
                     it.status = ConnectionStatus.suspended
-                    it.callsUsedToday = callsAtEnd
-                    it.callsResetOn = today
+                    if (background) { it.callsUsedToday = callsAtEnd; it.callsResetOn = today }
                 }
                 finishRun(
                     runId, SyncRunStatus.error, 0,
@@ -219,6 +241,52 @@ class BankSyncService(
             }
             0
         }
+    }
+
+    /**
+     * Window for the incremental (DEFAULT) strategy: resume from the account's latest stored booking
+     * date minus the overlap buffer (inclusive), up to tomorrow (exclusive → includes today). LONGEST
+     * ignores the window (the provider finds the earliest transaction and pulls everything forward).
+     */
+    private fun fetchWindow(
+        strategy: FetchStrategy,
+        connectionId: UUID,
+        accountId: UUID,
+        today: LocalDate,
+    ): Pair<LocalDate?, LocalDate?> {
+        if (strategy == FetchStrategy.LONGEST) return null to null
+        val last = pending.findMaxBookingDate(connectionId, accountId)
+            ?: today.minusDays(props.enableBanking.backfillDays)
+        return last.minusDays(props.enableBanking.syncOverlapDays) to today.plusDays(1)
+    }
+
+    /** Dedup + persist fetched movements by (connection, bankMovementId). Returns the count of new rows. */
+    private fun saveNew(connection: BankConnection, fetched: List<Fetched>): Int {
+        var n = 0
+        for (f in fetched) {
+            val m = f.movement
+            if (pending.existsByConnectionIdAndBankMovementId(connection.id, m.bankMovementId)) continue
+            val entity = PendingMovement(
+                householdId = connection.householdId,
+                connectionId = connection.id,
+                accountId = f.accountId,
+                bankMovementId = m.bankMovementId,
+                bookingDate = m.bookingDate,
+                valueDate = m.valueDate,
+                direction = m.direction,
+                amount = f.amountBase,
+                originalAmount = if (isBase(m.currency)) null else m.amount,
+                originalCurrency = if (isBase(m.currency)) null else m.currency,
+                counterparty = m.counterparty?.take(255),
+                description = m.description?.take(500),
+                reference = m.reference?.take(255),
+                status = MovementStatus.pending,
+            )
+            entity.suggestedCategoryCode = categorization.suggestCategory(connection.householdId, entity)
+            pending.save(entity)
+            n++
+        }
+        return n
     }
 
     private fun <T> write(block: () -> T): T = tx.execute { block() }!!

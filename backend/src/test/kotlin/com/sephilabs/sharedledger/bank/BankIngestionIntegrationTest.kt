@@ -2,8 +2,12 @@ package com.sephilabs.sharedledger.bank
 
 import com.sephilabs.sharedledger.IntegrationTestBase
 import com.sephilabs.sharedledger.bank.connector.BankMovement
+import com.sephilabs.sharedledger.bank.connector.FetchStrategy
+import com.sephilabs.sharedledger.bank.connector.MovementPage
 import com.sephilabs.sharedledger.common.errors.AppException
 import com.sephilabs.sharedledger.bank.sync.BankSyncService
+import com.sephilabs.sharedledger.bank.sync.SyncMode
+import com.sephilabs.sharedledger.config.AppProperties
 import com.sephilabs.sharedledger.catalog.CategoryService
 import com.sephilabs.sharedledger.household.Household
 import com.sephilabs.sharedledger.household.HouseholdRepository
@@ -21,6 +25,7 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.context.annotation.Import
 import org.springframework.data.domain.PageRequest
 import java.math.BigDecimal
+import java.time.Instant
 import java.time.LocalDate
 
 @Import(FakeBankConnectorConfig::class)
@@ -34,17 +39,23 @@ class BankIngestionIntegrationTest @Autowired constructor(
     private val categorization: CategorizationService,
     private val pending: PendingMovementRepository,
     private val connections: BankConnectionRepository,
+    private val syncRuns: BankSyncRunRepository,
     private val transactions: TransactionRepository,
     private val fxRates: FxRateRepository,
     private val categories: CategoryService,
+    private val props: AppProperties,
     private val fake: FakeBankConnector,
 ) : IntegrationTestBase() {
 
-    // The fake connector is a shared singleton across tests; reset its seeded movements each time.
+    // The fake connector is a shared singleton across tests; reset its seeded state each time.
     @BeforeEach
     fun resetConnector() {
         fake.movements.clear()
         fake.lastState = null
+        fake.fetchCalls.clear()
+        fake.scriptedPages.clear()
+        fake.failWithRateLimitAfter = -1
+        fake.accounts = listOf(com.sephilabs.sharedledger.bank.connector.AuthorizedAccount("acc-1", "NL00INGB0001234567", "Checking", "EUR"))
     }
 
     @Test
@@ -235,6 +246,153 @@ class BankIngestionIntegrationTest @Autowired constructor(
     }
 
     // --- helpers ---------------------------------------------------------------------------------
+
+    @Test
+    fun `pagination continues while a continuation_key is present, including an empty page`() {
+        val (user, household) = seed()
+        link(household, user) // initial sync ingests nothing (no movements / scripted pages yet)
+        val connectionId = connections.findAllByHouseholdIdOrderByCreatedAtAsc(household.id).single().id
+
+        // A bank that returns ~20/page: 20, 20, an EMPTY page that STILL carries a key, then 20.
+        fake.fetchCalls.clear()
+        fake.scriptedPages.addAll(
+            listOf(
+                scriptedPage(0, 20, "k1"),
+                scriptedPage(20, 20, "k2"),
+                MovementPage(emptyList(), "k3"), // empty but more to come — must not stop here
+                scriptedPage(40, 20, null),
+            ),
+        )
+
+        val ingested = syncService.sync(connectionId, SyncMode.INITIAL, null)
+
+        // Did not stop at ~60 or at the empty page — paged through all four responses.
+        assertThat(ingested).isEqualTo(60)
+        assertThat(pendingService.pendingCount(household.id)).isEqualTo(60)
+        assertThat(fake.fetchCalls).hasSize(4)
+        assertThat(fake.scriptedPages).isEmpty()
+    }
+
+    @Test
+    fun `initial sync runs outside the per-day call budget`() {
+        val (user, household) = seed()
+        link(household, user)
+        val connectionId = connections.findAllByHouseholdIdOrderByCreatedAtAsc(household.id).single().id
+
+        // Pre-exhaust the background budget for today.
+        val maxCalls = props.enableBanking.maxCallsPerDay
+        connections.findById(connectionId).get().let {
+            it.callsUsedToday = maxCalls
+            it.callsResetOn = LocalDate.now()
+            connections.save(it)
+        }
+
+        // More pages than the cap; an interactive INITIAL sync must still page through them all.
+        val pageCount = maxCalls + 3
+        fake.fetchCalls.clear()
+        repeat(pageCount) { i ->
+            fake.scriptedPages.add(scriptedPage(i * 5, 5, if (i < pageCount - 1) "k$i" else null))
+        }
+
+        val ingested = syncService.sync(connectionId, SyncMode.INITIAL, null)
+
+        assertThat(ingested).isEqualTo(pageCount * 5)
+        assertThat(fake.fetchCalls).hasSize(pageCount) // not capped at maxCalls
+        // Interactive syncs don't consume the background allowance — it's still exactly what we set.
+        assertThat(connections.findById(connectionId).get().callsUsedToday).isEqualTo(maxCalls)
+    }
+
+    @Test
+    fun `initial on-link sync uses the longest strategy for full history`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        fake.movements.addAll(
+            listOf(
+                movement("h-1", today.minusDays(400), Direction.expense, "5.00", "Old"),
+                movement("h-2", today.minusDays(1), Direction.income, "9.00", "New"),
+            ),
+        )
+        link(household, user)
+
+        // Full history: the 400-day-old movement (beyond any incremental window) is ingested.
+        assertThat(pendingService.pendingCount(household.id)).isEqualTo(2)
+        assertThat(fake.fetchCalls).isNotEmpty
+        assertThat(fake.fetchCalls).allMatch { it.strategy == FetchStrategy.LONGEST }
+    }
+
+    @Test
+    fun `background sync uses default strategy from the last sync point minus overlap`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val lastBooking = today.minusDays(2)
+        fake.movements.add(movement("bg-1", lastBooking, Direction.expense, "3.00", "Shop"))
+        link(household, user) // initial (longest) ingests bg-1 and sets the sync point
+        val connectionId = connections.findAllByHouseholdIdOrderByCreatedAtAsc(household.id).single().id
+
+        fake.fetchCalls.clear()
+        syncService.sync(connectionId, SyncMode.SCHEDULED, null)
+
+        val call = fake.fetchCalls.single()
+        assertThat(call.strategy).isEqualTo(FetchStrategy.DEFAULT)
+        assertThat(call.dateFrom).isEqualTo(lastBooking.minusDays(props.enableBanking.syncOverlapDays))
+        assertThat(call.dateTo).isEqualTo(today.plusDays(1)) // exclusive → includes today
+        assertThat(call.interactive).isFalse()
+    }
+
+    @Test
+    fun `the overlap re-fetch creates no duplicates`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        fake.movements.add(movement("ov-1", today.minusDays(1), Direction.expense, "4.00", "Shop"))
+        link(household, user)
+        val connectionId = connections.findAllByHouseholdIdOrderByCreatedAtAsc(household.id).single().id
+        assertThat(pendingService.pendingCount(household.id)).isEqualTo(1)
+
+        // The incremental window re-reads the overlap (which includes ov-1) but must not duplicate it.
+        val newlyIngested = syncService.sync(connectionId, SyncMode.SCHEDULED, null)
+        assertThat(newlyIngested).isZero()
+        assertThat(pending.findAll().count { it.householdId == household.id }).isEqualTo(1)
+    }
+
+    @Test
+    fun `a background rate limit backs off, surfaces status, and the next run is skipped`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        fake.movements.add(movement("rl-1", today.minusDays(1), Direction.expense, "2.00", "Shop"))
+        link(household, user)
+        val connectionId = connections.findAllByHouseholdIdOrderByCreatedAtAsc(household.id).single().id
+
+        // The first background fetch is rate-limited by the ASPSP.
+        fake.failWithRateLimitAfter = 0
+        fake.fetchCalls.clear()
+        syncService.sync(connectionId, SyncMode.SCHEDULED, null)
+
+        val connection = connections.findById(connectionId).get()
+        assertThat(connection.syncBackoffUntil).isNotNull()
+        assertThat(connection.syncBackoffUntil!!.isAfter(Instant.now())).isTrue()
+        // Transient limit, not a hard failure — the connection stays active.
+        assertThat(connection.status).isEqualTo(ConnectionStatus.active)
+
+        val run = syncRuns.findFirstByConnectionIdOrderByStartedAtDesc(connectionId)!!
+        assertThat(run.status).isEqualTo(SyncRunStatus.error)
+        assertThat(run.errorCode).isEqualTo("ASPSP_RATE_LIMIT_EXCEEDED")
+
+        // Next scheduled run while still backing off is skipped — no provider call is attempted.
+        fake.failWithRateLimitAfter = -1
+        fake.fetchCalls.clear()
+        val skipped = syncService.sync(connectionId, SyncMode.SCHEDULED, null)
+        assertThat(skipped).isZero()
+        assertThat(fake.fetchCalls).isEmpty()
+    }
+
+    private fun scriptedPage(startIdx: Int, count: Int, key: String?): MovementPage {
+        val today = LocalDate.now()
+        val ms = (0 until count).map { i ->
+            val idx = startIdx + i
+            movement("pg-$idx", today.minusDays((idx % 300 + 1).toLong()), Direction.expense, "1.00", "Shop $idx")
+        }
+        return MovementPage(ms, key)
+    }
 
     private fun link(household: Household, user: User) {
         bankService.startLink(household.id, StartLinkRequest(aspspName = "ING", country = "NL", label = "Test"), user)

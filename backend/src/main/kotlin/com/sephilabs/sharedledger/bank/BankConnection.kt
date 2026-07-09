@@ -69,6 +69,11 @@ class BankConnection(
     @Column(name = "calls_reset_on")
     var callsResetOn: LocalDate? = null,
 
+    // Set when a background sync hits ASPSP_RATE_LIMIT_EXCEEDED; the scheduler skips the connection
+    // until this instant passes. Null = not backing off. Interactive syncs ignore it.
+    @Column(name = "sync_backoff_until")
+    var syncBackoffUntil: Instant? = null,
+
     @Column(name = "created_by_user_id")
     var createdByUserId: UUID? = null,
 

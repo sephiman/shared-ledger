@@ -24,13 +24,21 @@ interface BankConnector {
     fun sessionStatus(sessionId: String): ConsentStatus
 
     /**
-     * One page of movements for an account since [dateFrom]. Pass the previous page's
-     * `continuationKey` to page forward; null starts from the beginning of the window.
+     * One page of an account's movements. Pass the previous page's `continuationKey` to page
+     * forward; null starts a new fetch. Callers must keep paging until a page returns no
+     * `continuationKey` — an empty page may still carry one.
+     *
+     * [strategy] picks the window semantics: [FetchStrategy.LONGEST] ignores the dates and pulls
+     * all available history; [FetchStrategy.DEFAULT] is bounded by [dateFrom] (inclusive) /
+     * [dateTo] (exclusive). [psu], when present, marks the call as interactive (not background).
      */
     fun fetchMovements(
         sessionId: String,
         accountUid: String,
-        dateFrom: LocalDate,
+        dateFrom: LocalDate?,
+        dateTo: LocalDate?,
+        strategy: FetchStrategy,
         continuationKey: String? = null,
+        psu: PsuContext? = null,
     ): MovementPage
 }

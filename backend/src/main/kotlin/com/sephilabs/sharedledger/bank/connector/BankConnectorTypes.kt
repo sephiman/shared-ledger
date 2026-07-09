@@ -12,7 +12,30 @@ import java.time.LocalDate
  * implement the same interface. Every adapter throws [BankConnectorException] on failure — callers
  * catch that one type, exactly like the portfolio price providers' `ProviderException`.
  */
-class BankConnectorException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)
+open class BankConnectorException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)
+
+/**
+ * The ASPSP rejected an unattended (background) fetch for exceeding its per-consent daily budget
+ * (Enable Banking `ASPSP_RATE_LIMIT_EXCEEDED`). The caller backs off for a few hours and retries;
+ * interactive fetches (PSU headers present) are not subject to this.
+ */
+class RateLimitExceededException(message: String, cause: Throwable? = null) : BankConnectorException(message, cause)
+
+/**
+ * How to page an account's transactions.
+ * - [LONGEST]: find the earliest available transaction and fetch everything forward. `dateFrom` is
+ *   only a starting hint and `dateTo` is ignored; no WRONG_TRANSACTIONS_PERIOD. Used for the full
+ *   on-link history sync.
+ * - [DEFAULT]: bounded by `dateFrom` (inclusive) / `dateTo` (exclusive). Used for incremental syncs.
+ */
+enum class FetchStrategy { LONGEST, DEFAULT }
+
+/**
+ * Marks a fetch as happening while the account holder is online. When present these headers are
+ * sent to the ASPSP so the call is treated as interactive (PSU) rather than a background fetch,
+ * which the bank rate-limits to ~4/day. Absent for scheduled/background syncs.
+ */
+data class PsuContext(val ipAddress: String, val userAgent: String)
 
 /** One bank in the provider's catalogue, filtered by country. */
 data class Aspsp(
