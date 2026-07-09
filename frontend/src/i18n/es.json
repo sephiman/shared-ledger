@@ -197,7 +197,11 @@
     "end": "Fin (opcional)",
     "next": "Siguiente",
     "last": "Última ejecución",
-    "run_now": "Ejecutar ahora"
+    "run_now": "Ejecutar ahora",
+    "stats_count_one": "{{count}} recurrente",
+    "stats_count_other": "{{count}} recurrentes",
+    "stats_in": "~{{amount}}/mes entrada",
+    "stats_out": "~{{amount}}/mes salida"
   },
   "budget": {
     "title": "Presupuestos",

@@ -197,7 +197,11 @@
     "end": "End date (optional)",
     "next": "Next",
     "last": "Last materialized",
-    "run_now": "Materialize now"
+    "run_now": "Materialize now",
+    "stats_count_one": "{{count}} recurring",
+    "stats_count_other": "{{count}} recurring",
+    "stats_in": "~{{amount}}/mo in",
+    "stats_out": "~{{amount}}/mo out"
   },
   "budget": {
     "title": "Budgets",

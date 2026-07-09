@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Decimal from "decimal.js";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
 import { useCategories } from "@/api/catalog";
@@ -13,9 +14,37 @@ import {
 } from "@/api/recurring";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select, Textarea } from "@/components/ui/primitives";
 import { formatDate, isoToday, monthName, weekdayName } from "@/lib/dates";
-import { formatMoney } from "@/lib/money";
+import { formatMoney, toDecimal } from "@/lib/money";
 import { categoryIcon } from "@/lib/categoryGroup";
 import { categoryLabel, categoryLabelByCode } from "@/lib/categoryLabel";
+
+// Monthly equivalent of one occurrence at the given cadence, so amounts on
+// different schedules can be summed into a single "per month" figure.
+function monthlyFactor(cadence: RecurringTemplate["cadence"]): Decimal {
+  switch (cadence) {
+    case "weekly":
+      return new Decimal(52).div(12);
+    case "yearly":
+      return new Decimal(1).div(12);
+    case "monthly":
+    default:
+      return new Decimal(1);
+  }
+}
+
+// Count of active templates plus their income/expense totals normalized to a
+// monthly cadence. Inactive templates are excluded from every figure.
+function monthlyStats(templates: RecurringTemplate[]): { count: number; income: Decimal; expense: Decimal } {
+  const active = templates.filter((t) => t.active);
+  let income = new Decimal(0);
+  let expense = new Decimal(0);
+  for (const t of active) {
+    const monthly = toDecimal(t.amount).times(monthlyFactor(t.cadence));
+    if (t.direction === "income") income = income.plus(monthly);
+    else expense = expense.plus(monthly);
+  }
+  return { count: active.length, income, expense };
+}
 
 function defaultInput(): RecurringInput {
   // Defaults match today's date so a freshly-created template fires today
@@ -50,6 +79,8 @@ export function RecurringPage() {
   const [editing, setEditing] = useState<RecurringTemplate | null>(null);
   const [draft, setDraft] = useState<RecurringInput | null>(null);
   const [errors, setErrors] = useState<{ categoryCode?: string; amount?: string; startDate?: string }>({});
+
+  const stats = monthlyStats(templates);
 
   function startNew() {
     setEditing(null);
@@ -115,6 +146,19 @@ export function RecurringPage() {
         <div>
           <h1 className="text-xl font-semibold">{t("recurring.title")}</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("recurring.description")}</p>
+          {!isLoading && (
+            <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-gray-600 dark:text-gray-300">
+              <span className="font-medium">{t("recurring.stats_count", { count: stats.count })}</span>
+              <span aria-hidden className="text-gray-400 dark:text-gray-500">·</span>
+              <span className="text-emerald-600 dark:text-emerald-400">
+                {t("recurring.stats_in", { amount: formatMoney(stats.income, household.currency, i18n.language) })}
+              </span>
+              <span aria-hidden className="text-gray-400 dark:text-gray-500">·</span>
+              <span className="text-rose-600 dark:text-rose-400">
+                {t("recurring.stats_out", { amount: formatMoney(stats.expense, household.currency, i18n.language) })}
+              </span>
+            </p>
+          )}
         </div>
         <div className="flex gap-2">
           <a
