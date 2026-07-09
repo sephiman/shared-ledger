@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1.7
-FROM node:24-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /workspace
 
-COPY package.json ./
+COPY package.json .npmrc ./
 RUN npm install --no-audit --no-fund
 
 COPY tsconfig.json tsconfig.app.json tsconfig.node.json vite.config.ts index.html ./
@@ -10,7 +10,7 @@ COPY public ./public
 COPY src ./src
 RUN npm run build
 
-FROM nginx:1.27-alpine AS runtime
+FROM nginx:1.29-alpine AS runtime
 COPY --from=build /workspace/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 RUN echo "ok" > /usr/share/nginx/html/healthz

@@ -4,8 +4,8 @@ Self-hosted personal-finance application for a household of one or two. Replaces
 
 Single repository, two services orchestrated with Docker Compose:
 
-- **backend** — Kotlin / Spring Boot 4 on JDK 24, Spring Security with cookie sessions, Spring Data JPA + Flyway, Spring Session JDBC, Micrometer + Prometheus, JSON logs.
-- **frontend** — React 19 + TypeScript on Vite 7, TanStack Query for server state, react-i18next for localization, Tailwind 4 with in-house primitives, Recharts 3 for charts, axios for HTTP. Served behind nginx in production with `/api` proxied to the backend.
+- **backend** — Kotlin / Spring Boot 4 on JDK 25, Spring Security with cookie sessions, Spring Data JPA + Flyway, Spring Session JDBC, Micrometer + Prometheus, JSON logs.
+- **frontend** — React 19 + TypeScript on Vite 8, TanStack Query for server state, react-i18next for localization, Tailwind 4 with in-house primitives, Recharts 3 for charts, axios for HTTP. Served behind nginx in production with `/api` proxied to the backend.
 
 Postgres is **not** part of this compose file. It runs externally on a Docker network the operator manages.
 
@@ -409,7 +409,7 @@ everything appears.
 
 For local development outside Docker:
 
-- JDK 24 (Eclipse Temurin recommended) and Gradle 9.5.1+
+- JDK 25 (Eclipse Temurin recommended) and Gradle 9.6.1+
 - Node.js 24+
 - A reachable Postgres instance
 
