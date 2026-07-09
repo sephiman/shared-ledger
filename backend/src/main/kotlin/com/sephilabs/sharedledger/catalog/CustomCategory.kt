@@ -7,6 +7,9 @@ import jakarta.persistence.EmbeddedId
 import jakarta.persistence.Entity
 import jakarta.persistence.Table
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
+import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.query.Param
 import java.io.Serializable
 import java.util.UUID
 
@@ -42,6 +45,11 @@ class CustomCategoryEntity(
 ) : TimestampedEntity()
 
 interface CustomCategoryRepository : JpaRepository<CustomCategoryEntity, CustomCategoryId> {
+
+    @Modifying
+    @Query(value = "DELETE FROM custom_categories WHERE household_id = :hid", nativeQuery = true)
+    fun hardDeleteAllByHouseholdId(@Param("hid") householdId: UUID): Int
+
     fun findAllByIdHouseholdIdOrderBySortOrderAsc(householdId: UUID): List<CustomCategoryEntity>
     fun findByIdHouseholdIdAndIdCode(householdId: UUID, code: String): CustomCategoryEntity?
 }

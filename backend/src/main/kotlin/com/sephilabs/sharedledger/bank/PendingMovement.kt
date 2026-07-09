@@ -11,6 +11,7 @@ import jakarta.persistence.Table
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import java.math.BigDecimal
@@ -88,6 +89,10 @@ class PendingMovement(
 ) : TimestampedEntity()
 
 interface PendingMovementRepository : JpaRepository<PendingMovement, UUID> {
+
+    @Modifying
+    @Query(value = "DELETE FROM pending_movements WHERE household_id = :hid", nativeQuery = true)
+    fun hardDeleteAllByHouseholdId(@Param("hid") householdId: UUID): Int
 
     fun findByIdAndHouseholdId(id: UUID, householdId: UUID): PendingMovement?
 

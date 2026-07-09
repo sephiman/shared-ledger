@@ -9,6 +9,9 @@ import jakarta.persistence.Enumerated
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
+import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.query.Param
 import java.util.UUID
 
 /**
@@ -56,6 +59,11 @@ class CategorizationRule(
 ) : TimestampedEntity()
 
 interface CategorizationRuleRepository : JpaRepository<CategorizationRule, UUID> {
+
+    @Modifying
+    @Query(value = "DELETE FROM bank_categorization_rules WHERE household_id = :hid", nativeQuery = true)
+    fun hardDeleteAllByHouseholdId(@Param("hid") householdId: UUID): Int
+
     fun findByIdAndHouseholdId(id: UUID, householdId: UUID): CategorizationRule?
     fun findAllByHouseholdIdOrderByPriorityAsc(householdId: UUID): List<CategorizationRule>
     fun findFirstByHouseholdIdAndMatchFieldAndMatchOpAndMatchValueIgnoreCase(

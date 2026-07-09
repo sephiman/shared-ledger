@@ -5,6 +5,9 @@ import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
+import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.query.Param
 import java.time.Instant
 import java.util.UUID
 
@@ -41,4 +44,9 @@ class BankAuthSession(
     var createdAt: Instant = Instant.now(),
 )
 
-interface BankAuthSessionRepository : JpaRepository<BankAuthSession, String>
+interface BankAuthSessionRepository : JpaRepository<BankAuthSession, String> {
+
+    @Modifying
+    @Query(value = "DELETE FROM bank_auth_sessions WHERE household_id = :hid", nativeQuery = true)
+    fun hardDeleteAllByHouseholdId(@Param("hid") householdId: UUID): Int
+}

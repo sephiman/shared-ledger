@@ -6,6 +6,9 @@ import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
+import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.query.Param
 import java.util.UUID
 
 /**
@@ -90,4 +93,8 @@ class TelegramSettings(
 
 interface TelegramSettingsRepository : JpaRepository<TelegramSettings, UUID> {
     fun findByHouseholdId(householdId: UUID): TelegramSettings?
+
+    @Modifying
+    @Query(value = "DELETE FROM telegram_settings WHERE household_id = :hid", nativeQuery = true)
+    fun hardDeleteAllByHouseholdId(@Param("hid") householdId: UUID): Int
 }

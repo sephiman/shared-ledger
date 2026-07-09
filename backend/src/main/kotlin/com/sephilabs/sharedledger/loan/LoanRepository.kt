@@ -1,12 +1,20 @@
 package com.sephilabs.sharedledger.loan
 
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import java.time.LocalDate
 import java.util.UUID
 
 interface LoanRepository : JpaRepository<Loan, UUID> {
+
+    /** Hard-delete every loan of the household, INCLUDING soft-deleted (native, bypasses @SQLRestriction).
+     *  loan_schedules and loan_payments are removed via ON DELETE CASCADE. */
+    @Modifying
+    @Query(value = "DELETE FROM loans WHERE household_id = :hid", nativeQuery = true)
+    fun hardDeleteAllByHouseholdId(@Param("hid") householdId: UUID): Int
+
     fun findAllByHouseholdId(householdId: UUID): List<Loan>
     fun findAllByHouseholdIdAndStatus(householdId: UUID, status: LoanStatus): List<Loan>
 }

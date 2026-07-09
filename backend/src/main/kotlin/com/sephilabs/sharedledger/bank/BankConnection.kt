@@ -8,6 +8,9 @@ import jakarta.persistence.Enumerated
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
+import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.query.Param
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
@@ -82,6 +85,13 @@ class BankConnection(
 ) : TimestampedEntity()
 
 interface BankConnectionRepository : JpaRepository<BankConnection, UUID> {
+
+    /** Hard-delete every connection of the household. bank_connection_accounts, bank_sync_runs and any
+     *  remaining pending_movements are removed via ON DELETE CASCADE. */
+    @Modifying
+    @Query(value = "DELETE FROM bank_connections WHERE household_id = :hid", nativeQuery = true)
+    fun hardDeleteAllByHouseholdId(@Param("hid") householdId: UUID): Int
+
     fun findByIdAndHouseholdId(id: UUID, householdId: UUID): BankConnection?
     fun findAllByHouseholdIdOrderByCreatedAtAsc(householdId: UUID): List<BankConnection>
     fun countByHouseholdId(householdId: UUID): Long

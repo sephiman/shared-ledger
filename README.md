@@ -253,6 +253,7 @@ Projection output:
 - Members & invitations: issue and revoke invitations, see pending ones (owners only).
 - FIRE settings (owners only).
 - **Notifications** (owners only): configure the per-household Telegram integration (see below).
+- **Danger zone — Delete all data** (owners only): a confirmation-gated action (type `delete`) that permanently wipes *every* piece of the household's financial data while keeping the household itself and its membership/invitations. It hard-deletes (including soft-deleted rows) transactions, budgets, recurring templates, net-worth snapshots and movements, assets, liabilities and loans (with their value/balance/amortization/schedule/payment history), the investment portfolio (holdings, lots and valuations), bank connections (with their accounts, sync runs, pending movements and categorization rules), and the FIRE, Telegram and auto-snapshot settings. Global reference data (categories, asset classes, FX rates, price history) is never touched.
 
 ### Notifications (Telegram)
 
