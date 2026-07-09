@@ -230,7 +230,7 @@ export function HoldingsTab() {
             <p className="text-gray-500 dark:text-gray-400">{t("portfolio.empty")}</p>
           ) : (
             <>
-              <ul className="space-y-2 md:hidden">
+              <ul className="space-y-2 lg:hidden">
                 {filtered.map((row) => {
                   const isOpen = expandedIds.has(row.holding.id);
                   return (
@@ -295,7 +295,7 @@ export function HoldingsTab() {
                   );
                 })}
               </ul>
-              <div className="hidden overflow-x-auto md:block">
+              <div className="hidden overflow-x-auto lg:block">
               <table className="w-full text-sm">
                 <thead className="text-left text-gray-500 dark:text-gray-400">
                   <tr>
