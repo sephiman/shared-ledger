@@ -65,6 +65,9 @@ const val VALUE_SOURCE_OVERRIDDEN = "overridden"
 // A scheduled snapshot copied this manual class forward from the previous snapshot.
 const val VALUE_SOURCE_CARRIED_OVER = "carried_over"
 
+// The aggregate cash asset class. Backed by a dated adjustment series + a flow-based estimate.
+const val CASH_CLASS = "cash"
+
 @Entity
 @Table(name = "snapshot_asset_values")
 class SnapshotAssetValue(

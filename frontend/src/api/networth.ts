@@ -315,6 +315,8 @@ export function useDeleteAssetValue(householdId: string, assetId: string) {
 export interface NamedValuesAtDate {
   assets: Record<string, string>;
   liabilities: Record<string, string>;
+  // The cash estimate at the date, or null when no adjustment series exists (carry over as before).
+  cash: string | null;
 }
 
 /** Computed value of each active named asset/liability at a date (amortizable → schedule, manual → series). */
@@ -436,5 +438,102 @@ export function useDeleteMovement(householdId: string) {
       await apiClient.delete(`/households/${householdId}/movements/${id}`);
     },
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["movements", householdId] }),
+  });
+}
+
+// --- Cash: a dated adjustment series (source of truth) + a flow-based estimate between them. ---
+
+export interface CashEstimate {
+  date: string;
+  anchorDate: string | null;
+  anchorAmount: string | null;
+  netTransactions: string;
+  netLendings: string;
+  netMovements: string;
+  netFlows: string;
+  // Null when there is no adjustment yet (cash has no series; it carries over as before).
+  estimate: string | null;
+}
+
+export interface CashSettings {
+  includeTransactions: boolean;
+  includeLendings: boolean;
+  includeMovements: boolean;
+}
+
+/** Invalidate everything that depends on the cash series after a mutation. */
+function invalidateCash(qc: ReturnType<typeof useQueryClient>, householdId: string) {
+  void qc.invalidateQueries({ queryKey: ["cash-adjustments", householdId] });
+  void qc.invalidateQueries({ queryKey: ["cash-estimate", householdId] });
+  // The snapshot form prefills cash from the estimate (per-date named-values query).
+  void qc.invalidateQueries({ queryKey: ["named-values", householdId] });
+}
+
+export function useCashAdjustments(householdId: string) {
+  return useQuery({
+    queryKey: ["cash-adjustments", householdId],
+    queryFn: async () => {
+      const raw = (await apiClient.get<{ id: string; adjustmentDate: string; amount: string }[]>(
+        `/households/${householdId}/cash/adjustments`,
+      )).data;
+      return raw.map((e): ValueEntry => ({ id: e.id, date: e.adjustmentDate, value: e.amount }));
+    },
+  });
+}
+
+export function useAddCashAdjustment(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ date, value }: { date: string; value: string }) =>
+      (await apiClient.post(`/households/${householdId}/cash/adjustments`, { adjustmentDate: date, amount: value })).data,
+    onSuccess: () => invalidateCash(qc, householdId),
+  });
+}
+
+export function useUpdateCashAdjustment(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ entryId, date, value }: { entryId: string; date: string; value: string }) =>
+      (await apiClient.patch(`/households/${householdId}/cash/adjustments/${entryId}`, { adjustmentDate: date, amount: value })).data,
+    onSuccess: () => invalidateCash(qc, householdId),
+  });
+}
+
+export function useDeleteCashAdjustment(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (entryId: string) => {
+      await apiClient.delete(`/households/${householdId}/cash/adjustments/${entryId}`);
+    },
+    onSuccess: () => invalidateCash(qc, householdId),
+  });
+}
+
+export function useCashEstimate(householdId: string, date: string) {
+  return useQuery({
+    queryKey: ["cash-estimate", householdId, date],
+    enabled: !!date,
+    queryFn: async () =>
+      (await apiClient.get<CashEstimate>(`/households/${householdId}/cash/estimate`, { params: { date } })).data,
+  });
+}
+
+export function useCashSettings(householdId: string) {
+  return useQuery({
+    queryKey: ["cash-settings", householdId],
+    queryFn: async () => (await apiClient.get<CashSettings>(`/households/${householdId}/cash/settings`)).data,
+  });
+}
+
+export function useUpdateCashSettings(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CashSettings) =>
+      (await apiClient.put<CashSettings>(`/households/${householdId}/cash/settings`, input)).data,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["cash-settings", householdId] });
+      void qc.invalidateQueries({ queryKey: ["cash-estimate", householdId] });
+      void qc.invalidateQueries({ queryKey: ["named-values", householdId] });
+    },
   });
 }

@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { TabBar } from "@/components/ui/TabBar";
 import { SnapshotsTab } from "./SnapshotsTab";
 import { EvolutionTab } from "./EvolutionTab";
-import { MovementsTab } from "./MovementsTab";
+import { FlowsTab } from "./FlowsTab";
 import { AssetsTab } from "./AssetsTab";
 import { LiabilitiesTab } from "./LiabilitiesTab";
 import { LendingsTab } from "../lendings/LendingsTab";
@@ -12,9 +12,9 @@ import { HoldingsTab } from "../portfolio/HoldingsTab";
 import { PortfolioAllocationTab } from "../portfolio/PortfolioAllocationTab";
 import { PortfolioEvolutionTab } from "../portfolio/PortfolioEvolutionTab";
 
-type Tab = "holdings" | "allocation" | "evolution" | "snapshots" | "movements" | "assets" | "liabilities" | "lendings";
+type Tab = "holdings" | "allocation" | "evolution" | "snapshots" | "flows" | "assets" | "liabilities" | "lendings";
 
-const TABS: Tab[] = ["holdings", "allocation", "evolution", "snapshots", "movements", "assets", "liabilities", "lendings"];
+const TABS: Tab[] = ["holdings", "allocation", "evolution", "snapshots", "flows", "assets", "liabilities", "lendings"];
 
 export function NetWorthPage() {
   const { t } = useTranslation();
@@ -36,7 +36,7 @@ export function NetWorthPage() {
     { value: "allocation", label: t("portfolio.allocation") },
     { value: "evolution", label: t("portfolio.evolution") },
     { value: "snapshots", label: t("networth.snapshots") },
-    { value: "movements", label: t("networth.movements") },
+    { value: "flows", label: t("networth.flows") },
     { value: "assets", label: t("networth.assets") },
     { value: "liabilities", label: t("networth.liabilities") },
     { value: "lendings", label: t("networth.lent") },
@@ -65,7 +65,7 @@ export function NetWorthPage() {
         </div>
       )}
       {tab === "snapshots" && <SnapshotsTab />}
-      {tab === "movements" && <MovementsTab />}
+      {tab === "flows" && <FlowsTab />}
       {tab === "assets" && <AssetsTab />}
       {tab === "liabilities" && <LiabilitiesTab />}
       {tab === "lendings" && <LendingsTab />}

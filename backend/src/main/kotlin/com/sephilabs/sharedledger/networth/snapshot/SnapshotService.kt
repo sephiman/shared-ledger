@@ -6,6 +6,9 @@ import com.sephilabs.sharedledger.common.Money
 import com.sephilabs.sharedledger.common.errors.AppException
 import com.sephilabs.sharedledger.identity.user.User
 import com.sephilabs.sharedledger.networth.asset.AssetRepository
+import com.sephilabs.sharedledger.networth.cash.CashAdjustment
+import com.sephilabs.sharedledger.networth.cash.CashAdjustmentRepository
+import com.sephilabs.sharedledger.networth.cash.CashEstimateService
 import com.sephilabs.sharedledger.networth.liability.LiabilityRepository
 import com.sephilabs.sharedledger.notification.NotifyAction
 import com.sephilabs.sharedledger.notification.NotifyActor
@@ -27,6 +30,8 @@ class SnapshotService(
     private val assetClasses: AssetClassRepository,
     private val portfolioValuation: PortfolioValuationService,
     private val namedValues: com.sephilabs.sharedledger.networth.NamedValueResolver,
+    private val cashEstimates: CashEstimateService,
+    private val cashAdjustments: CashAdjustmentRepository,
     private val metrics: AppMetrics,
     private val notifications: NotificationPublisher,
 ) {
@@ -38,7 +43,8 @@ class SnapshotService(
             .associate { it.id.toString() to Money.normalize(namedValues.assetValueAt(it.id, date) ?: BigDecimal.ZERO).toPlainString() }
         val liabMap = liabilities.findAllByHouseholdIdAndActiveTrueOrderByNameAsc(householdId)
             .associate { it.id.toString() to Money.normalize(namedValues.liabilityBalanceAt(it.id, date) ?: BigDecimal.ZERO).toPlainString() }
-        return NamedValuesDto(assetMap, liabMap)
+        val cash = cashEstimates.estimateAt(householdId, date).estimate?.toPlainString()
+        return NamedValuesDto(assetMap, liabMap, cash)
     }
 
     @Transactional
@@ -85,10 +91,17 @@ class SnapshotService(
             createdByUserId = createdByUserId,
             updatedByUserId = createdByUserId,
         )
-        val computedByClass = portfolioValuation.valuationAt(householdId, request.snapshotDate).byClass
+        // Cash is estimated from its adjustment series + marked flows; feed that estimate into the
+        // same "computed" detection used for portfolio classes. Null when there is no series yet.
+        val cashEstimate = cashEstimates.estimateAt(householdId, request.snapshotDate).estimate
+        val computedByClass = portfolioValuation.valuationAt(householdId, request.snapshotDate).byClass +
+            (cashEstimate?.let { mapOf(CASH_CLASS to it) } ?: emptyMap())
         snapshot.assetValues = request.assets.map {
             toAssetValue(snapshot.id, it, computedByClass[it.assetClassCode])
         }.toMutableList()
+        // Correcting cash re-anchors: a user-entered cash value (differing from the estimate) writes
+        // a new adjustment at the snapshot date, so the estimate never becomes a desynced truth.
+        reAnchorCashIfCorrected(householdId, request.snapshotDate, snapshot.assetValues, cashEstimate, createdByUserId)
         snapshot.liabilityBalances = request.liabilities.map {
             SnapshotLiabilityBalance(
                 id = SnapshotLiabilityBalanceId(snapshot.id, it.liabilityId),
@@ -123,7 +136,11 @@ class SnapshotService(
         snapshot.note = request.note
         snapshot.updatedByUserId = by.id
 
-        val computedByClass = portfolioValuation.valuationAt(householdId, request.snapshotDate).byClass
+        // Same cash estimate merge as create so a cash row frozen as 'computed' re-validates on edit.
+        // Editing an existing snapshot re-freezes without touching the series (re-anchor is create-only).
+        val cashEstimate = cashEstimates.estimateAt(householdId, request.snapshotDate).estimate
+        val computedByClass = portfolioValuation.valuationAt(householdId, request.snapshotDate).byClass +
+            (cashEstimate?.let { mapOf(CASH_CLASS to it) } ?: emptyMap())
         snapshot.assetValues.clear()
         snapshot.assetValues.addAll(request.assets.map {
             toAssetValue(snapshot.id, it, computedByClass[it.assetClassCode])
@@ -199,6 +216,33 @@ class SnapshotService(
             }
         }
         return sb.toString()
+    }
+
+    /**
+     * Writes a new cash adjustment at [snapshotDate] when the snapshot's cash value was corrected
+     * away from the estimate — the hybrid re-anchor. Only fires when the series is already active
+     * (an estimate existed); with no series, cash still behaves as a plain carried-over class and
+     * the first anchor is created from the Cash sub-tab. Runs on create only.
+     */
+    private fun reAnchorCashIfCorrected(
+        householdId: UUID,
+        snapshotDate: LocalDate,
+        assetValues: List<SnapshotAssetValue>,
+        cashEstimate: BigDecimal?,
+        userId: UUID,
+    ) {
+        if (cashEstimate == null) return
+        val cash = assetValues.firstOrNull { it.id.assetClassCode == CASH_CLASS } ?: return
+        if (cash.valueSource != VALUE_SOURCE_OVERRIDDEN) return
+        cashAdjustments.save(
+            CashAdjustment(
+                householdId = householdId,
+                adjustmentDate = snapshotDate,
+                amount = cash.value,
+                createdByUserId = userId,
+                updatedByUserId = userId,
+            ),
+        )
     }
 
     /**

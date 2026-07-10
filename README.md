@@ -1,6 +1,6 @@
 # shared-ledger
 
-Self-hosted personal-finance application for a household of one or two. Replaces a spreadsheet workflow for monthly transaction tracking and periodic net-worth snapshots, with budgets, recurring templates, an investment portfolio with automatic pricing, lending tracking, analytics, and a FIRE projection on top.
+Self-hosted personal-finance application for a household of one or two. Replaces a spreadsheet workflow for monthly transaction tracking and periodic net-worth snapshots, with budgets, recurring templates, an investment portfolio with automatic pricing, lending tracking, cash management with a flow-based estimate, analytics, and a FIRE projection on top.
 
 Single repository, two services orchestrated with Docker Compose:
 
@@ -110,7 +110,7 @@ Planned monthly (and optionally annual) expense amounts per category, compared a
 Periodic recordings of the value of each asset class, each named asset, and the outstanding balance of each liability. Snapshots are the source of truth for current net worth.
 
 - Each snapshot has a date and an optional note. Multiple per month are allowed; monthly views use the latest one per month.
-- The **Assets** block has two subgroups shown under one heading: **Classes** — the fixed fungible classes `Cash`, `Index funds`, `ETFs`, `Stocks`, `Crypto`, `Pension` (one value per class) — and **Named assets** (see [Assets](#assets-named)) auto-filled from each asset's dated series.
+- The **Assets** block has two subgroups shown under one heading: **Classes** — the fixed fungible classes `Cash`, `Index funds`, `ETFs`, `Stocks`, `Crypto`, `Pension` (one value per class) — and **Named assets** (see [Assets](#assets-named)) auto-filled from each asset's dated series. **Cash** is prefilled from its own [flow-based estimate](#cash-adjustment-series--flow-based-estimate) (marked *computed*); correcting it re-anchors the cash series (a new adjustment at the snapshot date).
 - **Liabilities** are named entities (see [Liabilities & amortizable loans](#liabilities-and-amortizable-loans)). A **simple** liability auto-fills its last known balance from its own series; an **amortizable** loan auto-fills the **computed balance from its schedule at the snapshot date** (marked *computed*, never 0). Every active liability appears in the form.
 - **Net worth = Assets (classes + named) − Liabilities.** Names (not UUIDs) are shown for named assets and liabilities, including for entities later soft-deleted.
 - The snapshot creation form **prefills from the previous snapshot** and shows delta (absolute and percent) next to each input. If any delta exceeds 50% the form requires explicit confirmation before saving — a typo guard.
@@ -128,7 +128,7 @@ A separate, dedicated workflow for recording capital movements (contributions to
 - A contribution to an asset class represents new capital flowing into that class (e.g. a DCA purchase of ETFs).
 - A withdrawal represents capital leaving a class (e.g. selling stocks).
 - A debt principal payment reduces the outstanding principal of a specific liability.
-- Movements live in their own tab in the net worth section, distinct from transactions.
+- Movements live under the **Flows** container tab (alongside Cash) in the Wealth hub, distinct from transactions.
 - **Movements do NOT alter snapshot values.** Snapshots remain the source of truth for current value. Movements enrich the analytical picture by separating capital flow from market return.
 - A SQL CHECK constraint enforces the type/target combination at the database level.
 
@@ -142,9 +142,22 @@ What movements unlock:
 
 If the operator chooses not to record movements, the app remains correct (net worth via snapshots still works); they only lose the contribution-vs-return decomposition.
 
+### Cash (adjustment series + flow-based estimate)
+
+Cash is a **hybrid**: a manual adjustment series is the source of truth, and between adjustments the balance is **estimated** from the flows the household marks as affecting cash. It lives in a **Cash** sub-tab under the **Flows** container in the Wealth hub (next to Movements). Cash stays an aggregate asset *class*, not a named asset — there is a single cash balance, not multiple accounts (v1).
+
+- **Adjustment series (the truth).** A dated series of `date + amount` entries ("at the close of day X I had Y"), editable and deletable exactly like an asset's value history. An adjustment is the truth of cash at that date; from there cash is estimated via flows.
+- **Estimate between adjustments (computed on demand, never cached).** Estimated cash at a date = the latest adjustment on/before that date **+ the net of the marked flows dated strictly after that adjustment**. Only adjustments (the truth) and each snapshot's frozen value are persisted; the intermediate estimate is always derived.
+- **End-of-day convention.** An adjustment dated `D` means cash at the **close of day D**, so the estimate counts only flows dated **strictly after D** — flows on `D` itself are considered already included. Dates stay day-precision; between multiple adjustments on the same day, the **last one created wins** (tie-break by creation order).
+- **Signed flows (bidirectional).** Each flow adds or subtracts by its sign: **Transactions** (income **+**, expense **−**), **Lent** (lending out **−**, repayment received **+**), **Movements** (withdrawal **+**, contribution **−**, debt payment **−**). The amortizable-loan instalment is **not** a cash flow — the real payment is a transaction (which does affect cash) while the schedule only reduces the liability, so there's no double counting.
+- **Per-type toggles (per household).** An on/off toggle for each of Transactions / Lent / Movements, configured in the Cash sub-tab itself (not general Settings), all on by default. A user who captures a flow type incompletely can turn it off and lean on manual adjustments.
+- **Two-panel layout.** Left: the current estimated balance and the adjustment series (add/edit/delete), with inline helper text making the end-of-day meaning explicit. Right: the flow toggles and a breakdown of the estimate ("since your last adjustment on X (€Y), net flows +€Z → estimated €W"). Panels stack on mobile.
+- **Snapshot integration.** Creating a snapshot prefills Cash with the estimate (marked *computed*, like market classes). Editing that value **re-anchors** — it writes a new adjustment at the snapshot date and freezes the value into the snapshot. Both the Cash sub-tab and the snapshot write to the **same** series. Past snapshots are never rewritten when adjustments or later flows are added.
+- **Compatibility.** With no adjustments and no marked flows, cash behaves exactly as before — carried over from the previous snapshot. The first anchor is created from the Cash sub-tab (or by correcting a snapshot once a series exists).
+
 ### Portfolio (investments)
 
-Individual market holdings — crypto, ETFs, individual stocks, and funds — tracked at the lot level with automatic pricing. Portfolio sits alongside snapshots, movements, assets, liabilities and lendings as sibling tabs under the **Wealth** hub (*Patrimonio* in Spanish).
+Individual market holdings — crypto, ETFs, individual stocks, and funds — tracked at the lot level with automatic pricing. Portfolio sits alongside snapshots, the Flows container (movements + cash), assets, liabilities and lendings as sibling tabs under the **Wealth** hub (*Patrimonio* in Spanish).
 
 - **Holdings** carry an asset class (`crypto`, `etf`, `stock`, `fund`), a symbol, an optional label/ISIN, a native currency, and an optional link to a price provider. Each holding owns a ledger of **lots**.
 - **Lots** are BUY/SELL entries (trade date, quantity, unit price, currency, optional fee and note). Net quantity, remaining cost basis and realized P&L are computed by **replaying the ledger FIFO**; the FX rate into the household base currency is frozen at trade time. Sells are validated so a position can never be oversold.
@@ -253,7 +266,7 @@ Projection output:
 - Members & invitations: issue and revoke invitations, see pending ones (owners only).
 - FIRE settings (owners only).
 - **Notifications** (owners only): configure the per-household Telegram integration (see below).
-- **Danger zone — Delete all data** (owners only): a confirmation-gated action (type `delete`) that permanently wipes *every* piece of the household's financial data while keeping the household itself and its membership/invitations. It hard-deletes (including soft-deleted rows) transactions, budgets, recurring templates, net-worth snapshots and movements, assets, liabilities and lendings (with their value/balance/amortization/schedule/payment history), the investment portfolio (holdings, lots and valuations), bank connections (with their accounts, sync runs, pending movements and categorization rules), and the FIRE, Telegram and auto-snapshot settings. Global reference data (categories, asset classes, FX rates, price history) is never touched.
+- **Danger zone — Delete all data** (owners only): a confirmation-gated action (type `delete`) that permanently wipes *every* piece of the household's financial data while keeping the household itself and its membership/invitations. It hard-deletes (including soft-deleted rows) transactions, budgets, recurring templates, net-worth snapshots and movements, cash adjustments, assets, liabilities and lendings (with their value/balance/amortization/schedule/payment history), the investment portfolio (holdings, lots and valuations), bank connections (with their accounts, sync runs, pending movements and categorization rules), and the FIRE, Telegram, auto-snapshot and cash-estimate settings. Global reference data (categories, asset classes, FX rates, price history) is never touched.
 
 ### Notifications (Telegram)
 
@@ -496,7 +509,7 @@ After step 6:
 3. **Create a recurring template**: `/recurring` → *New template* → monthly rent on day 1. Hit *Materialize now*. Confirm the corresponding transactions for the months that already passed appear in `/transactions`. Click *Materialize now* again — the count must not change (idempotency).
 4. **Set a budget**: `/budgets` → edit the "Groceries" row for the current month, save, then verify the *Month summary* table shows it.
 5. **Take a net-worth snapshot**: `/networth` → *Snapshots* → *New snapshot* → values for every asset class, save. View *Evolution* and *Allocation*.
-6. **Record a net-worth movement**: `/networth` → *Movements* → *Create* → contribution to ETFs.
+6. **Record a net-worth movement**: `/networth` → *Flows* → *Movements* → *Create* → contribution to ETFs. Then open *Flows* → *Cash*, add an adjustment, and confirm the estimated balance reflects flows dated after it.
 7. **Add a portfolio holding**: `/networth` → *Portfolio* → *New holding* → a crypto (e.g. BTC), link it via the search box, add a BUY lot. Prices backfill into `price_history`; confirm the holding shows a current value and P&L. Take a new snapshot and confirm the crypto class is prefilled as *computed*.
 8. **Track a lending**: `/networth` → *Prestado* → *Prestar dinero* → a borrower, a principal, simple interest. Open it, register a payment, and confirm the interest/principal split shows. The Dashboard should now display the money-lent tile.
 9. **Configure FIRE**: `/fire` → set target, contribution, scenarios. View the projection chart.

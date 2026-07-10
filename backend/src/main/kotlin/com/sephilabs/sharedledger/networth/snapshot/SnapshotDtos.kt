@@ -88,6 +88,9 @@ data class PrefillView(
 data class NamedValuesDto(
     val assets: Map<String, String>,
     val liabilities: Map<String, String>,
+    // The cash estimate at the date, or null when no adjustment series exists yet (cash then
+    // carries over as before). Used to prefill/auto-fill the 'cash' asset class in the form.
+    val cash: String? = null,
 )
 
 data class EvolutionPoint(

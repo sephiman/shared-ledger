@@ -71,15 +71,22 @@ export function SnapshotsTab() {
     if (panel.kind !== "create" || !portfolioValuation) return;
     setAssets((prev) => {
       const next = { ...prev };
-      const computed = new Set<string>();
       for (const [code, value] of Object.entries(portfolioValuation.byClass)) {
         if (!editedClasses.has(code)) {
           next[code] = value;
-          computed.add(code);
         }
       }
-      setComputedClasses(computed);
       return next;
+    });
+    setComputedClasses((prevComputed) => {
+      const computed = new Set<string>();
+      for (const code of Object.keys(portfolioValuation.byClass)) {
+        if (!editedClasses.has(code)) computed.add(code);
+      }
+      // Cash is computed from its own estimate (set by the named-values effect); keep that flag so
+      // the two effects don't race to overwrite each other's computed set.
+      if (prevComputed.has("cash")) computed.add("cash");
+      return computed;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portfolioValuation, panel.kind]);
@@ -89,6 +96,13 @@ export function SnapshotsTab() {
   // the user already edited in this panel keeps its manual value (overridden).
   useEffect(() => {
     if (panel.kind !== "create" || !namedValues) return;
+    // Cash prefills from its flow-based estimate (null when there is no adjustment series yet, in
+    // which case it keeps the carried-over value from startNew and stays user-overridable).
+    if (namedValues.cash != null && !editedClasses.has("cash")) {
+      const cash = namedValues.cash;
+      setAssets((prev) => ({ ...prev, cash }));
+      setComputedClasses((prev) => new Set(prev).add("cash"));
+    }
     setNamed((prev) => {
       const next = { ...prev };
       const computed = new Set<string>();

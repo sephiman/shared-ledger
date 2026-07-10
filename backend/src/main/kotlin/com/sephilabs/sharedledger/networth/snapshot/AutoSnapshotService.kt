@@ -7,6 +7,7 @@ import com.sephilabs.sharedledger.household.HouseholdRole
 import com.sephilabs.sharedledger.identity.user.User
 import com.sephilabs.sharedledger.networth.NamedValueResolver
 import com.sephilabs.sharedledger.networth.asset.AssetRepository
+import com.sephilabs.sharedledger.networth.cash.CashEstimateService
 import com.sephilabs.sharedledger.networth.liability.LiabilityRepository
 import com.sephilabs.sharedledger.portfolio.ASSET_CLASS_TO_SNAPSHOT_CODE
 import com.sephilabs.sharedledger.portfolio.PortfolioValuationService
@@ -27,6 +28,7 @@ class AutoSnapshotService(
     private val liabilities: LiabilityRepository,
     private val assets: AssetRepository,
     private val namedValues: NamedValueResolver,
+    private val cashEstimates: CashEstimateService,
     private val portfolioValuation: PortfolioValuationService,
     private val members: HouseholdMemberRepository,
     private val props: AppProperties,
@@ -103,7 +105,11 @@ class AutoSnapshotService(
             .filter { it.unitPrice != null }
             .mapNotNull { ASSET_CLASS_TO_SNAPSHOT_CODE[it.assetClass] }
             .toSet()
-        val computedByClass = valuation.byClass.filterKeys { it in pricedClasses }
+        // Cash: use the flow-based estimate when a series exists (marked 'computed'); otherwise it
+        // falls through to carry-forward below, exactly as before.
+        val cashEstimate = cashEstimates.estimateAt(householdId, date).estimate
+        val computedByClass = valuation.byClass.filterKeys { it in pricedClasses } +
+            (cashEstimate?.let { mapOf(CASH_CLASS to it) } ?: emptyMap())
 
         // "Previous" = latest snapshot strictly before this date (by date, then creation).
         val previous = snapshots.findUpTo(householdId, date.minusDays(1)).firstOrNull()

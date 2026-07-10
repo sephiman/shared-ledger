@@ -9,6 +9,8 @@ import com.sephilabs.sharedledger.catalog.CustomCategoryRepository
 import com.sephilabs.sharedledger.fire.FireSettingsRepository
 import com.sephilabs.sharedledger.lending.LendingRepository
 import com.sephilabs.sharedledger.networth.asset.AssetRepository
+import com.sephilabs.sharedledger.networth.cash.CashAdjustmentRepository
+import com.sephilabs.sharedledger.networth.cash.CashEstimateSettingsRepository
 import com.sephilabs.sharedledger.networth.liability.LiabilityRepository
 import com.sephilabs.sharedledger.networth.movement.MovementRepository
 import com.sephilabs.sharedledger.networth.snapshot.AutoSnapshotSettingsRepository
@@ -54,6 +56,8 @@ class HouseholdDataWipeService(
     private val fireSettings: FireSettingsRepository,
     private val telegramSettings: TelegramSettingsRepository,
     private val autoSnapshotSettings: AutoSnapshotSettingsRepository,
+    private val cashAdjustments: CashAdjustmentRepository,
+    private val cashEstimateSettings: CashEstimateSettingsRepository,
 ) {
 
     private val log = LoggerFactory.getLogger(javaClass)
@@ -65,6 +69,7 @@ class HouseholdDataWipeService(
         val movementCount = movements.hardDeleteAllByHouseholdId(householdId)
         val balanceCount = snapshots.deleteAllLiabilityBalancesByHouseholdId(householdId)
         val snapshotCount = snapshots.hardDeleteAllByHouseholdId(householdId)
+        val cashAdjustmentCount = cashAdjustments.hardDeleteAllByHouseholdId(householdId)
 
         // 2. Planning / catalog data referencing transactions or category codes.
         val recurringCount = recurringTemplates.hardDeleteAllByHouseholdId(householdId)
@@ -87,14 +92,15 @@ class HouseholdDataWipeService(
         val fireCount = fireSettings.hardDeleteAllByHouseholdId(householdId)
         val telegramCount = telegramSettings.hardDeleteAllByHouseholdId(householdId)
         val autoSnapshotCount = autoSnapshotSettings.hardDeleteAllByHouseholdId(householdId)
+        val cashSettingsCount = cashEstimateSettings.hardDeleteAllByHouseholdId(householdId)
 
         log.info(
-            "household_data_wipe household={} by_user={} tx={} mv={} snap={} snap_liab_balances={} " +
+            "household_data_wipe household={} by_user={} tx={} mv={} snap={} snap_liab_balances={} cash_adj={} " +
                 "recurring={} budgets={} custom_categories={} holdings={} assets={} liabilities={} lendings={} " +
-                "pending={} rules={} auth_sessions={} bank_connections={} fire={} telegram={} auto_snapshot={}",
-            householdId, byUserId, txCount, movementCount, snapshotCount, balanceCount,
+                "pending={} rules={} auth_sessions={} bank_connections={} fire={} telegram={} auto_snapshot={} cash_settings={}",
+            householdId, byUserId, txCount, movementCount, snapshotCount, balanceCount, cashAdjustmentCount,
             recurringCount, budgetCount, customCategoryCount, holdingCount, assetCount, liabilityCount, lendingCount,
-            pendingCount, ruleCount, authSessionCount, connectionCount, fireCount, telegramCount, autoSnapshotCount,
+            pendingCount, ruleCount, authSessionCount, connectionCount, fireCount, telegramCount, autoSnapshotCount, cashSettingsCount,
         )
     }
 }
