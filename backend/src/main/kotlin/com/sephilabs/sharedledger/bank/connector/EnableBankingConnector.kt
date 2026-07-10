@@ -8,7 +8,6 @@ import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClientResponseException
-import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -130,10 +129,26 @@ class EnableBankingConnector(
         }
         val body = get(query, headers)
         val raw = body.path("transactions")
-        val movements = raw.mapNotNull { mapMovement(it) }
+        val movements = raw.mapNotNull { txn ->
+            mapMovement(txn) ?: run {
+                // Log the SHAPE (never values) of a dropped row so an unmapped movement — e.g. a
+                // pending entry whose fields the mapper rejects — is diagnosable from prod logs.
+                log.warn(
+                    "eb_drop account={} status={} hasCreditDebit={} hasBooking={} hasValue={} hasTxnDate={} hasAmount={}",
+                    accountUid,
+                    txn.path("status").textOrNull(),
+                    txn.hasNonNull("credit_debit_indicator"),
+                    txn.hasNonNull("booking_date"),
+                    txn.hasNonNull("value_date"),
+                    txn.hasNonNull("transaction_date"),
+                    txn.path("transaction_amount").hasNonNull("amount"),
+                )
+                null
+            }
+        }
         if (raw.size() != movements.size) {
             log.info(
-                "eb_fetch account={} rawTransactions={} mapped={} dropped={} (unmappable: missing date or credit_debit_indicator)",
+                "eb_fetch account={} rawTransactions={} mapped={} dropped={}",
                 accountUid, raw.size(), movements.size, raw.size() - movements.size,
             )
         } else {
@@ -145,13 +160,21 @@ class EnableBankingConnector(
     private fun mapMovement(node: JsonNode): BankMovement? {
         val amountNode = node.path("transaction_amount")
         val rawAmount = amountNode.path("amount").textOrNull() ?: return null
+        val amount = rawAmount.toBigDecimalOrNull() ?: return null
         val direction = when (node.path("credit_debit_indicator").asText().uppercase()) {
             "CRDT" -> Direction.income
             "DBIT" -> Direction.expense
-            else -> return null
+            // Pending (PDNG) entries from some ASPSPs (notably ING) omit credit_debit_indicator; the
+            // signed transaction_amount then carries the direction (negative = debit/expense). We keep
+            // the row instead of dropping it — otherwise a same-day transaction is invisible until the
+            // bank books it the next business day.
+            else -> if (amount.signum() < 0) Direction.expense else Direction.income
         }
-        val booking = (node.path("booking_date").textOrNull() ?: node.path("value_date").textOrNull())
-            ?.let { LocalDate.parse(it) } ?: return null
+        // Pending entries may also lack booking_date/value_date; transaction_date is the last resort.
+        val booking = (node.path("booking_date").textOrNull()
+            ?: node.path("value_date").textOrNull()
+            ?: node.path("transaction_date").textOrNull())
+            ?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return null
         val counterparty = when (direction) {
             Direction.expense -> node.path("creditor").path("name").textOrNull()
             Direction.income -> node.path("debtor").path("name").textOrNull()
@@ -166,9 +189,9 @@ class EnableBankingConnector(
         return BankMovement(
             bankMovementId = id,
             bookingDate = booking,
-            valueDate = node.path("value_date").textOrNull()?.let { LocalDate.parse(it) },
+            valueDate = node.path("value_date").textOrNull()?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
             direction = direction,
-            amount = BigDecimal(rawAmount).abs(),
+            amount = amount.abs(),
             currency = amountNode.path("currency").textOrNull() ?: "EUR",
             counterparty = counterparty,
             description = description,
