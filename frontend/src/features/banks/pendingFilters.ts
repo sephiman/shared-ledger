@@ -1,4 +1,4 @@
-import type { MovementStatus, PendingMovement } from "@/api/banks";
+import type { MovementStatus } from "@/api/banks";
 
 export type GroupBy = "none" | "connection" | "category";
 export type CategorisationState = "all" | "uncategorized" | "categorized";
@@ -32,29 +32,4 @@ export function hasActivePendingFilters(s: PendingFilterState): boolean {
     s.categorisationState !== PENDING_FILTER_DEFAULTS.categorisationState ||
     s.duplicatesOnly
   );
-}
-
-/**
- * Apply the client-side pending filters: free-text search, categorisation state, and the independent
- * possible-duplicate toggle. [categoryCodeOf] resolves a movement's effective category (including any
- * unsaved per-row edits) so the state filter matches what the user sees.
- */
-export function filterPendingMovements(
-  movements: PendingMovement[],
-  opts: { search: string; categorisationState: CategorisationState; duplicatesOnly: boolean },
-  categoryCodeOf: (m: PendingMovement) => string,
-): PendingMovement[] {
-  const q = opts.search.trim().toLowerCase();
-  return movements.filter((m) => {
-    if (q && ![m.counterparty, m.description, m.reference].some((v) => (v ?? "").toLowerCase().includes(q))) {
-      return false;
-    }
-    if (opts.categorisationState !== "all") {
-      const categorized = categoryCodeOf(m).trim() !== "";
-      if (opts.categorisationState === "categorized" && !categorized) return false;
-      if (opts.categorisationState === "uncategorized" && categorized) return false;
-    }
-    return !(opts.duplicatesOnly && !m.possibleDuplicate);
-
-  });
 }

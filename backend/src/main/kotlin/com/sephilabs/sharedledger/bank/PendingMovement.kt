@@ -104,12 +104,25 @@ interface PendingMovementRepository : JpaRepository<PendingMovement, UUID> {
 
     fun findAllByHouseholdIdAndStatus(householdId: UUID, status: MovementStatus): List<PendingMovement>
 
+    /**
+     * The full-dataset pending query behind the review inbox. Text search ([search], a pre-lowercased
+     * `%term%` or null) and categorisation ([categorized]: true = has a suggested category, false =
+     * none, null = either) are applied server-side so the filters cover every row, not just a page.
+     * The possible-duplicate filter is computed cross-table in the service, so it isn't expressed here.
+     */
     @Query(
         value = """
         SELECT m FROM PendingMovement m
         WHERE m.householdId = :hid
           AND m.status = :status
           AND (:connectionId IS NULL OR m.connectionId = :connectionId)
+          AND (:search IS NULL
+               OR LOWER(m.counterparty) LIKE :search
+               OR LOWER(m.description) LIKE :search
+               OR LOWER(m.reference) LIKE :search)
+          AND (:categorized IS NULL
+               OR (:categorized = TRUE AND m.suggestedCategoryCode IS NOT NULL AND m.suggestedCategoryCode <> '')
+               OR (:categorized = FALSE AND (m.suggestedCategoryCode IS NULL OR m.suggestedCategoryCode = '')))
         ORDER BY m.bookingDate DESC, m.createdAt DESC
         """,
         countQuery = """
@@ -117,12 +130,21 @@ interface PendingMovementRepository : JpaRepository<PendingMovement, UUID> {
         WHERE m.householdId = :hid
           AND m.status = :status
           AND (:connectionId IS NULL OR m.connectionId = :connectionId)
+          AND (:search IS NULL
+               OR LOWER(m.counterparty) LIKE :search
+               OR LOWER(m.description) LIKE :search
+               OR LOWER(m.reference) LIKE :search)
+          AND (:categorized IS NULL
+               OR (:categorized = TRUE AND m.suggestedCategoryCode IS NOT NULL AND m.suggestedCategoryCode <> '')
+               OR (:categorized = FALSE AND (m.suggestedCategoryCode IS NULL OR m.suggestedCategoryCode = '')))
         """,
     )
     fun search(
         @Param("hid") householdId: UUID,
         @Param("status") status: MovementStatus,
         @Param("connectionId") connectionId: UUID?,
+        @Param("search") search: String?,
+        @Param("categorized") categorized: Boolean?,
         pageable: Pageable,
     ): Page<PendingMovement>
 

@@ -9,6 +9,9 @@ enum class SyncFrequency { daily, twice_daily }
 /** Review-inbox lifecycle. `confirmed` items are linked to a generated transaction. */
 enum class MovementStatus { pending, confirmed, rejected }
 
+/** Filters the pending inbox by whether a movement already carries a (suggested) category. */
+enum class PendingCategorisation { categorized, uncategorized }
+
 /** What a categorisation rule matches on. */
 enum class RuleField { counterparty, description, amount }
 

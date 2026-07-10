@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
@@ -24,15 +24,17 @@ import { addDaysIso, formatDate } from "@/lib/dates";
 import { showToast } from "@/lib/toastBus";
 import {
   PENDING_FILTER_DEFAULTS,
-  filterPendingMovements,
   hasActivePendingFilters,
   type CategorisationState,
   type GroupBy,
 } from "./pendingFilters";
 
-// The API caps a page at 200; we load that once and do search/group/select/paginate client-side.
+// Search / categorisation / duplicates are filtered server-side over the full dataset. The API caps
+// a page at 200; we load that (already-filtered) page once and do group/select/paginate client-side.
 const FETCH_SIZE = 200;
 const CLIENT_PAGE = 25;
+// Debounce the free-text search so typing doesn't fire a server request per keystroke.
+const SEARCH_DEBOUNCE_MS = 300;
 // Mirrors the backend's DUPLICATE_WINDOW_DAYS: a possible-duplicate match can be a few days off the
 // booking date, so "view match" must filter to the same ±window, not just the exact day.
 const DUPLICATE_WINDOW_DAYS = 3;
@@ -51,10 +53,21 @@ export function PendingInbox({ householdId, currency, locale }: { householdId: s
   const [categoryById, setCategoryById] = useState<Record<string, string>>({});
   const [directionById, setDirectionById] = useState<Record<string, Direction>>({});
 
+  // Debounced mirror of `search`; the input updates instantly, the server query follows on a delay.
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  useEffect(() => {
+    const handle = window.setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(handle);
+  }, [search]);
+
   const { data: connections = [] } = useBankConnections(householdId);
   const { data, isLoading } = usePendingMovements(householdId, {
     status,
     connectionId: connectionId || undefined,
+    search: debouncedSearch.trim() || undefined,
+    categorisation: categorisationState === "all" ? undefined : categorisationState,
+    // The possible-duplicate flag is only computed for pending items, so this bites only there.
+    duplicatesOnly: status === "pending" && duplicatesOnly ? true : undefined,
     page: 0,
     size: FETCH_SIZE,
   });
@@ -80,17 +93,9 @@ export function PendingInbox({ householdId, currency, locale }: { householdId: s
   const resolveCategory = (m: PendingMovement) => categoryById[m.id] ?? m.suggestedCategoryCode ?? "";
   const resolveDirection = (m: PendingMovement): Direction => directionById[m.id] ?? m.direction;
 
-  // The possible-duplicate flag is only computed for pending items, so the "only duplicates" toggle
-  // only bites in the pending view.
-  const filtered = useMemo(
-    () =>
-      filterPendingMovements(
-        loaded,
-        { search, categorisationState, duplicatesOnly: editable && duplicatesOnly },
-        resolveCategory,
-      ),
-    [loaded, search, categorisationState, duplicatesOnly, editable, categoryById],
-  );
+  // Search / categorisation / duplicates are already applied server-side, so the loaded page is the
+  // filtered set; grouping, selection and client pagination run over it.
+  const filtered = loaded;
 
   const selectedIds = useMemo(() => filtered.filter((m) => selected.has(m.id)).map((m) => m.id), [filtered, selected]);
   const allSelected = filtered.length > 0 && filtered.every((m) => selected.has(m.id));

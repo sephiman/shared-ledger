@@ -25,9 +25,13 @@ class PendingMovementController(
         @PathVariable householdId: UUID,
         @RequestParam(defaultValue = "pending") status: MovementStatus,
         @RequestParam(required = false) connectionId: UUID?,
+        @RequestParam(required = false) search: String?,
+        @RequestParam(required = false) categorisation: PendingCategorisation?,
+        @RequestParam(defaultValue = "false") duplicatesOnly: Boolean,
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "50") size: Int,
-    ): PageResponse<PendingMovementDto> = service.list(householdId, status, connectionId, page, size)
+    ): PageResponse<PendingMovementDto> =
+        service.list(householdId, status, connectionId, search, categorisation, duplicatesOnly, page, size)
 
     @GetMapping("/count")
     fun count(@PathVariable householdId: UUID): PendingCountDto =

@@ -178,9 +178,21 @@ export function useBankConnections(householdId: string, enabled = true) {
   });
 }
 
+export type PendingCategorisation = "categorized" | "uncategorized";
+
 export function usePendingMovements(
   householdId: string,
-  filters: { status: MovementStatus; connectionId?: string; page?: number; size?: number },
+  filters: {
+    status: MovementStatus;
+    connectionId?: string;
+    // Server-side filters over the full dataset (not just the loaded page): free-text search,
+    // categorisation state, and possible-duplicates only. Omit to disable each.
+    search?: string;
+    categorisation?: PendingCategorisation;
+    duplicatesOnly?: boolean;
+    page?: number;
+    size?: number;
+  },
   enabled = true,
 ) {
   return useQuery({

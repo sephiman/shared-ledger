@@ -11,6 +11,7 @@ import com.sephilabs.sharedledger.transaction.TransactionRepository
 import com.sephilabs.sharedledger.transaction.TransactionRequest
 import com.sephilabs.sharedledger.transaction.TransactionService
 import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
@@ -45,26 +46,59 @@ class PendingMovementService(
         householdId: UUID,
         status: MovementStatus,
         connectionId: UUID?,
+        search: String?,
+        categorisation: PendingCategorisation?,
+        duplicatesOnly: Boolean,
         page: Int,
         size: Int,
     ): PageResponse<PendingMovementDto> {
-        val pageable = PageRequest.of(page.coerceAtLeast(0), size.coerceIn(1, 200))
-        val result = pending.search(householdId, status, connectionId, pageable)
-        val items = result.content
-        if (items.isEmpty()) return PageResponse.of(emptyList(), pageable.pageNumber, pageable.pageSize, result.totalElements)
+        val pageNum = page.coerceAtLeast(0)
+        val pageSize = size.coerceIn(1, 200)
+        // Pre-lowercase + wrap for the case-insensitive LIKE; blank search means "no text filter".
+        val searchTerm = search?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }?.let { "%$it%" }
+        val categorized: Boolean? = when (categorisation) {
+            PendingCategorisation.categorized -> true
+            PendingCategorisation.uncategorized -> false
+            null -> null
+        }
 
-        val connById = connections.findAllByHouseholdIdOrderByCreatedAtAsc(householdId).associateBy { it.id }
-        val acctById = items.map { it.accountId }.toSet()
-            .mapNotNull { accounts.findById(it).orElse(null) }.associateBy { it.id }
+        // "Only possible duplicates" is a computed, cross-table flag (only meaningful for pending) that
+        // can't be expressed in SQL. When requested, load the whole filtered set, flag it in memory,
+        // then paginate the survivors here so the filter still covers the full dataset.
+        if (duplicatesOnly && status == MovementStatus.pending) {
+            val all = pending.search(householdId, status, connectionId, searchTerm, categorized, Pageable.unpaged()).content
+            if (all.isEmpty()) return PageResponse.of(emptyList(), pageNum, pageSize, 0)
+            val dupIndex = buildDuplicateIndex(householdId, all)
+            val duplicates = all.filter { matchesDuplicate(dupIndex, it) }
+            val pageItems = duplicates.drop(pageNum * pageSize).take(pageSize)
+            return PageResponse.of(buildDtos(householdId, pageItems, status, dupIndex), pageNum, pageSize, duplicates.size.toLong())
+        }
+
+        val pageable = PageRequest.of(pageNum, pageSize)
+        val result = pending.search(householdId, status, connectionId, searchTerm, categorized, pageable)
+        val items = result.content
+        if (items.isEmpty()) return PageResponse.of(emptyList(), pageNum, pageSize, result.totalElements)
         // Duplicate detection only matters for still-pending items; load the whole comparison
         // window once (not per row) and match in memory.
         val dupIndex = if (status == MovementStatus.pending) buildDuplicateIndex(householdId, items) else emptyMap()
+        return PageResponse.of(buildDtos(householdId, items, status, dupIndex), pageNum, pageSize, result.totalElements)
+    }
 
-        val dtos = items.map {
+    /** Resolve the connection/account for each row (batched) and map to DTOs, flagging duplicates. */
+    private fun buildDtos(
+        householdId: UUID,
+        items: List<PendingMovement>,
+        status: MovementStatus,
+        dupIndex: Map<String, List<LocalDate>>,
+    ): List<PendingMovementDto> {
+        if (items.isEmpty()) return emptyList()
+        val connById = connections.findAllByHouseholdIdOrderByCreatedAtAsc(householdId).associateBy { it.id }
+        val acctById = items.map { it.accountId }.toSet()
+            .mapNotNull { accounts.findById(it).orElse(null) }.associateBy { it.id }
+        return items.map {
             val dup = status == MovementStatus.pending && matchesDuplicate(dupIndex, it)
             it.toDto(connById[it.connectionId], acctById[it.accountId], dup)
         }
-        return PageResponse.of(dtos, pageable.pageNumber, pageable.pageSize, result.totalElements)
     }
 
     @Transactional

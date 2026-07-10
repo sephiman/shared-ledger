@@ -75,7 +75,7 @@ class BankIngestionIntegrationTest @Autowired constructor(
         assertThat(pendingService.pendingCount(household.id)).isEqualTo(2)
 
         val expenseCat = expenseCategory(household)
-        val expenseItem = pending.search(household.id, MovementStatus.pending, null, PageRequest.of(0, 100)).content.first { it.direction == Direction.expense }
+        val expenseItem = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content.first { it.direction == Direction.expense }
         val confirmed = pendingService.confirm(household.id, expenseItem.id, ConfirmMovementRequest(categoryCode = expenseCat), user)
 
         assertThat(confirmed.status).isEqualTo(MovementStatus.confirmed)
@@ -92,10 +92,10 @@ class BankIngestionIntegrationTest @Autowired constructor(
         assertThat(pending.findAll().count { it.householdId == household.id }).isEqualTo(2)
 
         // Reject the remaining pending item — creates nothing, disappears from the pending inbox.
-        val remaining = pending.search(household.id, MovementStatus.pending, null, PageRequest.of(0, 100)).content.single()
+        val remaining = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content.single()
         pendingService.reject(household.id, remaining.id, user)
         assertThat(pendingService.pendingCount(household.id)).isZero()
-        assertThat(pending.search(household.id, MovementStatus.rejected, null, PageRequest.of(0, 100)).content).hasSize(1)
+        assertThat(pending.search(household.id, MovementStatus.rejected, null, null, null, PageRequest.of(0, 100)).content).hasSize(1)
         // Still only the one confirmed transaction.
         assertThat(transactions.findByHouseholdIdAndOccurrenceDateBetween(household.id, today.minusDays(30), today)).hasSize(1)
     }
@@ -113,7 +113,7 @@ class BankIngestionIntegrationTest @Autowired constructor(
         link(household, user)
         assertThat(pendingService.pendingCount(household.id)).isEqualTo(2)
 
-        val items = pending.search(household.id, MovementStatus.pending, null, PageRequest.of(0, 100)).content
+        val items = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content
         val (first, second) = items[0] to items[1]
 
         // Reject both, then restore one individually and one via batch.
@@ -133,7 +133,7 @@ class BankIngestionIntegrationTest @Autowired constructor(
         val back = pending.findByIdAndHouseholdId(first.id, household.id)!!
         assertThat(back.processedAt).isNull()
         assertThat(back.processedByUserId).isNull()
-        assertThat(pending.search(household.id, MovementStatus.rejected, null, PageRequest.of(0, 100)).content).isEmpty()
+        assertThat(pending.search(household.id, MovementStatus.rejected, null, null, null, PageRequest.of(0, 100)).content).isEmpty()
         assertThat(transactions.findByHouseholdIdAndOccurrenceDateBetween(household.id, today.minusDays(30), today)).isEmpty()
     }
 
@@ -144,7 +144,7 @@ class BankIngestionIntegrationTest @Autowired constructor(
         fake.movements.add(movement("nr-1", today.minusDays(1), Direction.expense, "5.00", "Shop"))
         link(household, user)
 
-        val item = pending.search(household.id, MovementStatus.pending, null, PageRequest.of(0, 100)).content.single()
+        val item = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content.single()
         assertThatThrownBy { pendingService.restore(household.id, item.id) }
             .isInstanceOf(AppException::class.java)
             .hasMessageContaining("PENDING_MOVEMENT_NOT_REJECTED")
@@ -170,7 +170,7 @@ class BankIngestionIntegrationTest @Autowired constructor(
 
         link(household, user)
 
-        val item = pending.search(household.id, MovementStatus.pending, null, PageRequest.of(0, 100)).content.single()
+        val item = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content.single()
         assertThat(item.suggestedCategoryCode).isEqualTo(expenseCat)
 
         val result = pendingService.confirmBatch(household.id, listOf(ConfirmBatchItem(item.id)), user)
@@ -189,7 +189,7 @@ class BankIngestionIntegrationTest @Autowired constructor(
         fake.movements.add(movement("b-1", today.minusDays(1), Direction.expense, "5.00", "Kiosk"))
         link(household, user)
 
-        val item = pending.search(household.id, MovementStatus.pending, null, PageRequest.of(0, 100)).content.single()
+        val item = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content.single()
         assertThat(item.suggestedCategoryCode).isNull()
 
         // No rule + no chosen category → skipped, nothing created.
@@ -227,7 +227,7 @@ class BankIngestionIntegrationTest @Autowired constructor(
 
         link(household, user)
 
-        val item = pending.search(household.id, MovementStatus.pending, null, PageRequest.of(0, 100)).content.single()
+        val item = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content.single()
         assertThat(item.amount).isEqualByComparingTo("90.00")
         assertThat(item.originalAmount).isEqualByComparingTo("100.00")
         assertThat(item.originalCurrency).isEqualTo("USD")
@@ -263,7 +263,7 @@ class BankIngestionIntegrationTest @Autowired constructor(
         link(household, user)
 
         // Nothing was categorised at sync time (no rules existed yet).
-        val ingested = pending.search(household.id, MovementStatus.pending, null, PageRequest.of(0, 100)).content
+        val ingested = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content
         assertThat(ingested).allMatch { it.suggestedCategoryCode == null }
         val corner = ingested.first { it.counterparty == "Corner Store" }
         val kiosk = ingested.first { it.counterparty == "Coffee Kiosk" }
@@ -299,6 +299,54 @@ class BankIngestionIntegrationTest @Autowired constructor(
             assertThat(pending.findByIdAndHouseholdId(it.id, household.id)!!.status).isEqualTo(MovementStatus.pending)
         }
         assertThat(transactions.findByHouseholdIdAndOccurrenceDateBetween(household.id, today.minusDays(30), today)).isEmpty()
+    }
+
+    @Test
+    fun `pending filters (search, categorisation, duplicates) are applied across the full dataset`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val expenseCat = expenseCategory(household)
+        fake.movements.addAll(
+            listOf(
+                movement("f-1", today.minusDays(1), Direction.expense, "12.50", "Grocery Store"),
+                movement("f-2", today.minusDays(2), Direction.expense, "8.00", "Coffee House"),
+                movement("f-3", today.minusDays(3), Direction.income, "100.00", "Employer Payroll"),
+            ),
+        )
+        link(household, user)
+
+        // Categorise one item; the server-side "categorised" filter keys off suggestedCategoryCode.
+        val ingested = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content
+        val grocery = ingested.first { it.counterparty == "Grocery Store" }
+        pendingService.edit(household.id, grocery.id, EditMovementRequest(suggestedCategoryCode = expenseCat))
+
+        // Text search matches counterparty/description/reference, over every row (not just a page).
+        val searchHit = pendingService.list(household.id, MovementStatus.pending, null, "coffee", null, false, 0, 50)
+        assertThat(searchHit.items.map { it.counterparty }).containsExactly("Coffee House")
+
+        // Categorisation filters split the whole dataset by presence of a suggested category.
+        val categorised = pendingService.list(household.id, MovementStatus.pending, null, null, PendingCategorisation.categorized, false, 0, 50)
+        assertThat(categorised.items.map { it.counterparty }).containsExactly("Grocery Store")
+        val uncategorised = pendingService.list(household.id, MovementStatus.pending, null, null, PendingCategorisation.uncategorized, false, 0, 50)
+        assertThat(uncategorised.items.map { it.counterparty }).containsExactlyInAnyOrder("Coffee House", "Employer Payroll")
+
+        // Pagination runs on the filtered dataset: page size 1 still reports the full filtered total.
+        val firstPage = pendingService.list(household.id, MovementStatus.pending, null, null, PendingCategorisation.uncategorized, false, 0, 1)
+        assertThat(firstPage.items).hasSize(1)
+        assertThat(firstPage.total).isEqualTo(2)
+
+        // Duplicates-only: confirm the grocery item so a matching transaction exists, ingest a second
+        // identical movement, and only that possible-duplicate is returned by the filter.
+        pendingService.confirm(household.id, grocery.id, ConfirmMovementRequest(categoryCode = expenseCat), user)
+        fake.movements.clear()
+        fake.movements.add(movement("f-4", today.minusDays(1), Direction.expense, "12.50", "Grocery Store 2"))
+        val connectionId = connections.findAllByHouseholdIdOrderByCreatedAtAsc(household.id).single().id
+        syncService.sync(connectionId)
+
+        val dupes = pendingService.list(household.id, MovementStatus.pending, null, null, null, true, 0, 50)
+        assertThat(dupes.items.map { it.counterparty }).containsExactly("Grocery Store 2")
+        assertThat(dupes.total).isEqualTo(1)
+        assertThat(dupes.items.single().possibleDuplicate).isTrue()
     }
 
     // --- helpers ---------------------------------------------------------------------------------
