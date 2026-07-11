@@ -63,6 +63,7 @@ export interface PendingMovement {
   status: MovementStatus;
   suggestedCategoryCode: string | null;
   createdTransactionId: string | null;
+  createdMovementId: string | null;
   possibleDuplicate: boolean;
 }
 
@@ -89,6 +90,15 @@ export interface ConfirmMovementInput {
   direction?: Direction | null;
   note?: string | null;
   saveRule?: boolean;
+}
+
+export type MovementType = "contribution" | "withdrawal" | "debt_payment";
+
+export interface ConfirmAsMovementInput {
+  type: MovementType;
+  assetClassCode?: string | null;
+  liabilityId?: string | null;
+  note?: string | null;
 }
 
 export interface EditMovementInput {
@@ -279,6 +289,22 @@ export function useConfirmMovement(householdId: string) {
     mutationFn: async ({ id, input }: { id: string; input: ConfirmMovementInput }) =>
       (await apiClient.post<PendingMovement>(`${base(householdId)}/pending/${id}/confirm`, input)).data,
     onSuccess: () => invalidateAll(qc, householdId),
+    meta: { silentSuccess: true },
+  });
+}
+
+/** Confirm a pending item as a net-worth movement; also refresh movement/networth-derived data. */
+export function useConfirmAsMovement(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, input }: { id: string; input: ConfirmAsMovementInput }) =>
+      (await apiClient.post<PendingMovement>(`${base(householdId)}/pending/${id}/confirm-as-movement`, input)).data,
+    onSuccess: () => {
+      invalidateAll(qc, householdId);
+      void qc.invalidateQueries({ queryKey: ["movements", householdId] });
+      void qc.invalidateQueries({ queryKey: ["fire-projection", householdId] });
+      void qc.invalidateQueries({ queryKey: ["cash-estimate", householdId] });
+    },
     meta: { silentSuccess: true },
   });
 }

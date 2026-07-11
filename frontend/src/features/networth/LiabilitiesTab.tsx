@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
 import {
@@ -29,6 +29,13 @@ export function LiabilitiesTab() {
   const [nameError, setNameError] = useState<string | null>(null);
   const [chargeError, setChargeError] = useState<string | null>(null);
   const [openAmort, setOpenAmort] = useState<string | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  // The edit form renders at the top of the page while the list stays below, so scroll it into
+  // view when editing starts — otherwise clicking edit on a row far down leaves the form off-screen.
+  useEffect(() => {
+    if (editing) panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [editing]);
 
   function startEdit(value: EditingLiability | null) {
     setEditing(value);
@@ -70,6 +77,7 @@ export function LiabilitiesTab() {
       </div>
 
       {editing && (
+        <div ref={panelRef}>
         <Card>
           <CardHeader><p className="font-medium">{editing.id ? t("common.edit") : t("networth.new_liability")}</p></CardHeader>
           <CardBody className="space-y-3">
@@ -119,6 +127,7 @@ export function LiabilitiesTab() {
             </div>
           </CardBody>
         </Card>
+        </div>
       )}
 
       <Card>

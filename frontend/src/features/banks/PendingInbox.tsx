@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
@@ -28,6 +28,7 @@ import {
   type CategorisationState,
   type GroupBy,
 } from "./pendingFilters";
+import { MarkAsMovementDialog } from "./MarkAsMovementDialog";
 
 // Search / categorisation / duplicates are filtered server-side over the full dataset. The API caps
 // a page at 200; we load that (already-filtered) page once and do group/select/paginate client-side.
@@ -38,6 +39,11 @@ const SEARCH_DEBOUNCE_MS = 300;
 // Mirrors the backend's DUPLICATE_WINDOW_DAYS: a possible-duplicate match can be a few days off the
 // booking date, so "view match" must filter to the same ±window, not just the exact day.
 const DUPLICATE_WINDOW_DAYS = 3;
+
+// Reject reads as mildly destructive: a bordered `secondary` button with a red tint (not a full
+// danger fill). Shared by the per-row and bulk Reject buttons so they match.
+const REJECT_BUTTON_CLASS =
+  "border-red-300 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/30";
 
 export function PendingInbox({ householdId, currency, locale }: { householdId: string; currency: string; locale: string }) {
   const { t } = useTranslation();
@@ -209,6 +215,7 @@ export function PendingInbox({ householdId, currency, locale }: { householdId: s
   const renderRow = (m: PendingMovement) => (
     <MovementRow
       key={m.id}
+      householdId={householdId}
       movement={m}
       currency={currency}
       locale={locale}
@@ -311,7 +318,7 @@ export function PendingInbox({ householdId, currency, locale }: { householdId: s
                 ))}
               </Select>
               <Button disabled={confirmBatch.isPending} onClick={confirmSelected}>{t("banks.confirm")}</Button>
-              <Button variant="secondary" disabled={rejectBatch.isPending} onClick={rejectSelected}>{t("banks.reject")}</Button>
+              <Button variant="secondary" className={REJECT_BUTTON_CLASS} disabled={rejectBatch.isPending} onClick={rejectSelected}>{t("banks.reject")}</Button>
               <Button variant="ghost" onClick={() => setSelected(new Set())}>{t("banks.clear_selection")}</Button>
             </CardBody>
           </Card>
@@ -410,9 +417,10 @@ function buildGroups(
 }
 
 function MovementRow({
-  movement, currency, locale, categories, editable, selectable, restorable, selected, onToggle,
+  householdId, movement, currency, locale, categories, editable, selectable, restorable, selected, onToggle,
   categoryValue, onCategoryChange, direction, onDirectionChange, onConfirm, onReject, onRestore, onSaveDescription, busy,
 }: {
+  householdId: string;
   movement: PendingMovement;
   currency: string;
   locale: string;
@@ -434,7 +442,23 @@ function MovementRow({
 }) {
   const { t, i18n } = useTranslation();
   const [editing, setEditing] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [markMovementOpen, setMarkMovementOpen] = useState(false);
   const [desc, setDesc] = useState(movement.description ?? "");
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Dismiss the ⋯ overflow menu on outside click or Escape (mirrors UserMenu).
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointer = (e: MouseEvent) => { if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setMenuOpen(false); };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
 
   const options = categories.filter((c) => c.kind === direction);
   const income = direction === "income";
@@ -472,6 +496,7 @@ function MovementRow({
       </div>
 
       {editable && (
+        // One row: inputs on the left, actions pushed to the right (they wrap as a unit on mobile).
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Select value={direction} onChange={(e) => onDirectionChange(e.target.value as Direction)} className="w-28">
             <option value="expense">{t("common.expense")}</option>
@@ -483,10 +508,59 @@ function MovementRow({
               <option key={c.code} value={c.code}>{categoryLabel(c, t)}</option>
             ))}
           </Select>
-          <Button disabled={!categoryValue || busy} onClick={onConfirm}>{t("banks.confirm")}</Button>
-          <Button variant="ghost" onClick={() => setEditing((v) => !v)}>{t("common.edit")}</Button>
-          <Button variant="secondary" disabled={busy} onClick={onReject}>{t("banks.reject")}</Button>
+          {/* Actions — Confirm primary, Reject a quieter bordered button, the rest under ⋯. */}
+          <div className="ml-auto flex items-center gap-2">
+            <Button disabled={!categoryValue || busy} onClick={onConfirm}>{t("banks.confirm")}</Button>
+            <Button variant="secondary" className={REJECT_BUTTON_CLASS} disabled={busy} onClick={onReject}>{t("banks.reject")}</Button>
+            <div ref={menuRef} className="relative">
+              <Button
+                variant="secondary"
+                className="px-3"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                aria-label={t("common.more")}
+                onClick={() => setMenuOpen((v) => !v)}
+              >
+                ⋯
+              </Button>
+              {menuOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 z-20 mt-1 w-48 rounded-md border border-border bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => { setMenuOpen(false); setEditing((v) => !v); }}
+                    className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+                  >
+                    {t("common.edit")}
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={busy}
+                    onClick={() => { setMenuOpen(false); setMarkMovementOpen(true); }}
+                    className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50 dark:text-gray-200 dark:hover:bg-gray-700"
+                  >
+                    {t("banks.mark_as_movement")}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
+      )}
+
+      {markMovementOpen && (
+        <MarkAsMovementDialog
+          open={markMovementOpen}
+          householdId={householdId}
+          movement={movement}
+          currency={currency}
+          locale={locale}
+          onClose={() => setMarkMovementOpen(false)}
+        />
       )}
 
       {editable && editing && (

@@ -301,7 +301,8 @@ system, gated by two extra per-household toggles (bank movements, bank connectio
 
 Connect real bank accounts through **Enable Banking** (a licensed PSD2 aggregator, read-only
 account information — AIS) and sync movements into a **review inbox**. Nothing enters the ledger
-automatically: confirming a pending movement is what generates a normal transaction. This is a
+automatically: confirming a pending movement is what generates a normal transaction (or, for
+capital reallocations, a net-worth movement — see the review inbox below). This is a
 connector abstraction (Enable Banking is the primary provider; Yapily is a documented alternative;
 Wise could be added via its own API) with the always-available CSV import as the fallback.
 
@@ -354,6 +355,15 @@ Wise could be added via its own API) with the always-available CSV import as the
   confirms send one aggregated notification. A **possible-duplicate warning** flags manual
   transactions that look like an incoming movement (warns only, never auto-discards). Rejected
   items don't reappear and are visible under a "rejected" filter.
+- **Mark as movement** (per item, under "More"): instead of a transaction, a pending item can be
+  confirmed as a **net-worth movement** — for capital reallocations (a transfer to savings, a debt
+  principal payment) that shouldn't land in the income/expense ledger. A small dialog collects the
+  movement **type** (preselected from the item's direction — income → withdrawal, expense →
+  contribution, switchable to debt payment) and **target** (asset class, or liability for debt
+  payments); the item's date and amount carry over. It reuses `MovementService` (same target
+  validation as the manual Movements tab), records the produced movement via `created_movement_id`,
+  and marks the item `confirmed` like any other — no category or learned rule is involved. This is a
+  single-item action; batch confirm stays transaction-only.
 - **Categorisation**: configurable rules (counterparty / description / amount → category +
   direction) applied during sync, and learning from corrections — confirming with a category
   remembers "this counterparty → this category" for next time. No ML.

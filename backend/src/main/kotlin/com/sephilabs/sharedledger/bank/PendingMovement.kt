@@ -21,8 +21,9 @@ import java.util.UUID
 
 /**
  * A raw bank movement awaiting review. Its own entity with its own endpoints — the transaction
- * tables/endpoints are never touched. Confirming generates a transaction and sets
- * [createdTransactionId] + status=confirmed so the item is never re-ingested.
+ * tables/endpoints are never touched. Confirming generates either a transaction (sets
+ * [createdTransactionId]) or a net-worth movement (sets [createdMovementId]) and flips
+ * status=confirmed so the item is never re-ingested. Exactly one of the two links is set.
  */
 @Entity
 @Table(name = "pending_movements")
@@ -80,6 +81,9 @@ class PendingMovement(
 
     @Column(name = "created_transaction_id")
     var createdTransactionId: UUID? = null,
+
+    @Column(name = "created_movement_id")
+    var createdMovementId: UUID? = null,
 
     @Column(name = "processed_at")
     var processedAt: Instant? = null,

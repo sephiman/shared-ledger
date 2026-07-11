@@ -44,6 +44,14 @@ class PendingMovementController(
         @Valid @RequestBody body: ConfirmMovementRequest,
     ): PendingMovementDto = service.confirm(householdId, id, body, currentUser.requireUser())
 
+    /** Confirm a pending item as a net-worth movement (capital reallocation) instead of a transaction. */
+    @PostMapping("/{id}/confirm-as-movement")
+    fun confirmAsMovement(
+        @PathVariable householdId: UUID,
+        @PathVariable id: UUID,
+        @Valid @RequestBody body: ConfirmAsMovementRequest,
+    ): PendingMovementDto = service.confirmAsMovement(householdId, id, body, currentUser.requireUser())
+
     @PostMapping("/{id}/reject")
     fun reject(@PathVariable householdId: UUID, @PathVariable id: UUID): PendingMovementDto =
         service.reject(householdId, id, currentUser.requireUser())

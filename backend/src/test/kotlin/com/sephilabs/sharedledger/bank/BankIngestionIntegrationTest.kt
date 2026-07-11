@@ -13,6 +13,8 @@ import com.sephilabs.sharedledger.household.Household
 import com.sephilabs.sharedledger.household.HouseholdRepository
 import com.sephilabs.sharedledger.identity.user.User
 import com.sephilabs.sharedledger.identity.user.UserRepository
+import com.sephilabs.sharedledger.networth.movement.MovementRepository
+import com.sephilabs.sharedledger.networth.movement.MovementType
 import com.sephilabs.sharedledger.portfolio.price.FxRate
 import com.sephilabs.sharedledger.portfolio.price.FxRateRepository
 import com.sephilabs.sharedledger.transaction.Direction
@@ -41,6 +43,7 @@ class BankIngestionIntegrationTest @Autowired constructor(
     private val connections: BankConnectionRepository,
     private val syncRuns: BankSyncRunRepository,
     private val transactions: TransactionRepository,
+    private val movementRepo: MovementRepository,
     private val fxRates: FxRateRepository,
     private val categories: CategoryService,
     private val props: AppProperties,
@@ -98,6 +101,57 @@ class BankIngestionIntegrationTest @Autowired constructor(
         assertThat(pending.search(household.id, MovementStatus.rejected, null, null, null, PageRequest.of(0, 100)).content).hasSize(1)
         // Still only the one confirmed transaction.
         assertThat(transactions.findByHouseholdIdAndOccurrenceDateBetween(household.id, today.minusDays(30), today)).hasSize(1)
+    }
+
+    @Test
+    fun `confirming a pending item as a net-worth movement links a movement, not a transaction`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        fake.movements.add(movement("mv-1", today.minusDays(1), Direction.expense, "500.00", "Broker Transfer"))
+        link(household, user)
+
+        val item = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content.single()
+        val confirmed = pendingService.confirmAsMovement(
+            household.id,
+            item.id,
+            ConfirmAsMovementRequest(type = MovementType.contribution, assetClassCode = "etfs"),
+            user,
+        )
+
+        // The item is terminal, linked to a movement (not a transaction), and gone from the inbox.
+        assertThat(confirmed.status).isEqualTo(MovementStatus.confirmed)
+        assertThat(confirmed.createdMovementId).isNotNull()
+        assertThat(confirmed.createdTransactionId).isNull()
+        assertThat(pendingService.pendingCount(household.id)).isZero()
+
+        // A net-worth movement was created with the item's date + amount; the ledger is untouched.
+        val movements = movementRepo.findInRange(household.id, today.minusDays(30), today)
+        assertThat(movements).hasSize(1)
+        val m = movements.single()
+        assertThat(m.type).isEqualTo(MovementType.contribution)
+        assertThat(m.assetClassCode).isEqualTo("etfs")
+        assertThat(m.amount).isEqualByComparingTo("500.00")
+        assertThat(m.movementDate).isEqualTo(today.minusDays(1))
+        assertThat(transactions.findByHouseholdIdAndOccurrenceDateBetween(household.id, today.minusDays(30), today)).isEmpty()
+    }
+
+    @Test
+    fun `confirming as a movement with an invalid target is rejected and creates nothing`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        fake.movements.add(movement("mv-2", today.minusDays(1), Direction.expense, "10.00", "Shop"))
+        link(household, user)
+        val item = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content.single()
+
+        // contribution requires an asset class, not a liability → MOVEMENT_TARGET_INVALID.
+        assertThatThrownBy {
+            pendingService.confirmAsMovement(household.id, item.id, ConfirmAsMovementRequest(type = MovementType.contribution), user)
+        }.isInstanceOf(AppException::class.java).hasMessageContaining("MOVEMENT_TARGET_INVALID")
+
+        // The item stays pending and neither a movement nor a transaction was created.
+        assertThat(pendingService.pendingCount(household.id)).isEqualTo(1)
+        assertThat(movementRepo.findInRange(household.id, today.minusDays(30), today)).isEmpty()
+        assertThat(transactions.findByHouseholdIdAndOccurrenceDateBetween(household.id, today.minusDays(30), today)).isEmpty()
     }
 
     @Test

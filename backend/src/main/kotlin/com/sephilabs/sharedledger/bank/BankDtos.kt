@@ -1,6 +1,7 @@
 package com.sephilabs.sharedledger.bank
 
 import com.fasterxml.jackson.annotation.JsonFormat
+import com.sephilabs.sharedledger.networth.movement.MovementType
 import com.sephilabs.sharedledger.transaction.Direction
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
@@ -95,6 +96,8 @@ data class PendingMovementDto(
     val status: MovementStatus,
     val suggestedCategoryCode: String?,
     val createdTransactionId: UUID?,
+    // Set instead of createdTransactionId when the item was confirmed as a net-worth movement.
+    val createdMovementId: UUID?,
     // Warning only: a manual transaction looks like this movement (same date+amount, close desc).
     val possibleDuplicate: Boolean,
 )
@@ -107,6 +110,21 @@ data class ConfirmMovementRequest(
     val note: String? = null,
     // Remember counterparty -> category as a learned rule.
     val saveRule: Boolean = true,
+)
+
+/**
+ * Confirm a pending item as a net-worth movement (capital reallocation) instead of a transaction.
+ * The target rules mirror [com.sephilabs.sharedledger.networth.movement.MovementService.validateTarget]:
+ * contribution/withdrawal require [assetClassCode], debt_payment requires [liabilityId]. The item's
+ * date and amount are reused; no category or learned rule is involved.
+ */
+data class ConfirmAsMovementRequest(
+    @field:NotNull(message = "validation.required")
+    val type: MovementType,
+    val assetClassCode: String? = null,
+    val liabilityId: UUID? = null,
+    @field:Size(max = 500)
+    val note: String? = null,
 )
 
 data class EditMovementRequest(

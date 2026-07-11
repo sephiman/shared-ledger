@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Decimal from "decimal.js";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
@@ -79,6 +79,13 @@ export function RecurringPage() {
   const [editing, setEditing] = useState<RecurringTemplate | null>(null);
   const [draft, setDraft] = useState<RecurringInput | null>(null);
   const [errors, setErrors] = useState<{ categoryCode?: string; amount?: string; startDate?: string }>({});
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  // The edit form renders at the top of the page while the list stays below, so scroll it into
+  // view when editing starts — otherwise clicking edit on a row far down leaves the form off-screen.
+  useEffect(() => {
+    if (editing) panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [editing]);
 
   const stats = monthlyStats(templates);
 
@@ -173,6 +180,7 @@ export function RecurringPage() {
       </div>
 
       {draft && (
+        <div ref={panelRef}>
         <Card>
           <CardHeader>
             <p className="font-medium">{editing ? t("common.edit") : t("recurring.new")}</p>
@@ -290,6 +298,7 @@ export function RecurringPage() {
             </div>
           </CardBody>
         </Card>
+        </div>
       )}
 
       <Card>

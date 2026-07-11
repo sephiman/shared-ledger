@@ -41,6 +41,7 @@
     "cancel": "Cancelar",
     "delete": "Borrar",
     "edit": "Editar",
+    "more": "Más",
     "create": "Crear",
     "loading": "Cargando…",
     "empty": "Nada por aquí.",
@@ -188,7 +189,9 @@
     "category_skipped_direction": "{{count}} omitidos — dirección distinta",
     "link_success": "Banco vinculado",
     "completing_link": "Completando vinculación…",
-    "callback_missing": "Faltan datos de autorización del banco."
+    "callback_missing": "Faltan datos de autorización del banco.",
+    "mark_as_movement": "Marcar como movimiento",
+    "marked_as_movement": "Confirmado como movimiento"
   },
   "recurring": {
     "title": "Recurrentes",

@@ -41,6 +41,7 @@
     "cancel": "Cancel",
     "delete": "Delete",
     "edit": "Edit",
+    "more": "More",
     "create": "Create",
     "loading": "Loading…",
     "empty": "Nothing here yet.",
@@ -188,7 +189,9 @@
     "category_skipped_direction": "{{count}} skipped — different direction",
     "link_success": "Bank linked",
     "completing_link": "Completing link…",
-    "callback_missing": "Missing authorization details from the bank."
+    "callback_missing": "Missing authorization details from the bank.",
+    "mark_as_movement": "Mark as movement",
+    "marked_as_movement": "Confirmed as movement"
   },
   "recurring": {
     "title": "Recurring",

@@ -3,6 +3,8 @@ package com.sephilabs.sharedledger.bank
 import com.sephilabs.sharedledger.common.PageResponse
 import com.sephilabs.sharedledger.common.errors.AppException
 import com.sephilabs.sharedledger.identity.user.User
+import com.sephilabs.sharedledger.networth.movement.MovementRequest
+import com.sephilabs.sharedledger.networth.movement.MovementService
 import com.sephilabs.sharedledger.notification.NotificationPublisher
 import com.sephilabs.sharedledger.notification.NotifyActor
 import com.sephilabs.sharedledger.observability.AppMetrics
@@ -23,7 +25,9 @@ import java.util.UUID
  * The review inbox. Confirming generates a real transaction (reusing
  * [TransactionService.createInternal]) and links it back so the item is never re-ingested. Single
  * confirm notifies normally; batch confirm creates silently and emits one aggregated notification.
- * Reject discards (creates nothing) and the item stays hidden on the next sync.
+ * A pending item can also be confirmed as a net-worth movement instead (see [confirmAsMovement]) —
+ * for capital reallocations that shouldn't hit the income/expense ledger. Reject discards (creates
+ * nothing) and the item stays hidden on the next sync.
  */
 @Service
 class PendingMovementService(
@@ -31,6 +35,7 @@ class PendingMovementService(
     private val connections: BankConnectionRepository,
     private val accounts: BankConnectionAccountRepository,
     private val transactionService: TransactionService,
+    private val movementService: MovementService,
     private val transactions: TransactionRepository,
     private val categorization: CategorizationService,
     private val notifications: NotificationPublisher,
@@ -110,6 +115,21 @@ class PendingMovementService(
         createTransaction(householdId, movement, categoryCode, direction, request.note, by, notify = true)
         markConfirmed(movement, categoryCode, by)
         if (request.saveRule) categorization.learn(householdId, movement.counterparty, categoryCode, direction, by)
+        metrics.bankMovementsIngested(1)
+        return movement.toDto(connections.findById(movement.connectionId).orElse(null), account(movement), false)
+    }
+
+    /**
+     * Confirm a pending item as a net-worth movement instead of a transaction: reuses the item's
+     * date and amount, delegates target validation + creation to [MovementService.create], and links
+     * the result via [PendingMovement.createdMovementId]. No category and no rule-learning — those are
+     * transaction concepts. The item is a single-row action only (batch confirm stays transaction-only).
+     */
+    @Transactional
+    fun confirmAsMovement(householdId: UUID, id: UUID, request: ConfirmAsMovementRequest, by: User): PendingMovementDto {
+        val movement = requirePending(householdId, id)
+        createMovement(householdId, movement, request, by)
+        markConfirmed(movement, categoryCode = null, by)
         metrics.bankMovementsIngested(1)
         return movement.toDto(connections.findById(movement.connectionId).orElse(null), account(movement), false)
     }
@@ -242,15 +262,39 @@ class PendingMovementService(
         movement.createdTransactionId = tx.id
     }
 
+    private fun createMovement(
+        householdId: UUID,
+        movement: PendingMovement,
+        request: ConfirmAsMovementRequest,
+        by: User,
+    ) {
+        // MovementService.create() validates the type/target pairing (MOVEMENT_TARGET_INVALID).
+        val created = movementService.create(
+            householdId,
+            MovementRequest(
+                movementDate = movement.bookingDate,
+                type = request.type,
+                assetClassCode = request.assetClassCode,
+                liabilityId = request.liabilityId,
+                amount = movement.amount,
+                description = (request.note ?: movementDescription(movement))?.take(500),
+            ),
+            by,
+        )
+        movement.createdMovementId = created.id
+    }
+
     private fun restoreToPending(movement: PendingMovement) {
         movement.status = MovementStatus.pending
         movement.processedAt = null
         movement.processedByUserId = null
     }
 
-    private fun markConfirmed(movement: PendingMovement, categoryCode: String, by: User) {
+    // categoryCode is null when confirming as a net-worth movement (movements have no category);
+    // in that case the existing suggestedCategoryCode is left untouched.
+    private fun markConfirmed(movement: PendingMovement, categoryCode: String?, by: User) {
         movement.status = MovementStatus.confirmed
-        movement.suggestedCategoryCode = categoryCode
+        if (categoryCode != null) movement.suggestedCategoryCode = categoryCode
         movement.processedAt = Instant.now()
         movement.processedByUserId = by.id
     }
@@ -318,6 +362,7 @@ class PendingMovementService(
         status = status,
         suggestedCategoryCode = suggestedCategoryCode,
         createdTransactionId = createdTransactionId,
+        createdMovementId = createdMovementId,
         possibleDuplicate = possibleDuplicate,
     )
 
