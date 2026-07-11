@@ -249,7 +249,7 @@
     "cash_adjustments": "Ajustes",
     "cash_add_adjustment": "Añadir ajuste",
     "cash_adjustment_date": "Fecha",
-    "cash_end_of_day_hint": "Este es tu efectivo al cierre del día seleccionado; solo los flujos con fecha posterior ajustan la estimación.",
+    "cash_end_of_day_hint": "El importe se toma como tu efectivo al cierre del día seleccionado. Seguirá fluctuando después según la configuración; solo los flujos con fecha posterior ajustan la estimación.",
     "cash_what_affects": "Qué afecta a la estimación",
     "cash_flow_transactions": "Transacciones",
     "cash_flow_lendings": "Préstamos",

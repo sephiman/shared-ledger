@@ -1,10 +1,11 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
 import { useSnapshots } from "@/api/networth";
 import { useContributionSeries } from "@/api/analytics";
 import { useAssetClasses } from "@/api/catalog";
 import { Card, CardBody, CardHeader } from "@/components/ui/primitives";
+import { RangeSelector, defaultRange, type RangeValue } from "@/components/ui/RangeSelector";
 import {
   Area,
   AreaChart,
@@ -17,14 +18,25 @@ import {
   YAxis,
 } from "recharts";
 import { formatMoney, formatNumber } from "@/lib/money";
+import { cn } from "@/lib/cn";
+import {
+  buildEvolutionRows,
+  filterSnapshotsByRange,
+  CONTRIBUTIONS_KEY,
+  LIABILITIES_KEY,
+  NET_WORTH_KEY,
+  type EvolutionRow,
+} from "./evolution";
 
 const PALETTE = ["#0ea5e9", "#22c55e", "#a855f7", "#f97316", "#ef4444", "#14b8a6"];
+const NET_WORTH_COLOR = "#111827";
+const CONTRIBUTIONS_COLOR = "#6b7280";
+const LIABILITIES_COLOR = "#dc2626";
 
-interface EvolutionRow {
-  date: string;
-  netWorth: number;
-  contributions: number | null;
-  [classKey: string]: number | string | null;
+interface LegendEntry {
+  key: string;
+  name: string;
+  color: string;
 }
 
 export function EvolutionTab() {
@@ -33,6 +45,17 @@ export function EvolutionTab() {
   const { data: snapshots = [] } = useSnapshots(household.householdId);
   const { data: assetClasses = [] } = useAssetClasses();
   const { data: contributions } = useContributionSeries(household.householdId);
+
+  const [range, setRange] = useState<RangeValue>(defaultRange("all"));
+  // Legend keys that are toggled off. Net worth is recomputed from whatever stays visible.
+  const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
+  const toggle = (key: string) =>
+    setHidden((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
   const contributionByDate = useMemo(() => {
     const m = new Map<string, number>();
@@ -44,32 +67,37 @@ export function EvolutionTab() {
     return m;
   }, [contributions]);
 
-  const data = useMemo<EvolutionRow[]>(() => {
-    return snapshots.map((s) => {
-      const row: EvolutionRow = {
-        date: s.snapshotDate,
-        netWorth: 0,
-        contributions: contributionByDate.get(s.snapshotDate) ?? null,
-      };
-      let totalAssets = 0;
-      for (const cls of assetClasses) {
-        const v = Number(s.assets.find((a) => a.assetClassCode === cls.code)?.value ?? 0);
-        row[cls.code] = v;
-        totalAssets += v;
-      }
-      const totalLiabilities = Number(s.totalLiabilities);
-      row.netWorth = totalAssets - totalLiabilities;
-      return row;
-    });
-  }, [snapshots, assetClasses, contributionByDate]);
+  const filtered = useMemo(() => filterSnapshotsByRange(snapshots, range), [snapshots, range]);
+  const data = useMemo(
+    () => buildEvolutionRows(filtered, assetClasses, contributionByDate, hidden),
+    [filtered, assetClasses, contributionByDate, hidden],
+  );
 
   const overlayVisible = (contributions?.points.length ?? 0) > 0;
+  const liabilitiesPresent = useMemo(() => data.some((r) => r.liabilities > 0), [data]);
+  const showContributions = overlayVisible && !hidden.has(CONTRIBUTIONS_KEY);
+
+  // Full legend (including hidden entries, which render dimmed) — clicking any toggles it.
+  const legendEntries = useMemo<LegendEntry[]>(() => {
+    const entries: LegendEntry[] = assetClasses.map((cls, idx) => ({
+      key: cls.code,
+      name: t(`asset.${cls.code}`),
+      color: PALETTE[idx % PALETTE.length],
+    }));
+    entries.push({ key: NET_WORTH_KEY, name: t("networth.net_worth"), color: NET_WORTH_COLOR });
+    if (liabilitiesPresent) entries.push({ key: LIABILITIES_KEY, name: t("networth.liabilities"), color: LIABILITIES_COLOR });
+    if (overlayVisible) entries.push({ key: CONTRIBUTIONS_KEY, name: t("networth.contributions"), color: CONTRIBUTIONS_COLOR });
+    return entries;
+  }, [assetClasses, liabilitiesPresent, overlayVisible, t]);
 
   return (
     <Card>
       <CardHeader>
         <p className="font-medium">{t("networth.evolution")}</p>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("networth.evolution_description")}</p>
+        <div className="mt-3 flex flex-wrap items-end gap-3">
+          <RangeSelector value={range} onChange={setRange} />
+        </div>
       </CardHeader>
       <CardBody className="h-96">
         {data.length === 0 ? (
@@ -85,38 +113,57 @@ export function EvolutionTab() {
                   <EvolutionTooltip
                     {...props}
                     assetClasses={assetClasses}
+                    hidden={hidden}
                     currency={household.currency}
                     locale={i18n.language}
-                    showContributions={overlayVisible}
+                    showContributions={showContributions}
+                    showLiabilities={liabilitiesPresent && !hidden.has(LIABILITIES_KEY)}
                   />
                 )}
               />
-              <Legend />
-              {assetClasses.map((cls, idx) => (
-                <Area
-                  key={cls.code}
-                  type="monotone"
-                  dataKey={cls.code}
-                  stackId="assets"
-                  stroke={PALETTE[idx % PALETTE.length]}
-                  fill={PALETTE[idx % PALETTE.length]}
-                  name={t(`asset.${cls.code}`)}
-                  fillOpacity={0.7}
-                />
-              ))}
-              <Line
-                type="monotone"
-                dataKey="netWorth"
-                stroke="#111827"
-                strokeWidth={2}
-                dot={false}
-                name={t("networth.net_worth")}
+              <Legend
+                content={<ClickableLegend entries={legendEntries} hidden={hidden} onToggle={toggle} />}
               />
-              {overlayVisible && (
+              {assetClasses.map((cls, idx) =>
+                hidden.has(cls.code) ? null : (
+                  <Area
+                    key={cls.code}
+                    type="monotone"
+                    dataKey={cls.code}
+                    stackId="assets"
+                    stroke={PALETTE[idx % PALETTE.length]}
+                    fill={PALETTE[idx % PALETTE.length]}
+                    name={t(`asset.${cls.code}`)}
+                    fillOpacity={0.7}
+                  />
+                ),
+              )}
+              {!hidden.has(NET_WORTH_KEY) && (
+                <Line
+                  type="monotone"
+                  dataKey="netWorth"
+                  stroke={NET_WORTH_COLOR}
+                  strokeWidth={2}
+                  dot={false}
+                  name={t("networth.net_worth")}
+                />
+              )}
+              {liabilitiesPresent && !hidden.has(LIABILITIES_KEY) && (
+                <Line
+                  type="monotone"
+                  dataKey="liabilities"
+                  stroke={LIABILITIES_COLOR}
+                  strokeWidth={1.5}
+                  strokeDasharray="4 4"
+                  dot={false}
+                  name={t("networth.liabilities")}
+                />
+              )}
+              {showContributions && (
                 <Line
                   type="monotone"
                   dataKey="contributions"
-                  stroke="#6b7280"
+                  stroke={CONTRIBUTIONS_COLOR}
                   strokeWidth={1.5}
                   strokeDasharray="4 4"
                   dot={false}
@@ -137,6 +184,45 @@ export function EvolutionTab() {
   );
 }
 
+/**
+ * Clickable chart legend: renders every series (including hidden ones, dimmed + struck through)
+ * so a toggled-off series can always be brought back. Recharts injects extra props when used as
+ * `<Legend content>`; we ignore them and drive the list from our own `entries`.
+ */
+function ClickableLegend({
+  entries,
+  hidden,
+  onToggle,
+}: {
+  entries: LegendEntry[];
+  hidden: ReadonlySet<string>;
+  onToggle: (key: string) => void;
+}) {
+  return (
+    <ul className="flex flex-wrap justify-center gap-x-4 gap-y-1 pt-2 text-xs">
+      {entries.map((e) => {
+        const isHidden = hidden.has(e.key);
+        return (
+          <li key={e.key}>
+            <button
+              type="button"
+              onClick={() => onToggle(e.key)}
+              aria-pressed={!isHidden}
+              className={cn(
+                "inline-flex items-center gap-1.5 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                isHidden ? "opacity-40" : "opacity-100",
+              )}
+            >
+              <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: e.color }} />
+              <span className={cn("text-gray-700 dark:text-gray-200", isHidden && "line-through")}>{e.name}</span>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 interface TooltipPayloadItem {
   payload?: EvolutionRow;
 }
@@ -146,12 +232,24 @@ interface TooltipProps {
   label?: string | number;
   payload?: ReadonlyArray<TooltipPayloadItem>;
   assetClasses: { code: string }[];
+  hidden: ReadonlySet<string>;
   currency: string;
   locale: string;
   showContributions: boolean;
+  showLiabilities: boolean;
 }
 
-function EvolutionTooltip({ active, label, payload, assetClasses, currency, locale, showContributions }: TooltipProps) {
+function EvolutionTooltip({
+  active,
+  label,
+  payload,
+  assetClasses,
+  hidden,
+  currency,
+  locale,
+  showContributions,
+  showLiabilities,
+}: TooltipProps) {
   const { t } = useTranslation();
   if (!active || !payload || payload.length === 0) return null;
   const row = payload[0]?.payload as EvolutionRow | undefined;
@@ -166,10 +264,12 @@ function EvolutionTooltip({ active, label, payload, assetClasses, currency, loca
   return (
     <div className="rounded-md border border-border bg-white p-3 text-xs shadow-sm dark:bg-gray-800">
       <p className="mb-2 font-medium">{label}</p>
-      <p>
-        <span className="text-gray-500 dark:text-gray-400">{t("networth.net_worth")}: </span>
-        <span className="font-medium">{formatMoney(netWorth, currency, locale)}</span>
-      </p>
+      {!hidden.has(NET_WORTH_KEY) && (
+        <p>
+          <span className="text-gray-500 dark:text-gray-400">{t("networth.net_worth")}: </span>
+          <span className="font-medium">{formatMoney(netWorth, currency, locale)}</span>
+        </p>
+      )}
       {showContributions && contributions != null && (
         <>
           <p>
@@ -185,7 +285,14 @@ function EvolutionTooltip({ active, label, payload, assetClasses, currency, loca
           </p>
         </>
       )}
+      {showLiabilities && row.liabilities > 0 && (
+        <p>
+          <span className="text-gray-500 dark:text-gray-400">{t("networth.liabilities")}: </span>
+          <span>{formatMoney(row.liabilities, currency, locale)}</span>
+        </p>
+      )}
       {assetClasses.map((cls) => {
+        if (hidden.has(cls.code)) return null;
         const v = row[cls.code];
         if (typeof v !== "number" || v === 0) return null;
         return (

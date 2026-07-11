@@ -249,7 +249,7 @@
     "cash_adjustments": "Adjustments",
     "cash_add_adjustment": "Add adjustment",
     "cash_adjustment_date": "Date",
-    "cash_end_of_day_hint": "This is your cash at the end of the selected day; only flows dated after it adjust the estimate.",
+    "cash_end_of_day_hint": "The amount is taken as your cash at the end of the selected day. It will keep fluctuating afterwards based on the settings; only flows dated after it adjust the estimate.",
     "cash_what_affects": "What affects the estimate",
     "cash_flow_transactions": "Transactions",
     "cash_flow_lendings": "Lent",
