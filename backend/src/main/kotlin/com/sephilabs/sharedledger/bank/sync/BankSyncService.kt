@@ -201,7 +201,7 @@ class BankSyncService(
                 metrics.bankMovementsIngested(n)
                 log.info("bank_sync_done connection={} fetched={} new={} callsUsed={}/{}", connectionId, fetched.size, n, callsAtEnd, maxCalls)
                 // Published inside the tx so the AFTER_COMMIT Telegram listener fires only on commit.
-                notifications.bankMovementsToReview(connection.householdId, n, NotifyActor.Schedule(connection.householdId))
+                notifications.bankMovementsToReview(connection.householdId, n, connection.aspspName, connection.label, NotifyActor.Schedule(connection.householdId))
                 n
             }
         } catch (ex: RateLimitExceededException) {
@@ -221,7 +221,7 @@ class BankSyncService(
                 }
                 finishRun(runId, SyncRunStatus.error, n, "ASPSP_RATE_LIMIT_EXCEEDED", "Rate limited; backing off ${backoffHours}h")
                 metrics.bankMovementsIngested(n)
-                if (n > 0) notifications.bankMovementsToReview(connection.householdId, n, NotifyActor.Schedule(connection.householdId))
+                if (n > 0) notifications.bankMovementsToReview(connection.householdId, n, connection.aspspName, connection.label, NotifyActor.Schedule(connection.householdId))
                 n
             }
         } catch (ex: Exception) {

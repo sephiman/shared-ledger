@@ -192,7 +192,13 @@ class NotificationPublisher(
      * Gated by the same `notify_bank_movements` toggle as the confirm summary. Uses a CREATE change
      * event so its header ("new to review") stays distinct from the confirm summary's header.
      */
-    fun bankMovementsToReview(householdId: UUID, count: Int, actor: NotifyActor) {
+    fun bankMovementsToReview(
+        householdId: UUID,
+        count: Int,
+        bankName: String,
+        label: String?,
+        actor: NotifyActor,
+    ) {
         if (count <= 0) return
         events.publishEvent(
             EntityChangeEvent(
@@ -201,6 +207,9 @@ class NotificationPublisher(
                 action = NotifyAction.CREATE,
                 actor = actor,
                 fields = listOf(
+                    // Name the source bank so the reader can tell which connection synced these.
+                    CardField("banks.bank", FieldValue.Text(bankName)),
+                    CardField("banks.connection", FieldValue.Text(label)),
                     CardField("banks.new_movements", FieldValue.Text(count.toString())),
                 ),
             ),

@@ -464,7 +464,7 @@ function MovementRow({
             {source && <Badge tone="sky">{source}</Badge>}
             {movement.originalCurrency && <span>{movement.originalAmount} {movement.originalCurrency}</span>}
           </p>
-          {secondary && <p className="mt-0.5 truncate text-sm text-gray-600 dark:text-gray-300">{secondary}</p>}
+          {secondary && <p className="mt-0.5 break-words text-sm text-gray-600 dark:text-gray-300">{secondary}</p>}
         </div>
         <div className={`shrink-0 text-right font-semibold ${income ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
           {income ? "+" : "−"}{formatMoney(movement.amount, currency, locale)}
