@@ -55,16 +55,6 @@ class SnapshotController(
         return service.list(householdId, fromD, toD)
     }
 
-    @GetMapping("/latest")
-    fun latest(@PathVariable householdId: UUID): SnapshotDto =
-        service.latest(householdId) ?: throw AppException.notFound("SNAPSHOT_NOT_FOUND")
-
-    @GetMapping("/as-of")
-    fun asOf(
-        @PathVariable householdId: UUID,
-        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) date: LocalDate,
-    ): SnapshotDto = service.asOf(householdId, date) ?: throw AppException.notFound("SNAPSHOT_NOT_FOUND")
-
     @GetMapping("/previous-for-prefill")
     fun prefill(@PathVariable householdId: UUID): PrefillView = service.prefill(householdId)
 

@@ -223,15 +223,9 @@
     "monthly": "Monthly",
     "budget": "Budget",
     "spent": "Spent",
-    "pace": "Pace",
     "projection": "Projected",
-    "remaining": "Remaining",
     "percent": "Percent",
-    "matrix_year": "Year",
-    "annual_matrix": "Annual matrix",
-    "on_track": "On track",
-    "approaching": "Approaching limit",
-    "over": "Over budget"
+    "annual_matrix": "Annual matrix"
   },
   "wealth": {
     "evolution_from_portfolio": "From portfolio",

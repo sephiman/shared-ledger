@@ -104,14 +104,6 @@ export interface SnapshotInput {
   confirmLargeChanges: boolean;
 }
 
-export interface EvolutionPoint {
-  snapshotDate: string;
-  byClass: Record<string, string>;
-  totalAssets: string;
-  totalLiabilities: string;
-  netWorth: string;
-}
-
 export interface Movement {
   id: string;
   movementDate: string;
@@ -130,13 +122,6 @@ export interface MovementInput {
   liabilityId?: string | null;
   amount: string;
   description?: string | null;
-}
-
-export interface CumulativeBucket {
-  key: string;
-  contributions: string;
-  withdrawals: string;
-  debtPayments: string;
 }
 
 export function useLiabilities(householdId: string) {

@@ -150,14 +150,4 @@ class LendingBalanceCalculatorTest {
         val out = LendingBalanceCalculator.compute(l, listOf(live, deleted), LocalDate.of(2025, 4, 1))
         assertThat(out.principalRemaining).isEqualByComparingTo("800.00")
     }
-
-    @Test
-    fun `previewSplit returns interest-first allocation`() {
-        val l = lending(InterestType.simple, rate = "10")
-        // After 1 year of accrual (~100 interest), preview a 150 payment.
-        val split = LendingBalanceCalculator.previewSplit(l, emptyList(), LocalDate.of(2026, 1, 1), BigDecimal("150.00"))
-        assertThat(split).isNotNull
-        assertThat(split!!.interestPaid).isEqualByComparingTo("100.00")
-        assertThat(split.principalPaid).isEqualByComparingTo("50.00")
-    }
 }

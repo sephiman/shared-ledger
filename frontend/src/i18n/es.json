@@ -223,15 +223,9 @@
     "monthly": "Mensual",
     "budget": "Presupuesto",
     "spent": "Gastado",
-    "pace": "Ritmo",
     "projection": "Proyección",
-    "remaining": "Restante",
     "percent": "Porcentaje",
-    "matrix_year": "Año",
-    "annual_matrix": "Matriz anual",
-    "on_track": "Al día",
-    "approaching": "Acercándose al límite",
-    "over": "Excedido"
+    "annual_matrix": "Matriz anual"
   },
   "wealth": {
     "evolution_from_portfolio": "De la cartera",

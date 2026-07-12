@@ -84,14 +84,6 @@ export interface LendingScheduleInput {
   active: boolean;
 }
 
-export interface PaymentSplitPreview {
-  amount: string;
-  interestPaid: string;
-  principalPaid: string;
-  accruedInterestBefore: string;
-  principalBefore: string;
-}
-
 const base = (householdId: string) => `/households/${householdId}/lendings`;
 
 export function useLendings(householdId: string, status: LendingStatusFilter, top = 0) {
@@ -142,16 +134,6 @@ export function useUpdateLending(householdId: string) {
     mutationFn: async ({ id, input }: { id: string; input: LendingInput }) =>
       (await apiClient.patch<LendingDetail>(`${base(householdId)}/${id}`, input)).data,
     onSuccess: (_d, v) => invalidateLendings(qc, householdId, v.id),
-  });
-}
-
-export function useDeleteLending(householdId: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: string) => {
-      await apiClient.delete(`${base(householdId)}/${id}`);
-    },
-    onSuccess: () => invalidateLendings(qc, householdId),
   });
 }
 

@@ -109,32 +109,6 @@ object LendingBalanceCalculator {
         )
     }
 
-    /**
-     * Preview-only: project what the split would look like if a payment of [proposedAmount]
-     * landed at [proposedDate] in addition to [existingPayments]. Returns null if proposedAmount
-     * is non-positive.
-     */
-    fun previewSplit(
-        lending: Lending,
-        existingPayments: List<LendingPayment>,
-        proposedDate: LocalDate,
-        proposedAmount: BigDecimal,
-    ): PaymentAllocation? {
-        if (proposedAmount <= BigDecimal.ZERO) return null
-        val syntheticId = java.util.UUID(0L, 0L)
-        val synthetic = LendingPayment(
-            id = syntheticId,
-            lendingId = lending.id,
-            paymentDate = proposedDate,
-            amount = proposedAmount,
-            createdByUserId = syntheticId,
-            updatedByUserId = syntheticId,
-        )
-        val combined = existingPayments + synthetic
-        val out = compute(lending, combined, proposedDate)
-        return out.allocations.firstOrNull { it.paymentId == syntheticId }
-    }
-
     private fun computeNoInterest(lending: Lending, payments: List<LendingPayment>): Outstanding {
         var principal = lending.principalAmount
         val allocations = mutableListOf<PaymentAllocation>()

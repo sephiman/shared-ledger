@@ -263,15 +263,6 @@ export function useAddLot(householdId: string) {
   });
 }
 
-export function useUpdateLot(householdId: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ holdingId, lotId, input }: { holdingId: string; lotId: string; input: LotInput }) =>
-      (await apiClient.patch<Lot>(`/households/${householdId}/portfolio/holdings/${holdingId}/lots/${lotId}`, input)).data,
-    onSuccess: () => invalidatePortfolio(qc, householdId),
-  });
-}
-
 export function useDeleteLot(householdId: string) {
   const qc = useQueryClient();
   return useMutation({

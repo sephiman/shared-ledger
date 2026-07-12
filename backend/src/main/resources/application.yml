@@ -74,7 +74,6 @@ logging:
 
 app:
   security:
-    cookie-secure: ${APP_COOKIE_SECURE:true}
     login-rate:
       per-minute: 5
       per-hour: 20

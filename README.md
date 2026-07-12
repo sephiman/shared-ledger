@@ -110,7 +110,7 @@ Planned monthly (and optionally annual) expense amounts per category, compared a
 Periodic recordings of the value of each asset class, each named asset, and the outstanding balance of each liability. Snapshots are the source of truth for current net worth.
 
 - Each snapshot has a date and an optional note. Multiple per month are allowed; monthly views use the latest one per month.
-- The **Assets** block has two subgroups shown under one heading: **Classes** — the fixed fungible classes `Cash`, `Index funds`, `ETFs`, `Stocks`, `Crypto`, `Pension` (one value per class) — and **Named assets** (see [Assets](#assets-named)) auto-filled from each asset's dated series. **Cash** is prefilled from its own [flow-based estimate](#cash-adjustment-series--flow-based-estimate) (marked *computed*); correcting it re-anchors the cash series (a new adjustment at the snapshot date).
+- The **Assets** block has two subgroups shown under one heading: **Classes** — the fixed fungible classes `Cash`, `Funds`, `ETFs`, `Stocks`, `Crypto`, `Pension` (one value per class) — and **Named assets** (see [Assets](#assets-named)) auto-filled from each asset's dated series. **Cash** is prefilled from its own [flow-based estimate](#cash-adjustment-series--flow-based-estimate) (marked *computed*); correcting it re-anchors the cash series (a new adjustment at the snapshot date).
 - **Liabilities** are named entities (see [Liabilities & amortizable loans](#liabilities-and-amortizable-loans)). A **simple** liability auto-fills its last known balance from its own series; an **amortizable** loan auto-fills the **computed balance from its schedule at the snapshot date** (marked *computed*, never 0). Every active liability appears in the form.
 - **Net worth = Assets (classes + named) − Liabilities.** Names (not UUIDs) are shown for named assets and liabilities, including for entities later soft-deleted.
 - The snapshot creation form **prefills from the previous snapshot** and shows delta (absolute and percent) next to each input. If any delta exceeds 50% the form requires explicit confirmation before saving — a typo guard.
@@ -118,7 +118,7 @@ Periodic recordings of the value of each asset class, each named asset, and the 
 - **Evolution view**: stacked area chart of assets by class over time, with a net worth line (assets minus liabilities) overlaid. When movements exist, a dashed cumulative-contributions line is overlaid as well; the gap between it and the net-worth line is the revaluation (gain or loss), surfaced in the tooltip in both absolute terms and as a percent of contributions.
 - **Allocation view**: pie chart by asset class at the latest snapshot.
 - **Portfolio prefill**: market asset classes (crypto, ETFs, stocks, funds) are prefilled from the [Portfolio](#portfolio-investments) at the snapshot date and marked *computed*; editing a value marks it *overridden*, and a class with no priced holdings is *carried over* from the previous snapshot. A per-holding valuation is frozen into each snapshot for audit. Snapshots remain the source of truth — the prefill only removes the manual tallying.
-- Queries support a date range or an "as of" date.
+- Queries support an optional date range.
 
 ### Net worth movements
 
@@ -237,13 +237,17 @@ Inside the **Analytics** section, the existing four tabs (Year-over-year, Year-b
 
 Long-term wealth projection toward a financial independence goal.
 
-Per-household settings: target amount, target year, expected monthly contribution, configurable expected annual return scenarios (e.g. 4, 6, 8 %), and which asset classes count toward the goal (e.g. exclude operating Cash if desired).
+Per-household settings: target amount, target year, expected monthly contribution, configurable return scenarios, and which asset classes count toward the goal (e.g. exclude operating Cash if desired). Each scenario is a **(mean %, std-dev %)** pair — e.g. 6 % ± 15 % — not a single flat rate.
 
-Projection output:
+Projection output, per scenario:
 
-- Year-by-year projected portfolio value for each scenario, starting from the most recent snapshot's qualifying asset total. Capitalization is annual; monthly contributions accumulate within each year.
-- Chart shows one line per scenario plus a horizontal target line.
-- Summary table: which year each scenario reaches the target (or "not within projection window").
+- A **deterministic year-by-year path** using the scenario mean, starting from the most recent snapshot's qualifying asset total. Capitalization is annual; monthly contributions accumulate within each year. The chart shows one line per scenario plus a horizontal target line.
+- A **Monte Carlo simulation** (default 10 000 trials, configurable via `FIRE_MONTE_CARLO_TRIALS`): each trial samples annual returns from a Gaussian with the scenario's mean and std-dev (clamped to ±3σ). The chart overlays per-year **percentile bands (p10 / p25 / p50 / p75 / p90)** around the deterministic line.
+- **Probability of reaching the target** by the target year — the fraction of trials that cross the target amount — and the **median year** the target is first reached among the trials that do.
+- Summary table: which year each scenario's deterministic path reaches the target (or "not within projection window").
+
+Additionally:
+
 - If at least 12 historical snapshots exist, the operator's **actual annualized return** is computed from the snapshot series and shown as a reference.
 - If net worth movements exist, an optional cumulative-contributions overlay distinguishes savings from market growth.
 
@@ -354,7 +358,9 @@ Wise could be added via its own API) with the always-available CSV import as the
   Confirming reuses the normal transaction-creation logic; single confirms notify normally, batch
   confirms send one aggregated notification. A **possible-duplicate warning** flags manual
   transactions that look like an incoming movement (warns only, never auto-discards). Rejected
-  items don't reappear and are visible under a "rejected" filter.
+  items don't reappear and are visible under a "rejected" filter. The list also filters by
+  connection, free-text search, categorisation state (suggested / unsuggested), and
+  duplicates-only, and all filters are clearable in one click.
 - **Mark as movement** (per item, under "More"): instead of a transaction, a pending item can be
   confirmed as a **net-worth movement** — for capital reallocations (a transfer to savings, a debt
   principal payment) that shouldn't land in the income/expense ledger. A small dialog collects the
@@ -366,7 +372,8 @@ Wise could be added via its own API) with the always-available CSV import as the
   single-item action; batch confirm stays transaction-only.
 - **Categorisation**: configurable rules (counterparty / description / amount → category +
   direction) applied during sync, and learning from corrections — confirming with a category
-  remembers "this counterparty → this category" for next time. No ML.
+  remembers "this counterparty → this category" for next time. No ML. An **Apply rules** action
+  re-runs the rules over the uncategorized pending items on demand (useful after adding rules).
 - **Multi-currency** (e.g. Wise): non-EUR movements are converted to EUR at the ECB rate of the
   booking date, keeping the original amount/currency on the pending item.
 - **Read-only**: only account/movement information is ever requested; there is no payment
@@ -408,6 +415,7 @@ everything appears.
   - `sl_snapshots_created_total`
   - `sl_recurring_materialized_total{template_id}` and `sl_recurring_materialization_failures_total{template_id}`
   - `sl_portfolio_prices_refreshed_total{provider}` and `sl_portfolio_price_refresh_failures_total{provider}`
+  - `sl_bank_movements_ingested_total` and `sl_bank_sync_failures_total`
   - `sl_login_attempts_total{outcome=success|failure|rate_limited}`
   - `sl_active_sessions` (gauge)
   - `sl_registrations_total{mode, outcome}`
@@ -476,7 +484,8 @@ Edit `.env` and set at minimum:
 | `APP_COOKIE_SECURE` | `true` in production. Set to `false` only when running on plain HTTP for local dev. |
 | `TELEGRAM_TOKEN_KEY` | Base64 AES key (16/24/32 bytes) used to encrypt stored Telegram bot tokens at rest. Generate with `openssl rand -base64 32`. Required only if a household saves a bot token; keep it stable (rotating it makes stored tokens undecryptable). Optional: `TELEGRAM_API_BASE_URL`, `TELEGRAM_TIMEOUT_MS`. |
 | Portfolio pricing | All optional — holdings work unpriced without them. `EQUITY_PRICE_PROVIDER` (`yahoo` default, or `eodhd` / `twelve_data`), `COINGECKO_API_KEY` (Demo key for crypto), `EODHD_API_KEY` / `TWELVEDATA_API_KEY` (only for those providers). FX (Frankfurter) and Yahoo need no key. Base-URL overrides exist for each provider; see `.env.example`. |
-| Bank ingestion | All optional — the feature stays hidden unless configured. `ENABLE_BANKING_APP_ID` + `ENABLE_BANKING_PRIVATE_KEY` (the API application id and its PKCS#8 PEM RSA private key from the Enable Banking Control Panel; for a single env line replace newlines with `\n`), `ENABLE_BANKING_REDIRECT_URL` (your public frontend URL + `/settings/banks/callback`), and `ENABLE_BANKING_SECRET_KEY` (base64 AES key, `openssl rand -base64 32`, encrypts the stored bank session at rest; keep it stable). Optional overrides: `ENABLE_BANKING_BASE_URL`, `ENABLE_BANKING_CONSENT_VALID_DAYS`, `ENABLE_BANKING_BACKFILL_DAYS`. |
+| Bank ingestion | All optional — the feature stays hidden unless configured. `ENABLE_BANKING_APP_ID` + `ENABLE_BANKING_PRIVATE_KEY` (the API application id and its PKCS#8 PEM RSA private key from the Enable Banking Control Panel; for a single env line replace newlines with `\n`), `ENABLE_BANKING_REDIRECT_URL` (your public frontend URL + `/settings/banks/callback`), and `ENABLE_BANKING_SECRET_KEY` (base64 AES key, `openssl rand -base64 32`, encrypts the stored bank session at rest; keep it stable). Optional overrides: `ENABLE_BANKING_BASE_URL`, `ENABLE_BANKING_CONSENT_VALID_DAYS`, `ENABLE_BANKING_BACKFILL_DAYS`, `ENABLE_BANKING_TIMEOUT_MS`, `ENABLE_BANKING_MAX_CALLS_PER_DAY` (keep at 4 in production — the PSD2 unattended-access cap). |
+| `FIRE_MONTE_CARLO_TRIALS` | Trials per scenario for the FIRE Monte Carlo simulation. Default `10000`. |
 
 The `.env` file is git-ignored. `docker compose` reads it implicitly and the backend reads variables from it (via `env_file`).
 
@@ -500,7 +509,7 @@ Open `http://<host>:${FRONTEND_PORT}` (defaults to port `8087`) and log in with 
 
 ### Putting Nginx Proxy Manager (or any reverse proxy) in front
 
-The frontend service joins both the local `ledger` network and the shared external network (`${SHARED_NETWORK_NAME}`), and publishes its HTTP port on the host. Two ways to point NPM at it — pick whichever fits your setup:
+Both services attach to the single shared external network (`${SHARED_NETWORK_NAME}`), and the frontend publishes its HTTP port on the host. Two ways to point NPM at it — pick whichever fits your setup:
 
 **Path A — over the Docker network (recommended if NPM is in a container on this host).** Attach NPM to the same `${SHARED_NETWORK_NAME}` network. Then in NPM's Proxy Host config, set the **Forward Hostname / IP** to `shared-ledger-frontend` and **Forward Port** to `80`. No host port needs to be reachable from outside; you can set `FRONTEND_BIND_ADDR=127.0.0.1` in `.env` to keep the host port loopback-only as defense in depth.
 

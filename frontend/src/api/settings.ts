@@ -98,14 +98,6 @@ export function useChangePassword() {
   });
 }
 
-export function useUpdateMe() {
-  return useMutation({
-    mutationFn: async (locale: "en" | "es") => {
-      await apiClient.patch("/auth/me", { locale });
-    },
-  });
-}
-
 export function useCreateHousehold() {
   return useMutation({
     mutationFn: async (input: { name: string; currency: string; defaultLocale: "en" | "es" }) =>

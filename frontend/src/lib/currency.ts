@@ -3,22 +3,10 @@
 
 const COMMON: readonly string[] = ["EUR", "USD", "GBP", "JPY", "CHF", "CAD", "AUD"];
 
-let cachedCodes: Set<string> | null = null;
-
 function allCodes(): string[] {
   // `supportedValuesOf` returns sorted ISO codes. Cast guards against older TS lib targets.
   const intlWithSupported = Intl as unknown as { supportedValuesOf?: (key: string) => string[] };
   return intlWithSupported.supportedValuesOf?.("currency") ?? [];
-}
-
-export function isValidCurrency(code: string | null | undefined): boolean {
-  if (!code) return false;
-  if (!cachedCodes) cachedCodes = new Set(allCodes());
-  if (cachedCodes.size === 0) {
-    // Fallback for environments without supportedValuesOf — accept any 3-letter uppercase.
-    return /^[A-Z]{3}$/.test(code.toUpperCase());
-  }
-  return cachedCodes.has(code.toUpperCase());
 }
 
 export interface CurrencyOption {

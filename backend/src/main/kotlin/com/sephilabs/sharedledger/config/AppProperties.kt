@@ -16,7 +16,6 @@ data class AppProperties(
     val enableBanking: EnableBanking = EnableBanking(),
 ) {
     data class Security(
-        val cookieSecure: Boolean = true,
         val loginRate: LoginRate = LoginRate(),
         val importRate: ImportRate = ImportRate(),
     )
@@ -49,13 +48,10 @@ data class AppProperties(
     )
 
     data class Scheduler(
-        val recurringCron: String = "0 0 2 * * *",
         val timezone: String = "UTC",
     )
 
     data class AutoSnapshot(
-        // Daily check; per-household frequency decides whether today is a due date.
-        val cron: String = "0 0 6 * * *",
         // Which day scheduled weekly snapshots land on.
         val weeklyDay: java.time.DayOfWeek = java.time.DayOfWeek.MONDAY,
         // Day-of-month for monthly snapshots; clamped to the month's length.
@@ -110,10 +106,6 @@ data class AppProperties(
             minRequestIntervalMs = 500,
         ),
         val equityProvider: EquityProviderKind = EquityProviderKind.YAHOO,
-        val cryptoRefreshCron: String = "0 5 * * * *",
-        val fxRefreshCron: String = "0 30 0 * * *",
-        // Must run after the FX refresh: non-EUR equity valuations need the day's rate.
-        val equityRefreshCron: String = "0 0 1 * * *",
         // CoinGecko Demo plan serves at most 365 days of history.
         val cryptoHistoryCeilingDays: Long = 365,
         // 0 = uncapped (Yahoo serves long history; backfill reaches the earliest lot).
@@ -170,10 +162,6 @@ data class AppProperties(
         // PSD2 unattended-access ceiling per consent per day (background fetches only; interactive
         // fetches carry PSU headers and are not counted against this budget by the bank).
         val maxCallsPerDay: Int = 4,
-        // Twice daily, within the call budget.
-        val syncCron: String = "0 0 7,19 * * *",
-        // Daily check for consents nearing expiry.
-        val reminderCron: String = "0 0 8 * * *",
         // Warn this many days before a consent expires so the holder can re-link in time.
         val reminderDaysBefore: Long = 7,
     ) {

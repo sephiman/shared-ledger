@@ -111,15 +111,3 @@ data class LendingListResponse(
     val top: List<LendingSummary>,
 )
 
-data class PaymentSplitPreview(
-    @JsonFormat(shape = JsonFormat.Shape.STRING)
-    val amount: BigDecimal,
-    @JsonFormat(shape = JsonFormat.Shape.STRING)
-    val interestPaid: BigDecimal,
-    @JsonFormat(shape = JsonFormat.Shape.STRING)
-    val principalPaid: BigDecimal,
-    @JsonFormat(shape = JsonFormat.Shape.STRING)
-    val accruedInterestBefore: BigDecimal,
-    @JsonFormat(shape = JsonFormat.Shape.STRING)
-    val principalBefore: BigDecimal,
-)

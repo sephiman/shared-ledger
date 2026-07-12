@@ -391,15 +391,6 @@ export function useCreateRule(householdId: string) {
   });
 }
 
-export function useUpdateRule(householdId: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, input }: { id: string; input: RuleInput }) =>
-      (await apiClient.patch<CategorizationRule>(`${base(householdId)}/rules/${id}`, input)).data,
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["banks", householdId, "rules"] }),
-  });
-}
-
 export function useDeleteRule(householdId: string) {
   const qc = useQueryClient();
   return useMutation({

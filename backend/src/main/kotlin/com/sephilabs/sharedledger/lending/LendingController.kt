@@ -19,7 +19,6 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
-import java.math.BigDecimal
 import java.time.LocalDate
 import java.util.UUID
 
@@ -124,15 +123,6 @@ class LendingController(
         service.deletePayment(householdId, id, paymentId, currentUser.requireUser())
         return service.get(householdId, id)
     }
-
-    @GetMapping("/{id}/payments/split-preview")
-    fun previewSplit(
-        @PathVariable householdId: UUID,
-        @PathVariable id: UUID,
-        @RequestParam date: LocalDate,
-        @RequestParam amount: BigDecimal,
-        @RequestParam(required = false) excludePaymentId: UUID?,
-    ): PaymentSplitPreview = service.previewSplit(householdId, id, date, amount, excludePaymentId)
 
     @PutMapping("/{id}/schedule")
     fun upsertSchedule(

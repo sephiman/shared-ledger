@@ -192,29 +192,6 @@ class LendingService(
         notifications.lendingPayment(payment, lending.householdId, lending.borrowerName, NotifyAction.DELETE, NotifyActor.Human(by.email))
     }
 
-    @Transactional(readOnly = true)
-    fun previewSplit(
-        householdId: UUID,
-        lendingId: UUID,
-        proposedDate: LocalDate,
-        proposedAmount: BigDecimal,
-        excludePaymentId: UUID? = null,
-    ): PaymentSplitPreview {
-        val lending = loadOwn(householdId, lendingId)
-        val existing = payments.findAllByLendingIdOrderByPaymentDateAsc(lending.id)
-            .filter { it.id != excludePaymentId }
-        val beforeOutstanding = LendingBalanceCalculator.compute(lending, existing, proposedDate)
-        val alloc = LendingBalanceCalculator.previewSplit(lending, existing, proposedDate, proposedAmount)
-            ?: throw AppException.badRequest("LENDING_PAYMENT_AMOUNT_INVALID")
-        return PaymentSplitPreview(
-            amount = alloc.amount,
-            interestPaid = alloc.interestPaid,
-            principalPaid = alloc.principalPaid,
-            accruedInterestBefore = beforeOutstanding.accruedInterest,
-            principalBefore = beforeOutstanding.principalRemaining,
-        )
-    }
-
     @Transactional
     fun upsertSchedule(householdId: UUID, lendingId: UUID, request: LendingScheduleRequest, by: User): LendingSchedule {
         validateSchedule(request)

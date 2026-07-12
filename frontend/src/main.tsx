@@ -1,7 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
-import { MutationCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@/auth/AuthContext";
 import { ThemeProvider } from "@/lib/theme";
 import App from "./App";
@@ -24,6 +24,14 @@ const queryClient = new QueryClient({
       retry: 1,
     },
   },
+  queryCache: new QueryCache({
+    onError: (error, query) => {
+      if ((query.meta as { silentError?: boolean } | undefined)?.silentError) return;
+      // Queries have no local error UI in most views — surface failures like mutations do.
+      const api = asApiError(error);
+      showToast(i18n.t(`errors.${api.code}`, api.message), "error");
+    },
+  }),
   mutationCache: new MutationCache({
     onSuccess: (_data, _vars, _ctx, mutation) => {
       const meta = mutation.options.meta as MutationMeta | undefined;

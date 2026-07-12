@@ -182,13 +182,6 @@ class SnapshotService(
         snapshots.findInRange(householdId, from, to).map { toDto(it) }
 
     @Transactional(readOnly = true)
-    fun latest(householdId: UUID): SnapshotDto? = snapshots.findLatest(householdId)?.let { toDto(it) }
-
-    @Transactional(readOnly = true)
-    fun asOf(householdId: UUID, date: LocalDate): SnapshotDto? =
-        snapshots.findUpTo(householdId, date).firstOrNull()?.let { toDto(it) }
-
-    @Transactional(readOnly = true)
     fun prefill(householdId: UUID): PrefillView {
         val previous = snapshots.findLatest(householdId)?.let { toDto(it) }
         val active = liabilities.findAllByHouseholdIdAndActiveTrueOrderByNameAsc(householdId).map { it.id }

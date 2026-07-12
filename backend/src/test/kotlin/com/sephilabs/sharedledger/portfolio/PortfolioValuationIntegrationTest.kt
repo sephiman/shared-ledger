@@ -69,6 +69,9 @@ class PortfolioValuationIntegrationTest @Autowired constructor(
     @Test
     fun `non-EUR equity uses the fx rate at or before the valuation date`() {
         val (user, household) = seed()
+        // Covers the lot's registration-time fx freeze; without it addLot fails on
+        // LOT_FX_RATE_UNAVAILABLE (this test must not rely on rates leaked by other classes).
+        seedUsdRate(LocalDate.of(2026, 1, 2), "0.88000000")
         seedUsdRate(LocalDate.of(2026, 2, 27), "0.90000000")
         val holding = holdingService.create(
             household.id,
@@ -97,7 +100,10 @@ class PortfolioValuationIntegrationTest @Autowired constructor(
     @Test
     fun `holding without a price and fx is excluded from summary totals but keeps its cost basis`() {
         val (user, household) = seed()
-        seedUsdRate(LocalDate.now().minusDays(1), "0.92000000")
+        // At (not after) the USD lot's trade date, so the frozen rate is deterministically 0.92.
+        // now-1 would collide with BankIngestionIntegrationTest's identical (provider, pair, date)
+        // row in the shared fx_rates table and resolve nothing for a now-10 lot anyway.
+        seedUsdRate(LocalDate.now().minusDays(10), "0.92000000")
         val priced = createLinkedCrypto(household.id, user, "BTC", "bitcoin")
         addLot(household.id, priced.id, user, LocalDate.now().minusDays(30), "1", "50000")
         storePrice("coingecko", "bitcoin", "EUR", LocalDate.now(), "60000")
