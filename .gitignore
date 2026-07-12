@@ -8,7 +8,7 @@ backend/.gradle/
 backend/build/
 backend/out/
 backend/bin/
-backend/!gradle/wrapper/gradle-wrapper.jar
+!backend/gradle/wrapper/gradle-wrapper.jar
 
 # Node / Vite
 frontend/node_modules/

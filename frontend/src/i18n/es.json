@@ -1193,7 +1193,7 @@
   },
   "asset": {
     "cash": "Efectivo",
-    "fund": "Fondos indexados",
+    "fund": "Fondos",
     "etfs": "ETFs",
     "stocks": "Acciones",
     "crypto": "Cripto",

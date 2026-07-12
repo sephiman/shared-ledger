@@ -194,7 +194,7 @@ function SidePanel({ title, onClose, children }: { title: string; onClose: () =>
       <div className="relative z-10 h-full w-full max-w-md overflow-y-auto bg-white shadow-xl dark:bg-gray-900">
         <div className="flex items-center justify-between border-b border-border p-3 dark:border-gray-700">
           <p className="font-medium">{title}</p>
-          <button aria-label="close" className="px-2 text-gray-500" onClick={onClose}>✕</button>
+          <button type="button" aria-label="close" className="px-2 text-gray-500" onClick={onClose}>✕</button>
         </div>
         <div className="p-3">{children}</div>
       </div>
@@ -209,7 +209,7 @@ function Dialog({ title, onClose, children }: { title: string; onClose: () => vo
       <div className="relative z-10 w-full max-w-lg overflow-y-auto rounded-lg bg-white shadow-xl dark:bg-gray-900">
         <div className="flex items-center justify-between border-b border-border p-3 dark:border-gray-700">
           <p className="font-medium">{title}</p>
-          <button aria-label="close" className="px-2 text-gray-500" onClick={onClose}>✕</button>
+          <button type="button" aria-label="close" className="px-2 text-gray-500" onClick={onClose}>✕</button>
         </div>
         <div className="p-3">{children}</div>
       </div>

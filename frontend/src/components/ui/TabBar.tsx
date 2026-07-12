@@ -33,6 +33,7 @@ export function TabBar({
         {items.map((it) => (
           <button
             key={it.value}
+            type="button"
             onClick={() => onChange(it.value)}
             className={cn(
               "whitespace-nowrap px-3 py-2 text-sm font-medium",

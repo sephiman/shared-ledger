@@ -832,7 +832,7 @@ Backend:
 cd backend
 # Ensure DB_* env vars point to a real Postgres
 APP_COOKIE_SECURE=false ADMIN_EMAIL=dev@example.com ADMIN_PASSWORD=devdevdev \
-  gradle bootRun
+  ./gradlew bootRun
 ```
 
 Frontend:
@@ -847,7 +847,7 @@ npm run dev
 Tests:
 
 ```bash
-cd backend && gradle test       # Testcontainers spins up Postgres
+cd backend && ./gradlew test    # Testcontainers spins up Postgres
 cd frontend && npm test
 ```
 
