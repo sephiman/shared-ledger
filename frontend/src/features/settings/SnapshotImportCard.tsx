@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
-import { asApiError } from "@/api/client";
+import { apiErrorMessage } from "@/api/client";
 import { useExecuteSnapshots, usePreviewSnapshots, type ExecuteResult, type PreviewSummary, type SnapshotPolicy } from "@/api/import";
 import { Button, Card, CardBody, CardHeader, FieldError, Label, Select } from "@/components/ui/primitives";
 import { PreviewPanel, ResultPanel } from "./TransactionImportCard";
@@ -36,8 +36,7 @@ export function SnapshotImportCard() {
       setPreview(p);
     } catch (err) {
       setPreview(null);
-      const api = asApiError(err);
-      setError(t(`errors.${api.code}`, api.message));
+      setError(apiErrorMessage(err, t));
     }
   }
 
@@ -49,8 +48,7 @@ export function SnapshotImportCard() {
       setResult(r);
       setPreview(null);
     } catch (err) {
-      const api = asApiError(err);
-      setError(t(`errors.${api.code}`, api.message));
+      setError(apiErrorMessage(err, t));
     }
   }
 

@@ -1,13 +1,11 @@
 package com.sephilabs.sharedledger.lending
 
 import com.sephilabs.sharedledger.common.Csv
-import com.sephilabs.sharedledger.common.errors.AppException
 import com.sephilabs.sharedledger.household.HouseholdRepository
+import com.sephilabs.sharedledger.household.getOrThrow
 import com.sephilabs.sharedledger.household.RequireHouseholdOwner
 import com.sephilabs.sharedledger.identity.auth.CurrentUser
 import jakarta.validation.Valid
-import org.springframework.http.HttpHeaders
-import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
@@ -162,22 +160,12 @@ class LendingController(
     @GetMapping("/export.csv")
     fun exportLendings(@PathVariable householdId: UUID): ResponseEntity<String> {
         val csv = service.exportLendingsCsv(householdId)
-        val household = households.findById(householdId).orElseThrow { AppException.notFound("HOUSEHOLD_NOT_FOUND") }
-        val filename = Csv.exportFilename(LocalDate.now(), household.name, "lendings")
-        return ResponseEntity.ok()
-            .contentType(MediaType.parseMediaType("text/csv; charset=utf-8"))
-            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"$filename\"")
-            .body(csv)
+        return Csv.download(households.getOrThrow(householdId).name, "lendings", csv)
     }
 
     @GetMapping("/payments/export.csv")
     fun exportPayments(@PathVariable householdId: UUID): ResponseEntity<String> {
         val csv = service.exportPaymentsCsv(householdId)
-        val household = households.findById(householdId).orElseThrow { AppException.notFound("HOUSEHOLD_NOT_FOUND") }
-        val filename = Csv.exportFilename(LocalDate.now(), household.name, "lending-payments")
-        return ResponseEntity.ok()
-            .contentType(MediaType.parseMediaType("text/csv; charset=utf-8"))
-            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"$filename\"")
-            .body(csv)
+        return Csv.download(households.getOrThrow(householdId).name, "lending-payments", csv)
     }
 }

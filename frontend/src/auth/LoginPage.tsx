@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/auth/AuthContext";
-import { asApiError } from "@/api/client";
+import { apiErrorMessage } from "@/api/client";
 import { useTheme } from "@/lib/theme";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label } from "@/components/ui/primitives";
 
@@ -46,8 +46,7 @@ export function LoginPage() {
                 const next = params.get("next") ?? "/dashboard";
                 navigate(next);
               } catch (err) {
-                const api = asApiError(err);
-                setError(t(`errors.${api.code}`, api.message));
+                setError(apiErrorMessage(err, t));
               } finally {
                 setSubmitting(false);
               }

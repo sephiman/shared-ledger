@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { asApiError } from "@/api/client";
+import { apiErrorMessage } from "@/api/client";
 import { useConfirmAsMovement, type MovementType, type PendingMovement } from "@/api/banks";
 import { useAssetClasses } from "@/api/catalog";
 import { useLiabilities } from "@/api/networth";
@@ -68,8 +68,7 @@ export function MarkAsMovementDialog({ open, householdId, movement, currency, lo
       showToast(t("banks.marked_as_movement"), "success");
       onClose();
     } catch (err) {
-      const api = asApiError(err);
-      setSubmitError(t(`errors.${api.code}`, api.message));
+      setSubmitError(apiErrorMessage(err, t));
     }
   };
 

@@ -49,6 +49,7 @@ services:
     expose:
       - "8080"
       - "9090"
+    stop_grace_period: 30s
     restart: unless-stopped
     logging:
       driver: json-file

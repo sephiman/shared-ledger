@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
-import { asApiError } from "@/api/client";
+import { apiErrorMessage } from "@/api/client";
 import { useExecuteTransactions, usePreviewTransactions, type AdjustedRow, type ExecuteResult, type PreviewSummary } from "@/api/import";
 import { Button, Card, CardBody, CardHeader, FieldError } from "@/components/ui/primitives";
 import { CsvFormatHelp } from "./CsvFormatHelp";
@@ -33,8 +33,7 @@ export function TransactionImportCard() {
       setPreview(p);
     } catch (err) {
       setPreview(null);
-      const api = asApiError(err);
-      setError(t(`errors.${api.code}`, api.message));
+      setError(apiErrorMessage(err, t));
     }
   }
 
@@ -46,8 +45,7 @@ export function TransactionImportCard() {
       setResult(r);
       setPreview(null);
     } catch (err) {
-      const api = asApiError(err);
-      setError(t(`errors.${api.code}`, api.message));
+      setError(apiErrorMessage(err, t));
     }
   }
 

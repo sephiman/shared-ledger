@@ -5,13 +5,14 @@ import { useActiveHousehold, useAuth } from "@/auth/AuthContext";
 import { useChangePassword, useDeleteHousehold, useHousehold, useHouseholdMembers, useInvitations, useIssueInvitation, useRevokeInvitation, useSetDefaultHousehold, useUpdateHousehold, useWipeHouseholdData } from "@/api/settings";
 import { useCategories, useDeleteCustomCategory, type Category } from "@/api/catalog";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select } from "@/components/ui/primitives";
-import { asApiError } from "@/api/client";
+import { apiErrorMessage } from "@/api/client";
 import { categoryIcon } from "@/lib/categoryGroup";
 import { CreateHouseholdDialog } from "@/features/household/CreateHouseholdDialog";
 import { CustomCategoryDialog } from "./CustomCategoryDialog";
 import { NotificationsCard } from "./NotificationsCard";
 import { AutoSnapshotCard } from "./AutoSnapshotCard";
 import { getCurrencyOptions } from "@/lib/currency";
+import { formatDate } from "@/lib/dates";
 import { useBankConfig } from "@/api/banks";
 import { BanksCard } from "@/features/banks/BanksCard";
 
@@ -134,8 +135,7 @@ export function SettingsPage() {
                 setNewPw("");
                 setPwMsg(t("common.save"));
               } catch (err) {
-                const api = asApiError(err);
-                setPwMsg(t(`errors.${api.code}`, api.message));
+                setPwMsg(apiErrorMessage(err, t));
               }
             }}
           >
@@ -246,8 +246,7 @@ export function SettingsPage() {
                                 setDeleteTargetId(null);
                                 setDeleteConfirm("");
                               } catch (err) {
-                                const api = asApiError(err);
-                                setDeleteError(t(`errors.${api.code}`, api.message));
+                                setDeleteError(apiErrorMessage(err, t));
                               }
                             }}
                           >
@@ -439,8 +438,7 @@ export function SettingsPage() {
                                 setCustomDeleteTarget(null);
                                 setCustomDeleteConfirm("");
                               } catch (err) {
-                                const api = asApiError(err);
-                                setCustomDeleteError(t(`errors.${api.code}`, api.message));
+                                setCustomDeleteError(apiErrorMessage(err, t));
                               }
                             }}
                           >
@@ -485,7 +483,7 @@ export function SettingsPage() {
                       )}
                     </p>
                     <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                      {t(`settings.${m.role}`)} · {new Date(m.joinedAt).toLocaleDateString()}
+                      {t(`settings.${m.role}`)} · {formatDate(m.joinedAt, i18n.language)}
                     </p>
                   </li>
                 ))}
@@ -510,7 +508,7 @@ export function SettingsPage() {
                         )}
                       </td>
                       <td>{t(`settings.${m.role}`)}</td>
-                      <td>{new Date(m.joinedAt).toLocaleDateString()}</td>
+                      <td>{formatDate(m.joinedAt, i18n.language)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -569,7 +567,7 @@ export function SettingsPage() {
                         <div className="min-w-0 flex-1 break-words">
                           <p className="font-medium">{i.email ?? "—"}</p>
                           <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                            {t(`settings.${i.role}`)} · {new Date(i.expiresAt).toLocaleDateString()}
+                            {t(`settings.${i.role}`)} · {formatDate(i.expiresAt, i18n.language)}
                           </p>
                         </div>
                         <Button variant="ghost" onClick={() => revoke.mutate(i.id)}>{t("settings.revoke")}</Button>
@@ -591,7 +589,7 @@ export function SettingsPage() {
                       <tr key={i.id} className="border-t border-border">
                         <td className="py-2">{t(`settings.${i.role}`)}</td>
                         <td>{i.email ?? "—"}</td>
-                        <td>{new Date(i.expiresAt).toLocaleDateString()}</td>
+                        <td>{formatDate(i.expiresAt, i18n.language)}</td>
                         <td className="text-right">
                           <Button variant="ghost" onClick={() => revoke.mutate(i.id)}>{t("settings.revoke")}</Button>
                         </td>
@@ -646,8 +644,7 @@ export function SettingsPage() {
                         setWipeOpen(false);
                         setWipeConfirm("");
                       } catch (err) {
-                        const api = asApiError(err);
-                        setWipeMsg(t(`errors.${api.code}`, api.message));
+                        setWipeMsg(apiErrorMessage(err, t));
                       }
                     }}
                   >

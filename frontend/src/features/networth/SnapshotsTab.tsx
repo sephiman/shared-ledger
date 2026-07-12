@@ -22,6 +22,7 @@ import { asApiError } from "@/api/client";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label } from "@/components/ui/primitives";
 import { formatMoney } from "@/lib/money";
 import { formatDate, isoToday } from "@/lib/dates";
+import { useToggleSet } from "@/lib/useToggleSet";
 
 type PanelMode = { kind: "closed" } | { kind: "create" } | { kind: "edit"; s: Snapshot };
 
@@ -47,7 +48,7 @@ export function SnapshotsTab() {
   const [confirmLarge, setConfirmLarge] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dateError, setDateError] = useState<string | null>(null);
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const expanded = useToggleSet<string>();
   // Market classes currently auto-filled from portfolio holdings ("computed").
   const [computedClasses, setComputedClasses] = useState<Set<string>>(new Set());
   const [editedClasses, setEditedClasses] = useState<Set<string>>(new Set());
@@ -123,15 +124,6 @@ export function SnapshotsTab() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [namedValues, panel.kind]);
-
-  function toggleExpanded(id: string) {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
 
   useEffect(() => {
     if (panel.kind === "edit") {
@@ -488,12 +480,12 @@ export function SnapshotsTab() {
             <>
               <ul className="space-y-2 md:hidden">
                 {snapshots.slice().reverse().map((s) => {
-                  const isOpen = expandedIds.has(s.id);
+                  const isOpen = expanded.has(s.id);
                   return (
                     <li key={s.id} className="rounded-md border border-border dark:border-gray-700">
                       <button
                         type="button"
-                        onClick={() => toggleExpanded(s.id)}
+                        onClick={() => expanded.toggle(s.id)}
                         aria-expanded={isOpen}
                         className="block w-full p-3 text-left"
                       >
@@ -562,12 +554,12 @@ export function SnapshotsTab() {
                 </thead>
                 <tbody>
                   {snapshots.slice().reverse().map((s) => {
-                    const isOpen = expandedIds.has(s.id);
+                    const isOpen = expanded.has(s.id);
                     return (
                       <Fragment key={s.id}>
                         <tr
                           className="cursor-pointer border-t border-border hover:bg-gray-50 dark:hover:bg-gray-700/40"
-                          onClick={() => toggleExpanded(s.id)}
+                          onClick={() => expanded.toggle(s.id)}
                           aria-expanded={isOpen}
                         >
                           <td className="py-2 text-center text-xs text-gray-400" aria-hidden>{isOpen ? "▾" : "▸"}</td>

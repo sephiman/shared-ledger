@@ -10,7 +10,8 @@ import {
   type BankConnection,
   type ConnectionStatus,
 } from "@/api/banks";
-import { asApiError } from "@/api/client";
+import { apiErrorMessage } from "@/api/client";
+import { formatDate } from "@/lib/dates";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select } from "@/components/ui/primitives";
 import { CategorizationRulesCard } from "./CategorizationRulesCard";
 
@@ -51,8 +52,7 @@ export function BanksCard({ householdId, isOwner, locale }: { householdId: strin
       const res = await startLink.mutateAsync({ aspspName: name, country: ctry, label: label || undefined, relinkConnectionId });
       window.location.href = res.authUrl;
     } catch (err) {
-      const api = asApiError(err);
-      setLinkError(t(`errors.${api.code}`, api.message));
+      setLinkError(apiErrorMessage(err, t));
     }
   };
 
@@ -150,10 +150,10 @@ function ConnectionRow({
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const expires = connection.consentExpiresAt
-    ? new Date(connection.consentExpiresAt).toLocaleDateString(locale)
+    ? formatDate(connection.consentExpiresAt, locale)
     : "—";
   const lastSynced = connection.lastSyncedAt
-    ? new Date(connection.lastSyncedAt).toLocaleString(locale)
+    ? formatDate(connection.lastSyncedAt, locale, "PPp")
     : t("banks.never_synced");
 
   return (

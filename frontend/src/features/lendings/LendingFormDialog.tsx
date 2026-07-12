@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { asApiError } from "@/api/client";
+import { apiErrorMessage } from "@/api/client";
 import {
   useCreateLending,
   useUpdateLending,
@@ -85,8 +85,7 @@ export function LendingFormDialog({ open, householdId, editing, onClose, onSaved
         : await create.mutateAsync(input);
       onSaved(result.summary.id);
     } catch (err) {
-      const api = asApiError(err);
-      setSubmitError(t(`errors.${api.code}`, api.message));
+      setSubmitError(apiErrorMessage(err, t));
     }
   };
 

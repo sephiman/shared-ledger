@@ -1,8 +1,8 @@
 package com.sephilabs.sharedledger.networth.csv
 
-import com.sephilabs.sharedledger.common.errors.AppException
 import com.sephilabs.sharedledger.common.import.ExecuteResult
 import com.sephilabs.sharedledger.common.import.PreviewSummary
+import com.sephilabs.sharedledger.common.import.guarded
 import com.sephilabs.sharedledger.identity.auth.CurrentUser
 import com.sephilabs.sharedledger.identity.auth.ImportRateLimiter
 import org.springframework.web.bind.annotation.PathVariable
@@ -21,20 +21,12 @@ class AssetImportController(
     private val rateLimiter: ImportRateLimiter,
 ) {
     @PostMapping("/preview")
-    fun preview(@PathVariable householdId: UUID, @RequestParam("file") file: MultipartFile): PreviewSummary {
-        val user = currentUser.requireUser()
-        if (!rateLimiter.tryAcquire(user.id)) throw AppException.tooManyRequests()
-        if (file.isEmpty) throw AppException.badRequest("IMPORT_FILE_EMPTY")
-        return file.inputStream.use { service.preview(householdId, it) }
-    }
+    fun preview(@PathVariable householdId: UUID, @RequestParam("file") file: MultipartFile): PreviewSummary =
+        rateLimiter.guarded(currentUser, file) { _, input -> service.preview(householdId, input) }
 
     @PostMapping("/execute")
-    fun execute(@PathVariable householdId: UUID, @RequestParam("file") file: MultipartFile): ExecuteResult {
-        val user = currentUser.requireUser()
-        if (!rateLimiter.tryAcquire(user.id)) throw AppException.tooManyRequests()
-        if (file.isEmpty) throw AppException.badRequest("IMPORT_FILE_EMPTY")
-        return file.inputStream.use { service.execute(householdId, it, user) }
-    }
+    fun execute(@PathVariable householdId: UUID, @RequestParam("file") file: MultipartFile): ExecuteResult =
+        rateLimiter.guarded(currentUser, file) { user, input -> service.execute(householdId, input, user) }
 }
 
 @RestController
@@ -45,20 +37,12 @@ class LiabilityImportController(
     private val rateLimiter: ImportRateLimiter,
 ) {
     @PostMapping("/preview")
-    fun preview(@PathVariable householdId: UUID, @RequestParam("file") file: MultipartFile): PreviewSummary {
-        val user = currentUser.requireUser()
-        if (!rateLimiter.tryAcquire(user.id)) throw AppException.tooManyRequests()
-        if (file.isEmpty) throw AppException.badRequest("IMPORT_FILE_EMPTY")
-        return file.inputStream.use { service.preview(householdId, it) }
-    }
+    fun preview(@PathVariable householdId: UUID, @RequestParam("file") file: MultipartFile): PreviewSummary =
+        rateLimiter.guarded(currentUser, file) { _, input -> service.preview(householdId, input) }
 
     @PostMapping("/execute")
-    fun execute(@PathVariable householdId: UUID, @RequestParam("file") file: MultipartFile): ExecuteResult {
-        val user = currentUser.requireUser()
-        if (!rateLimiter.tryAcquire(user.id)) throw AppException.tooManyRequests()
-        if (file.isEmpty) throw AppException.badRequest("IMPORT_FILE_EMPTY")
-        return file.inputStream.use { service.execute(householdId, it, user) }
-    }
+    fun execute(@PathVariable householdId: UUID, @RequestParam("file") file: MultipartFile): ExecuteResult =
+        rateLimiter.guarded(currentUser, file) { user, input -> service.execute(householdId, input, user) }
 }
 
 @RestController
@@ -69,18 +53,10 @@ class AmortizationImportController(
     private val rateLimiter: ImportRateLimiter,
 ) {
     @PostMapping("/preview")
-    fun preview(@PathVariable householdId: UUID, @RequestParam("file") file: MultipartFile): PreviewSummary {
-        val user = currentUser.requireUser()
-        if (!rateLimiter.tryAcquire(user.id)) throw AppException.tooManyRequests()
-        if (file.isEmpty) throw AppException.badRequest("IMPORT_FILE_EMPTY")
-        return file.inputStream.use { service.preview(householdId, it) }
-    }
+    fun preview(@PathVariable householdId: UUID, @RequestParam("file") file: MultipartFile): PreviewSummary =
+        rateLimiter.guarded(currentUser, file) { _, input -> service.preview(householdId, input) }
 
     @PostMapping("/execute")
-    fun execute(@PathVariable householdId: UUID, @RequestParam("file") file: MultipartFile): ExecuteResult {
-        val user = currentUser.requireUser()
-        if (!rateLimiter.tryAcquire(user.id)) throw AppException.tooManyRequests()
-        if (file.isEmpty) throw AppException.badRequest("IMPORT_FILE_EMPTY")
-        return file.inputStream.use { service.execute(householdId, it, user) }
-    }
+    fun execute(@PathVariable householdId: UUID, @RequestParam("file") file: MultipartFile): ExecuteResult =
+        rateLimiter.guarded(currentUser, file) { user, input -> service.execute(householdId, input, user) }
 }

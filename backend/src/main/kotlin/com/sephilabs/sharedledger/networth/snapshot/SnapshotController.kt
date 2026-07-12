@@ -1,14 +1,12 @@
 package com.sephilabs.sharedledger.networth.snapshot
 
 import com.sephilabs.sharedledger.common.Csv
-import com.sephilabs.sharedledger.common.errors.AppException
 import com.sephilabs.sharedledger.household.HouseholdRepository
+import com.sephilabs.sharedledger.household.getOrThrow
 import com.sephilabs.sharedledger.household.RequireHouseholdOwner
 import com.sephilabs.sharedledger.identity.auth.CurrentUser
 import jakarta.validation.Valid
 import org.springframework.format.annotation.DateTimeFormat
-import org.springframework.http.HttpHeaders
-import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
@@ -93,11 +91,6 @@ class SnapshotController(
     @GetMapping("/export.csv")
     fun exportCsv(@PathVariable householdId: UUID): ResponseEntity<String> {
         val csv = service.exportCsv(householdId)
-        val household = households.findById(householdId).orElseThrow { AppException.notFound("HOUSEHOLD_NOT_FOUND") }
-        val filename = Csv.exportFilename(LocalDate.now(), household.name, "snapshots")
-        return ResponseEntity.ok()
-            .contentType(MediaType.parseMediaType("text/csv; charset=utf-8"))
-            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"$filename\"")
-            .body(csv)
+        return Csv.download(households.getOrThrow(householdId).name, "snapshots", csv)
     }
 }

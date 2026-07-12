@@ -1,8 +1,8 @@
 package com.sephilabs.sharedledger.dataexport
 
 import com.sephilabs.sharedledger.common.Csv
-import com.sephilabs.sharedledger.common.errors.AppException
 import com.sephilabs.sharedledger.household.HouseholdRepository
+import com.sephilabs.sharedledger.household.getOrThrow
 import com.sephilabs.sharedledger.lending.LendingService
 import com.sephilabs.sharedledger.networth.csv.NamedCsvExportService
 import com.sephilabs.sharedledger.networth.movement.MovementService
@@ -40,8 +40,7 @@ class DataExportController(
 
     @GetMapping("/export-all.zip")
     fun exportAll(@PathVariable householdId: UUID): ResponseEntity<ByteArray> {
-        val household = households.findById(householdId)
-            .orElseThrow { AppException.notFound("HOUSEHOLD_NOT_FOUND") }
+        val household = households.getOrThrow(householdId)
         val today = LocalDate.now()
 
         val files = listOf(

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useCreateHousehold } from "@/api/settings";
 import { useAuth } from "@/auth/AuthContext";
-import { asApiError } from "@/api/client";
+import { apiErrorMessage } from "@/api/client";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select } from "@/components/ui/primitives";
 import { getCurrencyOptions } from "@/lib/currency";
 
@@ -81,8 +81,7 @@ export function CreateHouseholdDialog({ open, onClose, onCreated }: Props) {
                 onCreated(created.id);
                 reset();
               } catch (err) {
-                const api = asApiError(err);
-                setSubmitError(t(`errors.${api.code}`, api.message));
+                setSubmitError(apiErrorMessage(err, t));
               }
             }}
             className="space-y-3"

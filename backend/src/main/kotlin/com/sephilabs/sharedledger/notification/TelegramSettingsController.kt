@@ -2,6 +2,7 @@ package com.sephilabs.sharedledger.notification
 
 import com.sephilabs.sharedledger.common.errors.AppException
 import com.sephilabs.sharedledger.household.HouseholdRepository
+import com.sephilabs.sharedledger.household.getOrThrow
 import com.sephilabs.sharedledger.household.RequireHouseholdOwner
 import com.sephilabs.sharedledger.identity.auth.CurrentUser
 import jakarta.validation.Valid
@@ -97,7 +98,7 @@ class TelegramSettingsController(
         val settings = settingsRepo.findByHouseholdId(householdId)
             ?: throw AppException.badRequest("TELEGRAM_NOT_CONFIGURED")
         if (!settings.isDeliverable()) throw AppException.badRequest("TELEGRAM_NOT_CONFIGURED")
-        val household = households.findById(householdId).orElseThrow { AppException.notFound("HOUSEHOLD_NOT_FOUND") }
+        val household = households.getOrThrow(householdId)
         val locale = Locale.forLanguageTag(household.defaultLocale.ifBlank { "en" })
         val token = crypto.decrypt(settings.botTokenEnc!!)
         val result = client.sendMessage(token, settings.chatId!!, formatter.testMessage(locale))

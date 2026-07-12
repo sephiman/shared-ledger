@@ -176,10 +176,7 @@ export function useAddLiabilityValue(householdId: string, liabilityId: string) {
         balanceDate: date,
         balance: value,
       })).data,
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["liability-values", householdId, liabilityId] });
-      void qc.invalidateQueries({ queryKey: ["liabilities", householdId] });
-    },
+    onSuccess: () => invalidateLiabilityValues(qc, householdId, liabilityId),
   });
 }
 
@@ -191,10 +188,7 @@ export function useUpdateLiabilityValue(householdId: string, liabilityId: string
         balanceDate: date,
         balance: value,
       })).data,
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["liability-values", householdId, liabilityId] });
-      void qc.invalidateQueries({ queryKey: ["liabilities", householdId] });
-    },
+    onSuccess: () => invalidateLiabilityValues(qc, householdId, liabilityId),
   });
 }
 
@@ -204,10 +198,7 @@ export function useDeleteLiabilityValue(householdId: string, liabilityId: string
     mutationFn: async (entryId: string) => {
       await apiClient.delete(`/households/${householdId}/liabilities/${liabilityId}/values/${entryId}`);
     },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["liability-values", householdId, liabilityId] });
-      void qc.invalidateQueries({ queryKey: ["liabilities", householdId] });
-    },
+    onSuccess: () => invalidateLiabilityValues(qc, householdId, liabilityId),
   });
 }
 
@@ -262,10 +253,7 @@ export function useAddAssetValue(householdId: string, assetId: string) {
         valueDate: date,
         value,
       })).data,
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["asset-values", householdId, assetId] });
-      void qc.invalidateQueries({ queryKey: ["assets", householdId] });
-    },
+    onSuccess: () => invalidateAssetValues(qc, householdId, assetId),
   });
 }
 
@@ -277,10 +265,7 @@ export function useUpdateAssetValue(householdId: string, assetId: string) {
         valueDate: date,
         value,
       })).data,
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["asset-values", householdId, assetId] });
-      void qc.invalidateQueries({ queryKey: ["assets", householdId] });
-    },
+    onSuccess: () => invalidateAssetValues(qc, householdId, assetId),
   });
 }
 
@@ -290,10 +275,7 @@ export function useDeleteAssetValue(householdId: string, assetId: string) {
     mutationFn: async (entryId: string) => {
       await apiClient.delete(`/households/${householdId}/assets/${assetId}/values/${entryId}`);
     },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["asset-values", householdId, assetId] });
-      void qc.invalidateQueries({ queryKey: ["assets", householdId] });
-    },
+    onSuccess: () => invalidateAssetValues(qc, householdId, assetId),
   });
 }
 
@@ -333,11 +315,7 @@ export function useCreateSnapshot(householdId: string) {
   return useMutation({
     mutationFn: async (input: SnapshotInput) =>
       (await apiClient.post<Snapshot>(`/households/${householdId}/snapshots`, input)).data,
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["snapshots", householdId] });
-      void qc.invalidateQueries({ queryKey: ["snapshot-prefill", householdId] });
-      void qc.invalidateQueries({ queryKey: ["fire-projection", householdId] });
-    },
+    onSuccess: () => invalidateSnapshots(qc, householdId),
   });
 }
 
@@ -346,11 +324,7 @@ export function useUpdateSnapshot(householdId: string) {
   return useMutation({
     mutationFn: async ({ id, input }: { id: string; input: SnapshotInput }) =>
       (await apiClient.patch<Snapshot>(`/households/${householdId}/snapshots/${id}`, input)).data,
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["snapshots", householdId] });
-      void qc.invalidateQueries({ queryKey: ["snapshot-prefill", householdId] });
-      void qc.invalidateQueries({ queryKey: ["fire-projection", householdId] });
-    },
+    onSuccess: () => invalidateSnapshots(qc, householdId),
   });
 }
 
@@ -360,7 +334,7 @@ export function useDeleteSnapshot(householdId: string) {
     mutationFn: async (id: string) => {
       await apiClient.delete(`/households/${householdId}/snapshots/${id}`);
     },
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["snapshots", householdId] }),
+    onSuccess: () => invalidateSnapshots(qc, householdId),
   });
 }
 
@@ -397,10 +371,7 @@ export function useCreateMovement(householdId: string) {
   return useMutation({
     mutationFn: async (input: MovementInput) =>
       (await apiClient.post<Movement>(`/households/${householdId}/movements`, input)).data,
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["movements", householdId] });
-      void qc.invalidateQueries({ queryKey: ["fire-projection", householdId] });
-    },
+    onSuccess: () => invalidateMovements(qc, householdId),
   });
 }
 
@@ -409,10 +380,7 @@ export function useUpdateMovement(householdId: string) {
   return useMutation({
     mutationFn: async ({ id, input }: { id: string; input: MovementInput }) =>
       (await apiClient.patch<Movement>(`/households/${householdId}/movements/${id}`, input)).data,
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["movements", householdId] });
-      void qc.invalidateQueries({ queryKey: ["fire-projection", householdId] });
-    },
+    onSuccess: () => invalidateMovements(qc, householdId),
   });
 }
 
@@ -422,7 +390,7 @@ export function useDeleteMovement(householdId: string) {
     mutationFn: async (id: string) => {
       await apiClient.delete(`/households/${householdId}/movements/${id}`);
     },
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["movements", householdId] }),
+    onSuccess: () => invalidateMovements(qc, householdId),
   });
 }
 
@@ -444,6 +412,29 @@ export interface CashSettings {
   includeTransactions: boolean;
   includeLendings: boolean;
   includeMovements: boolean;
+}
+
+function invalidateLiabilityValues(qc: ReturnType<typeof useQueryClient>, householdId: string, liabilityId: string) {
+  void qc.invalidateQueries({ queryKey: ["liability-values", householdId, liabilityId] });
+  void qc.invalidateQueries({ queryKey: ["liabilities", householdId] });
+}
+
+function invalidateAssetValues(qc: ReturnType<typeof useQueryClient>, householdId: string, assetId: string) {
+  void qc.invalidateQueries({ queryKey: ["asset-values", householdId, assetId] });
+  void qc.invalidateQueries({ queryKey: ["assets", householdId] });
+}
+
+function invalidateSnapshots(qc: ReturnType<typeof useQueryClient>, householdId: string) {
+  void qc.invalidateQueries({ queryKey: ["snapshots", householdId] });
+  void qc.invalidateQueries({ queryKey: ["snapshot-prefill", householdId] });
+  // FIRE's starting value comes from the latest snapshot's qualifying assets.
+  void qc.invalidateQueries({ queryKey: ["fire-projection", householdId] });
+}
+
+function invalidateMovements(qc: ReturnType<typeof useQueryClient>, householdId: string) {
+  void qc.invalidateQueries({ queryKey: ["movements", householdId] });
+  // The cumulative-contributions overlay in FIRE is built from movements.
+  void qc.invalidateQueries({ queryKey: ["fire-projection", householdId] });
 }
 
 /** Invalidate everything that depends on the cash series after a mutation. */

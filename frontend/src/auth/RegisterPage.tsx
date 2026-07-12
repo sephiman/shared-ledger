@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/auth/AuthContext";
-import { apiClient, asApiError, seedCsrf } from "@/api/client";
+import { apiClient, apiErrorMessage, seedCsrf } from "@/api/client";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select } from "@/components/ui/primitives";
 import { getCurrencyOptions } from "@/lib/currency";
 
@@ -39,8 +39,7 @@ export function RegisterPage() {
           const res = await apiClient.get<PublicInvite>(`/invitations/${invitationToken}`);
           setInvite(res.data);
         } catch (err) {
-          const api = asApiError(err);
-          setInviteError(t(`errors.${api.code}`, api.message));
+          setInviteError(apiErrorMessage(err, t));
         }
       }
     })();
@@ -90,8 +89,7 @@ export function RegisterPage() {
                 await refresh();
                 navigate("/dashboard");
               } catch (err) {
-                const api = asApiError(err);
-                setError(t(`errors.${api.code}`, api.message));
+                setError(apiErrorMessage(err, t));
               } finally {
                 setSubmitting(false);
               }

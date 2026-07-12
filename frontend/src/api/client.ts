@@ -35,6 +35,12 @@ export function asApiError(err: unknown): ApiError {
   return { code: "UNKNOWN", message: ax?.message ?? "Unknown error" };
 }
 
+/** Localized message for a failed request: the `errors.<code>` translation, falling back to the server message. */
+export function apiErrorMessage(err: unknown, t: (key: string, fallback: string) => string): string {
+  const api = asApiError(err);
+  return t(`errors.${api.code}`, api.message);
+}
+
 export async function seedCsrf(): Promise<void> {
   await apiClient.get("/auth/csrf");
 }

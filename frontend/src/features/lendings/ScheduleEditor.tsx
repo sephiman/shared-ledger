@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { asApiError } from "@/api/client";
+import { apiErrorMessage } from "@/api/client";
 import {
   useDeleteSchedule,
   useMaterializeSchedule,
@@ -59,8 +59,7 @@ export function ScheduleEditor({ householdId, lendingId, schedule, disabled }: P
       setOpen(false);
       setError(null);
     } catch (err) {
-      const api = asApiError(err);
-      setError(t(`errors.${api.code}`, api.message));
+      setError(apiErrorMessage(err, t));
     }
   };
 

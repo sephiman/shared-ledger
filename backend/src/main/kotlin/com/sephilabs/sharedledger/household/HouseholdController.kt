@@ -92,7 +92,7 @@ class HouseholdController(
 
     @GetMapping("/{householdId}")
     fun get(@PathVariable householdId: UUID): HouseholdDto {
-        val h = households.findById(householdId).orElseThrow { AppException.notFound("HOUSEHOLD_NOT_FOUND") }
+        val h = households.getOrThrow(householdId)
         return HouseholdDto(h.id, h.name, h.currency, h.defaultLocale, householdContext.role().name)
     }
 
@@ -118,7 +118,7 @@ class HouseholdController(
         @PathVariable householdId: UUID,
         @Valid @RequestBody body: HouseholdUpdateRequest,
     ): HouseholdDto {
-        val h = households.findById(householdId).orElseThrow { AppException.notFound("HOUSEHOLD_NOT_FOUND") }
+        val h = households.getOrThrow(householdId)
         body.name?.let { h.name = it }
         body.currency?.let { h.currency = it.uppercase() }
         body.defaultLocale?.let { h.defaultLocale = it }

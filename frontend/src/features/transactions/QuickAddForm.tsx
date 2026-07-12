@@ -10,7 +10,7 @@ import {
 } from "@/api/transactions";
 import { Button, Chip, FieldError, Input, Label, Select, Textarea } from "@/components/ui/primitives";
 import { isoToday } from "@/lib/dates";
-import { asApiError } from "@/api/client";
+import { apiErrorMessage } from "@/api/client";
 import { categoryIcon } from "@/lib/categoryGroup";
 import { categoryLabel, categoryLabelByCode } from "@/lib/categoryLabel";
 
@@ -77,8 +77,7 @@ export function QuickAddForm({ householdId, initial, onSaved, onCancel }: QuickA
           }
           onSaved?.();
         } catch (err) {
-          const api = asApiError(err);
-          setError(t(`errors.${api.code}`, api.message));
+          setError(apiErrorMessage(err, t));
         }
       }}
       className="space-y-3"

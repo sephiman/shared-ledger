@@ -29,9 +29,18 @@ spring:
     basename: i18n/messages
     encoding: UTF-8
     fallback-to-system-locale: false
+  lifecycle:
+    # Bound the graceful-shutdown drain below docker's stop_grace_period (30s in compose).
+    timeout-per-shutdown-phase: 20s
 
 server:
   port: 8080
+  error:
+    # Spring's defaults are already never/never — pinned explicitly so a framework
+    # default change can't start leaking messages or stacktraces in API errors.
+    include-message: never
+    include-stacktrace: never
+    include-binding-errors: never
   servlet:
     session:
       cookie:

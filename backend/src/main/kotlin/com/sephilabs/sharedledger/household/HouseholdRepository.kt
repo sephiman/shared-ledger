@@ -1,5 +1,6 @@
 package com.sephilabs.sharedledger.household
 
+import com.sephilabs.sharedledger.common.errors.AppException
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
@@ -14,6 +15,9 @@ interface HouseholdRepository : JpaRepository<Household, UUID> {
     """)
     fun findAllByUser(@Param("userId") userId: UUID): List<Household>
 }
+
+fun HouseholdRepository.getOrThrow(id: UUID): Household =
+    findById(id).orElseThrow { AppException.notFound("HOUSEHOLD_NOT_FOUND") }
 
 interface HouseholdMemberRepository : JpaRepository<HouseholdMember, HouseholdMemberId> {
     fun findAllByIdUserId(userId: UUID): List<HouseholdMember>

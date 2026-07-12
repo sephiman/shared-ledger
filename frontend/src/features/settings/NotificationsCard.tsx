@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button, Card, CardBody, CardHeader, Input, Label } from "@/components/ui/primitives";
-import { asApiError } from "@/api/client";
+import { apiErrorMessage, asApiError } from "@/api/client";
 import {
   useTelegramSettings,
   useTestTelegram,
@@ -96,8 +96,7 @@ export function NotificationsCard({ householdId }: { householdId: string }) {
       setToken("");
       setSaveMsg(t("common.saved"));
     } catch (err) {
-      const api = asApiError(err);
-      setSaveMsg(t(`errors.${api.code}`, api.message));
+      setSaveMsg(apiErrorMessage(err, t));
     }
   };
 

@@ -1,5 +1,8 @@
 package com.sephilabs.sharedledger.common
 
+import org.springframework.http.HttpHeaders
+import org.springframework.http.MediaType
+import org.springframework.http.ResponseEntity
 import java.math.BigDecimal
 import java.text.Normalizer
 import java.time.LocalDate
@@ -26,6 +29,15 @@ object Csv {
         val sanitized = sanitizeNameForFilename(householdName)
         val namePart = if (sanitized.isNotEmpty()) "-$sanitized" else ""
         return "$datePart$namePart-$suffix.csv"
+    }
+
+    /** Wraps a CSV body in the standard `text/csv` attachment response used by every export endpoint. */
+    fun download(householdName: String, suffix: String, body: String): ResponseEntity<String> {
+        val filename = exportFilename(LocalDate.now(), householdName, suffix)
+        return ResponseEntity.ok()
+            .contentType(MediaType.parseMediaType("text/csv; charset=utf-8"))
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"$filename\"")
+            .body(body)
     }
 
     private fun sanitizeNameForFilename(name: String): String {

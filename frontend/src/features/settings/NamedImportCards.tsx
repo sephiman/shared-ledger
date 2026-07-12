@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
-import { asApiError } from "@/api/client";
+import { apiErrorMessage } from "@/api/client";
 import {
   useExecuteAmortization,
   useExecuteAssets,
@@ -58,8 +58,7 @@ function ImportCard({
       setPreview(await previewMut.mutateAsync(file));
     } catch (err) {
       setPreview(null);
-      const api = asApiError(err);
-      setError(t(`errors.${api.code}`, api.message));
+      setError(apiErrorMessage(err, t));
     }
   }
 
@@ -70,8 +69,7 @@ function ImportCard({
       setResult(await executeMut.mutateAsync(file));
       setPreview(null);
     } catch (err) {
-      const api = asApiError(err);
-      setError(t(`errors.${api.code}`, api.message));
+      setError(apiErrorMessage(err, t));
     }
   }
 

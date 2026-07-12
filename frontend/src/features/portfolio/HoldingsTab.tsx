@@ -17,10 +17,11 @@ import {
   type LotType,
   type SymbolCandidate,
 } from "@/api/portfolio";
-import { asApiError } from "@/api/client";
+import { apiErrorMessage } from "@/api/client";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select } from "@/components/ui/primitives";
 import { formatMoney, formatNumber, formatPrice } from "@/lib/money";
 import { formatDate, isoToday } from "@/lib/dates";
+import { useToggleSet } from "@/lib/useToggleSet";
 import { SymbolSearchCombobox } from "./SymbolSearchCombobox";
 import { fractionToPercent, percentOf, pnlTone, signedMoney } from "./valuation";
 
@@ -104,21 +105,12 @@ export function HoldingsTab() {
 
   const [panel, setPanel] = useState<PanelMode>({ kind: "closed" });
   const panelRef = useRef<HTMLDivElement | null>(null);
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const expanded = useToggleSet<string>();
   const [assetFilter, setAssetFilter] = useState<AssetFilter>("all");
 
   useEffect(() => {
     if (panel.kind === "edit") panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [panel]);
-
-  function toggleExpanded(id: string) {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
 
   const holdings = summary?.holdings ?? [];
   const availableClasses = ASSET_CLASSES.filter((c) => holdings.some((h) => h.holding.assetClass === c));
@@ -232,12 +224,12 @@ export function HoldingsTab() {
             <>
               <ul className="space-y-2 lg:hidden">
                 {filtered.map((row) => {
-                  const isOpen = expandedIds.has(row.holding.id);
+                  const isOpen = expanded.has(row.holding.id);
                   return (
                     <li key={row.holding.id} className="rounded-md border border-border dark:border-gray-700">
                       <button
                         type="button"
-                        onClick={() => toggleExpanded(row.holding.id)}
+                        onClick={() => expanded.toggle(row.holding.id)}
                         aria-expanded={isOpen}
                         className="block w-full p-3 text-left"
                       >
@@ -312,13 +304,13 @@ export function HoldingsTab() {
                 </thead>
                 <tbody>
                   {filtered.map((row) => {
-                    const isOpen = expandedIds.has(row.holding.id);
+                    const isOpen = expanded.has(row.holding.id);
                     const avg = avgCost(row);
                     return (
                       <Fragment key={row.holding.id}>
                         <tr
                           className="cursor-pointer border-t border-border hover:bg-gray-50 dark:hover:bg-gray-700/40"
-                          onClick={() => toggleExpanded(row.holding.id)}
+                          onClick={() => expanded.toggle(row.holding.id)}
                           aria-expanded={isOpen}
                         >
                           <td className="py-2 text-center text-xs text-gray-400" aria-hidden>{isOpen ? "▾" : "▸"}</td>
@@ -504,8 +496,7 @@ function LinkPanel({ holding }: { holding: Holding }) {
         },
       });
     } catch (err) {
-      const api = asApiError(err);
-      setError(t(`errors.${api.code}`, api.message));
+      setError(apiErrorMessage(err, t));
     }
   }
 
@@ -564,8 +555,7 @@ function LotsEditor({ holding, currency, locale }: { holding: Holding; currency:
       setFee("");
       setNote("");
     } catch (err) {
-      const api = asApiError(err);
-      setError(t(`errors.${api.code}`, api.message));
+      setError(apiErrorMessage(err, t));
     }
   }
 
@@ -747,8 +737,7 @@ function HoldingFormPanel({
       }
       onClose();
     } catch (err) {
-      const api = asApiError(err);
-      setError(t(`errors.${api.code}`, api.message));
+      setError(apiErrorMessage(err, t));
     }
   }
 

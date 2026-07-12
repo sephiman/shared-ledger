@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
 import { useCompleteLink } from "@/api/banks";
-import { asApiError } from "@/api/client";
+import { apiErrorMessage } from "@/api/client";
 import { showToast } from "@/lib/toastBus";
 import { Card, CardBody } from "@/components/ui/primitives";
 
@@ -36,8 +36,7 @@ export function BankCallbackPage() {
         navigate("/settings", { replace: true });
       })
       .catch((err) => {
-        const api = asApiError(err);
-        setError(t(`errors.${api.code}`, api.message));
+        setError(apiErrorMessage(err, t));
       });
   }, [complete, navigate, params, t]);
 
