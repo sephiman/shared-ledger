@@ -66,6 +66,12 @@ class SnapshotService(
         createdByUserId: UUID,
         actor: NotifyActor,
     ): SnapshotDto {
+        // One snapshot per (household, date) — the unique index enforces it; this gives a friendly
+        // error instead of a raw 409 on the common (non-race) manual case. Edit the existing one instead.
+        if (snapshots.existsByHouseholdIdAndSnapshotDate(householdId, request.snapshotDate)) {
+            throw AppException.conflict("SNAPSHOT_DATE_EXISTS")
+        }
+
         val expectedClasses = assetClasses.findAllByOrderBySortOrderAsc().map { it.code }.toSet()
         val givenClasses = request.assets.map { it.assetClassCode }.toSet()
         if (!givenClasses.containsAll(expectedClasses)) throw AppException.badRequest("SNAPSHOT_MISSING_ASSET_VALUES")
@@ -127,6 +133,13 @@ class SnapshotService(
     fun update(householdId: UUID, id: UUID, request: SnapshotRequest, by: User): SnapshotDto {
         val snapshot = snapshots.findById(id).orElseThrow { AppException.notFound("SNAPSHOT_NOT_FOUND") }
         if (snapshot.householdId != householdId) throw AppException.notFound("SNAPSHOT_NOT_FOUND")
+
+        // Moving a snapshot onto a date already taken by another snapshot would violate uniqueness.
+        if (request.snapshotDate != snapshot.snapshotDate &&
+            snapshots.existsByHouseholdIdAndSnapshotDate(householdId, request.snapshotDate)
+        ) {
+            throw AppException.conflict("SNAPSHOT_DATE_EXISTS")
+        }
 
         val expectedClasses = assetClasses.findAllByOrderBySortOrderAsc().map { it.code }.toSet()
         val givenClasses = request.assets.map { it.assetClassCode }.toSet()

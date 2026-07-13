@@ -37,18 +37,25 @@ class AuthService(
             throw AppException.forbidden("REGISTRATION_DISABLED")
         }
 
+        // Validate the invitation / registration-mode path BEFORE probing whether the email exists,
+        // so an unauthenticated caller without a valid invitation can't enumerate registered emails
+        // (the email-taken 409 is only reachable once the invite/household path is satisfied).
+        val token = request.invitationToken
+        if (token == null) {
+            if (mode == AppProperties.RegistrationMode.INVITE_ONLY) {
+                metrics.registration(mode.name, "failed_invalid_invite")
+                throw AppException.forbidden("REGISTRATION_REQUIRES_INVITATION")
+            }
+            if (request.household == null) {
+                throw AppException.badRequest("REGISTRATION_HOUSEHOLD_REQUIRED")
+            }
+        } else {
+            invitations.validateToken(token)
+        }
+
         if (users.existsByEmailIgnoreCase(request.email)) {
             metrics.registration(mode.name, "failed_email_taken")
             throw AppException.conflict("EMAIL_ALREADY_REGISTERED")
-        }
-
-        val token = request.invitationToken
-        if (token == null && mode == AppProperties.RegistrationMode.INVITE_ONLY) {
-            metrics.registration(mode.name, "failed_invalid_invite")
-            throw AppException.forbidden("REGISTRATION_REQUIRES_INVITATION")
-        }
-        if (token == null && request.household == null) {
-            throw AppException.badRequest("REGISTRATION_HOUSEHOLD_REQUIRED")
         }
 
         val user = User(

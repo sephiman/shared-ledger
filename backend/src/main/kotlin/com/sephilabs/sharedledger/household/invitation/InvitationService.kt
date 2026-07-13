@@ -102,6 +102,14 @@ class InvitationService(
         return invitation.householdId
     }
 
+    /** Validate a token without consuming it — used during registration before any user lookup. */
+    @Transactional(readOnly = true)
+    fun validateToken(token: String) {
+        val invitation = invitations.findByTokenHash(InvitationTokens.hash(token))
+            ?: throw AppException.badRequest("INVITATION_INVALID")
+        validateActive(invitation)
+    }
+
     private fun validateActive(invitation: HouseholdInvitation) {
         val now = Instant.now()
         if (invitation.revokedAt != null) throw AppException.badRequest("INVITATION_REVOKED")

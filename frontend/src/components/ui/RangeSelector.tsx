@@ -25,7 +25,9 @@ export function defaultRange(preset: RangePreset = "1y"): RangeValue {
 function isoMonthsAgo(months: number): string {
   const d = new Date();
   d.setMonth(d.getMonth() - months);
-  return d.toISOString().slice(0, 10);
+  // Local calendar date, not UTC — toISOString() would shift the day across midnight in +offset zones.
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
 /**

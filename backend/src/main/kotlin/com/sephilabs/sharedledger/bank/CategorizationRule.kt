@@ -17,7 +17,8 @@ import java.util.UUID
 /**
  * A categorisation rule: when [matchField] [matchOp] [matchValue], assign [categoryCode] +
  * [direction]. Lower [priority] wins. Rules with source=learned are created automatically when a
- * movement is confirmed with a category (remembered by counterparty for next time).
+ * movement matching no existing rule is confirmed with a category (remembered by counterparty for
+ * next time).
  */
 @Entity
 @Table(name = "bank_categorization_rules")
@@ -66,10 +67,5 @@ interface CategorizationRuleRepository : JpaRepository<CategorizationRule, UUID>
 
     fun findByIdAndHouseholdId(id: UUID, householdId: UUID): CategorizationRule?
     fun findAllByHouseholdIdOrderByPriorityAsc(householdId: UUID): List<CategorizationRule>
-    fun findFirstByHouseholdIdAndMatchFieldAndMatchOpAndMatchValueIgnoreCase(
-        householdId: UUID,
-        matchField: RuleField,
-        matchOp: RuleOp,
-        matchValue: String,
-    ): CategorizationRule?
+    fun findAllByIdInAndHouseholdId(ids: Collection<UUID>, householdId: UUID): List<CategorizationRule>
 }

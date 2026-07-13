@@ -5,21 +5,14 @@ import io.github.bucket4j.Bandwidth
 import io.github.bucket4j.Bucket
 import org.springframework.stereotype.Component
 import java.time.Duration
-import java.util.concurrent.ConcurrentHashMap
 
 @Component
 class LoginRateLimiter(private val props: AppProperties) {
 
-    private val buckets: MutableMap<String, Bucket> = ConcurrentHashMap()
+    // Keyed by client IP, which is attacker-influenced, so the store evicts idle keys to stay bounded.
+    private val store = EvictingBucketStore<String>(retention = Duration.ofHours(1), build = ::build)
 
-    fun tryAcquire(key: String): Boolean {
-        val bucket = buckets.computeIfAbsent(key) { build() }
-        return bucket.tryConsume(1)
-    }
-
-    fun reset(key: String) {
-        buckets.remove(key)
-    }
+    fun tryAcquire(key: String): Boolean = store.tryAcquire(key)
 
     private fun build(): Bucket {
         val perMinute = Bandwidth.builder()

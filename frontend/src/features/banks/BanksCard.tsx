@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useAspsps,
+  useBankConfig,
   useBankConnections,
   useDeleteConnection,
   useStartLink,
@@ -13,7 +14,6 @@ import {
 import { apiErrorMessage } from "@/api/client";
 import { formatDate } from "@/lib/dates";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select } from "@/components/ui/primitives";
-import { CategorizationRulesCard } from "./CategorizationRulesCard";
 
 // Common SEPA / open-banking countries; the ASPSP catalogue itself comes from the provider.
 const COUNTRIES = ["NL", "ES", "DE", "FR", "BE", "IT", "PT", "IE", "AT", "FI", "GB"];
@@ -32,7 +32,19 @@ function statusClass(status: ConnectionStatus): string {
 export function BanksCard({ householdId, isOwner, locale }: { householdId: string; isOwner: boolean; locale: string }) {
   const { t } = useTranslation();
   const { data: connections = [] } = useBankConnections(householdId);
+  const { data: config } = useBankConfig(householdId);
   const startLink = useStartLink(householdId);
+
+  // Distinct daily background-sync times in the viewer's own timezone, sorted by time of day.
+  const syncTimes = useMemo(() => {
+    const byMinute = new Map<number, string>();
+    for (const iso of config?.nextSyncTimes ?? []) {
+      const d = new Date(iso);
+      const key = d.getHours() * 60 + d.getMinutes();
+      if (!byMinute.has(key)) byMinute.set(key, d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" }));
+    }
+    return Array.from(byMinute.entries()).sort((a, b) => a[0] - b[0]).map((e) => e[1]);
+  }, [config?.nextSyncTimes, locale]);
 
   const [country, setCountry] = useState("NL");
   const [aspspName, setAspspName] = useState("");
@@ -57,76 +69,78 @@ export function BanksCard({ householdId, isOwner, locale }: { householdId: strin
   };
 
   return (
-    <>
-      <Card>
-        <CardHeader>
-          <p className="font-medium">{t("banks.title")}</p>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("banks.settings_description")}</p>
-        </CardHeader>
-        <CardBody className="space-y-4">
-          <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-gray-700 dark:border-sky-900 dark:bg-sky-950/30 dark:text-gray-300">
-            <p className="font-medium">{t("banks.explain_title")}</p>
-            <ul className="mt-1 list-disc space-y-0.5 pl-5">
-              <li>{t("banks.explain_sca")}</li>
-              <li>{t("banks.explain_readonly")}</li>
-              <li>{t("banks.explain_expiry")}</li>
-              <li>{t("banks.explain_selfhosted")}</li>
-            </ul>
-          </div>
+    <Card>
+      <CardHeader>
+        <p className="font-medium">{t("banks.title")}</p>
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("banks.settings_description")}</p>
+      </CardHeader>
+      <CardBody className="space-y-4">
+        <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-gray-700 dark:border-sky-900 dark:bg-sky-950/30 dark:text-gray-300">
+          <p className="font-medium">{t("banks.explain_title")}</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5">
+            <li>{t("banks.explain_sca")}</li>
+            <li>{t("banks.explain_readonly")}</li>
+            <li>{t("banks.explain_expiry")}</li>
+            <li>{t("banks.explain_selfhosted")}</li>
+          </ul>
+        </div>
 
-          {isOwner && (
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-              <div>
-                <Label>{t("banks.country")}</Label>
-                <Select value={country} onChange={(e) => { setCountry(e.target.value); setAspspName(""); }}>
-                  {COUNTRIES.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </Select>
-              </div>
-              <div>
-                <Label>{t("banks.bank")}</Label>
-                <Select value={aspspName} onChange={(e) => setAspspName(e.target.value)} disabled={aspspsLoading}>
-                  <option value="">{aspspsLoading ? t("common.loading") : t("banks.pick_bank")}</option>
-                  {aspsps.map((a) => (
-                    <option key={`${a.name}-${a.country}`} value={a.name}>{a.name}</option>
-                  ))}
-                </Select>
-              </div>
-              <div>
-                <Label>{t("banks.label")}</Label>
-                <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("banks.label_placeholder")} />
-              </div>
-              <div className="flex items-end">
-                <Button disabled={startLink.isPending || !aspspName} onClick={() => beginLink()}>
-                  {t("banks.link_bank")}
-                </Button>
-              </div>
+        {syncTimes.length > 0 && (
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {t("banks.auto_sync_schedule", { times: syncTimes.join(", ") })}
+          </p>
+        )}
+
+        {isOwner && (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+            <div>
+              <Label>{t("banks.country")}</Label>
+              <Select value={country} onChange={(e) => { setCountry(e.target.value); setAspspName(""); }}>
+                {COUNTRIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </Select>
             </div>
-          )}
-          {linkError && <FieldError message={linkError} />}
+            <div>
+              <Label>{t("banks.bank")}</Label>
+              <Select value={aspspName} onChange={(e) => setAspspName(e.target.value)} disabled={aspspsLoading}>
+                <option value="">{aspspsLoading ? t("common.loading") : t("banks.pick_bank")}</option>
+                {aspsps.map((a) => (
+                  <option key={`${a.name}-${a.country}`} value={a.name}>{a.name}</option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <Label>{t("banks.label")}</Label>
+              <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("banks.label_placeholder")} />
+            </div>
+            <div className="flex items-end">
+              <Button disabled={startLink.isPending || !aspspName} onClick={() => beginLink()}>
+                {t("banks.link_bank")}
+              </Button>
+            </div>
+          </div>
+        )}
+        {linkError && <FieldError message={linkError} />}
 
-          {connections.length === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-gray-400">{t("banks.no_connections")}</p>
-          ) : (
-            <ul className="space-y-2">
-              {connections.map((c) => (
-                <ConnectionRow
-                  key={c.id}
-                  householdId={householdId}
-                  connection={c}
-                  isOwner={isOwner}
-                  locale={locale}
-                  onRelink={() => beginLink(c.id, c.aspspName, c.aspspCountry)}
-                />
-              ))}
-            </ul>
-          )}
-        </CardBody>
-      </Card>
-
-      {connections.length > 0 && <CategorizationRulesCard householdId={householdId} isOwner={isOwner} />}
-    </>
+        {connections.length === 0 ? (
+          <p className="text-sm text-gray-500 dark:text-gray-400">{t("banks.no_connections")}</p>
+        ) : (
+          <ul className="space-y-2">
+            {connections.map((c) => (
+              <ConnectionRow
+                key={c.id}
+                householdId={householdId}
+                connection={c}
+                isOwner={isOwner}
+                locale={locale}
+                onRelink={() => beginLink(c.id, c.aspspName, c.aspspCountry)}
+              />
+            ))}
+          </ul>
+        )}
+      </CardBody>
+    </Card>
   );
 }
 

@@ -9,10 +9,13 @@ import com.sephilabs.sharedledger.common.errors.AppException
 import com.sephilabs.sharedledger.config.AppProperties
 import com.sephilabs.sharedledger.identity.user.User
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.scheduling.support.CronExpression
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Duration
 import java.time.Instant
+import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.util.UUID
 
 /**
@@ -34,7 +37,26 @@ class BankService(
 
     @Transactional(readOnly = true)
     fun config(householdId: UUID): BankConfigDto =
-        BankConfigDto(featureEnabled = props.enableBanking.configured, connectionCount = connections.countByHouseholdId(householdId))
+        BankConfigDto(
+            featureEnabled = props.enableBanking.configured,
+            connectionCount = connections.countByHouseholdId(householdId),
+            // Absolute instants so the UI can render them in the viewer's own timezone (DST-correct).
+            nextSyncTimes = if (props.enableBanking.configured) upcomingSyncRuns(count = 3) else emptyList(),
+        )
+
+    /** The next [count] background-sync fire times, from the configured cron + scheduler zone. */
+    private fun upcomingSyncRuns(count: Int): List<Instant> {
+        val cron = runCatching { CronExpression.parse(props.enableBanking.syncCron) }.getOrNull() ?: return emptyList()
+        val zone = runCatching { ZoneId.of(props.scheduler.timezone) }.getOrDefault(ZoneId.of("UTC"))
+        val runs = mutableListOf<Instant>()
+        var cursor: ZonedDateTime = ZonedDateTime.now(zone)
+        repeat(count) {
+            val next = cron.next(cursor) ?: return runs
+            runs.add(next.toInstant())
+            cursor = next
+        }
+        return runs
+    }
 
     @Transactional(readOnly = true)
     fun listAspsps(country: String): List<AspspDto> {

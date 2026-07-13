@@ -197,7 +197,10 @@ function nextCap(date: Date, period: CompoundingPeriod): Date {
   return period === "monthly" ? addMonths(date, 1) : addMonths(date, 12);
 }
 
-const SYNTHETIC_ID = "00000000-0000-0000-0000-000000000000";
+// Max UUID so the proposed payment sorts LAST among same-date payments (matching the backend, which
+// applies payments in creation order — a new payment is the newest). A min id would sort it first
+// and show a split that differs from what actually gets persisted.
+const SYNTHETIC_ID = "ffffffff-ffff-ffff-ffff-ffffffffffff";
 
 export interface SplitPreview {
   interestPaid: Decimal;

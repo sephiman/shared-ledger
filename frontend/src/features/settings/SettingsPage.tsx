@@ -346,6 +346,18 @@ export function SettingsPage() {
         <BanksCard householdId={household.householdId} isOwner={isOwner} locale={i18n.language} />
       )}
 
+      {bankConfig?.featureEnabled && (
+        <Card>
+          <CardHeader>
+            <p className="font-medium">{t("banks.rules_title")}</p>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("banks.rules_description")}</p>
+          </CardHeader>
+          <CardBody>
+            <Link to="/settings/rules" className="text-sm text-primary">{t("banks.open_rules")}</Link>
+          </CardBody>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <div className="flex items-start justify-between gap-3">

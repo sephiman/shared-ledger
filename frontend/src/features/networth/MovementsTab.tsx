@@ -207,7 +207,7 @@ export function MovementsTab() {
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="secondary" onClick={closeForm}>{t("common.cancel")}</Button>
-              <Button onClick={save}>{t("common.save")}</Button>
+              <Button onClick={save} disabled={create.isPending || update.isPending}>{t("common.save")}</Button>
             </div>
           </CardBody>
         </Card>

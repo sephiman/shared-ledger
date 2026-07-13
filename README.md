@@ -372,8 +372,14 @@ Wise could be added via its own API) with the always-available CSV import as the
   single-item action; batch confirm stays transaction-only.
 - **Categorisation**: configurable rules (counterparty / description / amount → category +
   direction) applied during sync, and learning from corrections — confirming with a category
-  remembers "this counterparty → this category" for next time. No ML. An **Apply rules** action
-  re-runs the rules over the uncategorized pending items on demand (useful after adding rules).
+  remembers "this counterparty → this category" for next time, but **only when no existing rule
+  (manual or learned) already matches the movement**: a confirmation that differs from a matching
+  rule's suggestion is treated as a one-off exception, not a new rule. No ML. An **Apply rules**
+  action re-runs the rules over the uncategorized pending items on demand (useful after adding
+  rules). Rules are managed on their **own page** (Settings → Categorisation rules) with free-text
+  search over the matched value, combinable filters (match field, direction, category,
+  manual/learned origin), sorting (creation date, value, category), pagination, in-place editing,
+  and multi-select bulk delete — handy for pruning piled-up learned rules.
 - **Multi-currency** (e.g. Wise): non-EUR movements are converted to EUR at the ECB rate of the
   booking date, keeping the original amount/currency on the pending item.
 - **Read-only**: only account/movement information is ever requested; there is no payment
@@ -429,6 +435,22 @@ everything appears.
 
 - A background scheduler runs daily; failures are isolated per template, logged with `templateId` MDC, and counted in failure metrics. The app does not crash.
 - All container logs use the `json-file` driver with rotation (10MB × 5).
+
+#### Scheduled jobs and when they run
+
+All scheduled jobs fire in `app.scheduler.timezone` (env `SCHEDULER_TIMEZONE`), which **defaults to UTC**. The table shows the default UTC time and the equivalent local time for a Central-European operator (CET = UTC+1 in winter, CEST = UTC+2 in summer):
+
+| Job | UTC (default) | CET (winter) | CEST (summer) |
+| --- | --- | --- | --- |
+| FX rate refresh | 00:30 | 01:30 | 02:30 |
+| Equity price refresh | 01:00 | 02:00 | 03:00 |
+| Recurring / lending / amortization materialize | 02:00 | 03:00 | 04:00 |
+| Auto-snapshot due-check | 06:00 | 07:00 | 08:00 |
+| Bank sync (incremental) | 07:00 & 19:00 | 08:00 & 20:00 | 09:00 & 21:00 |
+| Consent-expiry reminder | 08:00 | 09:00 | 10:00 |
+| Crypto price refresh | hourly at :05 | hourly at :05 | hourly at :05 |
+
+The ordering matters: **FX refresh runs before equity refresh** so non-EUR equity valuations convert with the day's rate. **Leave `SCHEDULER_TIMEZONE` at UTC.** Business dates are stamped in UTC (`LocalDate.now()`), so pointing the scheduler at a non-UTC zone would run the early-morning jobs on the *previous* UTC calendar day and break that FX→equity ordering. If you want the jobs to run at a different wall-clock time, shift the cron expressions rather than the timezone.
 
 ---
 
@@ -515,7 +537,9 @@ Both services attach to the single shared external network (`${SHARED_NETWORK_NA
 
 **Path B — over the host's published port (use this if NPM lives on the host or on a different machine).** Leave `FRONTEND_BIND_ADDR=0.0.0.0` in `.env` so the published port answers on all host interfaces. In NPM set **Forward Hostname / IP** to the host's IP (or `host.docker.internal` if NPM runs in Docker on the same host) and **Forward Port** to `${FRONTEND_PORT}`. Lock the port down at the OS firewall so only NPM (and your own admin IPs) can reach it.
 
-In both paths, NPM terminates TLS and forwards `X-Forwarded-For`, `X-Forwarded-Proto`, and `Host`. The backend trusts these headers (`server.forward-headers-strategy=framework`), so the session cookie's `Secure` flag and the rate limiter's per-IP keying work correctly behind the proxy. Keep `APP_COOKIE_SECURE=true` in `.env` for external access.
+In both paths, NPM terminates TLS and forwards `X-Forwarded-For`, `X-Forwarded-Proto`, and `Host`. The backend trusts these headers via Tomcat's `RemoteIpValve` (`server.forward-headers-strategy=native`), so the session cookie's `Secure` flag and the rate limiter's per-IP keying work correctly behind the proxy. Keep `APP_COOKIE_SECURE=true` in `.env` for external access.
+
+`RemoteIpValve` trusts only **private-range** proxies by default (10/8, 172.16/12, 192.168/16, 127/8) and derives the real client IP from the right of the `X-Forwarded-For` chain — so a client can't spoof `X-Forwarded-For` to dodge the login rate limiter. If your reverse proxy sits on a **public** IP (e.g. NPM on a separate host reached over the internet), add that IP to the trusted set with `SERVER_TOMCAT_REMOTEIP_INTERNAL_PROXIES` (a regex), or the limiter will key every request on the proxy's single IP.
 
 ---
 

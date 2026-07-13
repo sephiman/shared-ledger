@@ -70,6 +70,10 @@ class AuthController(
      */
     private fun openSession(email: String, password: String, request: HttpServletRequest, response: HttpServletResponse) {
         val auth = authManager.authenticate(UsernamePasswordAuthenticationToken(email, password))
+        // Session-fixation defense: if the client already had a session, rotate its id now that
+        // authentication succeeded, so a pre-seeded session id can't be promoted to an authenticated
+        // one. (When there's no prior session, saveContext mints a fresh one below.)
+        if (request.getSession(false) != null) request.changeSessionId()
         val context = SecurityContextHolder.createEmptyContext().apply { authentication = auth }
         SecurityContextHolder.setContext(context)
         contextRepo.saveContext(context, request, response)
@@ -88,6 +92,10 @@ class AuthController(
         request: HttpServletRequest,
         response: HttpServletResponse,
     ): ResponseEntity<MeResponse> {
+        // Throttle per source IP (same limiter as login) so the endpoint can't be used to
+        // brute-force invitation tokens or enumerate emails.
+        val ip = request.remoteAddr ?: "unknown"
+        if (!rateLimiter.tryAcquire("register:$ip")) throw AppException.tooManyRequests()
         val user = authService.register(body)
         // Establish the session immediately so registration is self-contained:
         // the new user is authenticated without depending on a follow-up /login.

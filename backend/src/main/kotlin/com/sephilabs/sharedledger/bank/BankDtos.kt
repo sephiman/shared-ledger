@@ -17,6 +17,8 @@ import java.util.UUID
 data class BankConfigDto(
     val featureEnabled: Boolean,
     val connectionCount: Long,
+    // Upcoming background-sync fire times (absolute instants); the UI renders them in the viewer's zone.
+    val nextSyncTimes: List<Instant> = emptyList(),
 )
 
 data class AspspDto(val name: String, val country: String, val logoUrl: String?)
@@ -175,7 +177,11 @@ data class CategorizationRuleDto(
     val direction: Direction,
     val priority: Int,
     val source: RuleSource,
+    val createdAt: Instant,
 )
+
+/** Result of a bulk rule delete. */
+data class DeletedCountDto(val deleted: Int)
 
 data class CategorizationRuleRequest(
     @field:NotNull(message = "validation.required")

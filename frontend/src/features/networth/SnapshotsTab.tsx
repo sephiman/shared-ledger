@@ -465,7 +465,7 @@ export function SnapshotsTab() {
             <FieldError message={error} />
             <div className="flex justify-end gap-2">
               <Button variant="secondary" onClick={closePanel}>{t("common.cancel")}</Button>
-              <Button onClick={save} disabled={anyLarge && !confirmLarge}>{t("common.save")}</Button>
+              <Button onClick={save} disabled={(anyLarge && !confirmLarge) || create.isPending || update.isPending}>{t("common.save")}</Button>
             </div>
           </CardBody>
         </Card>

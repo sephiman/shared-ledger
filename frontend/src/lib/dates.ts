@@ -16,12 +16,13 @@ export function addDaysIso(iso: string, days: number): string {
   return format(addDays(parseISO(iso), days), "yyyy-MM-dd");
 }
 
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/** Today's date in the browser's LOCAL calendar (not UTC) as yyyy-MM-dd. */
 export function isoToday(): string {
   const d = new Date();
-  return d.toISOString().slice(0, 10);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
-
-const pad2 = (n: number) => String(n).padStart(2, "0");
 
 export function monthBounds(year: number, month: number): { from: string; to: string } {
   const lastDay = new Date(year, month, 0).getDate();

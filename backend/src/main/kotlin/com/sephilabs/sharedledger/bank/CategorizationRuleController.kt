@@ -45,4 +45,11 @@ class CategorizationRuleController(
         service.delete(householdId, id)
         return ResponseEntity.noContent().build()
     }
+
+    @RequireHouseholdOwner
+    @PostMapping("/delete-batch")
+    fun deleteBatch(
+        @PathVariable householdId: UUID,
+        @Valid @RequestBody body: BatchIdsRequest,
+    ): DeletedCountDto = service.deleteBatch(householdId, body.ids)
 }

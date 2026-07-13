@@ -162,6 +162,9 @@ data class AppProperties(
         // PSD2 unattended-access ceiling per consent per day (background fetches only; interactive
         // fetches carry PSU headers and are not counted against this budget by the bank).
         val maxCallsPerDay: Int = 4,
+        // The background-sync cron. Also consumed by the @Scheduled placeholder in yaml; mirrored here
+        // so the bank config endpoint can surface upcoming run times to the UI.
+        val syncCron: String = "0 0 7,19 * * *",
         // Warn this many days before a consent expires so the holder can re-link in time.
         val reminderDaysBefore: Long = 7,
     ) {

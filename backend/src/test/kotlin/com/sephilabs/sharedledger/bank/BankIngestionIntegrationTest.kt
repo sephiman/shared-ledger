@@ -231,8 +231,109 @@ class BankIngestionIntegrationTest @Autowired constructor(
         assertThat(result.confirmed).isEqualTo(1)
         assertThat(result.skipped).isEmpty()
         assertThat(transactions.findByHouseholdIdAndOccurrenceDateBetween(household.id, today.minusDays(30), today)).hasSize(1)
-        // A learned rule already existed for this counterparty; no duplicate rule is created.
-        assertThat(rules.findAllByHouseholdIdOrderByPriorityAsc(household.id)).hasSize(2)
+        // The manual rule already covered the movement, so confirming learns nothing new.
+        assertThat(rules.findAllByHouseholdIdOrderByPriorityAsc(household.id)).hasSize(1)
+    }
+
+    @Test
+    fun `confirming a movement covered by a rule creates no learned rule, even with a different category`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val expenseCat = expenseCategory(household)
+        val otherExpenseCat = categories.listForHousehold(household.id)
+            .first { it.kind == "expense" && it.code != expenseCat }.code
+        categorization.create(
+            household.id,
+            CategorizationRuleRequest(
+                matchField = RuleField.counterparty,
+                matchOp = RuleOp.contains,
+                matchValue = "Albert",
+                categoryCode = expenseCat,
+                direction = Direction.expense,
+            ),
+            user,
+        )
+        fake.movements.add(movement("cv-1", today.minusDays(1), Direction.expense, "25.00", "Albert Heijn"))
+        link(household, user)
+
+        // Confirm with a DIFFERENT category than the rule suggests — a one-off exception, not a new norm.
+        val item = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content.single()
+        pendingService.confirm(household.id, item.id, ConfirmMovementRequest(categoryCode = otherExpenseCat), user)
+
+        // The transaction got the confirmed category, but no learned rule piled on the matching one.
+        val txns = transactions.findByHouseholdIdAndOccurrenceDateBetween(household.id, today.minusDays(30), today)
+        assertThat(txns.single().categoryCode).isEqualTo(otherExpenseCat)
+        val allRules = rules.findAllByHouseholdIdOrderByPriorityAsc(household.id)
+        assertThat(allRules).hasSize(1)
+        assertThat(allRules.single().source).isEqualTo(RuleSource.manual)
+    }
+
+    @Test
+    fun `confirming an uncovered movement learns a rule for its counterparty`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val expenseCat = expenseCategory(household)
+        fake.movements.add(movement("lr-1", today.minusDays(1), Direction.expense, "9.50", "Coffee Kiosk"))
+        link(household, user)
+
+        val item = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content.single()
+        pendingService.confirm(household.id, item.id, ConfirmMovementRequest(categoryCode = expenseCat), user)
+
+        val learned = rules.findAllByHouseholdIdOrderByPriorityAsc(household.id).single()
+        assertThat(learned.source).isEqualTo(RuleSource.learned)
+        assertThat(learned.matchField).isEqualTo(RuleField.counterparty)
+        assertThat(learned.matchOp).isEqualTo(RuleOp.equals)
+        assertThat(learned.matchValue).isEqualTo("Coffee Kiosk")
+        assertThat(learned.categoryCode).isEqualTo(expenseCat)
+
+        // The next movement from the same payee arrives pre-categorised, and confirming it
+        // creates no second rule — the learned one now covers the case.
+        fake.movements.clear()
+        fake.movements.add(movement("lr-2", today, Direction.expense, "4.00", "Coffee Kiosk"))
+        val connectionId = connections.findAllByHouseholdIdOrderByCreatedAtAsc(household.id).single().id
+        syncService.sync(connectionId)
+        val next = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content.single()
+        assertThat(next.suggestedCategoryCode).isEqualTo(expenseCat)
+        pendingService.confirm(household.id, next.id, ConfirmMovementRequest(), user)
+        assertThat(rules.findAllByHouseholdIdOrderByPriorityAsc(household.id)).hasSize(1)
+    }
+
+    @Test
+    fun `delete-batch removes only the requested rules of the household`() {
+        val (user, household) = seed()
+        val expenseCat = expenseCategory(household)
+        val created = (1..3).map { i ->
+            categorization.create(
+                household.id,
+                CategorizationRuleRequest(
+                    matchField = RuleField.counterparty,
+                    matchOp = RuleOp.contains,
+                    matchValue = "Shop $i",
+                    categoryCode = expenseCat,
+                    direction = Direction.expense,
+                ),
+                user,
+            )
+        }
+        // Another household's rule must be untouched even if its id is passed.
+        val (otherUser, otherHousehold) = seed()
+        val foreign = categorization.create(
+            otherHousehold.id,
+            CategorizationRuleRequest(
+                matchField = RuleField.counterparty,
+                matchOp = RuleOp.contains,
+                matchValue = "Foreign",
+                categoryCode = expenseCategory(otherHousehold),
+                direction = Direction.expense,
+            ),
+            otherUser,
+        )
+
+        val result = categorization.deleteBatch(household.id, listOf(created[0].id, created[2].id, foreign.id))
+
+        assertThat(result.deleted).isEqualTo(2)
+        assertThat(rules.findAllByHouseholdIdOrderByPriorityAsc(household.id).map { it.id }).containsExactly(created[1].id)
+        assertThat(rules.findAllByHouseholdIdOrderByPriorityAsc(otherHousehold.id)).hasSize(1)
     }
 
     @Test

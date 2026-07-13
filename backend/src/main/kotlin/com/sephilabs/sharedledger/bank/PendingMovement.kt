@@ -7,10 +7,12 @@ import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
 import jakarta.persistence.Id
+import jakarta.persistence.LockModeType
 import jakarta.persistence.Table
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
@@ -101,6 +103,19 @@ interface PendingMovementRepository : JpaRepository<PendingMovement, UUID> {
     fun findByIdAndHouseholdId(id: UUID, householdId: UUID): PendingMovement?
 
     fun findAllByIdInAndHouseholdId(ids: Collection<UUID>, householdId: UUID): List<PendingMovement>
+
+    /**
+     * Row-locking variants used when confirming/rejecting: two concurrent confirms of the same item
+     * would otherwise both pass the in-memory status check and each generate a transaction/movement.
+     * `SELECT … FOR UPDATE` serialises them — the loser blocks, then re-reads status=confirmed.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT m FROM PendingMovement m WHERE m.id = :id AND m.householdId = :hid")
+    fun findByIdAndHouseholdIdForUpdate(@Param("id") id: UUID, @Param("hid") householdId: UUID): PendingMovement?
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT m FROM PendingMovement m WHERE m.id IN :ids AND m.householdId = :hid")
+    fun findAllByIdInAndHouseholdIdForUpdate(@Param("ids") ids: Collection<UUID>, @Param("hid") householdId: UUID): List<PendingMovement>
 
     fun existsByConnectionIdAndBankMovementId(connectionId: UUID, bankMovementId: String): Boolean
 

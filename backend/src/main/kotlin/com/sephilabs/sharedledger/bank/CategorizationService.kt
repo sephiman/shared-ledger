@@ -11,7 +11,8 @@ import java.util.UUID
 /**
  * Configurable categorisation rules plus learning-from-corrections. Applied during sync to suggest
  * a category; on confirm, a counterparty -> category pairing is remembered as a learned rule so the
- * next movement from the same payee arrives pre-categorised. No ML — just deterministic matching.
+ * next movement from the same payee arrives pre-categorised — but only when no existing rule already
+ * covers the movement (see [learn]). No ML — just deterministic matching.
  */
 @Service
 class CategorizationService(private val rules: CategorizationRuleRepository) {
@@ -34,19 +35,17 @@ class CategorizationService(private val rules: CategorizationRuleRepository) {
     fun matchRule(candidates: List<CategorizationRule>, movement: PendingMovement): CategorizationRule? =
         candidates.firstOrNull { it.direction == movement.direction && it.matches(movement) }
 
-    /** Remember counterparty -> category for next time (idempotent upsert of a learned rule). */
+    /**
+     * Remember counterparty -> category for next time — but only when no existing rule (manual or
+     * learned) already matches the movement. An existing match means the case is covered: a manual
+     * confirmation that differs from the rule's suggestion is a one-off exception for that movement,
+     * not a new norm, so no rule is piled on top of the one that already matches.
+     */
     @Transactional
-    fun learn(householdId: UUID, counterparty: String?, categoryCode: String, direction: Direction, by: User) {
-        val value = counterparty?.trim().orEmpty()
+    fun learn(householdId: UUID, movement: PendingMovement, categoryCode: String, direction: Direction, by: User) {
+        val value = movement.counterparty?.trim().orEmpty()
         if (value.isBlank()) return
-        val existing = rules.findFirstByHouseholdIdAndMatchFieldAndMatchOpAndMatchValueIgnoreCase(
-            householdId, RuleField.counterparty, RuleOp.equals, value,
-        )
-        if (existing != null) {
-            existing.categoryCode = categoryCode
-            existing.direction = direction
-            return
-        }
+        if (matchRule(orderedRules(householdId), movement) != null) return
         rules.save(
             CategorizationRule(
                 householdId = householdId,
@@ -100,6 +99,14 @@ class CategorizationService(private val rules: CategorizationRuleRepository) {
         rules.delete(rule)
     }
 
+    /** Delete the household's rules among [ids]; ids of other households are silently ignored. */
+    @Transactional
+    fun deleteBatch(householdId: UUID, ids: List<UUID>): DeletedCountDto {
+        val toDelete = rules.findAllByIdInAndHouseholdId(ids, householdId)
+        rules.deleteAll(toDelete)
+        return DeletedCountDto(deleted = toDelete.size)
+    }
+
     private fun CategorizationRule.matches(m: PendingMovement): Boolean = when (matchField) {
         RuleField.counterparty -> textMatches(m.counterparty)
         RuleField.description -> textMatches(m.description)
@@ -139,6 +146,7 @@ class CategorizationService(private val rules: CategorizationRuleRepository) {
         direction = direction,
         priority = priority,
         source = source,
+        createdAt = createdAt,
     )
 
     private companion object {

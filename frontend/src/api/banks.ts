@@ -13,6 +13,8 @@ export type SyncRunStatus = "success" | "error";
 export interface BankConfig {
   featureEnabled: boolean;
   connectionCount: number;
+  /** Upcoming background-sync run times as ISO instants; rendered in the viewer's timezone. */
+  nextSyncTimes: string[];
 }
 
 export interface Aspsp {
@@ -76,6 +78,7 @@ export interface CategorizationRule {
   direction: Direction;
   priority: number;
   source: RuleSource;
+  createdAt: string;
 }
 
 export interface StartLinkInput {
@@ -391,12 +394,30 @@ export function useCreateRule(householdId: string) {
   });
 }
 
+export function useUpdateRule(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, input }: { id: string; input: RuleInput }) =>
+      (await apiClient.patch<CategorizationRule>(`${base(householdId)}/rules/${id}`, input)).data,
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["banks", householdId, "rules"] }),
+  });
+}
+
 export function useDeleteRule(householdId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
       await apiClient.delete(`${base(householdId)}/rules/${id}`);
     },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["banks", householdId, "rules"] }),
+  });
+}
+
+export function useDeleteRules(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]) =>
+      (await apiClient.post<{ deleted: number }>(`${base(householdId)}/rules/delete-batch`, { ids })).data,
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["banks", householdId, "rules"] }),
   });
 }

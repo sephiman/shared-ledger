@@ -6,17 +6,14 @@ import io.github.bucket4j.Bucket
 import org.springframework.stereotype.Component
 import java.time.Duration
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 
 @Component
 class ImportRateLimiter(private val props: AppProperties) {
 
-    private val buckets: MutableMap<UUID, Bucket> = ConcurrentHashMap()
+    // Keyed by user id (bounded by the user count), but still evicted so departed users don't linger.
+    private val store = EvictingBucketStore<UUID>(retention = Duration.ofHours(1), build = ::build)
 
-    fun tryAcquire(userId: UUID): Boolean {
-        val bucket = buckets.computeIfAbsent(userId) { build() }
-        return bucket.tryConsume(1)
-    }
+    fun tryAcquire(userId: UUID): Boolean = store.tryAcquire(userId)
 
     private fun build(): Bucket {
         val perHour = Bandwidth.builder()

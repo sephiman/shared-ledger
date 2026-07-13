@@ -114,7 +114,7 @@ class PendingMovementService(
             ?: throw AppException.badRequest("BANK_CATEGORY_REQUIRED")
         createTransaction(householdId, movement, categoryCode, direction, request.note, by, notify = true)
         markConfirmed(movement, categoryCode, by)
-        if (request.saveRule) categorization.learn(householdId, movement.counterparty, categoryCode, direction, by)
+        if (request.saveRule) categorization.learn(householdId, movement, categoryCode, direction, by)
         metrics.bankMovementsIngested(1)
         return movement.toDto(connections.findById(movement.connectionId).orElse(null), account(movement), false)
     }
@@ -137,7 +137,7 @@ class PendingMovementService(
     @Transactional
     fun confirmBatch(householdId: UUID, items: List<ConfirmBatchItem>, by: User): BatchResultDto {
         val byId = items.associateBy { it.id }
-        val movements = pending.findAllByIdInAndHouseholdId(byId.keys, householdId)
+        val movements = pending.findAllByIdInAndHouseholdIdForUpdate(byId.keys, householdId)
             .filter { it.status == MovementStatus.pending }
         val skipped = mutableListOf<UUID>()
         var confirmed = 0
@@ -153,7 +153,7 @@ class PendingMovementService(
             // Silent create; a single aggregated notification is published after the loop.
             createTransaction(householdId, movement, categoryCode, direction, null, by, notify = false)
             markConfirmed(movement, categoryCode, by)
-            categorization.learn(householdId, movement.counterparty, categoryCode, direction, by)
+            categorization.learn(householdId, movement, categoryCode, direction, by)
             confirmed++
         }
         notifications.bankMovementsConfirmed(householdId, confirmed, NotifyActor.Human(by.email))
@@ -235,8 +235,10 @@ class PendingMovementService(
 
     // --- helpers ---------------------------------------------------------------------------------
 
+    // Row-locked so two concurrent confirms of the same item can't both pass the status check and
+    // each generate a transaction/movement — the loser blocks here, then re-reads status=confirmed.
     private fun requirePending(householdId: UUID, id: UUID): PendingMovement {
-        val movement = pending.findByIdAndHouseholdId(id, householdId)
+        val movement = pending.findByIdAndHouseholdIdForUpdate(id, householdId)
             ?: throw AppException.notFound("PENDING_MOVEMENT_NOT_FOUND")
         if (movement.status != MovementStatus.pending) throw AppException.conflict("PENDING_MOVEMENT_ALREADY_PROCESSED")
         return movement

@@ -36,11 +36,11 @@ class MdcRequestContextFilter : OncePerRequestFilter() {
         }
     }
 
-    private fun resolveClientIp(request: HttpServletRequest): String {
-        val forwarded = request.getHeader("X-Forwarded-For")
-        if (!forwarded.isNullOrBlank()) return forwarded.split(',').first().trim()
-        return request.remoteAddr ?: "unknown"
-    }
+    // RemoteIpValve (forward-headers-strategy: native) has already resolved remoteAddr to the real
+    // client behind trusted proxies, so we trust it rather than re-parsing X-Forwarded-For (which a
+    // client could spoof).
+    private fun resolveClientIp(request: HttpServletRequest): String =
+        request.remoteAddr ?: "unknown"
 }
 
 @Component

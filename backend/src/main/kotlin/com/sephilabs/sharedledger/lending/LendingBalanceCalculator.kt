@@ -43,7 +43,10 @@ object LendingBalanceCalculator {
             .filter { it.deletedAt == null }
             .filter { !it.paymentDate.isBefore(lending.startDate) }
             .filter { !it.paymentDate.isAfter(effectiveEnd) }
-            .sortedWith(compareBy({ it.paymentDate }, { it.id }))
+            // Same-date payments apply in creation order (newest last), so a freshly-added payment
+            // is allocated after existing ones — and the live preview (synthetic sorts last) matches
+            // what gets persisted. id is only a final stable tiebreak for equal createdAt.
+            .sortedWith(compareBy({ it.paymentDate }, { it.createdAt }, { it.id }))
             .toList()
 
         if (lending.interestType == InterestType.none) {
