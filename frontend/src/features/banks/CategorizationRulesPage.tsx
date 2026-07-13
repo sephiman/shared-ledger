@@ -60,7 +60,10 @@ export function CategorizationRulesPage() {
     [rules, filters, sort, categories, t],
   );
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const pageItems = filtered.slice(cpage * PAGE_SIZE, cpage * PAGE_SIZE + PAGE_SIZE);
+  // The list can shrink under the current page (deletes, refetches, filters); clamping keeps the
+  // rendered page real instead of trusting every such path to reset the page state.
+  const page = Math.min(cpage, pageCount - 1);
+  const pageItems = filtered.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
 
   const allSelected = filtered.length > 0 && filtered.every((r) => selected.has(r.id));
   const toggleSelected = (id: string) =>
@@ -266,12 +269,12 @@ export function CategorizationRulesPage() {
               </ul>
               {pageCount > 1 && (
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-500 dark:text-gray-400">{t("common.page_of", { page: cpage + 1, total: pageCount })}</span>
+                  <span className="text-gray-500 dark:text-gray-400">{t("common.page_of", { page: page + 1, total: pageCount })}</span>
                   <div className="flex gap-2">
-                    <Button variant="secondary" disabled={cpage === 0} onClick={() => setCpage((p) => Math.max(0, p - 1))}>
+                    <Button variant="secondary" disabled={page === 0} onClick={() => setCpage(Math.max(0, page - 1))}>
                       {t("common.prev")}
                     </Button>
-                    <Button variant="secondary" disabled={cpage + 1 >= pageCount} onClick={() => setCpage((p) => p + 1)}>
+                    <Button variant="secondary" disabled={page + 1 >= pageCount} onClick={() => setCpage(page + 1)}>
                       {t("common.next")}
                     </Button>
                   </div>
