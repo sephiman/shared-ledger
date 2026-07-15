@@ -791,7 +791,11 @@
     "delete_custom_category_warning": "This will permanently delete the category and every transaction, budget, and recurring template using it. This cannot be undone.",
     "custom_category_name": "Name",
     "custom_category_group": "Group",
-    "custom_category_essential": "Essential"
+    "custom_category_essential": "Essential",
+    "home_panels_title": "Home panels",
+    "home_panels_description": "Choose which panels appear at the top of your Home. This only affects your account — other household members keep their own layout.",
+    "home_panels_disclaimer": "Panels marked with ⓘ depend on data: even when switched on, they only appear once there is something to show. The monthly summary and the expenses chart are always shown.",
+    "home_panel_data_dependent": "This panel only appears when there is data to show. Turning it on won't display it while it has no data."
   },
   "notifications": {
     "title": "Notifications",

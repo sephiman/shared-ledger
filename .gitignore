@@ -16,10 +16,11 @@ frontend/dist/
 frontend/.vite/
 frontend/coverage/
 
-# IDEs
+# IDEs / assistants
 .idea/
 .vscode/
 *.iml
+.claude/
 
 # OS
 .DS_Store

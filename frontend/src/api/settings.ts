@@ -112,6 +112,17 @@ export function useSetDefaultHousehold() {
   });
 }
 
+export function useUpdateHomePanels() {
+  const { setUser } = useAuth();
+  return useMutation({
+    mutationFn: async (hiddenPanels: string[]) =>
+      (await apiClient.put<Me>("/auth/me/home-panels", { hiddenPanels })).data,
+    // Home reads the preference from /auth/me; pushing the response into the
+    // auth context applies the new layout without a refetch.
+    onSuccess: (me) => setUser(me),
+  });
+}
+
 export function useDeleteHousehold() {
   return useMutation({
     mutationFn: async (householdId: string) => {

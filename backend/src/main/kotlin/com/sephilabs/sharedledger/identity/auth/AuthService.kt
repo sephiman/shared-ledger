@@ -9,6 +9,7 @@ import com.sephilabs.sharedledger.household.HouseholdMemberRepository
 import com.sephilabs.sharedledger.household.HouseholdRepository
 import com.sephilabs.sharedledger.household.HouseholdRole
 import com.sephilabs.sharedledger.household.invitation.InvitationService
+import com.sephilabs.sharedledger.identity.user.HomePanel
 import com.sephilabs.sharedledger.identity.user.User
 import com.sephilabs.sharedledger.identity.user.UserRepository
 import com.sephilabs.sharedledger.observability.AppMetrics
@@ -97,6 +98,18 @@ class AuthService(
     fun updateLocale(userId: UUID, locale: String): User {
         val user = loadManaged(userId)
         user.locale = locale
+        return user
+    }
+
+    @Transactional
+    fun setHiddenHomePanels(userId: UUID, hiddenPanels: List<String>): User {
+        val unknown = hiddenPanels.filterNot { it in HomePanel.ids }
+        if (unknown.isNotEmpty()) {
+            throw AppException.badRequest("INVALID_HOME_PANEL")
+        }
+        val user = loadManaged(userId)
+        // Store in enum order so equivalent selections serialize identically.
+        user.hiddenHomePanels = HomePanel.entries.map { it.id }.filter { it in hiddenPanels }.joinToString(",")
         return user
     }
 

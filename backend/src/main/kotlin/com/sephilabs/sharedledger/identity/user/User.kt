@@ -29,4 +29,8 @@ class User(
 
     @Column(name = "default_household_id")
     var defaultHouseholdId: UUID? = null,
+
+    // CSV of HomePanel ids the user chose to hide on Home; empty = all visible.
+    @Column(name = "hidden_home_panels", nullable = false)
+    var hiddenHomePanels: String = "",
 ) : TimestampedEntity()

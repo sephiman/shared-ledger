@@ -10,6 +10,7 @@ import { categoryIcon } from "@/lib/categoryGroup";
 import { CreateHouseholdDialog } from "@/features/household/CreateHouseholdDialog";
 import { CustomCategoryDialog } from "./CustomCategoryDialog";
 import { NotificationsCard } from "./NotificationsCard";
+import { HomePanelsCard } from "./HomePanelsCard";
 import { AutoSnapshotCard } from "./AutoSnapshotCard";
 import { getCurrencyOptions } from "@/lib/currency";
 import { formatDate } from "@/lib/dates";
@@ -143,6 +144,8 @@ export function SettingsPage() {
           </Button>
         </CardBody>
       </Card>
+
+      <HomePanelsCard />
 
       {user && (
         <Card>

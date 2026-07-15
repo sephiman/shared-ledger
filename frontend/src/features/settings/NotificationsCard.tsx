@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Button, Card, CardBody, CardHeader, Input, Label } from "@/components/ui/primitives";
+import { Button, Card, CardBody, CardHeader, Input, Label, Toggle } from "@/components/ui/primitives";
 import { apiErrorMessage, asApiError } from "@/api/client";
 import {
   useTelegramSettings,
@@ -27,21 +27,6 @@ const ENTITY_TOGGLES: { key: EntityToggleKey; labelKey: string }[] = [
   { key: "notifyRecurringTxn", labelKey: "notifications.entity_recurring_txn" },
   { key: "notifyRecurringLending", labelKey: "notifications.entity_recurring_lending" },
 ];
-
-function Toggle({ checked, disabled, onChange, label }: { checked: boolean; disabled?: boolean; onChange: (v: boolean) => void; label: string }) {
-  return (
-    <label className="flex items-center justify-between gap-3 py-1.5 text-sm">
-      <span className={disabled ? "text-gray-400 dark:text-gray-500" : ""}>{label}</span>
-      <input
-        type="checkbox"
-        checked={checked}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.checked)}
-        className="h-4 w-4 rounded border-border text-primary focus:ring-primary disabled:opacity-50"
-      />
-    </label>
-  );
-}
 
 export function NotificationsCard({ householdId }: { householdId: string }) {
   const { t } = useTranslation();

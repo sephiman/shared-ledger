@@ -217,7 +217,7 @@ Tracking-only records of money the household has **lent to other people**. They 
 
 Beyond raw lists, the app provides comparisons and projections.
 
-The Dashboard (landing page) shows the current month and current year at a glance and adds two at-a-glance tiles in a hero row:
+The Dashboard (landing page) shows the current month and current year at a glance and adds a hero row of up to six at-a-glance tiles: the two described below plus **Current wealth**, **Portfolio**, **Money lent** and **Pending bank movements**. Those four are data-dependent — they render only when they have something to show (no empty-state placeholder). Independently of that, each user can hide any of the six tiles from *Settings → Home panels* (see Settings); the monthly/yearly summaries and expenses charts are always shown.
 
 - **Trailing 12-month savings rate**: primary number is the trailing-12-month rate; below it, the year-to-date and current-month rates. Beside the primary number, a small sparkline plots the trailing-12 rate month by month over the last 24 months so the trend is visible without opening Analytics.
 - **Fixed cost of living**: trailing-12-month average of recurring (template-backed) expenses, expressed as €/day (÷30.44) and €/year (×12). A secondary line shows the same metrics including discretionary expenses for comparison. If fewer than 12 months of data exist, the average is taken over the months available and that count is shown.
@@ -263,6 +263,7 @@ Additionally:
 
 - Change language (per user).
 - Change password.
+- **Home panels** (per user): show/hide each of the six top Dashboard tiles — Savings rate, Cost of living, Current wealth, Portfolio, Money lent, Pending bank movements. Stored server-side per user, so it survives new devices and never affects other members of the household. The toggle can only *hide* a tile: data-dependent tiles (marked with an info hint in Settings) still appear only once they have data, even when switched on. The month/year summaries and the expenses chart are always shown and not listed here.
 - **Households**: list every household the user belongs to, mark one as default, switch the active household, create a new household, or hard-delete an owned household (subject to the default-household restriction described above).
 - Household name, currency and default locale (owners only).
 - Custom categories: create, rename, change essential flag, move between groups, or hard-delete with cascade (owners only). Members see the list read-only.

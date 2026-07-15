@@ -237,6 +237,22 @@ export function CheckboxTree({
   );
 }
 
+/** Labelled on/off row: label on the left, checkbox on the right. */
+export function Toggle({ checked, disabled, onChange, label }: { checked: boolean; disabled?: boolean; onChange: (v: boolean) => void; label: ReactNode }) {
+  return (
+    <label className="flex items-center justify-between gap-3 py-1.5 text-sm">
+      <span className={disabled ? "text-gray-400 dark:text-gray-500" : ""}>{label}</span>
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.checked)}
+        className="h-4 w-4 rounded border-border text-primary focus:ring-primary disabled:opacity-50"
+      />
+    </label>
+  );
+}
+
 export function Chip({ children, onClick, active }: { children: React.ReactNode; onClick?: () => void; active?: boolean }) {
   return (
     <button

@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
-import { useActiveHousehold } from "@/auth/AuthContext";
+import { useActiveHousehold, useAuth } from "@/auth/AuthContext";
+import { isPanelVisible } from "@/lib/homePanels";
 import {
   useCostOfLiving,
   useDashboardExtras,
@@ -37,6 +38,7 @@ interface DashboardData {
 
 export function DashboardPage() {
   const household = useActiveHousehold();
+  const { user } = useAuth();
   const now = new Date();
   const month = useMonthDashboard(household.householdId, now.getFullYear(), now.getMonth() + 1);
   const year = useYearDashboard(household.householdId, now.getFullYear());
@@ -53,17 +55,32 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-8">
+      {/* Per-user Settings toggle gates each tile; hidden tiles aren't even mounted (no wasted
+          queries). Tiles keep their own return-null-when-no-data behaviour, so a panel shows
+          only when its toggle is on AND it has data. */}
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <SavingsRateTile extras={extras.data} locale={i18n.language} />
-        <CostOfLivingTile
-          data={costOfLiving.data}
-          currency={household.currency}
-          locale={i18n.language}
-        />
-        <CurrentWealthTile householdId={household.householdId} currency={household.currency} locale={i18n.language} />
-        <PortfolioOverviewTile householdId={household.householdId} currency={household.currency} locale={i18n.language} />
-        <LendingsOverviewTile householdId={household.householdId} currency={household.currency} locale={i18n.language} />
-        <PendingBankTile householdId={household.householdId} />
+        {isPanelVisible(user?.hiddenHomePanels, "savings_rate") && (
+          <SavingsRateTile extras={extras.data} locale={i18n.language} />
+        )}
+        {isPanelVisible(user?.hiddenHomePanels, "cost_of_living") && (
+          <CostOfLivingTile
+            data={costOfLiving.data}
+            currency={household.currency}
+            locale={i18n.language}
+          />
+        )}
+        {isPanelVisible(user?.hiddenHomePanels, "current_wealth") && (
+          <CurrentWealthTile householdId={household.householdId} currency={household.currency} locale={i18n.language} />
+        )}
+        {isPanelVisible(user?.hiddenHomePanels, "portfolio") && (
+          <PortfolioOverviewTile householdId={household.householdId} currency={household.currency} locale={i18n.language} />
+        )}
+        {isPanelVisible(user?.hiddenHomePanels, "money_lent") && (
+          <LendingsOverviewTile householdId={household.householdId} currency={household.currency} locale={i18n.language} />
+        )}
+        {isPanelVisible(user?.hiddenHomePanels, "pending_bank") && (
+          <PendingBankTile householdId={household.householdId} />
+        )}
       </section>
 
       <DashboardSection

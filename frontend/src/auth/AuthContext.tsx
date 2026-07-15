@@ -13,6 +13,8 @@ export interface Me {
   email: string;
   locale: "en" | "es";
   defaultHouseholdId: string | null;
+  /** Home panels this user switched off in Settings (empty = all visible). */
+  hiddenHomePanels: string[];
   households: HouseholdMembership[];
 }
 

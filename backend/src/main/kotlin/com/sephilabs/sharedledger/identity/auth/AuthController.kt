@@ -3,6 +3,7 @@ package com.sephilabs.sharedledger.identity.auth
 import com.sephilabs.sharedledger.common.errors.AppException
 import com.sephilabs.sharedledger.household.HouseholdMemberRepository
 import com.sephilabs.sharedledger.household.HouseholdRepository
+import com.sephilabs.sharedledger.identity.user.HomePanel
 import com.sephilabs.sharedledger.identity.user.User
 import com.sephilabs.sharedledger.identity.user.UserRepository
 import com.sephilabs.sharedledger.observability.AppMetrics
@@ -128,6 +129,13 @@ class AuthController(
         return buildMe(updated)
     }
 
+    @PutMapping("/me/home-panels")
+    fun setHomePanels(@Valid @RequestBody body: HomePanelsRequest): MeResponse {
+        val current = currentUser.requireUser()
+        val updated = authService.setHiddenHomePanels(current.id, body.hiddenPanels)
+        return buildMe(updated)
+    }
+
     private fun buildMe(user: User): MeResponse {
         val memberships = members.findAllByIdUserId(user.id)
         val byId = households.findAllById(memberships.map { it.id.householdId }).associateBy { it.id }
@@ -137,6 +145,8 @@ class AuthController(
             }
         }
         val defaultId = user.defaultHouseholdId?.takeIf { id -> list.any { it.householdId == id } }
-        return MeResponse(user.id, user.email, user.locale, defaultId, list)
+        // Drop ids that are no longer valid panels so a removed panel can't linger in the payload.
+        val hiddenPanels = user.hiddenHomePanels.split(',').filter { it in HomePanel.ids }
+        return MeResponse(user.id, user.email, user.locale, defaultId, hiddenPanels, list)
     }
 }

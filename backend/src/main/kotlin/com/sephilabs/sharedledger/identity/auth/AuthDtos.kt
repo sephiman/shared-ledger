@@ -30,6 +30,10 @@ data class DefaultHouseholdRequest(
     val householdId: UUID,
 )
 
+data class HomePanelsRequest(
+    val hiddenPanels: List<String>,
+)
+
 data class HouseholdMembershipDto(
     val householdId: UUID,
     val name: String,
@@ -42,6 +46,7 @@ data class MeResponse(
     val email: String,
     val locale: String,
     val defaultHouseholdId: UUID?,
+    val hiddenHomePanels: List<String>,
     val households: List<HouseholdMembershipDto>,
 )
 
