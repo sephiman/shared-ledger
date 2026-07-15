@@ -247,7 +247,9 @@
   },
   "wealth": {
     "evolution_from_portfolio": "De la cartera",
-    "evolution_from_snapshots": "De las instantáneas"
+    "evolution_from_snapshots": "De las instantáneas",
+    "home_title": "Patrimonio actual",
+    "home_view_all": "Ver todo"
   },
   "networth": {
     "title": "Patrimonio",

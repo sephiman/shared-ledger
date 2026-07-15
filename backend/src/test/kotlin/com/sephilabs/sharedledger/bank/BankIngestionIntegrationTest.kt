@@ -644,6 +644,40 @@ class BankIngestionIntegrationTest @Autowired constructor(
         assertThat(fake.fetchCalls).isEmpty()
     }
 
+    @Test
+    fun `pending count breaks down per connection, labelled and largest first`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        fake.movements.addAll(
+            listOf(
+                movement("m-1", today.minusDays(2), Direction.expense, "10.00", "Shop A"),
+                movement("m-2", today.minusDays(1), Direction.expense, "20.00", "Shop B"),
+            ),
+        )
+        // First connection ingests the two movements above.
+        bankService.startLink(household.id, StartLinkRequest(aspspName = "ING", country = "NL", label = "Joint account"), user)
+        bankService.completeLink(household.id, CompleteLinkRequest(code = "code", state = fake.lastState!!), user)
+        // The second connection (unlabelled → bank-name fallback) also sees a third movement: 3 vs 2.
+        fake.movements.add(movement("m-3", today, Direction.expense, "30.00", "Shop C"))
+        bankService.startLink(household.id, StartLinkRequest(aspspName = "Revolut", country = "NL", label = null), user)
+        bankService.completeLink(household.id, CompleteLinkRequest(code = "code", state = fake.lastState!!), user)
+
+        val counts = pendingService.pendingCounts(household.id)
+        assertThat(counts.count).isEqualTo(5)
+        assertThat(counts.byConnection.map { it.label to it.count })
+            .containsExactly("Revolut" to 3L, "Joint account" to 2L)
+
+        // Confirming one Revolut item moves its line, not just the total (ties order alphabetically).
+        val revolutId = counts.byConnection.first().connectionId
+        val item = pending.search(household.id, MovementStatus.pending, revolutId, null, null, PageRequest.of(0, 100)).content.first()
+        pendingService.confirm(household.id, item.id, ConfirmMovementRequest(categoryCode = expenseCategory(household)), user)
+
+        val after = pendingService.pendingCounts(household.id)
+        assertThat(after.count).isEqualTo(4)
+        assertThat(after.byConnection.map { it.label to it.count })
+            .containsExactly("Joint account" to 2L, "Revolut" to 2L)
+    }
+
     private fun scriptedPage(startIdx: Int, count: Int, key: String?): MovementPage {
         val today = LocalDate.now()
         val ms = (0 until count).map { i ->

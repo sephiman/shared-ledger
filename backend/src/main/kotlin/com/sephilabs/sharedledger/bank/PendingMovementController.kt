@@ -35,7 +35,7 @@ class PendingMovementController(
 
     @GetMapping("/count")
     fun count(@PathVariable householdId: UUID): PendingCountDto =
-        PendingCountDto(service.pendingCount(householdId))
+        service.pendingCounts(householdId)
 
     @PostMapping("/{id}/confirm")
     fun confirm(

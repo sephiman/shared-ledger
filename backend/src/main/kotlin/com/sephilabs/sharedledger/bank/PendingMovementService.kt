@@ -46,6 +46,25 @@ class PendingMovementService(
     fun pendingCount(householdId: UUID): Long =
         pending.countByHouseholdIdAndStatus(householdId, MovementStatus.pending)
 
+    /** Pending count plus its per-connection breakdown (largest inbox first) for the Home tile. */
+    @Transactional(readOnly = true)
+    fun pendingCounts(householdId: UUID): PendingCountDto {
+        val rows = pending.countByHouseholdIdAndStatusGroupedByConnection(householdId, MovementStatus.pending)
+        if (rows.isEmpty()) return PendingCountDto(0)
+        val connectionsById = connections.findAllByHouseholdIdOrderByCreatedAtAsc(householdId).associateBy { it.id }
+        val byConnection = rows
+            .map { row ->
+                val connection = connectionsById[row.connectionId]
+                PendingConnectionCountDto(
+                    connectionId = row.connectionId,
+                    label = connection?.label ?: connection?.aspspName ?: "?",
+                    count = row.count,
+                )
+            }
+            .sortedWith(compareByDescending<PendingConnectionCountDto> { it.count }.thenBy { it.label })
+        return PendingCountDto(byConnection.sumOf { it.count }, byConnection)
+    }
+
     @Transactional(readOnly = true)
     fun list(
         householdId: UUID,

@@ -10,6 +10,19 @@ export type RuleOp = "equals" | "contains" | "range";
 export type RuleSource = "manual" | "learned";
 export type SyncRunStatus = "success" | "error";
 
+export interface PendingConnectionCount {
+  connectionId: string;
+  /** Connection label, falling back to the bank name when unlabelled. */
+  label: string;
+  count: number;
+}
+
+export interface PendingCount {
+  count: number;
+  /** Pending per bank connection, largest inbox first. */
+  byConnection: PendingConnectionCount[];
+}
+
 export interface BankConfig {
   featureEnabled: boolean;
   connectionCount: number;
@@ -220,7 +233,7 @@ export function usePendingCount(householdId: string, enabled = true) {
   return useQuery({
     queryKey: ["banks", householdId, "pending-count"],
     queryFn: async () =>
-      (await apiClient.get<{ count: number }>(`${base(householdId)}/pending/count`)).data.count,
+      (await apiClient.get<PendingCount>(`${base(householdId)}/pending/count`)).data,
     enabled,
     // Poll so the tab counter / nav badge pick up background syncs (and other members' changes).
     refetchInterval: 20_000,

@@ -161,7 +161,10 @@ data class BatchResultDto(
     val skipped: List<UUID> = emptyList(),
 )
 
-data class PendingCountDto(val count: Long)
+data class PendingCountDto(val count: Long, val byConnection: List<PendingConnectionCountDto> = emptyList())
+
+/** Pending inbox size of one bank connection; [label] falls back to the bank name when unlabelled. */
+data class PendingConnectionCountDto(val connectionId: UUID, val label: String, val count: Long)
 
 /** Result of running categorisation rules over the uncategorized pending inbox. */
 data class ApplyRulesResultDto(val categorized: Int = 0)

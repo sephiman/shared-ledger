@@ -12,9 +12,9 @@ export function PendingBankTile({ householdId }: { householdId: string }) {
   const { t } = useTranslation();
   const { data: bankConfig } = useBankConfig(householdId);
   const hasBanks = (bankConfig?.connectionCount ?? 0) > 0;
-  const { data: count } = usePendingCount(householdId, hasBanks);
+  const { data: pending } = usePendingCount(householdId, hasBanks);
 
-  if (!count || count === 0) return null;
+  if (!pending || pending.count === 0) return null;
 
   return (
     <Card>
@@ -25,8 +25,16 @@ export function PendingBankTile({ householdId }: { householdId: string }) {
         </Link>
       </CardHeader>
       <CardBody>
-        <p className="text-3xl font-semibold tabular-nums">{count}</p>
+        <p className="text-3xl font-semibold tabular-nums">{pending.count}</p>
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{t("banks.pending_home_hint")}</p>
+        <ul className="mt-3 space-y-1 text-sm">
+          {pending.byConnection.slice(0, 3).map((c) => (
+            <li key={c.connectionId} className="flex justify-between gap-3">
+              <span className="truncate text-gray-600 dark:text-gray-300">{c.label}</span>
+              <span className="font-mono tabular-nums">{c.count}</span>
+            </li>
+          ))}
+        </ul>
       </CardBody>
     </Card>
   );

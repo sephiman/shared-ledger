@@ -9,6 +9,7 @@ import {
   type DashboardExtras,
 } from "@/api/analytics";
 import { Card, CardBody, CardHeader } from "@/components/ui/primitives";
+import { CurrentWealthTile } from "./CurrentWealthTile";
 import { LendingsOverviewTile } from "./LendingsOverviewTile";
 import { PortfolioOverviewTile } from "./PortfolioOverviewTile";
 import { PendingBankTile } from "./PendingBankTile";
@@ -59,6 +60,7 @@ export function DashboardPage() {
           currency={household.currency}
           locale={i18n.language}
         />
+        <CurrentWealthTile householdId={household.householdId} currency={household.currency} locale={i18n.language} />
         <PortfolioOverviewTile householdId={household.householdId} currency={household.currency} locale={i18n.language} />
         <LendingsOverviewTile householdId={household.householdId} currency={household.currency} locale={i18n.language} />
         <PendingBankTile householdId={household.householdId} />

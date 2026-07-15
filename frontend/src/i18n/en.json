@@ -247,7 +247,9 @@
   },
   "wealth": {
     "evolution_from_portfolio": "From portfolio",
-    "evolution_from_snapshots": "From snapshots"
+    "evolution_from_snapshots": "From snapshots",
+    "home_title": "Current wealth",
+    "home_view_all": "View all"
   },
   "networth": {
     "title": "Wealth",

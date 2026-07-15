@@ -81,7 +81,7 @@ export function TransactionsPage() {
   // The "Pending" inbox sub-view only appears once at least one bank is linked.
   const { data: connections = [] } = useBankConnections(household.householdId);
   const showPending = connections.length > 0;
-  const { data: pendingCount = 0 } = usePendingCount(household.householdId, showPending);
+  const pendingCount = usePendingCount(household.householdId, showPending).data?.count ?? 0;
   const tab = showPending && searchParams.get("tab") === "pending" ? "pending" : "confirmed";
   const selectTab = (value: string) => {
     const next = new URLSearchParams(searchParams);

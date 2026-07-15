@@ -121,6 +121,19 @@ interface PendingMovementRepository : JpaRepository<PendingMovement, UUID> {
 
     fun countByHouseholdIdAndStatus(householdId: UUID, status: MovementStatus): Long
 
+    /** Grouped variant of the pending count, one row per connection (Home-tile breakdown). */
+    @Query(
+        """
+        SELECT m.connectionId AS connectionId, COUNT(m) AS count FROM PendingMovement m
+        WHERE m.householdId = :hid AND m.status = :status
+        GROUP BY m.connectionId
+        """,
+    )
+    fun countByHouseholdIdAndStatusGroupedByConnection(
+        @Param("hid") householdId: UUID,
+        @Param("status") status: MovementStatus,
+    ): List<ConnectionCountRow>
+
     fun findAllByHouseholdIdAndStatus(householdId: UUID, status: MovementStatus): List<PendingMovement>
 
     /**
@@ -177,4 +190,10 @@ interface PendingMovementRepository : JpaRepository<PendingMovement, UUID> {
         @Param("connectionId") connectionId: UUID,
         @Param("accountId") accountId: UUID,
     ): LocalDate?
+}
+
+/** Projection for [PendingMovementRepository.countByHouseholdIdAndStatusGroupedByConnection]. */
+interface ConnectionCountRow {
+    val connectionId: UUID
+    val count: Long
 }

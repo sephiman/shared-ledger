@@ -24,7 +24,7 @@ export function AppShell() {
   // Only query (and poll) the count once at least one bank is linked; otherwise it's always 0.
   const { data: bankConfig } = useBankConfig(household.householdId);
   const hasBanks = (bankConfig?.connectionCount ?? 0) > 0;
-  const { data: pendingCount } = usePendingCount(household.householdId, hasBanks);
+  const pendingCount = usePendingCount(household.householdId, hasBanks).data?.count ?? 0;
   const logoSrc = resolvedTheme === "dark" ? "/SharedLedgerDark.png" : "/SharedLedgerLight.png";
 
   return (
@@ -50,7 +50,7 @@ export function AppShell() {
                   }
                 >
                   {t(item.key)}
-                  {item.to === "/transactions" && !!pendingCount && pendingCount > 0 && (
+                  {item.to === "/transactions" && pendingCount > 0 && (
                     <span className="ml-1.5 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-xs font-semibold text-primary-foreground">
                       {pendingCount}
                     </span>
