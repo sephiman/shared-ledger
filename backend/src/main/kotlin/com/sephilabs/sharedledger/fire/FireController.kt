@@ -21,13 +21,13 @@ class FireController(
 ) {
 
     @GetMapping("/settings")
-    fun get(@PathVariable householdId: UUID): FireSettingsDto = with(service) { getOrCreate(householdId).toDto() }
+    fun get(@PathVariable householdId: UUID): FireSettingsDto = service.settingsDto(householdId)
 
     @RequireHouseholdOwner
     @PutMapping("/settings")
     fun update(@PathVariable householdId: UUID, @Valid @RequestBody body: FireSettingsRequest): FireSettingsDto {
         val by = currentUser.requireUser()
-        return with(service) { update(householdId, body, by).toDto() }
+        return service.update(householdId, body, by)
     }
 
     @GetMapping("/projection")

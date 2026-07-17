@@ -109,7 +109,7 @@ Planned monthly (and optionally annual) expense amounts per category, compared a
 
 Periodic recordings of the value of each asset class, each named asset, and the outstanding balance of each liability. Snapshots are the source of truth for current net worth.
 
-- Each snapshot has a date and an optional note. Multiple per month are allowed; monthly views use the latest one per month.
+- Each snapshot has a date and an optional note. **At most one snapshot per date** (enforced by a unique database index); creating a second one on the same date is rejected with `SNAPSHOT_DATE_EXISTS` — edit the existing snapshot instead. Multiple per month are still fine; monthly views use the latest one in the month.
 - The **Assets** block has two subgroups shown under one heading: **Classes** — the fixed fungible classes `Cash`, `Funds`, `ETFs`, `Stocks`, `Crypto`, `Pension` (one value per class) — and **Named assets** (see [Assets](#assets-named)) auto-filled from each asset's dated series. **Cash** is prefilled from its own [flow-based estimate](#cash-adjustment-series--flow-based-estimate) (marked *computed*); correcting it re-anchors the cash series (a new adjustment at the snapshot date).
 - **Liabilities** are named entities (see [Liabilities & amortizable loans](#liabilities-and-amortizable-loans)). A **simple** liability auto-fills its last known balance from its own series; an **amortizable** loan auto-fills the **computed balance from its schedule at the snapshot date** (marked *computed*, never 0). Every active liability appears in the form.
 - **Net worth = Assets (classes + named) − Liabilities.** Names (not UUIDs) are shown for named assets and liabilities, including for entities later soft-deleted.
@@ -138,7 +138,7 @@ What movements unlock:
 - Real return per asset class = current snapshot value − net contributions since inception (or since any chosen start date).
 - Investment cash-flow view by month or year.
 - Principal repayment history per liability.
-- On the FIRE chart: an optional cumulative-contributions overlay, making clear how much of net-worth growth is savings vs. market.
+- On the FIRE page: the real **money-weighted (XIRR) annualized return**, the movements-derived contribution mode, and the gain-fraction estimate behind the capital-gains tax model — none of which exist without movements.
 
 If the operator chooses not to record movements, the app remains correct (net worth via snapshots still works); they only lose the contribution-vs-return decomposition.
 
@@ -164,7 +164,7 @@ Individual market holdings — crypto, ETFs, individual stocks, and funds — tr
 - **Pricing is API-only and never guessed.** Crypto via **CoinGecko** (with **Binance** as a keyless fallback beyond CoinGecko's history ceiling); equities via **Yahoo Finance** by default (keyless, covers European UCITS ETFs in EUR), with **EODHD** or **Twelve Data** selectable as documented alternatives; FX via **Frankfurter (ECB)**. Funds have no automatic provider and stay unpriced until entered manually in a snapshot.
 - **Linking** a holding to a provider symbol happens by searching in the UI (recommended — it resolves the exact provider symbol for you), by ISIN auto-match on import for equities, or by filling the provider columns in the CSV. Unlinked or unpriced holdings show a badge and count as stale.
 - **Daily price refresh** background jobs keep a shared `price_history` current (crypto intraday, FX and equities daily). Failures are isolated per symbol and self-heal on the next run; a refresh outage never crashes the app.
-- **Views**: a **Portfolio** tab (totals for invested / current value / unrealized & realized P&L / total return, a per-holding table with its lots, and an asset-type filter that re-totals per class); an **Allocation** tab (pie charts by holding, by asset class, by crypto, by stock, and by latest snapshot); and an **Evolution** tab (daily market value with invested and realized/unrealized overlays plus asset-class / holding / time-range filters, shown above the snapshot-based net-worth evolution).
+- **Views**: a **Portfolio** tab (totals for invested / current value / unrealized & realized P&L / total return, a per-holding table with its lots, and an asset-type filter that re-totals per class); an **Allocation** tab (pie charts by holding, by asset class, by crypto, by stock, and by latest snapshot); and an **Evolution** tab (daily market value with invested and realized/unrealized overlays, a **ROI (TWR)** chart — time-weighted return that chains daily market returns between trades, so contributions and withdrawals don't count as performance — plus asset-class / holding / time-range filters, shown above the snapshot-based net-worth evolution).
 - **Snapshot integration**: see [Portfolio prefill](#net-worth-snapshots) above — market classes are prefilled from live valuations, stay editable, and are frozen per snapshot for audit.
 - **Notifications**: buy/sell lot changes can push a Telegram message (see [Notifications](#notifications-telegram)); CSV imports stay silent.
 
@@ -222,34 +222,49 @@ The Dashboard (landing page) shows the current month and current year at a glanc
 - **Trailing 12-month savings rate**: primary number is the trailing-12-month rate; below it, the year-to-date and current-month rates. Beside the primary number, a small sparkline plots the trailing-12 rate month by month over the last 24 months so the trend is visible without opening Analytics.
 - **Fixed cost of living**: trailing-12-month average of recurring (template-backed) expenses, expressed as €/day (÷30.44) and €/year (×12). A secondary line shows the same metrics including discretionary expenses for comparison. If fewer than 12 months of data exist, the average is taken over the months available and that count is shown.
 
-Inside the **Analytics** section, the existing four tabs (Year-over-year, Year-by-year, Trailing 12 months, Forecast) are joined by four exploration tabs:
+The **Analytics** section is organized into five tabs — **Daily**, **Explorer**, **Composition**, **Changes** and **Trends**. The last three group related sections on one scrollable page; old per-section URLs redirect to the right tab and anchor.
 
-- **Year-over-year same-month comparison**: pick a month; compare totals and per-category breakdown across the last N years for which data exists.
-- **Year-by-year comparison**: pick years; show monthly income / expenses / savings as one line per year over a 12-month X axis.
-- **Trailing 12 months**: income, expenses, savings rate over the last 12 months.
-- **Forecast**: per category, project the next 1–12 months from historical data. Method: simple moving average over a configurable window (3 / 6 / 12 months). For categories backed by an active recurring template, the template amount is used instead of the historical average (more accurate). Historical context is shown alongside the projection so it's interpretable.
-- **Allocation**: donut chart of how income for the selected month or calendar year was split across expense groups (Home, Transport, Groceries, Shopping, Outings, Financial, Health, Personal), plus a "Saved" slice for the positive remainder. A ranked table below repeats the figures for exact reading.
-- **Top movers**: top-5 increases and top-5 decreases in category spending for the selected month against a chosen baseline — same month last year, or trailing 6-month average. Categories absent from the baseline but with spending in the period surface separately as "New activity".
-- **Recurring vs discretionary**: share of expenses generated by an active recurring template versus the rest, for a selected scope (current/past month, trailing 12, year-to-date, or any calendar year).
-- **Heatmap**: a category-by-month matrix where each cell's color intensity reflects spending. Colour is scaled per row so categories with very different magnitudes (e.g. Mortgage vs Books) are both readable. Range is configurable (12, 24, 36, 48 months, or full history); a toggle swaps the matrix to income categories; clicking a cell drills into the transactions list pre-filtered by that category and month.
+- **Daily** (expenses only): a month calendar where each day is shaded by how much was spent, with a month summary (total, average per spending day, highest day) and prev/next/today navigation. Clicking a day opens a drill-down panel: the day's total, its per-category breakdown, the individual transactions, and how the day compares against the period's daily average and against the average for that same weekday. Below the calendar, pattern charts show average spend by day-of-week and by day-of-month over a selectable range (3 months, 12 months, year-to-date, or all history).
+- **Explorer** (expenses only): a per-category deep dive. Pick one expense category or a whole group and a range (12 / 24 / all months) to get stat tiles (average and median per month, highest month, lowest non-zero month) and a monthly bar chart with an optional prior-year overlay (absolute and percent deltas in the tooltip); for a single category, a top-descriptions table lists where the money actually went (occurrences, total, average per occurrence). A second, stacked panel charts any set of groups/categories as stacked monthly bars with an optional total line, for side-by-side composition over time.
+- **Composition** — how spending is made up:
+  - **Allocation**: donut chart of how income for the selected month or calendar year was split across expense groups (Home, Transport, Groceries, Shopping, Outings, Financial, Health, Personal), plus a "Saved" slice for the positive remainder. A ranked table below repeats the figures for exact reading.
+  - **Cost of living**: essential vs non-essential monthly averages over the trailing window (with the essential share as a percentage and the number of months used), plus per-category breakdown tables for both sides; each row clicks through to the transactions list pre-filtered by that category.
+  - **Recurring vs discretionary**: share of expenses generated by an active recurring template versus the rest, for a selected scope (current/past month, trailing 12, year-to-date, or any calendar year).
+- **Changes** — what moved:
+  - **Top movers**: top-5 increases and top-5 decreases in category spending for the selected month against a chosen baseline — same month last year, or trailing 6-month average. Categories absent from the baseline but with spending in the period surface separately as "New activity".
+  - **Heatmap**: a category-by-month matrix where each cell's color intensity reflects spending. Colour is scaled per row so categories with very different magnitudes (e.g. Mortgage vs Books) are both readable. Range is configurable (12, 24, 36, 48 months, or full history); a toggle swaps the matrix to income categories; clicking a cell drills into the transactions list pre-filtered by that category and month.
+- **Trends** — the long view:
+  - **Year-over-year same-month comparison**: pick a month; compare totals and per-category breakdown across the last N years for which data exists.
+  - **Year-by-year comparison**: pick years; show monthly income / expenses / savings as one line per year over a 12-month X axis.
+  - **Trailing 12 months**: income, expenses and net savings per month over the last 12 months, plus the savings-rate line.
+  - **Forecast**: per category, project the next 1–12 months from historical data. Method: simple moving average over a configurable window (3 / 6 / 12 months). For categories backed by an active recurring template, the template amount is used instead of the historical average (more accurate). Historical context is shown alongside the projection so it's interpretable.
 
 ### FIRE projection
 
-Long-term wealth projection toward a financial independence goal.
+Long-term wealth projection toward financial independence, derived from the household's real data (spending, savings, movements, snapshots) with manual overrides always available. The framework is explicitly **nominal**: return scenarios are nominal and targets inflate year by year at a configurable expected inflation (default 2 %/year).
 
-Per-household settings: target amount, target year, expected monthly contribution, configurable return scenarios, and which asset classes count toward the goal (e.g. exclude operating Cash if desired). Each scenario is a **(mean %, std-dev %)** pair — e.g. 6 % ± 15 % — not a single flat rate.
+**Targets — three tiers derived from real spending, plus an optional manual one:**
 
-Projection output, per scenario:
+- **Lean FIRE** = essential trailing-12 spending ÷ SWR — the same essential base as the Cost-of-living tile.
+- **FIRE** = total trailing-12 spending ÷ SWR.
+- **Fat FIRE** = total spending × a configurable multiplier (default 1.5) ÷ SWR.
+- **Custom target** — an optional fourth tier with a user-set nominal amount (the pre-v2 single target migrated here; it neither inflates nor grosses up).
+- The **safe withdrawal rate** is configurable per household (default 4 % — the classic ×25). Each spending base (essential, total) has a persisted source mode: **derived** (default — recomputed live on every query, never frozen; with fewer than 12 months of data the available months are used and the count is shown) or **manual** (a user-entered monthly amount, letting tiers work even before any transactions exist). The derived value always stays visible next to an override so the gap with real spending is never hidden, and one single effective value per base feeds targets, tax gross-up, coverage, the table and every explanation. If manual overrides make essential exceed total, a non-blocking warning notes that Lean FIRE would exceed FIRE — values are never reordered or clamped. Each tier can be toggled on/off for the chart and table.
 
-- A **deterministic year-by-year path** using the scenario mean, starting from the most recent snapshot's qualifying asset total. Capitalization is annual; monthly contributions accumulate within each year. The chart shows one line per scenario plus a horizontal target line.
-- A **Monte Carlo simulation** (default 10 000 trials, configurable via `FIRE_MONTE_CARLO_TRIALS`): each trial samples annual returns from a Gaussian with the scenario's mean and std-dev (clamped to ±3σ). The chart overlays per-year **percentile bands (p10 / p25 / p50 / p75 / p90)** around the deterministic line.
-- **Probability of reaching the target** by the target year — the fraction of trials that cross the target amount — and the **median year** the target is first reached among the trials that do.
-- Summary table: which year each scenario's deterministic path reaches the target (or "not within projection window").
+**Projection engine, per scenario** (each a **(mean %, std-dev %)** pair, e.g. 6 % ± 15 %):
 
-Additionally:
+- A **deterministic year-by-year path** using the scenario mean, starting **from the latest snapshot's qualifying-class total** — the live Portfolio value plays no part in the projection.
+- A **Monte Carlo simulation** (default 10 000 trials, configurable via `FIRE_MONTE_CARLO_TRIALS`): Gaussian annual returns clamped to ±3σ, with per-year **percentile bands (p10 / p25 / p50 / p75 / p90)**.
+- The hit condition uses each year's **inflated** target; the chart draws one rising target curve per active tier (dashed) next to the scenario bands.
+- The **monthly contribution** has three source modes — **manual**, **derived from savings** (trailing-12 average of income − expenses) and **derived from movements** (trailing-12 net contributions into qualifying classes). All three values are always displayed so the save-vs-invest gap stays visible; a derived mode without data warns loudly instead of silently projecting 0. A toggle (default on) indexes the contribution to inflation.
+- **Scenario × tier summary table**: deterministic hit year, P(hit) within the window and median hit year — plus the **Coast FIRE** counterparts (the same simulation with contributions stopped today).
+- **Current coverage** per active tier: qualifying wealth in the latest snapshot ÷ target, as a percentage with a progress bar.
 
-- If at least 12 historical snapshots exist, the operator's **actual annualized return** is computed from the snapshot series and shown as a reference.
-- If net worth movements exist, an optional cumulative-contributions overlay distinguishes savings from market growth.
+**Real annualized return — money-weighted (XIRR):** computed over the recorded net-worth movements between the first and latest snapshots, restricted to the qualifying classes, so contributions count as capital, not performance. **If no movements exist in the range, no return figure is shown at all** — the UI prompts to record movements instead (ROI or nothing). Once a valid return exists, an **"Add scenario from my history"** button creates a scenario from the mean/std-dev of the per-year money-weighted returns, permanently labeled *"(historical — reference)"* — a deliberately thin sample that never becomes a default.
+
+**Capital-gains tax (Spanish seed, editable):** an optional toggle (default on) converts each spending tier from net to gross — targets then cover the tax paid when selling to live. Brackets are **data, not code**: a per-household editable table seeded with the Spanish savings-base scale (Ley 7/2024, FY 2025–2026: 19/21/23/27/30 %). The net→gross conversion is closed-form per bracket; the taxable share of a withdrawal (**gain fraction**) is derived **per Monte Carlo path** from its own cost basis, and from recorded movements for today's deterministic metrics (with a manual fallback while movements are insufficient). Loss offsetting is deliberately ignored — a conservative simplification — and the UI states this is a planning estimate, not tax advice.
+
+**Transparency:** every derived figure carries a *"How is this calculated?"* explanation instantiated with the household's own numbers ("Lean FIRE = annual withdrawal of €X ÷ 3.5 % SWR = €Y"), each setting shows a one-line repercussion with real numbers, and an **assumptions block** next to the chart (SWR, inflation, indexation, contribution source, spending base, tax treatment, data as-of date) makes the projection auditable at a glance. All FIRE parameters live on the FIRE page itself (owner-only saves) and persist per household; derived values are never persisted.
 
 ### Internationalization
 
@@ -258,6 +273,7 @@ Additionally:
 - Locale resolution order: `Accept-Language` header → authenticated user's preferred locale → English.
 - Currency, date and number formatting reflect the active locale and the household currency.
 - Language toggle in the header persists per user.
+- **Theme**: light / dark / system toggle in the header menu (`system` follows the OS preference and updates live). Stored per browser, not per user.
 
 ### Settings
 
@@ -267,11 +283,11 @@ Additionally:
 - **Households**: list every household the user belongs to, mark one as default, switch the active household, create a new household, or hard-delete an owned household (subject to the default-household restriction described above).
 - Household name, currency and default locale (owners only).
 - Custom categories: create, rename, change essential flag, move between groups, or hard-delete with cascade (owners only). Members see the list read-only.
-- Liabilities management: name + active flag (full CRUD).
-- Members & invitations: issue and revoke invitations, see pending ones (owners only).
-- FIRE settings (owners only).
+- **Auto-snapshot** (owners only): enable scheduled net-worth snapshot creation and pick the frequency — daily, weekly or monthly. Off by default; a daily background job creates the snapshot when one is due.
+- Members & invitations: every member sees the member list (role, joined date); owners issue and revoke invitations and see pending ones.
+- FIRE settings are edited on the FIRE page itself (saving is owner-only); assets, liabilities and their amortization schedules are managed in the Wealth hub tabs, not in Settings.
 - **Notifications** (owners only): configure the per-household Telegram integration (see below).
-- **Danger zone — Delete all data** (owners only): a confirmation-gated action (type `delete`) that permanently wipes *every* piece of the household's financial data while keeping the household itself and its membership/invitations. It hard-deletes (including soft-deleted rows) transactions, budgets, recurring templates, net-worth snapshots and movements, cash adjustments, assets, liabilities and lendings (with their value/balance/amortization/schedule/payment history), the investment portfolio (holdings, lots and valuations), bank connections (with their accounts, sync runs, pending movements and categorization rules), and the FIRE, Telegram, auto-snapshot and cash-estimate settings. Global reference data (categories, asset classes, FX rates, price history) is never touched.
+- **Danger zone — Delete all data** (owners only): a confirmation-gated action (type `delete`) that permanently wipes *every* piece of the household's financial data while keeping the household itself and its membership/invitations. It hard-deletes (including soft-deleted rows) transactions, budgets, recurring templates, net-worth snapshots and movements, cash adjustments, assets, liabilities and lendings (with their value/balance/amortization/schedule/payment history), the investment portfolio (holdings, lots and valuations), bank connections (with their accounts, sync runs, pending movements and categorization rules), and the FIRE (including its tax-bracket table), Telegram, auto-snapshot and cash-estimate settings. Global reference data (categories, asset classes, FX rates, price history) is never touched.
 
 ### Notifications (Telegram)
 
@@ -356,12 +372,17 @@ Wise could be added via its own API) with the always-available CSV import as the
     the others — and every run is audited (success/error + code + new-movement count).
 - **Review inbox** (a **Pending (N)** sub-view inside Transactions, plus a nav badge and a Home
   card, all at household level): per-movement **confirm / edit / reject** and **batch** actions.
-  Confirming reuses the normal transaction-creation logic; single confirms notify normally, batch
-  confirms send one aggregated notification. A **possible-duplicate warning** flags manual
-  transactions that look like an incoming movement (warns only, never auto-discards). Rejected
-  items don't reappear and are visible under a "rejected" filter. The list also filters by
+  Each row is edited inline before confirming — direction, category (confirm stays disabled until
+  one is chosen) and description — and the bulk bar can assign a category to the whole selection
+  at once. Confirming reuses the normal transaction-creation logic; single confirms notify
+  normally, batch confirms send one aggregated notification. A **possible-duplicate warning**
+  flags manual transactions that look like an incoming movement (warns only, never auto-discards).
+  Rejected items don't reappear in the pending list; they stay visible under a "rejected" filter,
+  from which they can be **restored** back to pending (individually or in batch). Confirmed items
+  are final — they already produced a transaction or movement. The list also filters by
   connection, free-text search, categorisation state (suggested / unsuggested), and
-  duplicates-only, and all filters are clearable in one click.
+  duplicates-only, can be grouped by connection or category, and all filters are clearable in one
+  click.
 - **Mark as movement** (per item, under "More"): instead of a transaction, a pending item can be
   confirmed as a **net-worth movement** — for capital reallocations (a transfer to savings, a debt
   principal payment) that shouldn't land in the income/expense ledger. A small dialog collects the
@@ -402,6 +423,7 @@ everything appears.
 - All state-changing endpoints require authentication; all household-scoped reads enforce membership.
 - Passwords hashed with **Argon2id** via Spring Security's `Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8()`.
 - Login attempts rate-limited per source IP via Bucket4j (in-memory).
+- CSV/data imports rate-limited per user (10/hour by default, configurable) across all import endpoints.
 - No secrets in source. All credentials, admin bootstrap values, and runtime config come from environment variables.
 
 ### Data integrity
@@ -427,7 +449,7 @@ everything appears.
   - `sl_active_sessions` (gauge)
   - `sl_registrations_total{mode, outcome}`
   - `sl_invitations_issued_total{role}`, `sl_invitations_accepted_total{role}`
-  - `sl_analytics_request_seconds{endpoint}` (timers for month, year, year-over-year, year-by-year, forecast, dashboard_extras, allocation, top_movers, recurring_share, heatmap, contribution_series, and FIRE projection)
+  - `sl_analytics_request_seconds{endpoint}` (timers for month, year, year-over-year, year-by-year, forecast, dashboard_extras, allocation, top_movers, recurring_share, heatmap, daily, cost_of_living, explorer, contribution_series, and FIRE projection)
 - **Health probes**: `/actuator/health/liveness` and `/readiness`.
 - **Telegram dispatch** is logged per attempt as structured `telegram_notify` lines (`household`, `entity`, `action`, `ok`, and the Telegram `description` on failure) — the only place delivery outcomes are observed; there is no in-app failure surfacing or retry.
 - Grafana/Prometheus/Loki stack is **not** part of this repo. The app exposes the data; the operator wires up their own monitoring against the endpoints.
@@ -556,7 +578,7 @@ After step 6:
 6. **Record a net-worth movement**: `/networth` → *Flows* → *Movements* → *Create* → contribution to ETFs. Then open *Flows* → *Cash*, add an adjustment, and confirm the estimated balance reflects flows dated after it.
 7. **Add a portfolio holding**: `/networth` → *Portfolio* → *New holding* → a crypto (e.g. BTC), link it via the search box, add a BUY lot. Prices backfill into `price_history`; confirm the holding shows a current value and P&L. Take a new snapshot and confirm the crypto class is prefilled as *computed*.
 8. **Track a lending**: `/networth` → *Prestado* → *Prestar dinero* → a borrower, a principal, simple interest. Open it, register a payment, and confirm the interest/principal split shows. The Dashboard should now display the money-lent tile.
-9. **Configure FIRE**: `/fire` → set target, contribution, scenarios. View the projection chart.
+9. **Configure FIRE**: `/fire` → with the transactions, snapshots and movement from the previous steps, the Lean/FIRE/Fat tiers, coverage and projection derive automatically; tweak SWR, inflation, contribution source, scenarios or the tax brackets in the on-page settings and confirm targets move coherently across chart, tiers and table.
 10. **Invite a partner** (owners only): `/settings` → *Members & invitations* → *Issue invitation*. Copy the link `…/register?invite=<token>` and open it in another browser session.
 11. **Check observability**:
    - `docker compose logs -f backend` shows JSON logs with `requestId`, `userId`, `householdId` populated.
