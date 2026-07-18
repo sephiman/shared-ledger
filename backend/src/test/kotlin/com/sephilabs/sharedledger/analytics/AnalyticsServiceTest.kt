@@ -71,6 +71,96 @@ class AnalyticsServiceTest @Autowired constructor(
     }
 
     @Test
+    fun `money flow builds income to hub to group links with a saved node`() {
+        val (user, household) = seed()
+        val ym = YearMonth.of(2025, 3)
+        addTx(household, user, ym.atDay(5), Direction.income, "income.salary", "1000.00")
+        addTx(household, user, ym.atDay(6), Direction.income, "income.financial", "100.00")
+        addTx(household, user, ym.atDay(10), Direction.expense, "groceries.groceries", "200.00")
+        addTx(household, user, ym.atDay(15), Direction.expense, "home.rent", "300.00")
+
+        val r = service.moneyFlow(household.id, ym.atDay(1), ym.atEndOfMonth(), "group")
+        assertThat(r.income).isEqualByComparingTo("1100.00")
+        assertThat(r.expenses).isEqualByComparingTo("500.00")
+        assertThat(r.saved).isEqualByComparingTo("600.00")
+        assertThat(r.deficit).isEqualByComparingTo("0.00")
+
+        assertThat(r.nodes.map { it.id }).containsExactly(
+            "income.salary", "income.financial", HUB_NODE_ID, "home", "groceries", SAVED_NODE_ID,
+        )
+        assertThat(r.nodes.first { it.id == HUB_NODE_ID }.amount).isEqualByComparingTo("1100.00")
+        assertThat(r.nodes.first { it.id == "home" }.groupCode).isEqualTo("home")
+        assertThat(r.links).hasSize(5)
+        assertThat(r.links.first { it.source == "income.salary" }.target).isEqualTo(HUB_NODE_ID)
+        assertThat(r.links.first { it.target == SAVED_NODE_ID }.amount).isEqualByComparingTo("600.00")
+        // Inflows and outflows of the hub balance exactly.
+        val inflow = r.links.filter { it.target == HUB_NODE_ID }.sumOf { it.amount }
+        val outflow = r.links.filter { it.source == HUB_NODE_ID }.sumOf { it.amount }
+        assertThat(inflow).isEqualByComparingTo(outflow)
+    }
+
+    @Test
+    fun `money flow adds a deficit node feeding the hub when expenses exceed income`() {
+        val (user, household) = seed()
+        val ym = YearMonth.of(2025, 4)
+        addTx(household, user, ym.atDay(5), Direction.income, "income.salary", "100.00")
+        addTx(household, user, ym.atDay(10), Direction.expense, "home.rent", "700.00")
+
+        val r = service.moneyFlow(household.id, ym.atDay(1), ym.atEndOfMonth(), "group")
+        assertThat(r.saved).isEqualByComparingTo("0.00")
+        assertThat(r.deficit).isEqualByComparingTo("600.00")
+        assertThat(r.nodes.map { it.id }).containsExactly("income.salary", DEFICIT_NODE_ID, HUB_NODE_ID, "home")
+        assertThat(r.links.first { it.source == DEFICIT_NODE_ID }.target).isEqualTo(HUB_NODE_ID)
+        assertThat(r.links.first { it.source == DEFICIT_NODE_ID }.amount).isEqualByComparingTo("600.00")
+        assertThat(r.nodes.first { it.id == HUB_NODE_ID }.amount).isEqualByComparingTo("700.00")
+        assertThat(r.nodes.map { it.id }).doesNotContain(SAVED_NODE_ID)
+    }
+
+    @Test
+    fun `money flow at category level keeps leaf categories with their group code`() {
+        val (user, household) = seed()
+        val ym = YearMonth.of(2025, 5)
+        addTx(household, user, ym.atDay(5), Direction.income, "income.salary", "1000.00")
+        addTx(household, user, ym.atDay(10), Direction.expense, "home.rent", "300.00")
+        addTx(household, user, ym.atDay(11), Direction.expense, "home.utilities", "100.00")
+
+        val r = service.moneyFlow(household.id, ym.atDay(1), ym.atEndOfMonth(), "category")
+        val expenseNodes = r.nodes.filter { it.side == "expense" }
+        assertThat(expenseNodes.map { it.id }).containsExactly("home.rent", "home.utilities")
+        assertThat(expenseNodes).allMatch { it.groupCode == "home" }
+    }
+
+    @Test
+    fun `money flow group totals match allocation for the same period`() {
+        val (user, household) = seed()
+        val ym = YearMonth.of(2025, 6)
+        addTx(household, user, ym.atDay(1), Direction.income, "income.salary", "2345.67")
+        addTx(household, user, ym.atDay(3), Direction.expense, "home.rent", "876.54")
+        addTx(household, user, ym.atDay(8), Direction.expense, "groceries.groceries", "123.45")
+        addTx(household, user, ym.atDay(9), Direction.expense, "outings.restaurants", "67.89")
+
+        val allocation = service.allocation(household.id, ym.year, ym.monthValue)
+        val flow = service.moneyFlow(household.id, ym.atDay(1), ym.atEndOfMonth(), "group")
+
+        assertThat(flow.income).isEqualByComparingTo(allocation.income)
+        assertThat(flow.expenses).isEqualByComparingTo(allocation.expenses)
+        assertThat(flow.saved).isEqualByComparingTo(allocation.saved)
+        for (slice in allocation.slices) {
+            assertThat(flow.nodes.first { it.id == slice.groupCode }.amount).isEqualByComparingTo(slice.amount)
+        }
+    }
+
+    @Test
+    fun `money flow returns no nodes for an empty period`() {
+        val (_, household) = seed()
+        val r = service.moneyFlow(household.id, LocalDate.of(2025, 1, 1), LocalDate.of(2025, 1, 31), "group")
+        assertThat(r.income).isEqualByComparingTo("0.00")
+        assertThat(r.expenses).isEqualByComparingTo("0.00")
+        assertThat(r.nodes).isEmpty()
+        assertThat(r.links).isEmpty()
+    }
+
+    @Test
     fun `trailing12 reports net savings per month and range averages`() {
         val (user, household) = seed()
         val asOf = YearMonth.of(2025, 6)

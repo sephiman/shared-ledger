@@ -6,6 +6,7 @@ import { ExplorerTab } from "./ExplorerTab";
 import { CompositionTab } from "./CompositionTab";
 import { ChangesTab } from "./ChangesTab";
 import { TrendsTab } from "./TrendsTab";
+import { MoneyFlowTab } from "./MoneyFlowTab";
 
 type TabDef = { slug: string; labelKey: string };
 
@@ -15,6 +16,7 @@ const TABS: TabDef[] = [
   { slug: "composition", labelKey: "analytics.composition" },
   { slug: "changes", labelKey: "analytics.changes" },
   { slug: "trends", labelKey: "analytics.trends" },
+  { slug: "money-flow", labelKey: "analytics.money_flow" },
 ];
 
 export function AnalyticsPage() {
@@ -36,6 +38,7 @@ export function AnalyticsPage() {
         <Route path="composition" element={<CompositionTab />} />
         <Route path="changes" element={<ChangesTab />} />
         <Route path="trends" element={<TrendsTab />} />
+        <Route path="money-flow" element={<MoneyFlowTab />} />
 
         <Route path="yoy" element={<Navigate to="/analytics/trends#yoy" replace />} />
         <Route path="yby" element={<Navigate to="/analytics/trends#yby" replace />} />

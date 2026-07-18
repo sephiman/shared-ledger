@@ -9,9 +9,7 @@ import { monthBounds, monthName, yearBounds } from "@/lib/dates";
 import { groupIcon } from "@/lib/categoryGroup";
 import { ChartTooltip } from "@/components/charts/ChartTooltip";
 import { useNavigate } from "react-router-dom";
-
-const PALETTE = ["#0ea5e9", "#22c55e", "#a855f7", "#f97316", "#ef4444", "#14b8a6", "#eab308", "#ec4899"];
-const SAVED_COLOR = "#16a34a";
+import { SAVED_COLOR, groupColor } from "./palette";
 
 type ScopeKind = "month" | "year";
 
@@ -47,12 +45,12 @@ export function AllocationTab() {
 
   const chartData = useMemo(() => {
     if (!data) return [];
-    const slices = data.slices.map((s, i) => ({
+    const slices = data.slices.map((s) => ({
       key: s.groupCode,
       name: `${groupIcon(s.groupCode)} ${t(`category_group.${s.groupCode}`)}`,
       amount: Number(s.amount),
       percent: s.percentOfIncome,
-      fill: PALETTE[i % PALETTE.length],
+      fill: groupColor(s.groupCode),
     }));
     const savedNum = Number(data.saved);
     if (savedNum > 0) {

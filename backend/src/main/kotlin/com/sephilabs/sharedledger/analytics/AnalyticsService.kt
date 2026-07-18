@@ -330,6 +330,42 @@ class AnalyticsService(
         )
     }
 
+    // Shared aggregation core for allocation() and moneyFlow(): both views MUST report
+    // identical figures for the same period, so the bucketing lives in one place.
+    private class FlowAggregate(
+        val income: BigDecimal,
+        val expenses: BigDecimal,
+        val incomeByCategory: LinkedHashMap<String, BigDecimal>,
+        val expensesByGroup: LinkedHashMap<String, BigDecimal>,
+        val expensesByCategory: LinkedHashMap<String, BigDecimal>,
+        val categoryGroups: Map<String, String>,
+    )
+
+    private fun aggregateFlows(householdId: UUID, from: LocalDate, to: LocalDate): FlowAggregate {
+        val rows = transactions.aggregationRows(householdId, from, to)
+        val catGroup = categoryService.listForHousehold(householdId).associate { it.code to (it.group ?: "ungrouped") }
+        var income = BigDecimal.ZERO
+        var expenses = BigDecimal.ZERO
+        val incomeByCategory = LinkedHashMap<String, BigDecimal>()
+        val expensesByGroup = LinkedHashMap<String, BigDecimal>()
+        val expensesByCategory = LinkedHashMap<String, BigDecimal>()
+        for (r in rows) {
+            when (r.direction) {
+                Direction.income -> {
+                    income += r.amount
+                    incomeByCategory.merge(r.categoryCode, r.amount) { a, b -> a + b }
+                }
+                Direction.expense -> {
+                    expenses += r.amount
+                    val g = catGroup[r.categoryCode] ?: "ungrouped"
+                    expensesByGroup.merge(g, r.amount) { a, b -> a + b }
+                    expensesByCategory.merge(r.categoryCode, r.amount) { a, b -> a + b }
+                }
+            }
+        }
+        return FlowAggregate(income, expenses, incomeByCategory, expensesByGroup, expensesByCategory, catGroup)
+    }
+
     @Transactional(readOnly = true)
     fun allocation(householdId: UUID, year: Int, month: Int?): AllocationResponse {
         val (from, to) = if (month != null) {
@@ -338,28 +374,13 @@ class AnalyticsService(
         } else {
             LocalDate.of(year, 1, 1) to LocalDate.of(year, 12, 31)
         }
-        val rows = transactions.aggregationRows(householdId, from, to)
-        val catGroup = categoryService.listForHousehold(householdId).associate { it.code to (it.group ?: "ungrouped") }
-
-        var income = BigDecimal.ZERO
-        var expenses = BigDecimal.ZERO
-        val byGroup = LinkedHashMap<String, BigDecimal>()
-        for (r in rows) {
-            when (r.direction) {
-                Direction.income -> income += r.amount
-                Direction.expense -> {
-                    expenses += r.amount
-                    val g = catGroup[r.categoryCode] ?: "ungrouped"
-                    byGroup.merge(g, r.amount) { a, b -> a + b }
-                }
-            }
-        }
-        val saved = (income - expenses).max(BigDecimal.ZERO)
-        val pctBase = income
-        val slices = byGroup.entries
+        val flows = aggregateFlows(householdId, from, to)
+        val income = flows.income
+        val saved = (income - flows.expenses).max(BigDecimal.ZERO)
+        val slices = flows.expensesByGroup.entries
             .map { (group, amount) ->
-                val pct = if (pctBase.signum() > 0)
-                    amount.divide(pctBase, 4, RoundingMode.HALF_EVEN).toDouble() * 100.0
+                val pct = if (income.signum() > 0)
+                    amount.divide(income, 4, RoundingMode.HALF_EVEN).toDouble() * 100.0
                 else 0.0
                 AllocationSlice(groupCode = group, amount = Money.normalize(amount), percentOfIncome = pct)
             }
@@ -369,9 +390,50 @@ class AnalyticsService(
             year = year,
             month = month,
             income = Money.normalize(income),
-            expenses = Money.normalize(expenses),
+            expenses = Money.normalize(flows.expenses),
             saved = Money.normalize(saved),
             slices = slices,
+        )
+    }
+
+    @Transactional(readOnly = true)
+    fun moneyFlow(householdId: UUID, from: LocalDate, to: LocalDate, level: String): MoneyFlowResponse {
+        val flows = aggregateFlows(householdId, from, to)
+        val saved = (flows.income - flows.expenses).max(BigDecimal.ZERO)
+        val deficit = (flows.expenses - flows.income).max(BigDecimal.ZERO)
+        val nodes = mutableListOf<MoneyFlowNode>()
+        val links = mutableListOf<MoneyFlowLink>()
+        if (flows.income.signum() != 0 || flows.expenses.signum() != 0) {
+            flows.incomeByCategory.entries.sortedByDescending { it.value }.forEach { (code, amount) ->
+                nodes += MoneyFlowNode(id = code, side = "income", groupCode = null, amount = Money.normalize(amount))
+                links += MoneyFlowLink(source = code, target = HUB_NODE_ID, amount = Money.normalize(amount))
+            }
+            if (deficit.signum() > 0) {
+                nodes += MoneyFlowNode(id = DEFICIT_NODE_ID, side = "deficit", groupCode = null, amount = Money.normalize(deficit))
+                links += MoneyFlowLink(source = DEFICIT_NODE_ID, target = HUB_NODE_ID, amount = Money.normalize(deficit))
+            }
+            nodes += MoneyFlowNode(id = HUB_NODE_ID, side = "hub", groupCode = null, amount = Money.normalize(flows.income + deficit))
+            val expenseBuckets = if (level == "category") flows.expensesByCategory else flows.expensesByGroup
+            expenseBuckets.entries.sortedByDescending { it.value }.forEach { (code, amount) ->
+                val group = if (level == "category") flows.categoryGroups[code] ?: "ungrouped" else code
+                nodes += MoneyFlowNode(id = code, side = "expense", groupCode = group, amount = Money.normalize(amount))
+                links += MoneyFlowLink(source = HUB_NODE_ID, target = code, amount = Money.normalize(amount))
+            }
+            if (saved.signum() > 0) {
+                nodes += MoneyFlowNode(id = SAVED_NODE_ID, side = "saved", groupCode = null, amount = Money.normalize(saved))
+                links += MoneyFlowLink(source = HUB_NODE_ID, target = SAVED_NODE_ID, amount = Money.normalize(saved))
+            }
+        }
+        return MoneyFlowResponse(
+            from = from,
+            to = to,
+            level = level,
+            income = Money.normalize(flows.income),
+            expenses = Money.normalize(flows.expenses),
+            saved = Money.normalize(saved),
+            deficit = Money.normalize(deficit),
+            nodes = nodes,
+            links = links,
         )
     }
 

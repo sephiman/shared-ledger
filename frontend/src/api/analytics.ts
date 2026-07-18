@@ -175,6 +175,31 @@ export interface AllocationResponse {
   slices: AllocationSlice[];
 }
 
+export interface MoneyFlowNode {
+  id: string;
+  side: "income" | "deficit" | "hub" | "expense" | "saved";
+  groupCode: string | null;
+  amount: string;
+}
+
+export interface MoneyFlowLink {
+  source: string;
+  target: string;
+  amount: string;
+}
+
+export interface MoneyFlowResponse {
+  from: string;
+  to: string;
+  level: "group" | "category";
+  income: string;
+  expenses: string;
+  saved: string;
+  deficit: string;
+  nodes: MoneyFlowNode[];
+  links: MoneyFlowLink[];
+}
+
 export interface MoverRow {
   categoryCode: string;
   groupCode: string | null;
@@ -248,6 +273,23 @@ export function useAllocation(householdId: string, year: number, month: number |
         params: month != null ? { year, month } : { year },
       })).data,
     enabled,
+  });
+}
+
+export function useMoneyFlow(
+  householdId: string,
+  from: string,
+  to: string,
+  level: "group" | "category",
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ["analytics", householdId, "money-flow", from, to, level],
+    queryFn: async () =>
+      (await apiClient.get<MoneyFlowResponse>(`/households/${householdId}/analytics/money-flow`, {
+        params: { from, to, level },
+      })).data,
+    enabled: enabled && Boolean(from) && Boolean(to),
   });
 }
 

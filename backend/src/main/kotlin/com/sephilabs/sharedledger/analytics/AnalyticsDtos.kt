@@ -144,6 +144,38 @@ data class AllocationResponse(
     val slices: List<AllocationSlice>,
 )
 
+// Reserved node ids for the money-flow Sankey. Category codes are always dotted
+// ("home.rent", "income.salary") and group codes are the seeded group words, so
+// these bare ids can never collide with a real category or group code.
+const val HUB_NODE_ID = "hub"
+const val SAVED_NODE_ID = "saved"
+const val DEFICIT_NODE_ID = "deficit"
+
+data class MoneyFlowNode(
+    val id: String,
+    val side: String, // "income" | "deficit" | "hub" | "expense" | "saved"
+    val groupCode: String?, // expense nodes: owning group (equals id at group level)
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val amount: BigDecimal,
+)
+
+data class MoneyFlowLink(
+    val source: String, // node id
+    val target: String, // node id
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val amount: BigDecimal,
+)
+
+data class MoneyFlowResponse(
+    val from: java.time.LocalDate,
+    val to: java.time.LocalDate,
+    val level: String, // "group" | "category"
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val income: BigDecimal,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val expenses: BigDecimal,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val saved: BigDecimal,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val deficit: BigDecimal,
+    val nodes: List<MoneyFlowNode>,
+    val links: List<MoneyFlowLink>,
+)
+
 data class MoverRow(
     val categoryCode: String,
     val groupCode: String?,

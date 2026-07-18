@@ -93,6 +93,27 @@ class AnalyticsController(
         service.allocation(householdId, year, month)
     }!!
 
+    @GetMapping("/money-flow")
+    fun moneyFlow(
+        @PathVariable householdId: UUID,
+        @RequestParam from: String,
+        @RequestParam to: String,
+        @RequestParam(defaultValue = "group") level: String,
+    ): MoneyFlowResponse = metrics.analyticsTimer("money_flow").record<MoneyFlowResponse> {
+        if (level !in setOf("group", "category")) {
+            throw AppException.badRequest("INVALID_PARAMETER", "level")
+        }
+        val pFrom = runCatching { LocalDate.parse(from) }
+            .getOrElse { throw AppException.badRequest("INVALID_PARAMETER", "from") }
+        val pTo = runCatching { LocalDate.parse(to) }
+            .getOrElse { throw AppException.badRequest("INVALID_PARAMETER", "to") }
+        if (pFrom.isAfter(pTo)) throw AppException.badRequest("INVALID_PARAMETER", "from")
+        if (ChronoUnit.DAYS.between(pFrom, pTo) > 366L * 20L) {
+            throw AppException.badRequest("INVALID_PARAMETER", "range_too_wide")
+        }
+        service.moneyFlow(householdId, pFrom, pTo, level)
+    }!!
+
     @GetMapping("/top-movers")
     fun topMovers(
         @PathVariable householdId: UUID,
