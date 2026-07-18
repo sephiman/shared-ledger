@@ -775,6 +775,8 @@
     "projection": "Proyección",
     "actual_return": "Rentabilidad anualizada real",
     "actual_return_explain": "Rentabilidad ponderada por dinero (XIRR) de tus clases elegibles entre {{from}} y {{to}}: entra el valor de la primera instantánea, entran y salen tus {{movements}} movimiento(s) registrados y vuelve el valor de la última instantánea. Las aportaciones cuentan como capital, no como rendimiento.",
+    "actual_return_coverage_warning": "puede estar sobreestimada: {{months}} mes(es) de historial anteriores a tu primer movimiento registrado no están cubiertos",
+    "actual_return_gap_explain": "Solo hay movimientos registrados desde {{first}}: los {{months}} mes(es) anteriores no están cubiertos, así que el crecimiento previo se cuenta como rentabilidad.",
     "no_return_no_movements": "Registra movimientos de patrimonio para ver tu rentabilidad real.",
     "no_return_insufficient_snapshots": "Se necesitan al menos dos instantáneas para calcular tu rentabilidad real.",
     "no_return_not_computable": "No se pudo calcular tu rentabilidad real con los datos registrados.",

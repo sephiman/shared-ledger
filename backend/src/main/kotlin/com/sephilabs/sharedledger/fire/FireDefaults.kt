@@ -41,6 +41,13 @@ object FireDefaults {
     /** A sub-period must span at least this many days before its annualized return joins the historical sample. */
     const val MIN_HISTORICAL_PERIOD_DAYS: Long = 90
 
+    /**
+     * The real (XIRR) return is only trustworthy if recorded movements cover the contributions
+     * made since the first snapshot in range. When the first movement lags the first snapshot by
+     * more than this, the uncovered history is flagged as possibly overstating the return.
+     */
+    const val MOVEMENT_COVERAGE_GAP_MONTHS: Long = 1
+
     /** Lower bound used when scanning history "since inception" (predates any real data). */
     val EARLIEST_DATA_DATE: LocalDate = LocalDate.of(2000, 1, 1)
 }

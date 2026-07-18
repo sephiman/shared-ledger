@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { FireProjection } from "@/api/fire";
 import { Card, CardBody, CardHeader } from "@/components/ui/primitives";
 import { Explain } from "./Explain";
-import { scenarioLabel } from "./fireLabels";
+import { formatHitProbability, hitMedianYear, scenarioLabel } from "./fireLabels";
 
 /**
  * Scenario × tier summary: deterministic hit year, Monte Carlo probability and median year,
@@ -48,10 +48,10 @@ export function FireScenarioTable({ projection }: { projection: FireProjection }
                         </td>
                         <td className="pr-2">{t(`fire.tier_${stat.tier}`)}</td>
                         <td className="pr-2">{stat.deterministicHitYear ?? "—"}</td>
-                        <td className="pr-2">{(stat.probabilityOfReachingTarget * 100).toFixed(0)}%</td>
-                        <td className="pr-2">{stat.medianYearReachingTarget ?? "—"}</td>
-                        <td className="pr-2">{(stat.coastProbabilityOfReachingTarget * 100).toFixed(0)}%</td>
-                        <td>{stat.coastMedianYearReachingTarget ?? "—"}</td>
+                        <td className="pr-2">{formatHitProbability(stat.probabilityOfReachingTarget)}</td>
+                        <td className="pr-2">{hitMedianYear(stat.probabilityOfReachingTarget, stat.medianYearReachingTarget)}</td>
+                        <td className="pr-2">{formatHitProbability(stat.coastProbabilityOfReachingTarget)}</td>
+                        <td>{hitMedianYear(stat.coastProbabilityOfReachingTarget, stat.coastMedianYearReachingTarget)}</td>
                       </tr>
                     ))}
                   </Fragment>

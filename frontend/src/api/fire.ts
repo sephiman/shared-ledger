@@ -105,6 +105,9 @@ export interface FireActualReturn {
   fromDate: string;
   toDate: string;
   movementCount: number;
+  firstMovementDate: string;
+  /** Whole months of history before the first recorded movement; > 0 means coverage is partial. */
+  uncoveredMonths: number;
 }
 
 export interface FireHistoricalScenario {

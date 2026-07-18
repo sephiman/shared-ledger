@@ -336,11 +336,21 @@ class FireService(
 
         val rate = Xirr.rate(cashFlows(first, last, inRange, qualifying))
             ?: return null to FireActualReturnUnavailableReason.not_computable
+        // inRange preserves allMovements' ascending order, so first() is the earliest covered movement.
+        val firstMovementDate = inRange.first().movementDate
+        val uncoveredMonths =
+            if (firstMovementDate.isAfter(first.snapshotDate.plusMonths(FireDefaults.MOVEMENT_COVERAGE_GAP_MONTHS))) {
+                ChronoUnit.MONTHS.between(first.snapshotDate, firstMovementDate).toInt()
+            } else {
+                0
+            }
         return FireActualReturn(
             annualizedPercent = toPercent(rate),
             fromDate = first.snapshotDate,
             toDate = last.snapshotDate,
             movementCount = inRange.size,
+            firstMovementDate = firstMovementDate,
+            uncoveredMonths = uncoveredMonths,
         ) to null
     }
 

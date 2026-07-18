@@ -192,6 +192,35 @@ class FireProjectionTest @Autowired constructor(
     }
 
     @Test
+    fun `partial coverage is flagged when the first movement lags the first snapshot`() {
+        val (household, user) = setupHousehold()
+        addSnapshot(household, user, LocalDate.of(2024, 1, 1), "10000.00")
+        addMovement(household, user, LocalDate.of(2024, 9, 1), MovementType.contribution, "5000.00")
+        addSnapshot(household, user, LocalDate.of(2025, 1, 1), "16000.00")
+
+        fireService.update(household.id, request(), user)
+        val actual = fireService.project(household.id).actualReturn
+
+        assertThat(actual).isNotNull
+        assertThat(actual!!.firstMovementDate).isEqualTo(LocalDate.of(2024, 9, 1))
+        assertThat(actual.uncoveredMonths).isEqualTo(8)
+    }
+
+    @Test
+    fun `coverage is complete when the first movement is within the threshold of the first snapshot`() {
+        val (household, user) = setupHousehold()
+        addSnapshot(household, user, LocalDate.of(2024, 1, 1), "10000.00")
+        addMovement(household, user, LocalDate.of(2024, 1, 20), MovementType.contribution, "5000.00")
+        addSnapshot(household, user, LocalDate.of(2025, 1, 1), "16000.00")
+
+        fireService.update(household.id, request(), user)
+        val actual = fireService.project(household.id).actualReturn
+
+        assertThat(actual).isNotNull
+        assertThat(actual!!.uncoveredMonths).isEqualTo(0)
+    }
+
+    @Test
     fun `no movements means no return figure at all`() {
         val (household, user) = setupHousehold()
         addSnapshot(household, user, LocalDate.of(2024, 1, 1), "10000.00")

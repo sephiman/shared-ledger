@@ -775,6 +775,8 @@
     "projection": "Projection",
     "actual_return": "Real annualized return",
     "actual_return_explain": "Money-weighted (XIRR) return of your qualifying classes between {{from}} and {{to}}: the first snapshot's value goes in, your {{movements}} recorded movement(s) flow in or out, and the latest snapshot's value comes back. Contributions count as capital, not as performance.",
+    "actual_return_coverage_warning": "may be overstated: {{months}} month(s) of history before your first recorded movement are not covered",
+    "actual_return_gap_explain": "Movements are only recorded from {{first}} — the {{months}} month(s) before that are not covered, so earlier growth is counted as return.",
     "no_return_no_movements": "Record net worth movements to see your real return.",
     "no_return_insufficient_snapshots": "At least two snapshots are needed to compute your real return.",
     "no_return_not_computable": "Your real return could not be computed from the recorded data.",

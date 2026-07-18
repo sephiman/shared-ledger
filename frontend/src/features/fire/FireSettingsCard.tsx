@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import type { FireProjection, FireSettings, FireTierKey, ReturnScenario } from "@/api/fire";
 import { Badge, Button, Card, CardBody, CardHeader, FieldError, Input, Label, Toggle } from "@/components/ui/primitives";
-import { formatMoney } from "@/lib/money";
+import { formatMoney, formatNumber } from "@/lib/money";
 import { TIER_ORDER } from "./fireLabels";
 
 export interface FireFormErrors {
@@ -76,9 +76,15 @@ export function FireSettingsCard({
   })();
 
   const inflationEffect = (() => {
-    const last = fireTier?.targetCurve[fireTier.targetCurve.length - 1];
-    if (!last || !saved_) return t("fire.inflation_effect_generic");
-    return t("fire.inflation_effect", { target: money(last.value), year: last.year });
+    if (!fireTier || !saved_ || !projection) return t("fire.inflation_effect_generic");
+    // Compound today's FIRE target over whole years from the latest-snapshot year, so the
+    // figure is hand-reproducible: targetToday × (1 + inflation)^N. (The chart's dashed curve
+    // additionally re-grosses-up the tax per year; this headline "grows at inflation" line
+    // deliberately does not, keeping it verifiable from the two on-screen numbers.)
+    const n = Math.max(0, Number(saved_.targetYear) - projection.startYear);
+    if (n <= 0) return t("fire.inflation_effect_generic");
+    const projected = Number(fireTier.targetToday) * (1 + Number(saved_.expectedInflationPct) / 100) ** n;
+    return t("fire.inflation_effect", { target: money(projected), year: saved_.targetYear });
   })();
 
   const fatEffect = fatTier && saved_
@@ -519,8 +525,8 @@ export function FireSettingsCard({
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   {t("fire.gain_fraction_effect")}{" "}
                   {projection && (projection.gainFraction.source === "movements"
-                    ? t("fire.gain_fraction_movements", { pct: projection.gainFraction.percent })
-                    : t("fire.gain_fraction_manual", { pct: projection.gainFraction.percent }))}
+                    ? t("fire.gain_fraction_movements", { pct: formatNumber(Number(projection.gainFraction.percent), locale, 2) })
+                    : t("fire.gain_fraction_manual", { pct: formatNumber(Number(projection.gainFraction.percent), locale, 2) }))}
                 </p>
               </div>
 

@@ -193,7 +193,7 @@ export function FireChart({ projection, currency }: { projection: FireProjection
               </li>
               <li>
                 {s.applyCapitalGainsTax
-                  ? t("fire.assumptions_tax_on", { gain: formatPercent(Number(projection.gainFraction.percent), locale, 0) })
+                  ? t("fire.assumptions_tax_on", { gain: formatPercent(Number(projection.gainFraction.percent), locale, 2) })
                   : t("fire.assumptions_tax_off")}
               </li>
               <li>
@@ -216,17 +216,27 @@ export function FireChart({ projection, currency }: { projection: FireProjection
 function ActualReturnBadge({ projection }: { projection: FireProjection }) {
   const { t } = useTranslation();
   if (projection.actualReturn) {
+    const ar = projection.actualReturn;
+    const partial = ar.uncoveredMonths > 0;
     return (
-      <div className="text-right text-sm text-gray-600 dark:text-gray-300">
+      <div className="max-w-xs text-right text-sm text-gray-600 dark:text-gray-300">
         <p>
-          {t("fire.actual_return")}: <span className="font-medium">{projection.actualReturn.annualizedPercent}%</span>
+          {t("fire.actual_return")}: <span className="font-medium">{ar.annualizedPercent}%</span>
         </p>
+        {partial && (
+          <p className="text-xs text-amber-700 dark:text-amber-300">
+            {t("fire.actual_return_coverage_warning", { months: ar.uncoveredMonths })}
+          </p>
+        )}
         <Explain>
-          {t("fire.actual_return_explain", {
-            from: projection.actualReturn.fromDate,
-            to: projection.actualReturn.toDate,
-            movements: projection.actualReturn.movementCount,
-          })}
+          <p>
+            {t("fire.actual_return_explain", {
+              from: ar.fromDate,
+              to: ar.toDate,
+              movements: ar.movementCount,
+            })}
+          </p>
+          {partial && <p>{t("fire.actual_return_gap_explain", { first: ar.firstMovementDate, months: ar.uncoveredMonths })}</p>}
         </Explain>
       </div>
     );

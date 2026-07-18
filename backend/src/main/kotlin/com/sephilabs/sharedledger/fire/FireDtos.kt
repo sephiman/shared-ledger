@@ -197,6 +197,10 @@ data class FireActualReturn(
     val fromDate: LocalDate,
     val toDate: LocalDate,
     val movementCount: Int,
+    /** Date of the earliest movement counted in the XIRR (the start of real coverage). */
+    val firstMovementDate: LocalDate,
+    /** Whole months between the first snapshot and the first movement, 0 unless the gap exceeds the threshold. */
+    val uncoveredMonths: Int,
 )
 
 enum class FireActualReturnUnavailableReason { insufficient_snapshots, no_movements, not_computable }

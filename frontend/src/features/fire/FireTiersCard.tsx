@@ -68,7 +68,7 @@ export function FireTiersCard({ projection, currency }: { projection: FireProjec
         )}
         {taxOn && (
           <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-            {t("fire.tax_targets_note", { gain: formatPercent(Number(projection.gainFraction.percent), locale, 0) })}
+            {t("fire.tax_targets_note", { gain: formatPercent(Number(projection.gainFraction.percent), locale, 2) })}
           </p>
         )}
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
