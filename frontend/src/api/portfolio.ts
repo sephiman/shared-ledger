@@ -103,6 +103,8 @@ export interface HoldingSummary {
   unrealizedPnl: string | null;
   unrealizedPnlPct: string | null;
   realizedPnl: string;
+  // FIFO cost basis of this holding's sold lots, over the whole history.
+  soldCostBasis: string;
   totalReturn: string | null;
   weight: string | null;
 }
@@ -116,6 +118,13 @@ export interface PortfolioSummary {
   totalRealizedPnl: string;
   totalUnrealizedPnl: string | null;
   totalReturn: string | null;
+  // FIFO cost basis of all sold lots, whole history.
+  totalSoldCostBasis: string;
+  // Fractions (0.1234 = +12.34 %); null when the denominator is zero or the numerator unknown.
+  // Denominators: open cost basis / sold cost basis / their sum (capital deployed).
+  unrealizedPnlPct: string | null;
+  realizedPnlPct: string | null;
+  totalReturnPct: string | null;
   byClass: Record<string, string>;
   anyStale: boolean;
   anyUnpriced: boolean;

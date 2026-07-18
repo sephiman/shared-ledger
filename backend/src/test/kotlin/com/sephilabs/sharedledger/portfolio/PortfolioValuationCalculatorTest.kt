@@ -33,6 +33,9 @@ class PortfolioValuationCalculatorTest {
         assertThat(state.netQuantity).isEqualByComparingTo(BigDecimal("12"))
         assertThat(state.remainingCostBasisBase).isEqualByComparingTo(BigDecimal("1355.52"))
         assertThat(state.realizedPnlBase).isEqualByComparingTo(BigDecimal.ZERO)
+        // Nothing sold yet: no sold cost basis, and a realized % over it is undefined, not 0 %.
+        assertThat(state.soldCostBasisBase).isEqualByComparingTo(BigDecimal.ZERO)
+        assertThat(PortfolioValuationCalculator.fraction(state.realizedPnlBase, state.soldCostBasisBase)).isNull()
     }
 
     @Test
@@ -50,6 +53,8 @@ class PortfolioValuationCalculatorTest {
         // Remaining: 5 units of lot2 at 200.
         assertThat(state.remainingCostBasisBase).isEqualByComparingTo(BigDecimal("1000.00"))
         assertThat(state.realizedPnlBase).isEqualByComparingTo(BigDecimal("2490.00"))
+        // Sold portion: all of lot1 (1000) + 5 of lot2 (1000).
+        assertThat(state.soldCostBasisBase).isEqualByComparingTo(BigDecimal("2000.00"))
     }
 
     @Test
@@ -78,6 +83,64 @@ class PortfolioValuationCalculatorTest {
         assertThat(state.netQuantity).isEqualByComparingTo(BigDecimal.ZERO)
         assertThat(state.remainingCostBasisBase).isEqualByComparingTo(BigDecimal.ZERO)
         assertThat(state.realizedPnlBase).isEqualByComparingTo(BigDecimal("90.00"))
+        // The sold cost basis survives the close: realized % = 90 / 150, while an
+        // unrealized % over the empty open position is undefined.
+        assertThat(state.soldCostBasisBase).isEqualByComparingTo(BigDecimal("150.00"))
+        assertThat(PortfolioValuationCalculator.fraction(state.realizedPnlBase, state.soldCostBasisBase))
+            .isEqualByComparingTo(BigDecimal("0.6"))
+        assertThat(PortfolioValuationCalculator.fraction(BigDecimal.ZERO, state.remainingCostBasisBase)).isNull()
+    }
+
+    @Test
+    fun `sell and rebuy keeps the sold cost basis separate from the open cost basis`() {
+        val state = PortfolioValuationCalculator.replay(
+            listOf(
+                buy(1, "10", "1000"),   // cost 10 × 1000 = 10 000
+                sell(2, "10", "1500"),  // proceeds 15 000; cost of sold = 10 000; realized = 5 000
+                buy(3, "10", "1500"),   // rebuy: open cost basis 15 000
+            )
+        )
+        assertThat(state.netQuantity).isEqualByComparingTo(BigDecimal("10"))
+        assertThat(state.remainingCostBasisBase).isEqualByComparingTo(BigDecimal("15000.00"))
+        assertThat(state.soldCostBasisBase).isEqualByComparingTo(BigDecimal("10000.00"))
+        assertThat(state.realizedPnlBase).isEqualByComparingTo(BigDecimal("5000.00"))
+
+        // Priced at 1800: value 18 000, unrealized 3 000.
+        val result = PortfolioValuationCalculator.value(
+            state, PriceInput(BigDecimal("1800"), asOf, "EUR", BigDecimal.ONE), asOf, staleThresholdDays = 7,
+        )
+        assertThat(result.soldCostBasisBase).isEqualByComparingTo(BigDecimal("10000.00"))
+        // Unrealized % = 3 000 / 15 000 (open lots) = 0.2 — not 3 000 / 10 000.
+        assertThat(result.unrealizedPnlPct).isEqualByComparingTo(BigDecimal("0.2"))
+        // Realized % = 5 000 / 10 000 (sold lots) = 0.5.
+        assertThat(PortfolioValuationCalculator.fraction(state.realizedPnlBase, state.soldCostBasisBase))
+            .isEqualByComparingTo(BigDecimal("0.5"))
+        // Total return % = (5 000 + 3 000) / (15 000 + 10 000 deployed) = 0.32 — the recycled
+        // 10 000 counts in both the open rebuy and the sold history by design.
+        assertThat(
+            PortfolioValuationCalculator.fraction(
+                result.totalReturnBase, state.remainingCostBasisBase.add(state.soldCostBasisBase),
+            )
+        ).isEqualByComparingTo(BigDecimal("0.32"))
+    }
+
+    @Test
+    fun `non-strict oversell counts only the covered portion in the sold cost basis`() {
+        val state = PortfolioValuationCalculator.replay(
+            listOf(buy(1, "5", "100"), sell(2, "10", "100")),
+        )
+        // Proceeds 1000 − covered cost 500 = 500 realized; the uncovered remainder
+        // consumes at zero cost and adds nothing to the sold basis.
+        assertThat(state.soldCostBasisBase).isEqualByComparingTo(BigDecimal("500.00"))
+        assertThat(state.realizedPnlBase).isEqualByComparingTo(BigDecimal("500.00"))
+    }
+
+    @Test
+    fun `fraction rounds half-even at scale 4 and is null on unknown or zero input`() {
+        assertThat(PortfolioValuationCalculator.fraction(BigDecimal.ONE, BigDecimal("3")))
+            .isEqualByComparingTo(BigDecimal("0.3333"))
+        assertThat(PortfolioValuationCalculator.fraction(null, BigDecimal.ONE)).isNull()
+        assertThat(PortfolioValuationCalculator.fraction(BigDecimal.ONE, BigDecimal.ZERO)).isNull()
     }
 
     @Test

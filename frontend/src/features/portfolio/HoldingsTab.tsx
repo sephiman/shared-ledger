@@ -23,7 +23,7 @@ import { formatMoney, formatNumber, formatPrice } from "@/lib/money";
 import { formatDate, isoToday } from "@/lib/dates";
 import { useToggleSet } from "@/lib/useToggleSet";
 import { SymbolSearchCombobox } from "./SymbolSearchCombobox";
-import { fractionToPercent, percentOf, pnlTone, signedMoney } from "./valuation";
+import { fractionOf, fractionToPercent, percentLabel, pnlTone, signedMoney } from "./valuation";
 
 const ASSET_CLASSES: HoldingAssetClass[] = ["crypto", "etf", "stock", "fund"];
 
@@ -63,21 +63,29 @@ type AssetFilter = HoldingAssetClass | "all";
 
 interface Totals {
   totalCostBasis: string;
+  totalSoldCostBasis: string;
   totalValue: string;
   totalUnrealizedPnl: string | null;
   totalRealizedPnl: string;
   totalReturn: string | null;
+  // Fractions, backend convention: each percentage over its own denominator
+  // (open cost basis / sold cost basis / their sum); null when undefined.
+  unrealizedPnlPct: string | null;
+  realizedPnlPct: string | null;
+  totalReturnPct: string | null;
 }
 
 /** Recomputes the totals for a subset of holdings, mirroring the backend summary math. */
 function subtotals(rows: HoldingSummary[]): Totals {
   let cost = new Decimal(0);
+  let sold = new Decimal(0);
   let value = new Decimal(0);
   let unrealized = new Decimal(0);
   let realized = new Decimal(0);
   let anyUnrealized = false;
   for (const r of rows) {
     cost = cost.plus(r.holding.remainingCostBasis || 0);
+    sold = sold.plus(r.soldCostBasis || 0);
     if (r.currentValue != null) value = value.plus(r.currentValue);
     if (r.unrealizedPnl != null) {
       unrealized = unrealized.plus(r.unrealizedPnl);
@@ -87,10 +95,16 @@ function subtotals(rows: HoldingSummary[]): Totals {
   }
   return {
     totalCostBasis: cost.toString(),
+    totalSoldCostBasis: sold.toString(),
     totalValue: value.toString(),
     totalUnrealizedPnl: anyUnrealized ? unrealized.toString() : null,
     totalRealizedPnl: realized.toString(),
     totalReturn: anyUnrealized ? unrealized.plus(realized).toString() : null,
+    unrealizedPnlPct: anyUnrealized ? fractionOf(unrealized.toString(), cost.toString()) : null,
+    realizedPnlPct: fractionOf(realized.toString(), sold.toString()),
+    totalReturnPct: anyUnrealized
+      ? fractionOf(unrealized.plus(realized).toString(), cost.plus(sold).toString())
+      : null,
   };
 }
 
@@ -123,10 +137,14 @@ export function HoldingsTab() {
     : effectiveFilter === "all"
       ? {
           totalCostBasis: summary.totalCostBasis,
+          totalSoldCostBasis: summary.totalSoldCostBasis,
           totalValue: summary.totalValue,
           totalUnrealizedPnl: summary.totalUnrealizedPnl,
           totalRealizedPnl: summary.totalRealizedPnl,
           totalReturn: summary.totalReturn,
+          unrealizedPnlPct: summary.unrealizedPnlPct,
+          realizedPnlPct: summary.realizedPnlPct,
+          totalReturnPct: summary.totalReturnPct,
         }
       : subtotals(filtered);
   const locale = i18n.language;
@@ -135,12 +153,16 @@ export function HoldingsTab() {
   // Per-unit prices (current price, avg cost) at full precision — tiny coins keep every decimal.
   const price = (v: string | number | null | undefined, currency = household.currency) =>
     v == null ? "—" : formatPrice(v, currency, locale);
-  // Signed money plus its percent of the cost basis, e.g. "+€1,234 (11.1%)".
-  const pnlWithPct = (v: string | null | undefined, denom: string): string => {
-    if (v == null) return "—";
-    const pct = percentOf(v, denom);
-    return `${signedMoney(v, money(v))}${pct != null ? ` (${formatNumber(pct, locale, 1)}%)` : ""}`;
-  };
+  // Signed money plus the percentage over its own denominator, e.g. "+€1,234 (11.1%)";
+  // an undefined percentage (zero denominator) renders as "(—)", never 0%.
+  const pnlStat = (v: string | null | undefined, fraction: string | null): string =>
+    v == null ? "—" : `${signedMoney(v, money(v))} (${percentLabel(fraction, locale)})`;
+  // One instantiated explanation line, e.g. "Realized +€5,000.00 over €10,000.00 … = +50.0%".
+  const pctTooltip = (key: string, v: string | null | undefined, fraction: string | null, basis: string): string | undefined =>
+    v == null || fraction == null
+      ? undefined
+      : t(key, { pnl: signedMoney(v, money(v)), basis: money(basis), pct: percentLabel(fraction, locale, true) });
+  const deployed = totals ? new Decimal(totals.totalCostBasis).plus(totals.totalSoldCostBasis).toString() : "0";
 
   return (
     <div className="space-y-4">
@@ -182,18 +204,21 @@ export function HoldingsTab() {
           <Stat label={t("portfolio.current_value")} value={money(totals.totalValue)} />
           <Stat
             label={t("portfolio.unrealized_pnl")}
-            value={pnlWithPct(totals.totalUnrealizedPnl, totals.totalCostBasis)}
+            value={pnlStat(totals.totalUnrealizedPnl, totals.unrealizedPnlPct)}
             tone={toneClass(pnlTone(totals.totalUnrealizedPnl))}
+            title={pctTooltip("portfolio.unrealized_pct_tooltip", totals.totalUnrealizedPnl, totals.unrealizedPnlPct, totals.totalCostBasis)}
           />
           <Stat
             label={t("portfolio.realized_pnl")}
-            value={pnlWithPct(totals.totalRealizedPnl, totals.totalCostBasis)}
+            value={pnlStat(totals.totalRealizedPnl, totals.realizedPnlPct)}
             tone={toneClass(pnlTone(totals.totalRealizedPnl))}
+            title={pctTooltip("portfolio.realized_pct_tooltip", totals.totalRealizedPnl, totals.realizedPnlPct, totals.totalSoldCostBasis)}
           />
           <Stat
             label={t("portfolio.total_return")}
-            value={pnlWithPct(totals.totalReturn, totals.totalCostBasis)}
+            value={pnlStat(totals.totalReturn, totals.totalReturnPct)}
             tone={toneClass(pnlTone(totals.totalReturn))}
+            title={pctTooltip("portfolio.total_return_pct_tooltip", totals.totalReturn, totals.totalReturnPct, deployed)}
           />
         </div>
       )}
@@ -404,12 +429,12 @@ export function HoldingsTab() {
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
+function Stat({ label, value, tone, title }: { label: string; value: string; tone?: string; title?: string }) {
   return (
     <Card>
       <CardBody className="py-3">
         <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
-        <p className={`mt-0.5 text-lg font-semibold ${tone ?? ""}`}>{value}</p>
+        <p className={`mt-0.5 text-lg font-semibold ${tone ?? ""}`} title={title}>{value}</p>
       </CardBody>
     </Card>
   );

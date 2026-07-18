@@ -1,9 +1,10 @@
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import Decimal from "decimal.js";
 import { usePortfolioSummary } from "@/api/portfolio";
 import { Card, CardBody, CardHeader } from "@/components/ui/primitives";
-import { formatMoney, formatNumber } from "@/lib/money";
-import { pnlTone, signedMoney, percentOf } from "@/features/portfolio/valuation";
+import { formatMoney } from "@/lib/money";
+import { pnlTone, signedMoney, percentLabel } from "@/features/portfolio/valuation";
 
 function toneClass(tone: ReturnType<typeof pnlTone>): string {
   if (tone === "positive") return "text-green-600 dark:text-green-400";
@@ -19,12 +20,16 @@ export function PortfolioOverviewTile({ householdId, currency, locale }: { house
   if (!data || data.holdings.length === 0) return null;
 
   const money = (v: string | null) => (v == null ? "—" : formatMoney(v, currency, locale));
-  // Signed money plus its percent of the cost basis, e.g. "+€1,234 (11.1%)".
-  const pnlText = (v: string | null): string => {
-    if (v == null) return "—";
-    const pct = percentOf(v, data.totalCostBasis);
-    return `${signedMoney(v, money(v))}${pct != null ? ` (${formatNumber(pct, locale, 1)}%)` : ""}`;
-  };
+  // Signed money plus the percentage over its own denominator, e.g. "+€1,234 (11.1%)";
+  // an undefined percentage (zero denominator) renders as "(—)", never 0%.
+  const pnlText = (v: string | null, fraction: string | null): string =>
+    v == null ? "—" : `${signedMoney(v, money(v))} (${percentLabel(fraction, locale)})`;
+  // One instantiated explanation line, e.g. "Realized +€5,000.00 over €10,000.00 … = +50.0%".
+  const pctTooltip = (key: string, v: string | null, fraction: string | null, basis: string): string | undefined =>
+    v == null || fraction == null
+      ? undefined
+      : t(key, { pnl: signedMoney(v, money(v)), basis: money(basis), pct: percentLabel(fraction, locale, true) });
+  const deployed = new Decimal(data.totalCostBasis).plus(data.totalSoldCostBasis).toString();
 
   const top = [...data.holdings]
     .filter((h) => h.currentValue != null)
@@ -44,17 +49,26 @@ export function PortfolioOverviewTile({ householdId, currency, locale }: { house
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{t("portfolio.current_value")}</p>
 
         {data.totalReturn != null && (
-          <p className={`mt-2 text-sm font-medium tabular-nums ${toneClass(pnlTone(data.totalReturn))}`}>
-            {pnlText(data.totalReturn)}
+          <p
+            className={`mt-2 text-sm font-medium tabular-nums ${toneClass(pnlTone(data.totalReturn))}`}
+            title={pctTooltip("portfolio.total_return_pct_tooltip", data.totalReturn, data.totalReturnPct, deployed)}
+          >
+            {pnlText(data.totalReturn, data.totalReturnPct)}
             <span className="ml-1 font-normal text-gray-500 dark:text-gray-400">{t("portfolio.total_return")}</span>
           </p>
         )}
         <div className="mt-1 grid grid-cols-2 gap-x-3 text-xs">
-          <span className={`tabular-nums ${toneClass(pnlTone(data.totalUnrealizedPnl))}`}>
-            {t("portfolio.unrealized_pnl")}: {pnlText(data.totalUnrealizedPnl)}
+          <span
+            className={`tabular-nums ${toneClass(pnlTone(data.totalUnrealizedPnl))}`}
+            title={pctTooltip("portfolio.unrealized_pct_tooltip", data.totalUnrealizedPnl, data.unrealizedPnlPct, data.totalCostBasis)}
+          >
+            {t("portfolio.unrealized_pnl")}: {pnlText(data.totalUnrealizedPnl, data.unrealizedPnlPct)}
           </span>
-          <span className={`tabular-nums ${toneClass(pnlTone(data.totalRealizedPnl))}`}>
-            {t("portfolio.realized_pnl")}: {pnlText(data.totalRealizedPnl)}
+          <span
+            className={`tabular-nums ${toneClass(pnlTone(data.totalRealizedPnl))}`}
+            title={pctTooltip("portfolio.realized_pct_tooltip", data.totalRealizedPnl, data.realizedPnlPct, data.totalSoldCostBasis)}
+          >
+            {t("portfolio.realized_pnl")}: {pnlText(data.totalRealizedPnl, data.realizedPnlPct)}
           </span>
         </div>
         <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 tabular-nums">

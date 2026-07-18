@@ -1,4 +1,5 @@
 import Decimal from "decimal.js";
+import { formatNumber } from "@/lib/money";
 
 /** Converts a backend fraction string (e.g. "0.1663") into a percent number (16.63). */
 export function fractionToPercent(fraction: string | null | undefined): number | null {
@@ -30,14 +31,26 @@ export function signedMoney(value: string, formatted: string): string {
   return new Decimal(value).isPositive() && !new Decimal(value).isZero() ? `+${formatted}` : formatted;
 }
 
-/** numerator/denominator as a percent number, or null when undefined (zero/invalid denominator). */
-export function percentOf(numerator: string | null | undefined, denominator: string | null | undefined): number | null {
+/**
+ * numerator/denominator as a fraction string (the backend convention: "0.1234" = +12.34 %),
+ * or null when undefined (null numerator, zero/invalid denominator) — mirrors the backend
+ * rule so filtered subtotals behave like the summary fields.
+ */
+export function fractionOf(numerator: string | null | undefined, denominator: string | null | undefined): string | null {
   if (numerator == null || denominator == null) return null;
   try {
     const d = new Decimal(denominator);
     if (d.isZero()) return null;
-    return new Decimal(numerator).div(d).times(100).toNumber();
+    return new Decimal(numerator).div(d).toString();
   } catch {
     return null;
   }
+}
+
+/** "16.6%" from a backend fraction string; "—" when undefined. [signed] adds "+" for gains. */
+export function percentLabel(fraction: string | null | undefined, locale: string, signed = false): string {
+  const pct = fractionToPercent(fraction);
+  if (pct == null) return "—";
+  const formatted = `${formatNumber(pct, locale, 1)}%`;
+  return signed && pct > 0 ? `+${formatted}` : formatted;
 }

@@ -118,6 +118,9 @@ data class HoldingSummaryDto(
     val unrealizedPnlPct: BigDecimal?,
     @JsonFormat(shape = JsonFormat.Shape.STRING)
     val realizedPnl: BigDecimal,
+    // FIFO cost basis of this holding's sold lots, over the whole history.
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    val soldCostBasis: BigDecimal,
     @JsonFormat(shape = JsonFormat.Shape.STRING)
     val totalReturn: BigDecimal?,
     // Fraction of the priced portfolio value, scale 4.
@@ -139,6 +142,17 @@ data class PortfolioSummaryDto(
     val totalUnrealizedPnl: BigDecimal?,
     @JsonFormat(shape = JsonFormat.Shape.STRING)
     val totalReturn: BigDecimal?,
+    // FIFO cost basis of all sold lots, whole history.
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    val totalSoldCostBasis: BigDecimal,
+    // Scale-4 fractions (0.1234 = +12.34 %); null when the denominator is zero or the numerator
+    // is unknown. Denominators: open cost basis / sold cost basis / their sum (capital deployed).
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    val unrealizedPnlPct: BigDecimal?,
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    val realizedPnlPct: BigDecimal?,
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    val totalReturnPct: BigDecimal?,
     val byClass: Map<String, BigDecimal>,
     val anyStale: Boolean,
     val anyUnpriced: Boolean,

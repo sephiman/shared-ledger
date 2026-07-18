@@ -126,6 +126,12 @@ class PortfolioValuationIntegrationTest @Autowired constructor(
         // 50000 + (10 × 100 × 0.92)
         assertThat(summary.totalCostBasis).isEqualByComparingTo(BigDecimal("50920.00"))
         assertThat(summary.anyUnpriced).isTrue()
+        // Nothing sold: realized % is undefined; unrealized 10000 / open 50920 and
+        // total 10000 / deployed (50920 + 0) round half-even at scale 4.
+        assertThat(summary.totalSoldCostBasis).isEqualByComparingTo(BigDecimal.ZERO)
+        assertThat(summary.realizedPnlPct).isNull()
+        assertThat(summary.unrealizedPnlPct).isEqualByComparingTo(BigDecimal("0.1964"))
+        assertThat(summary.totalReturnPct).isEqualByComparingTo(BigDecimal("0.1964"))
         val pricedRow = summary.holdings.single { it.holding.symbol == "BTC" }
         assertThat(pricedRow.weight).isEqualByComparingTo(BigDecimal.ONE)
         val unpricedRow = summary.holdings.single { it.holding.symbol == "NOPRICE" }
@@ -169,8 +175,15 @@ class PortfolioValuationIntegrationTest @Autowired constructor(
         assertThat(row.holding.remainingCostBasis).isEqualByComparingTo(BigDecimal("40000.00"))
         assertThat(row.unrealizedPnl).isEqualByComparingTo(BigDecimal("10000.00"))
         assertThat(row.totalReturn).isEqualByComparingTo(BigDecimal("25000.00"))
+        assertThat(row.soldCostBasis).isEqualByComparingTo(BigDecimal("40000.00"))
         assertThat(summary.totalRealizedPnl).isEqualByComparingTo(BigDecimal("15000.00"))
         assertThat(summary.totalCostBasis).isEqualByComparingTo(BigDecimal("40000.00"))
+        assertThat(summary.totalSoldCostBasis).isEqualByComparingTo(BigDecimal("40000.00"))
+        // Each percentage over its own denominator: unrealized 10000 / open 40000,
+        // realized 15000 / sold 40000, total 25000 / deployed 80000.
+        assertThat(summary.unrealizedPnlPct).isEqualByComparingTo(BigDecimal("0.25"))
+        assertThat(summary.realizedPnlPct).isEqualByComparingTo(BigDecimal("0.375"))
+        assertThat(summary.totalReturnPct).isEqualByComparingTo(BigDecimal("0.3125"))
     }
 
     @Test
@@ -249,6 +262,12 @@ class PortfolioValuationIntegrationTest @Autowired constructor(
         assertThat(row.realizedPnl).isEqualByComparingTo(BigDecimal("500.00"))
         assertThat(summary.totalRealizedPnl).isEqualByComparingTo(BigDecimal("500.00"))
         assertThat(summary.totalValue).isEqualByComparingTo(BigDecimal.ZERO)
+        // No open lots: unrealized % is undefined, while realized 500 / sold 1000 and
+        // total 500 / deployed (0 + 1000) both stay meaningful.
+        assertThat(summary.totalSoldCostBasis).isEqualByComparingTo(BigDecimal("1000.00"))
+        assertThat(summary.unrealizedPnlPct).isNull()
+        assertThat(summary.realizedPnlPct).isEqualByComparingTo(BigDecimal("0.5"))
+        assertThat(summary.totalReturnPct).isEqualByComparingTo(BigDecimal("0.5"))
 
         // A position closed by the valuation date holds nothing worth freezing.
         assertThat(service.valuationAt(household.id, LocalDate.of(2026, 3, 1)).holdings).isEmpty()

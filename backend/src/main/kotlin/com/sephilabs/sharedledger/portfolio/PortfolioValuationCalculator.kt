@@ -34,6 +34,10 @@ object PortfolioValuationCalculator {
         val netQuantity: BigDecimal,
         val remainingCostBasisBase: BigDecimal,
         val realizedPnlBase: BigDecimal,
+        // FIFO cost basis of the sold (consumed) portions, accumulated over the whole replayed
+        // history. A non-strict oversell consumes the uncovered remainder at zero cost, so that
+        // remainder adds nothing here — mirroring the realized-P&L math.
+        val soldCostBasisBase: BigDecimal,
     )
 
     data class PriceInput(
@@ -48,6 +52,7 @@ object PortfolioValuationCalculator {
         val netQuantity: BigDecimal,
         val remainingCostBasisBase: BigDecimal,
         val realizedPnlBase: BigDecimal,
+        val soldCostBasisBase: BigDecimal,
         val currentValueBase: BigDecimal?,      // null when unpriced; 0.00 for closed positions
         val unrealizedPnlAbs: BigDecimal?,
         val unrealizedPnlPct: BigDecimal?,
@@ -102,6 +107,7 @@ object PortfolioValuationCalculator {
         val queue = ArrayDeque<OpenLot>()
         var netQuantity = BigDecimal.ZERO
         var realized = BigDecimal.ZERO
+        var soldCost = BigDecimal.ZERO
 
         for (entry in ordered) {
             when (entry.type) {
@@ -130,6 +136,7 @@ object PortfolioValuationCalculator {
                     }
                     if (toConsume.signum() > 0 && strict) throw OversellException(entry.tradedOn)
                     realized = realized.add(proceeds.subtract(costOfSold, MC), MC)
+                    soldCost = soldCost.add(costOfSold, MC)
                 }
             }
         }
@@ -141,6 +148,7 @@ object PortfolioValuationCalculator {
             netQuantity = netQuantity,
             remainingCostBasisBase = Money.normalize(remainingCost),
             realizedPnlBase = Money.normalize(realized),
+            soldCostBasisBase = Money.normalize(soldCost),
         )
     }
 
@@ -242,6 +250,7 @@ object PortfolioValuationCalculator {
                 netQuantity = state.netQuantity,
                 remainingCostBasisBase = state.remainingCostBasisBase,
                 realizedPnlBase = state.realizedPnlBase,
+                soldCostBasisBase = state.soldCostBasisBase,
                 currentValueBase = null,
                 unrealizedPnlAbs = null,
                 unrealizedPnlPct = null,
@@ -262,6 +271,7 @@ object PortfolioValuationCalculator {
             netQuantity = state.netQuantity,
             remainingCostBasisBase = state.remainingCostBasisBase,
             realizedPnlBase = state.realizedPnlBase,
+            soldCostBasisBase = state.soldCostBasisBase,
             currentValueBase = value,
             unrealizedPnlAbs = unrealized,
             unrealizedPnlPct = unrealizedPct,
@@ -272,9 +282,17 @@ object PortfolioValuationCalculator {
     }
 
     /** Weight of each value within the total, as a scale-4 fraction. Zero total -> empty. */
-    fun weights(valuesById: Map<java.util.UUID, BigDecimal>): Map<java.util.UUID, BigDecimal> {
+    fun weights(valuesById: Map<UUID, BigDecimal>): Map<UUID, BigDecimal> {
         val total = valuesById.values.fold(BigDecimal.ZERO, BigDecimal::add)
         if (total.signum() == 0) return emptyMap()
         return valuesById.mapValues { (_, v) -> v.divide(total, FRACTION_SCALE, RoundingMode.HALF_EVEN) }
     }
+
+    /**
+     * [numerator]/[denominator] as a scale-4 fraction (0.1234 = +12.34 %); null when the
+     * numerator is unknown or the denominator is zero — never 0 % from a division by zero.
+     */
+    fun fraction(numerator: BigDecimal?, denominator: BigDecimal): BigDecimal? =
+        if (numerator == null || denominator.signum() == 0) null
+        else numerator.divide(denominator, FRACTION_SCALE, RoundingMode.HALF_EVEN)
 }

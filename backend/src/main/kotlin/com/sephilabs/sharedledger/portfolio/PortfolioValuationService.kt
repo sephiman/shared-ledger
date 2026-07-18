@@ -64,12 +64,14 @@ class PortfolioValuationService(
                 unrealizedPnl = row.result.unrealizedPnlAbs,
                 unrealizedPnlPct = row.result.unrealizedPnlPct,
                 realizedPnl = row.result.realizedPnlBase,
+                soldCostBasis = row.result.soldCostBasisBase,
                 totalReturn = row.result.totalReturnBase,
                 weight = weights[row.holding.id],
             )
         }
 
         val totalCostBasis = Money.normalize(results.fold(BigDecimal.ZERO) { acc, row -> acc + row.result.remainingCostBasisBase })
+        val totalSoldCostBasis = Money.normalize(results.fold(BigDecimal.ZERO) { acc, row -> acc + row.result.soldCostBasisBase })
         val totalValue = Money.normalize(pricedValues.values.fold(BigDecimal.ZERO, BigDecimal::add))
         val totalRealized = Money.normalize(results.fold(BigDecimal.ZERO) { acc, row -> acc + row.result.realizedPnlBase })
         val anyUnpriced = results.any { it.result.currentValueBase == null }
@@ -86,6 +88,7 @@ class PortfolioValuationService(
                 Money.normalize(rows.fold(BigDecimal.ZERO) { acc, row -> acc + (row.result.currentValueBase ?: BigDecimal.ZERO) })
             }
 
+        val totalReturn = totalUnrealized?.let { Money.normalize(totalRealized.add(it)) }
         return PortfolioSummaryDto(
             asOfDate = today,
             holdings = holdingDtos,
@@ -93,7 +96,13 @@ class PortfolioValuationService(
             totalValue = totalValue,
             totalRealizedPnl = totalRealized,
             totalUnrealizedPnl = totalUnrealized,
-            totalReturn = totalUnrealized?.let { Money.normalize(totalRealized.add(it)) },
+            totalReturn = totalReturn,
+            totalSoldCostBasis = totalSoldCostBasis,
+            // Each percentage over its own denominator: unrealized over the open-lots cost basis,
+            // realized over the sold-lots cost basis, total return over all capital deployed.
+            unrealizedPnlPct = PortfolioValuationCalculator.fraction(totalUnrealized, totalCostBasis),
+            realizedPnlPct = PortfolioValuationCalculator.fraction(totalRealized, totalSoldCostBasis),
+            totalReturnPct = PortfolioValuationCalculator.fraction(totalReturn, totalCostBasis.add(totalSoldCostBasis)),
             byClass = byClass,
             anyStale = results.any { it.result.stale },
             anyUnpriced = anyUnpriced,
