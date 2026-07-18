@@ -109,6 +109,20 @@ export interface HoldingSummary {
   weight: string | null;
 }
 
+// Money-weighted return (XIRR) over the whole lot history: buys out, sells in, the
+// current value of open holdings as terminal inflow, each flow at its trade-time FX.
+export interface MoneyWeightedReturn {
+  // Fraction (0.1234 = +12.34 %): annualized, or cumulative when `annualized` is false.
+  value: string | null;
+  // False → cumulative figure (history shorter than one year).
+  annualized: boolean;
+  from: string | null;
+  to: string;
+  flowCount: number;
+  terminalValue: string | null;
+  unavailableReason: "no_flows" | "unpriced_holdings" | "not_computable" | null;
+}
+
 export interface PortfolioSummary {
   asOfDate: string;
   holdings: HoldingSummary[];
@@ -125,6 +139,9 @@ export interface PortfolioSummary {
   unrealizedPnlPct: string | null;
   realizedPnlPct: string | null;
   totalReturnPct: string | null;
+  moneyWeightedReturn: MoneyWeightedReturn;
+  // Same metric scoped to each asset class's own lots and current value.
+  moneyWeightedReturnByClass: Partial<Record<HoldingAssetClass, MoneyWeightedReturn>>;
   byClass: Record<string, string>;
   anyStale: boolean;
   anyUnpriced: boolean;

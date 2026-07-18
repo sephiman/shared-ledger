@@ -410,6 +410,154 @@ class PortfolioValuationIntegrationTest @Autowired constructor(
         assertThat(evolution.points[3].twrPct).isEqualByComparingTo(BigDecimal("0.21"))
     }
 
+    @Test
+    fun `money-weighted return solves the whole lot history with the current value as terminal inflow`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val coinId = "btc-mwr-${System.nanoTime()}"
+        val holding = createLinkedCrypto(household.id, user, "BTC", coinId)
+        // 1461 days = exactly 4.0 years under the 365.25 convention. Sell 5 and rebuy 5 the
+        // same day: the recycled 550 nets to zero cash on that date, so the money-weighted
+        // story is 1000 in → 1464.10 out over 4 years = 10 %/y — while return-on-cost counts
+        // the recycled money in both denominators and reports a timeless 464.10/1550 ≈ 30 %.
+        addLot(household.id, holding.id, user, today.minusDays(1461), "10", "100")
+        holdingService.addLot(
+            household.id, holding.id,
+            LotRequest(
+                type = LotType.SELL,
+                tradedOn = today.minusDays(731),
+                quantity = BigDecimal("5"),
+                unitPrice = BigDecimal("110"),
+            ),
+            user,
+        )
+        addLot(household.id, holding.id, user, today.minusDays(731), "5", "110")
+        storePrice("coingecko", coinId, "EUR", today, "146.41")
+
+        val mwr = service.summary(household.id).moneyWeightedReturn
+        assertThat(mwr.value).isEqualByComparingTo(BigDecimal("0.1000"))
+        assertThat(mwr.annualized).isTrue()
+        assertThat(mwr.from).isEqualTo(today.minusDays(1461))
+        assertThat(mwr.to).isEqualTo(today)
+        assertThat(mwr.flowCount).isEqualTo(3)
+        assertThat(mwr.terminalValue).isEqualByComparingTo(BigDecimal("1464.10"))
+        assertThat(mwr.unavailableReason).isNull()
+    }
+
+    @Test
+    fun `money-weighted return keeps historical flows at their frozen fx, never today's rate`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        // NOK, used nowhere else: fx lookups don't filter by provider, and rows this old
+        // forward-fill into every later date — seeding a currency that another class expects
+        // to be rate-free (USD in HoldingLifecycle, GBP in PortfolioImport) breaks it.
+        // Frozen at the trade date: 0.50. A very different later rate must not touch the flow.
+        seedFxRate("NOK", today.minusDays(1461), "0.50000000")
+        seedFxRate("NOK", today.minusDays(2), "1.00000000")
+        val coinId = "btc-mwrfx-${System.nanoTime()}"
+        val holding = createLinkedCrypto(household.id, user, "BTC", coinId)
+        // 10 × 100 NOK × 0.50 = 500 EUR at trade time.
+        addLot(household.id, holding.id, user, today.minusDays(1461), "10", "100", currency = "NOK")
+        storePrice("coingecko", coinId, "EUR", today, "73.205")
+
+        val mwr = service.summary(household.id).moneyWeightedReturn
+        // 500 → 732.05 over 4.0 years = 10 %/y. Re-converting the buy at today's 1.00
+        // rate would make the cost 1000 and the rate clearly negative instead.
+        assertThat(mwr.value).isEqualByComparingTo(BigDecimal("0.1000"))
+        assertThat(mwr.terminalValue).isEqualByComparingTo(BigDecimal("732.05"))
+    }
+
+    @Test
+    fun `money-weighted return of a history under one year is cumulative`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val coinId = "btc-mwrshort-${System.nanoTime()}"
+        val holding = createLinkedCrypto(household.id, user, "BTC", coinId)
+        addLot(household.id, holding.id, user, today.minusDays(100), "1", "10000")
+        storePrice("coingecko", coinId, "EUR", today, "11000")
+
+        val mwr = service.summary(household.id).moneyWeightedReturn
+        // Cumulative = 11000/10000 − 1 exactly; annualizing 100 days would mislead.
+        assertThat(mwr.value).isEqualByComparingTo(BigDecimal("0.1000"))
+        assertThat(mwr.annualized).isFalse()
+        assertThat(mwr.unavailableReason).isNull()
+    }
+
+    @Test
+    fun `money-weighted return is unavailable while an open holding is unpriced`() {
+        val (user, household) = seed()
+        val coinId = "btc-mwrnoprice-${System.nanoTime()}"
+        val holding = createLinkedCrypto(household.id, user, "BTC", coinId)
+        addLot(household.id, holding.id, user, LocalDate.now().minusDays(30), "1", "10000")
+        // No stored price: the terminal value would be incomplete.
+
+        val mwr = service.summary(household.id).moneyWeightedReturn
+        assertThat(mwr.value).isNull()
+        assertThat(mwr.terminalValue).isNull()
+        assertThat(mwr.unavailableReason).isEqualTo(MoneyWeightedReturnUnavailableReason.unpriced_holdings)
+        assertThat(mwr.flowCount).isEqualTo(1)
+        assertThat(mwr.from).isEqualTo(LocalDate.now().minusDays(30))
+    }
+
+    @Test
+    fun `money-weighted return is computed per asset class, isolating unpriced classes`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        // Crypto: 1000 → 1464.10 over exactly 4.0 years = 10 %/y.
+        val coinId = "btc-mwrclass-${System.nanoTime()}"
+        val crypto = createLinkedCrypto(household.id, user, "BTC", coinId)
+        addLot(household.id, crypto.id, user, today.minusDays(1461), "10", "100")
+        storePrice("coingecko", coinId, "EUR", today, "146.41")
+        // ETF: 1000 → 1100 over 100 days = +10 % cumulative.
+        val etfSymbol = "VRF${System.nanoTime() % 1000}.US"
+        val etf = holdingService.create(
+            household.id,
+            HoldingRequest(
+                assetClass = HoldingAssetClass.etf,
+                symbol = "VRF",
+                nativeCurrency = "EUR",
+                provider = HoldingProvider.eodhd,
+                providerSymbol = etfSymbol,
+            ),
+            user,
+        )
+        addLot(household.id, etf.id, user, today.minusDays(100), "1", "1000")
+        storePrice("eodhd", etfSymbol, "EUR", today, "1100")
+        // Fund: open position, no price.
+        val fund = holdingService.create(
+            household.id,
+            HoldingRequest(assetClass = HoldingAssetClass.fund, symbol = "NOPRICEF"),
+            user,
+        )
+        addLot(household.id, fund.id, user, today.minusDays(50), "10", "10")
+
+        val summary = service.summary(household.id)
+        val byClass = summary.moneyWeightedReturnByClass
+        assertThat(byClass.getValue(HoldingAssetClass.crypto).value).isEqualByComparingTo(BigDecimal("0.1000"))
+        assertThat(byClass.getValue(HoldingAssetClass.crypto).annualized).isTrue()
+        assertThat(byClass.getValue(HoldingAssetClass.etf).value).isEqualByComparingTo(BigDecimal("0.1000"))
+        assertThat(byClass.getValue(HoldingAssetClass.etf).annualized).isFalse()
+        assertThat(byClass.getValue(HoldingAssetClass.etf).terminalValue).isEqualByComparingTo(BigDecimal("1100.00"))
+        assertThat(byClass.getValue(HoldingAssetClass.etf).flowCount).isEqualTo(1)
+        // The unpriced fund blanks only its own class and the portfolio-wide figure.
+        assertThat(byClass.getValue(HoldingAssetClass.fund).unavailableReason)
+            .isEqualTo(MoneyWeightedReturnUnavailableReason.unpriced_holdings)
+        assertThat(summary.moneyWeightedReturn.value).isNull()
+        assertThat(summary.moneyWeightedReturn.unavailableReason)
+            .isEqualTo(MoneyWeightedReturnUnavailableReason.unpriced_holdings)
+    }
+
+    @Test
+    fun `money-weighted return without any lots reports no flows`() {
+        val (_, household) = seed()
+
+        val mwr = service.summary(household.id).moneyWeightedReturn
+        assertThat(mwr.value).isNull()
+        assertThat(mwr.from).isNull()
+        assertThat(mwr.flowCount).isEqualTo(0)
+        assertThat(mwr.unavailableReason).isEqualTo(MoneyWeightedReturnUnavailableReason.no_flows)
+    }
+
     private fun createLinkedCrypto(householdId: java.util.UUID, user: User, symbol: String, providerSymbol: String) =
         holdingService.create(
             householdId,
@@ -454,11 +602,13 @@ class PortfolioValuationIntegrationTest @Autowired constructor(
         )
     }
 
-    private fun seedUsdRate(date: LocalDate, rate: String) {
+    private fun seedUsdRate(date: LocalDate, rate: String) = seedFxRate("USD", date, rate)
+
+    private fun seedFxRate(currency: String, date: LocalDate, rate: String) {
         fxRates.save(
             FxRate(
                 provider = "frankfurter",
-                baseCurrency = "USD",
+                baseCurrency = currency,
                 quoteCurrency = "EUR",
                 rate = BigDecimal(rate),
                 rateDate = date,

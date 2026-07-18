@@ -103,6 +103,21 @@ class PortfolioValuationService(
             unrealizedPnlPct = PortfolioValuationCalculator.fraction(totalUnrealized, totalCostBasis),
             realizedPnlPct = PortfolioValuationCalculator.fraction(totalRealized, totalSoldCostBasis),
             totalReturnPct = PortfolioValuationCalculator.fraction(totalReturn, totalCostBasis.add(totalSoldCostBasis)),
+            moneyWeightedReturn = moneyWeightedReturn(lotsByHolding.values.flatten(), totalValue, anyUnpriced, today),
+            // Per class over that class's own lots and value: an unpriced holding only
+            // blocks its own class (and the portfolio-wide figure), not the others.
+            moneyWeightedReturnByClass = results
+                .groupBy { it.holding.assetClass }
+                .mapValues { (_, rows) ->
+                    moneyWeightedReturn(
+                        lots = rows.flatMap { lotsByHolding[it.holding.id] ?: emptyList() },
+                        terminalValue = Money.normalize(
+                            rows.fold(BigDecimal.ZERO) { acc, row -> acc + (row.result.currentValueBase ?: BigDecimal.ZERO) },
+                        ),
+                        anyUnpriced = rows.any { it.result.currentValueBase == null },
+                        asOf = today,
+                    )
+                },
             byClass = byClass,
             anyStale = results.any { it.result.stale },
             anyUnpriced = anyUnpriced,
@@ -339,6 +354,53 @@ class PortfolioValuationService(
             }
         }
         return dto.copy(lots = lots)
+    }
+
+    /**
+     * Money-weighted return (XIRR) over [lots], with [terminalValue] — the current value of
+     * the same holdings' open positions — as the closing inflow at [asOf]. Every flow is in
+     * base currency at its own frozen trade-time FX rate; nothing is re-converted with
+     * today's rates. Takes the lots and value of any subset, so a per-holding variant is a
+     * parameter change, not a rework. With [anyUnpriced] the terminal value is incomplete
+     * and the result is marked unavailable — never a wrong number.
+     */
+    internal fun moneyWeightedReturn(
+        lots: List<HoldingLot>,
+        terminalValue: BigDecimal,
+        anyUnpriced: Boolean,
+        asOf: LocalDate,
+    ): MoneyWeightedReturnDto {
+        val from = lots.minOfOrNull { it.tradedOn }
+        val spanAnnualized =
+            from == null || java.time.temporal.ChronoUnit.DAYS.between(from, asOf) >= MoneyWeightedReturn.MIN_ANNUALIZATION_DAYS
+        fun unavailable(reason: MoneyWeightedReturnUnavailableReason, terminal: BigDecimal? = null) =
+            MoneyWeightedReturnDto(
+                value = null,
+                annualized = spanAnnualized,
+                from = from,
+                to = asOf,
+                flowCount = lots.size,
+                terminalValue = terminal,
+                unavailableReason = reason,
+            )
+
+        if (lots.isEmpty()) return unavailable(MoneyWeightedReturnUnavailableReason.no_flows)
+        if (anyUnpriced) return unavailable(MoneyWeightedReturnUnavailableReason.unpriced_holdings)
+
+        // XIRR sign convention is the inverse of cashFlowBase: a BUY puts money in (negative).
+        val flows = lots.map { MoneyWeightedReturn.Flow(it.tradedOn, cashFlowBase(it.toEntry()).negate()) } +
+            MoneyWeightedReturn.Flow(asOf, terminalValue)
+        val result = MoneyWeightedReturn.compute(flows, asOf)
+        if (result.value == null) return unavailable(MoneyWeightedReturnUnavailableReason.not_computable, terminalValue)
+        return MoneyWeightedReturnDto(
+            value = result.value,
+            annualized = result.annualized,
+            from = from,
+            to = asOf,
+            flowCount = lots.size,
+            terminalValue = terminalValue,
+            unavailableReason = null,
+        )
     }
 
     /** Signed base-currency cash flow of a ledger entry: +cost for a BUY, −proceeds for a SELL. */

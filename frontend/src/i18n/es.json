@@ -450,7 +450,7 @@
     "avg_cost_tooltip": "Coste medio de compra por unidad = coste de adquisición ÷ cantidad",
     "unrealized_pct_tooltip": "No realizado {{pnl}} sobre {{basis}} de coste de adquisición de los lotes abiertos = {{pct}}",
     "realized_pct_tooltip": "Realizado {{pnl}} sobre {{basis}} de coste de adquisición de los lotes vendidos = {{pct}}",
-    "total_return_pct_tooltip": "Rentabilidad total {{pnl}} sobre {{basis}} de capital aportado (coste de lotes abiertos + vendidos) = {{pct}}",
+    "total_return_pct_tooltip": "Rentabilidad total {{pnl}} sobre {{basis}} de capital aportado (coste de lotes abiertos + vendidos) = {{pct}} — beneficio por euro de coste, sin tener en cuenta el cuándo",
     "price_as_of": "A fecha de {{date}}",
     "pnl": "P&G",
     "weight": "Peso",
@@ -511,7 +511,15 @@
     "change": "Variación",
     "roi_twr": "ROI (TWR)",
     "roi_twr_description": "Rentabilidad ponderada por tiempo: encadena los rendimientos diarios del mercado entre operaciones, de modo que las aportaciones y retiradas no cuentan como rentabilidad.",
-    "twr": "TWR"
+    "twr": "TWR",
+    "xirr_label": "Retorno ponderado por dinero (XIRR, anualizado)",
+    "xirr_label_cumulative": "Retorno ponderado por dinero (XIRR, acumulado)",
+    "how_calculated": "¿Cómo se calcula?",
+    "xirr_explain": "Tasa de crecimiento anual del dinero que has aportado, teniendo en cuenta cuándo lo aportaste. Calculado con tus {{flows}} compras/ventas entre {{from}} y {{to}}, cada una en EUR al tipo de su fecha de operación, más el valor actual de las posiciones abiertas ({{terminal}}) como entrada final.",
+    "xirr_explain_cumulative": "Crecimiento acumulado del dinero que has aportado, teniendo en cuenta cuándo lo aportaste — el histórico es menor de un año, así que no se anualiza. Calculado con tus {{flows}} compras/ventas entre {{from}} y {{to}}, cada una en EUR al tipo de su fecha de operación, más el valor actual de las posiciones abiertas ({{terminal}}) como entrada final.",
+    "xirr_unavailable_no_flows": "Aún no hay operaciones registradas.",
+    "xirr_unavailable_unpriced": "Algunas posiciones abiertas no tienen precio, así que el valor de cierre es desconocido.",
+    "xirr_unavailable_not_computable": "Los flujos no admiten ninguna tasa con sentido (p. ej. aún no ha vuelto dinero y la posición no vale nada, o todo ocurrió en un solo día)."
   },
   "lendings": {
     "header_description": "Dinero que prestas a otras personas — solo seguimiento. No se cuenta en tu Patrimonio (una decisión deliberada) y no está vinculado a transacciones.",

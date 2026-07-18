@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import Decimal from "decimal.js";
 import { useActiveHousehold } from "@/auth/AuthContext";
@@ -163,6 +163,27 @@ export function HoldingsTab() {
       ? undefined
       : t(key, { pnl: signedMoney(v, money(v)), basis: money(basis), pct: percentLabel(fraction, locale, true) });
   const deployed = totals ? new Decimal(totals.totalCostBasis).plus(totals.totalSoldCostBasis).toString() : "0";
+  // Money-weighted return cannot be derived from the filtered subtotals (it is a
+  // root-solve over dated flows, not a ratio), so the class figure comes precomputed
+  // from the backend and the filter just picks the matching entry.
+  const mwr =
+    effectiveFilter === "all" ? summary?.moneyWeightedReturn : summary?.moneyWeightedReturnByClass[effectiveFilter];
+  const mwrExplain = !mwr
+    ? null
+    : mwr.value == null
+      ? t(
+          mwr.unavailableReason === "no_flows"
+            ? "portfolio.xirr_unavailable_no_flows"
+            : mwr.unavailableReason === "unpriced_holdings"
+              ? "portfolio.xirr_unavailable_unpriced"
+              : "portfolio.xirr_unavailable_not_computable",
+        )
+      : t(mwr.annualized ? "portfolio.xirr_explain" : "portfolio.xirr_explain_cumulative", {
+          flows: mwr.flowCount,
+          from: mwr.from ? formatDate(mwr.from, locale) : "—",
+          to: formatDate(mwr.to, locale),
+          terminal: money(mwr.terminalValue),
+        });
 
   return (
     <div className="space-y-4">
@@ -199,7 +220,7 @@ export function HoldingsTab() {
       )}
 
       {totals && filtered.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           <Stat label={t("portfolio.invested")} value={money(totals.totalCostBasis)} />
           <Stat label={t("portfolio.current_value")} value={money(totals.totalValue)} />
           <Stat
@@ -220,6 +241,22 @@ export function HoldingsTab() {
             tone={toneClass(pnlTone(totals.totalReturn))}
             title={pctTooltip("portfolio.total_return_pct_tooltip", totals.totalReturn, totals.totalReturnPct, deployed)}
           />
+          {mwr && (
+            <Stat
+              label={t(mwr.annualized ? "portfolio.xirr_label" : "portfolio.xirr_label_cumulative")}
+              value={percentLabel(mwr.value, locale, true)}
+              tone={toneClass(pnlTone(mwr.value))}
+            >
+              {mwrExplain && (
+                <details className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  <summary className="cursor-pointer select-none text-sky-600 hover:underline dark:text-sky-400">
+                    {t("portfolio.how_calculated")}
+                  </summary>
+                  <p className="mt-1">{mwrExplain}</p>
+                </details>
+              )}
+            </Stat>
+          )}
         </div>
       )}
 
@@ -429,12 +466,25 @@ export function HoldingsTab() {
   );
 }
 
-function Stat({ label, value, tone, title }: { label: string; value: string; tone?: string; title?: string }) {
+function Stat({
+  label,
+  value,
+  tone,
+  title,
+  children,
+}: {
+  label: string;
+  value: string;
+  tone?: string;
+  title?: string;
+  children?: ReactNode;
+}) {
   return (
     <Card>
       <CardBody className="py-3">
         <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
         <p className={`mt-0.5 text-lg font-semibold ${tone ?? ""}`} title={title}>{value}</p>
+        {children}
       </CardBody>
     </Card>
   );

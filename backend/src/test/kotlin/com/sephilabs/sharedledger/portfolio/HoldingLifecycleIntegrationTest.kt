@@ -83,9 +83,12 @@ class HoldingLifecycleIntegrationTest @Autowired constructor(
     @Test
     fun `non-EUR lot freezes the last known fx rate and fails without one`() {
         val (user, household) = seed()
+        // CHF, used nowhere else: the "no rate yet" phase must not find a rate another
+        // class left behind — the shared fx_rates table and the shared stub both leak
+        // USD rows (e.g. PriceRefreshIntegrationTest's history) into this lookup.
         val holding = service.create(
             household.id,
-            HoldingRequest(assetClass = HoldingAssetClass.stock, symbol = "AAPL", nativeCurrency = "USD"),
+            HoldingRequest(assetClass = HoldingAssetClass.stock, symbol = "AAPL", nativeCurrency = "CHF"),
             user,
         )
 
@@ -96,7 +99,7 @@ class HoldingLifecycleIntegrationTest @Autowired constructor(
                     tradedOn = LocalDate.of(2025, 5, 10),
                     quantity = BigDecimal("10"),
                     unitPrice = BigDecimal("190"),
-                    currency = "USD",
+                    currency = "CHF",
                 ),
                 user,
             )
@@ -106,7 +109,7 @@ class HoldingLifecycleIntegrationTest @Autowired constructor(
         fxRates.save(
             FxRate(
                 provider = "frankfurter",
-                baseCurrency = "USD",
+                baseCurrency = "CHF",
                 quoteCurrency = "EUR",
                 rate = BigDecimal("0.92000000"),
                 rateDate = LocalDate.of(2025, 5, 9),
@@ -118,7 +121,7 @@ class HoldingLifecycleIntegrationTest @Autowired constructor(
                 tradedOn = LocalDate.of(2025, 5, 10),
                 quantity = BigDecimal("10"),
                 unitPrice = BigDecimal("190"),
-                currency = "USD",
+                currency = "CHF",
             ),
             user,
         )

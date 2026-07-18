@@ -128,6 +128,42 @@ data class HoldingSummaryDto(
     val weight: BigDecimal?,
 )
 
+enum class MoneyWeightedReturnUnavailableReason {
+    /** No lots registered at all. */
+    no_flows,
+
+    /** An open position has no price, so the terminal value would be incomplete. */
+    unpriced_holdings,
+
+    /** The flows admit no meaningful rate (no sign change, single-day span, non-convergence). */
+    not_computable,
+}
+
+/**
+ * Money-weighted return (XIRR) over the whole lot history: buys out, sells in, the
+ * current value of open holdings as a terminal inflow — every flow in base currency at
+ * its trade-time FX rate. Distinct from the return-on-cost percentages (which ignore
+ * timing) and from FIRE's snapshot-based figure (different data source).
+ */
+data class MoneyWeightedReturnDto(
+    // Scale-4 fraction (0.1234 = +12.34 %): annualized rate, or the cumulative return
+    // when the history spans less than a year. Null when unavailable — never a wrong number.
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    val value: BigDecimal?,
+    // False → cumulative figure (history shorter than one year; annualizing it would mislead).
+    val annualized: Boolean,
+    // First trade date; null when there are no lots.
+    val from: LocalDate?,
+    // The as-of date the terminal value is taken at.
+    val to: LocalDate,
+    // Lot flows that went into the calculation, excluding the terminal flow.
+    val flowCount: Int,
+    // Current value of open holdings used as the closing inflow; null when unpriced.
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    val terminalValue: BigDecimal?,
+    val unavailableReason: MoneyWeightedReturnUnavailableReason?,
+)
+
 data class PortfolioSummaryDto(
     val asOfDate: LocalDate,
     val holdings: List<HoldingSummaryDto>,
@@ -153,6 +189,10 @@ data class PortfolioSummaryDto(
     val realizedPnlPct: BigDecimal?,
     @JsonFormat(shape = JsonFormat.Shape.STRING)
     val totalReturnPct: BigDecimal?,
+    val moneyWeightedReturn: MoneyWeightedReturnDto,
+    // Same metric scoped to each asset class's own lots and current value, so the
+    // asset-type filter can show a class figure instead of a misleading portfolio-wide one.
+    val moneyWeightedReturnByClass: Map<HoldingAssetClass, MoneyWeightedReturnDto>,
     val byClass: Map<String, BigDecimal>,
     val anyStale: Boolean,
     val anyUnpriced: Boolean,

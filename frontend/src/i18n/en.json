@@ -450,7 +450,7 @@
     "avg_cost_tooltip": "Average purchase cost per unit = cost basis ÷ quantity",
     "unrealized_pct_tooltip": "Unrealized {{pnl}} over {{basis}} cost basis of open lots = {{pct}}",
     "realized_pct_tooltip": "Realized {{pnl}} over {{basis}} cost basis of sold lots = {{pct}}",
-    "total_return_pct_tooltip": "Total return {{pnl}} over {{basis}} capital deployed (cost of open + sold lots) = {{pct}}",
+    "total_return_pct_tooltip": "Total return {{pnl}} over {{basis}} capital deployed (cost of open + sold lots) = {{pct}} — profit per euro of cost, regardless of timing",
     "price_as_of": "As of {{date}}",
     "pnl": "P&L",
     "weight": "Weight",
@@ -511,7 +511,15 @@
     "change": "Change",
     "roi_twr": "ROI (TWR)",
     "roi_twr_description": "Time-weighted return: chains the daily market returns between trades, so contributions and withdrawals are not counted as performance.",
-    "twr": "TWR"
+    "twr": "TWR",
+    "xirr_label": "Money-weighted return (XIRR, annualized)",
+    "xirr_label_cumulative": "Money-weighted return (XIRR, cumulative)",
+    "how_calculated": "How is this calculated?",
+    "xirr_explain": "Annual growth rate of the money you put in, accounting for when you put it in. Computed from your {{flows}} buy/sell trades between {{from}} and {{to}}, each in EUR at its trade-date rate, plus the current value of open holdings ({{terminal}}) as a final inflow.",
+    "xirr_explain_cumulative": "Cumulative growth of the money you put in, accounting for when you put it in — the history is shorter than one year, so it is not annualized. Computed from your {{flows}} buy/sell trades between {{from}} and {{to}}, each in EUR at its trade-date rate, plus the current value of open holdings ({{terminal}}) as a final inflow.",
+    "xirr_unavailable_no_flows": "No trades registered yet.",
+    "xirr_unavailable_unpriced": "Some open holdings have no price, so the closing value is unknown.",
+    "xirr_unavailable_not_computable": "The cash flows admit no meaningful rate (e.g. no money has come back yet and the position is worthless, or everything happened on one day)."
   },
   "lendings": {
     "header_description": "Money you lend to others — tracking only. Not counted toward your Wealth (a deliberate choice) and not linked to transactions.",
