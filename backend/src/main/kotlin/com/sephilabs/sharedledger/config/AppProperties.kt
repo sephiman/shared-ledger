@@ -116,6 +116,14 @@ data class AppProperties(
         val vsCurrency: String = "eur",
         // A valuation whose price observation is older than this is flagged stale.
         val stalePriceThresholdDays: Long = 7,
+        // Benchmark overlay series: how far back to backfill on the first fill. Also the
+        // floor the daily gap-fill extends the head down to, so it never re-pulls history.
+        val benchmarkHistoryLookbackDays: Long = 3650,
+        // Bootstrap missing benchmark history at startup (off in tests to avoid provider HTTP).
+        val benchmarkBackfillOnStart: Boolean = true,
+        // Minimum gap between user-triggered "refresh prices" runs, so the button can't
+        // hammer providers. A click inside the window is reported as skipped, not re-run.
+        val manualRefreshCooldownSeconds: Long = 60,
         // Lot-matching method for sells. Only FIFO is implemented; AVERAGE is reserved.
         val costMethod: CostMethod = CostMethod.FIFO,
     ) {

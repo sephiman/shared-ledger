@@ -182,15 +182,49 @@ export interface PortfolioEvolution {
   points: PortfolioEvolutionPoint[];
 }
 
+export type BenchmarkKind = "equity" | "crypto";
+
+export interface Benchmark {
+  key: string;
+  // Currency the closes are stored in; the series is always returned in EUR terms.
+  currency: string;
+  kind: BenchmarkKind;
+  hasData: boolean;
+  availableFrom: string | null;
+  availableTo: string | null;
+}
+
+export interface BenchmarkSeriesPoint {
+  date: string;
+  // Cumulative TWR since the window anchor, as a fraction; null where data is missing.
+  twrPct: string | null;
+}
+
+export interface BenchmarkSeries {
+  key: string;
+  currency: string;
+  points: BenchmarkSeriesPoint[];
+  availableFrom: string | null;
+  availableTo: string | null;
+  // True when the stored data does not cover the whole window (leading/interior gap).
+  partial: boolean;
+}
+
+export interface BenchmarkSeriesResponse {
+  series: BenchmarkSeries[];
+}
+
 function invalidatePortfolio(qc: ReturnType<typeof useQueryClient>, householdId: string) {
   void qc.invalidateQueries({ queryKey: ["portfolio", householdId] });
 }
 
-export function usePortfolioSummary(householdId: string) {
+export function usePortfolioSummary(householdId: string, refetchInterval: number | false = false) {
   return useQuery({
     queryKey: ["portfolio", householdId, "summary"],
     queryFn: async () =>
       (await apiClient.get<PortfolioSummary>(`/households/${householdId}/portfolio/summary`)).data,
+    // While a manual price refresh is in flight, poll so the table updates whenever prices land.
+    refetchInterval,
   });
 }
 
@@ -219,6 +253,48 @@ export function usePortfolioEvolution(householdId: string, filters: EvolutionFil
       (await apiClient.get<PortfolioEvolution>(`/households/${householdId}/portfolio/evolution`, {
         params: filters,
       })).data,
+  });
+}
+
+export interface PriceRefreshTrigger {
+  // False when the cooldown skipped the run (prices were refreshed very recently).
+  started: boolean;
+}
+
+export function useRefreshPrices(householdId: string) {
+  // The refresh runs asynchronously server-side; the caller polls the summary (via its
+  // refetchInterval) to reflect prices as they land, so this hook just fires the trigger.
+  return useMutation({
+    mutationFn: async () =>
+      (await apiClient.post<PriceRefreshTrigger>(`/households/${householdId}/portfolio/refresh-prices`)).data,
+  });
+}
+
+export function useBenchmarks(householdId: string) {
+  return useQuery({
+    queryKey: ["portfolio", householdId, "benchmarks"],
+    queryFn: async () =>
+      (await apiClient.get<Benchmark[]>(`/households/${householdId}/portfolio/benchmarks`)).data,
+    staleTime: 1000 * 60 * 60,
+  });
+}
+
+export function useBenchmarkSeries(
+  householdId: string,
+  filters: EvolutionFilters,
+  keys: string[],
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ["portfolio", householdId, "benchmark-series", filters, keys],
+    queryFn: async () =>
+      (
+        await apiClient.get<BenchmarkSeriesResponse>(
+          `/households/${householdId}/portfolio/benchmark-series`,
+          { params: { ...filters, keys: keys.join(",") } },
+        )
+      ).data,
+    enabled: enabled && keys.length > 0,
   });
 }
 

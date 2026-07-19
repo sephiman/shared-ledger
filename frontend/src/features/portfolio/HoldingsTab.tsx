@@ -9,6 +9,7 @@ import {
   useDeleteLot,
   useLinkHolding,
   usePortfolioSummary,
+  useRefreshPrices,
   useUnlinkHolding,
   useUpdateHolding,
   type Holding,
@@ -111,11 +112,31 @@ function subtotals(rows: HoldingSummary[]): Totals {
 export function HoldingsTab() {
   const { t, i18n } = useTranslation();
   const household = useActiveHousehold();
-  const { data: summary } = usePortfolioSummary(household.householdId);
+
+  // The refresh runs asynchronously on the server, so we can't know exactly when prices land.
+  // While refreshing, poll the summary and stop as soon as it reports fresh (or a safety cap).
+  const [refreshing, setRefreshing] = useState(false);
+  const { data: summary } = usePortfolioSummary(household.householdId, refreshing ? 5000 : false);
   const create = useCreateHolding(household.householdId);
   const update = useUpdateHolding(household.householdId);
   const del = useDeleteHolding(household.householdId);
   const unlink = useUnlinkHolding(household.householdId);
+  const refreshPrices = useRefreshPrices(household.householdId);
+
+  const triggerRefresh = () =>
+    refreshPrices.mutate(undefined, {
+      onSuccess: () => {
+        setRefreshing(true);
+        // Safety cap: some holdings may stay legitimately unpriced (unlinked / no provider data),
+        // so `anyStale` would never clear — give up polling after 90s.
+        setTimeout(() => setRefreshing(false), 90000);
+      },
+    });
+
+  // Stop polling the moment prices come back fresh.
+  useEffect(() => {
+    if (refreshing && summary && !summary.anyStale) setRefreshing(false);
+  }, [refreshing, summary]);
 
   const [panel, setPanel] = useState<PanelMode>({ kind: "closed" });
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -261,8 +282,18 @@ export function HoldingsTab() {
       )}
 
       {summary?.anyStale && (
-        <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
-          {t("portfolio.stale_prices_warning")}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
+          <span>{t("portfolio.stale_prices_warning")}</span>
+          <Button
+            variant="secondary"
+            className="shrink-0"
+            disabled={refreshing || refreshPrices.isPending}
+            onClick={triggerRefresh}
+          >
+            {refreshing || refreshPrices.isPending
+              ? t("portfolio.refreshing_prices")
+              : t("portfolio.refresh_prices")}
+          </Button>
         </div>
       )}
 

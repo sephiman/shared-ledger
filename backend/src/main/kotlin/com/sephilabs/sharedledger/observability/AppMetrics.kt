@@ -84,6 +84,20 @@ class AppMetrics(private val registry: MeterRegistry) {
             .increment()
     }
 
+    fun benchmarkRefreshed(benchmark: String) {
+        Counter.builder("sl_benchmark_prices_refreshed_total")
+            .tag("benchmark", benchmark)
+            .register(registry)
+            .increment()
+    }
+
+    fun benchmarkRefreshFailure(benchmark: String) {
+        Counter.builder("sl_benchmark_price_refresh_failures_total")
+            .tag("benchmark", benchmark)
+            .register(registry)
+            .increment()
+    }
+
     fun bankMovementsIngested(count: Int) {
         if (count <= 0) return
         Counter.builder("sl_bank_movements_ingested_total")

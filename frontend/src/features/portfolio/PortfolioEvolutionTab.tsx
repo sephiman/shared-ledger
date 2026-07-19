@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
 import {
+  useBenchmarks,
+  useBenchmarkSeries,
   usePortfolioEvolution,
   usePortfolioSummary,
   type HoldingAssetClass,
@@ -24,6 +26,7 @@ import {
 import { formatCompactMoney, formatMoney, formatPercent } from "@/lib/money";
 import { formatDate } from "@/lib/dates";
 import { ChartTooltip } from "@/components/charts/ChartTooltip";
+import { benchmarkColors, benchmarkColumnsByDate } from "./benchmarkOverlay";
 
 const VALUE_COLOR = "#0ea5e9";
 const INVESTED_COLOR = "#6b7280";
@@ -85,6 +88,8 @@ export function PortfolioEvolutionTab() {
   const [assetClass, setAssetClass] = useState<HoldingAssetClass | "">("");
   const [holdingId, setHoldingId] = useState("");
   const [range, setRange] = useState<RangeValue>(defaultRange("1y"));
+  // Off by default: the chart is identical to today until the user opts a benchmark in.
+  const [selectedBenchmarks, setSelectedBenchmarks] = useState<string[]>([]);
 
   const holdingOptions = useMemo(
     () =>
@@ -118,6 +123,44 @@ export function PortfolioEvolutionTab() {
         twr: Number(p.twrPct) * 100,
       })),
     [evolution],
+  );
+
+  const { data: benchmarks } = useBenchmarks(household.householdId);
+  // Only hit the endpoint once the user opts in and there is a TWR curve to overlay onto.
+  const { data: benchmarkSeries } = useBenchmarkSeries(
+    household.householdId,
+    filters,
+    selectedBenchmarks,
+    data.length > 0,
+  );
+
+  // Colour per benchmark, keyed by the registry order so a new benchmark is stable and
+  // needs no code change here. A benchmark's label falls back to its key if untranslated.
+  const benchmarkColor = useMemo(() => benchmarkColors((benchmarks ?? []).map((b) => b.key)), [benchmarks]);
+  const benchmarkName = (key: string) => t(`portfolio.benchmark.${key}`, { defaultValue: key });
+
+  const toggleBenchmark = (key: string) =>
+    setSelectedBenchmarks((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
+    );
+
+  // Benchmark TWR points share the ROI curve's sample dates, so they merge onto the same rows.
+  const benchByDate = useMemo(
+    () => benchmarkColumnsByDate(benchmarkSeries?.series, selectedBenchmarks),
+    [benchmarkSeries, selectedBenchmarks],
+  );
+
+  const roiData = useMemo(
+    () => data.map((d) => ({ ...d, ...(benchByDate.get(d.date) ?? {}) })),
+    [data, benchByDate],
+  );
+
+  const partialBenchmarks = useMemo(
+    () =>
+      (benchmarkSeries?.series ?? []).filter(
+        (s) => selectedBenchmarks.includes(s.key) && s.partial && s.availableFrom,
+      ),
+    [benchmarkSeries, selectedBenchmarks],
   );
 
   // Re-anchor the summary to the selected range: first/last points are its bounds.
@@ -300,9 +343,47 @@ export function PortfolioEvolutionTab() {
                   deltaTone={summaryRows.twr.deltaAbs}
                 />
               </div>
-              <div className="mt-3 h-44">
+
+              {benchmarks && benchmarks.length > 0 && (
+                <div className="mt-3">
+                  <Label>{t("portfolio.benchmarks_label")}</Label>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    {benchmarks.map((b) => {
+                      const active = selectedBenchmarks.includes(b.key);
+                      return (
+                        <button
+                          key={b.key}
+                          type="button"
+                          disabled={!b.hasData}
+                          onClick={() => toggleBenchmark(b.key)}
+                          title={b.hasData ? undefined : t("portfolio.benchmark_no_data")}
+                          className={[
+                            "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition-colors",
+                            !b.hasData
+                              ? "cursor-not-allowed border-border bg-gray-50 text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-500"
+                              : active
+                                ? "border-primary bg-sky-50 text-primary dark:bg-sky-900/40 dark:text-sky-300"
+                                : "border-border bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600",
+                          ].join(" ")}
+                        >
+                          <span
+                            className="inline-block h-2 w-2 shrink-0 rounded-full"
+                            style={{ backgroundColor: benchmarkColor[b.key] }}
+                          />
+                          {benchmarkName(b.key)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    {t("portfolio.benchmark_eur_note")}
+                  </p>
+                </div>
+              )}
+
+              <div className={selectedBenchmarks.length > 0 ? "mt-3 h-56" : "mt-3 h-44"}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={data} syncId={SYNC_ID} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                  <LineChart data={roiData} syncId={SYNC_ID} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis {...xAxisProps} />
                     <YAxis width={AXIS_WIDTH} tickFormatter={formatPctTick} tick={{ fontSize: 12 }} />
@@ -312,6 +393,7 @@ export function PortfolioEvolutionTab() {
                         <ChartTooltip {...props} formatValue={(v) => formatPercent(Number(v), i18n.language, 2)} />
                       )}
                     />
+                    {selectedBenchmarks.length > 0 && <Legend />}
                     <Line
                       type="monotone"
                       dataKey="twr"
@@ -320,9 +402,28 @@ export function PortfolioEvolutionTab() {
                       dot={false}
                       name={t("portfolio.twr")}
                     />
+                    {selectedBenchmarks.map((key) => (
+                      <Line
+                        key={key}
+                        type="monotone"
+                        dataKey={`bench_${key}`}
+                        stroke={benchmarkColor[key] ?? ZERO_LINE_COLOR}
+                        strokeWidth={1.5}
+                        strokeDasharray="5 3"
+                        dot={false}
+                        connectNulls={false}
+                        name={benchmarkName(key)}
+                      />
+                    ))}
                   </LineChart>
                 </ResponsiveContainer>
               </div>
+
+              {partialBenchmarks.length > 0 && (
+                <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                  {t("portfolio.benchmark_partial_note")}
+                </p>
+              )}
             </div>
           </>
         )}

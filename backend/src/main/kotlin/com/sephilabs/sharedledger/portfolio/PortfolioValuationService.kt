@@ -198,11 +198,6 @@ class PortfolioValuationService(
         val start = from ?: allLots.minOf { it.tradedOn }
         if (start.isAfter(end)) return PortfolioEvolutionDto(emptyList())
 
-        // Adaptive sampling keeps long ("all time") ranges light: daily up to
-        // MAX_EVOLUTION_POINTS, then every stepDays. The end date is always included.
-        val totalDays = java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1
-        val stepDays = maxOf(1L, (totalDays + MAX_EVOLUTION_POINTS - 1) / MAX_EVOLUTION_POINTS)
-
         // One in-memory forward-fill cursor per holding and per foreign currency.
         val priceSeries = all.filter { it.linked }.associate { holding ->
             val currency = priceCurrencyFor(holding)
@@ -226,10 +221,7 @@ class PortfolioValuationService(
             holding.id to (lotsByHolding[holding.id] ?: emptyList()).map { it.toEntry() }
         }
 
-        val sampleDates = generateSequence(start) { it.plusDays(stepDays) }
-            .takeWhile { !it.isAfter(end) }
-            .toMutableList()
-        if (sampleDates.lastOrNull() != end) sampleDates.add(end)
+        val sampleDates = buildSampleDates(start, end)
 
         // Running TWR state chained across the sample dates (see the per-point comment).
         var prevValue: BigDecimal? = null
@@ -290,6 +282,46 @@ class PortfolioValuationService(
             }
 
         return PortfolioEvolutionDto(points)
+    }
+
+    /**
+     * The sample dates the [evolution] TWR curve would produce for the same filters, or null
+     * when there is no curve (no lots, or an empty window). Benchmark overlays call this so
+     * their X axis and 0 %-anchor line up exactly with the user's TWR curve — same start
+     * (`from` or the earliest filtered lot), same end, same adaptive step.
+     */
+    @Transactional(readOnly = true)
+    fun sampleWindow(
+        householdId: UUID,
+        from: LocalDate?,
+        to: LocalDate?,
+        assetClass: HoldingAssetClass? = null,
+        holdingId: UUID? = null,
+    ): List<LocalDate>? {
+        val all = holdings.findAllByHouseholdIdOrderBySymbolAsc(householdId)
+            .filter { it.active }
+            .filter { assetClass == null || it.assetClass == assetClass }
+            .filter { holdingId == null || it.id == holdingId }
+        val allLots = lotsByHolding(all).values.flatten()
+        if (allLots.isEmpty()) return null
+        val end = to ?: LocalDate.now()
+        val start = from ?: allLots.minOf { it.tradedOn }
+        if (start.isAfter(end)) return null
+        return buildSampleDates(start, end)
+    }
+
+    /**
+     * Adaptive sampling that keeps long ("all time") ranges light: daily up to
+     * MAX_EVOLUTION_POINTS points, then every stepDays. The end date is always included.
+     */
+    private fun buildSampleDates(start: LocalDate, end: LocalDate): List<LocalDate> {
+        val totalDays = java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1
+        val stepDays = maxOf(1L, (totalDays + MAX_EVOLUTION_POINTS - 1) / MAX_EVOLUTION_POINTS)
+        val dates = generateSequence(start) { it.plusDays(stepDays) }
+            .takeWhile { !it.isAfter(end) }
+            .toMutableList()
+        if (dates.lastOrNull() != end) dates.add(end)
+        return dates
     }
 
     /** Freezes one valuation row per active holding with an open position at the snapshot date. */

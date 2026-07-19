@@ -162,6 +162,12 @@ app:
     fx-refresh-cron: "0 30 0 * * *"
     # After FX (00:30), before the recurring materializer (02:00).
     equity-refresh-cron: "0 0 1 * * *"
+    # Benchmark overlay series (indices/commodities/crypto). After equities (01:00); it
+    # tops up its own FX (USD) so ordering vs the FX job is not load-bearing.
+    benchmark-refresh-cron: "0 15 1 * * *"
+    # Backfill horizon for benchmark series (~10y) so "all time" ranges have a curve.
+    benchmark-history-lookback-days: 3650
+    benchmark-backfill-on-start: true
     crypto-history-ceiling-days: 365
     # 0 = uncapped (Yahoo serves long history; backfill reaches the earliest lot).
     # Set 365 when equity-provider is eodhd.
@@ -169,6 +175,8 @@ app:
     backfill-on-link: true
     vs-currency: eur
     stale-price-threshold-days: 7
+    # Cooldown between user-triggered price refreshes (the "Refresh prices" button).
+    manual-refresh-cooldown-seconds: 60
   enable-banking:
     # PSD2 open-banking ingestion (Enable Banking). The whole feature stays hidden until
     # both app-id and private-key are set (created once in the Enable Banking Control Panel).

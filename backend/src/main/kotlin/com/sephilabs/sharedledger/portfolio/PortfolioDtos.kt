@@ -245,3 +245,8 @@ data class PortfolioEvolutionPointDto(
 data class PortfolioEvolutionDto(
     val points: List<PortfolioEvolutionPointDto>,
 )
+
+/** Result of a user-triggered price refresh: false when skipped by the cooldown. */
+data class PriceRefreshTriggerDto(
+    val started: Boolean,
+)

@@ -472,6 +472,8 @@
     "no_price": "Aún sin precio",
     "stale_price": "Precio desactualizado",
     "stale_prices_warning": "Algunos precios están desactualizados o faltan; los valores usan el último precio conocido.",
+    "refresh_prices": "Actualizar precios",
+    "refreshing_prices": "Actualizando…",
     "fund_no_provider": "Los fondos aún no tienen proveedor de precios automático.",
     "search_placeholder": "Busca por símbolo o nombre…",
     "no_results": "Sin coincidencias.",
@@ -519,7 +521,17 @@
     "xirr_explain_cumulative": "Crecimiento acumulado del dinero que has aportado, teniendo en cuenta cuándo lo aportaste — el histórico es menor de un año, así que no se anualiza. Calculado con tus {{flows}} compras/ventas entre {{from}} y {{to}}, cada una en EUR al tipo de su fecha de operación, más el valor actual de las posiciones abiertas ({{terminal}}) como entrada final.",
     "xirr_unavailable_no_flows": "Aún no hay operaciones registradas.",
     "xirr_unavailable_unpriced": "Algunas posiciones abiertas no tienen precio, así que el valor de cierre es desconocido.",
-    "xirr_unavailable_not_computable": "Los flujos no admiten ninguna tasa con sentido (p. ej. aún no ha vuelto dinero y la posición no vale nada, o todo ocurrió en un solo día)."
+    "xirr_unavailable_not_computable": "Los flujos no admiten ninguna tasa con sentido (p. ej. aún no ha vuelto dinero y la posición no vale nada, o todo ocurrió en un solo día).",
+    "benchmarks_label": "Índices de referencia",
+    "benchmark_eur_note": "Los índices se muestran en euros, convertidos al tipo del BCE de cada día y rebasados a 0 % al inicio del periodo seleccionado.",
+    "benchmark_no_data": "Sin datos aún",
+    "benchmark_partial_note": "Algunos índices solo tienen datos para parte del periodo; el inicio que falta se deja en blanco en vez de estimarlo.",
+    "benchmark": {
+      "sp500": "S&P 500",
+      "msci_world": "MSCI World",
+      "gold": "Oro",
+      "bitcoin": "Bitcoin"
+    }
   },
   "lendings": {
     "header_description": "Dinero que prestas a otras personas — solo seguimiento. No se cuenta en tu Patrimonio (una decisión deliberada) y no está vinculado a transacciones.",

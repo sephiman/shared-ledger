@@ -4,6 +4,11 @@ import com.sephilabs.sharedledger.common.Csv
 import com.sephilabs.sharedledger.household.HouseholdRepository
 import com.sephilabs.sharedledger.household.getOrThrow
 import com.sephilabs.sharedledger.identity.auth.CurrentUser
+import com.sephilabs.sharedledger.observability.AppMetrics
+import com.sephilabs.sharedledger.portfolio.benchmark.BenchmarkDto
+import com.sephilabs.sharedledger.portfolio.benchmark.BenchmarkSeriesResponseDto
+import com.sephilabs.sharedledger.portfolio.benchmark.BenchmarkService
+import com.sephilabs.sharedledger.portfolio.price.ManualPriceRefreshService
 import com.sephilabs.sharedledger.portfolio.price.SymbolCandidate
 import jakarta.validation.Valid
 import org.springframework.http.ResponseEntity
@@ -24,9 +29,12 @@ import java.util.UUID
 class PortfolioController(
     private val service: HoldingService,
     private val valuation: PortfolioValuationService,
+    private val benchmarks: BenchmarkService,
+    private val manualRefresh: ManualPriceRefreshService,
     private val symbolSearch: SymbolSearchService,
     private val currentUser: CurrentUser,
     private val households: HouseholdRepository,
+    private val metrics: AppMetrics,
 ) {
 
     @GetMapping("/export.csv")
@@ -45,6 +53,14 @@ class PortfolioController(
     @GetMapping("/summary")
     fun summary(@PathVariable householdId: UUID): PortfolioSummaryDto = valuation.summary(householdId)
 
+    /** On-demand price gap-fill for stale/missing holdings; 202 when started, 200 when the
+     *  cooldown skipped it. Refreshes the shared price series, so it runs off-thread. */
+    @PostMapping("/refresh-prices")
+    fun refreshPrices(@PathVariable householdId: UUID): ResponseEntity<PriceRefreshTriggerDto> {
+        val started = manualRefresh.trigger()
+        return ResponseEntity.status(if (started) 202 else 200).body(PriceRefreshTriggerDto(started))
+    }
+
     @GetMapping("/valuation")
     fun valuationAt(
         @PathVariable householdId: UUID,
@@ -59,6 +75,26 @@ class PortfolioController(
         @RequestParam(required = false) assetClass: HoldingAssetClass?,
         @RequestParam(required = false) holdingId: UUID?,
     ): PortfolioEvolutionDto = valuation.evolution(householdId, from, to, assetClass, holdingId)
+
+    /** Enabled benchmarks plus their stored-data extent, for the ROI-chart overlay selector. */
+    @GetMapping("/benchmarks")
+    fun benchmarks(@PathVariable householdId: UUID): List<BenchmarkDto> = benchmarks.list()
+
+    /**
+     * Normalized TWR (EUR terms) for the selected benchmarks over the same window the ROI
+     * curve covers for these filters. `keys` is a comma-separated list; empty returns all.
+     */
+    @GetMapping("/benchmark-series")
+    fun benchmarkSeries(
+        @PathVariable householdId: UUID,
+        @RequestParam(required = false) from: LocalDate?,
+        @RequestParam(required = false) to: LocalDate?,
+        @RequestParam(required = false) assetClass: HoldingAssetClass?,
+        @RequestParam(required = false) holdingId: UUID?,
+        @RequestParam(required = false) keys: List<String>?,
+    ): BenchmarkSeriesResponseDto = metrics.analyticsTimer("portfolio_benchmarks").record<BenchmarkSeriesResponseDto> {
+        benchmarks.series(householdId, from, to, assetClass, holdingId, keys ?: emptyList())
+    }!!
 
     @GetMapping("/holdings")
     fun list(@PathVariable householdId: UUID): List<HoldingDto> = service.list(householdId)
