@@ -1,14 +1,24 @@
 import type { BenchmarkSeries } from "@/api/portfolio";
 
-// Distinct hues for benchmark overlays, assigned in the registry's order so a new benchmark
-// (a new DB row) gets a stable colour with no chart code change. Kept clear of the ROI series.
-export const BENCHMARK_PALETTE = ["#2563eb", "#db2777", "#0d9488", "#7c3aed", "#ca8a04", "#dc2626"];
+// Each known benchmark reads with an intuitive hue (Bitcoin orange, Gold gold, …). Kept clear
+// of the ROI series colour so the overlays stay legible against the user's own curve.
+const BENCHMARK_COLORS: Record<string, string> = {
+  gold: "#d4af37",
+  bitcoin: "#f7931a",
+  sp500: "#dc2626",
+  msci_world: "#2563eb",
+};
 
-/** Colour per benchmark key, by registry order. Unknown keys fall off the end and rotate. */
+// Fallback hues for any future benchmark not in the map above, assigned in registry order so a
+// new benchmark (a new DB row) still gets a stable colour with no chart code change.
+export const BENCHMARK_PALETTE = ["#0d9488", "#7c3aed", "#db2777", "#ca8a04"];
+
+/** Colour per benchmark key: known keys get their branded hue, unknown keys rotate the palette. */
 export function benchmarkColors(keys: string[]): Record<string, string> {
   const map: Record<string, string> = {};
-  keys.forEach((k, i) => {
-    map[k] = BENCHMARK_PALETTE[i % BENCHMARK_PALETTE.length];
+  let fallbackIdx = 0;
+  keys.forEach((k) => {
+    map[k] = BENCHMARK_COLORS[k] ?? BENCHMARK_PALETTE[fallbackIdx++ % BENCHMARK_PALETTE.length];
   });
   return map;
 }
