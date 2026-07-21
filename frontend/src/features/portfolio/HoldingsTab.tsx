@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import Decimal from "decimal.js";
-import { useActiveHousehold } from "@/auth/AuthContext";
+import { useActiveHousehold, useAuth } from "@/auth/AuthContext";
 import {
   useAddLot,
   useCreateHolding,
@@ -24,7 +24,7 @@ import { formatMoney, formatNumber, formatPrice } from "@/lib/money";
 import { formatDate, isoToday } from "@/lib/dates";
 import { useToggleSet } from "@/lib/useToggleSet";
 import { SymbolSearchCombobox } from "./SymbolSearchCombobox";
-import { fractionOf, fractionToPercent, percentLabel, pnlTone, signedMoney } from "./valuation";
+import { fractionToPercent, percentLabel, pnlTone, returnPercents, signedMoney } from "./valuation";
 
 const ASSET_CLASSES: HoldingAssetClass[] = ["crypto", "etf", "stock", "fund"];
 
@@ -69,11 +69,6 @@ interface Totals {
   totalUnrealizedPnl: string | null;
   totalRealizedPnl: string;
   totalReturn: string | null;
-  // Fractions, backend convention: each percentage over its own denominator
-  // (open cost basis / sold cost basis / their sum); null when undefined.
-  unrealizedPnlPct: string | null;
-  realizedPnlPct: string | null;
-  totalReturnPct: string | null;
 }
 
 /** Recomputes the totals for a subset of holdings, mirroring the backend summary math. */
@@ -101,17 +96,13 @@ function subtotals(rows: HoldingSummary[]): Totals {
     totalUnrealizedPnl: anyUnrealized ? unrealized.toString() : null,
     totalRealizedPnl: realized.toString(),
     totalReturn: anyUnrealized ? unrealized.plus(realized).toString() : null,
-    unrealizedPnlPct: anyUnrealized ? fractionOf(unrealized.toString(), cost.toString()) : null,
-    realizedPnlPct: fractionOf(realized.toString(), sold.toString()),
-    totalReturnPct: anyUnrealized
-      ? fractionOf(unrealized.plus(realized).toString(), cost.plus(sold).toString())
-      : null,
   };
 }
 
 export function HoldingsTab() {
   const { t, i18n } = useTranslation();
   const household = useActiveHousehold();
+  const { user } = useAuth();
 
   // The refresh runs asynchronously on the server, so we can't know exactly when prices land.
   // While refreshing, poll the summary and stop as soon as it reports fresh (or a safety cap).
@@ -163,9 +154,6 @@ export function HoldingsTab() {
           totalUnrealizedPnl: summary.totalUnrealizedPnl,
           totalRealizedPnl: summary.totalRealizedPnl,
           totalReturn: summary.totalReturn,
-          unrealizedPnlPct: summary.unrealizedPnlPct,
-          realizedPnlPct: summary.realizedPnlPct,
-          totalReturnPct: summary.totalReturnPct,
         }
       : subtotals(filtered);
   const locale = i18n.language;
@@ -183,7 +171,10 @@ export function HoldingsTab() {
     v == null || fraction == null
       ? undefined
       : t(key, { pnl: signedMoney(v, money(v)), basis: money(basis), pct: percentLabel(fraction, locale, true) });
-  const deployed = totals ? new Decimal(totals.totalCostBasis).plus(totals.totalSoldCostBasis).toString() : "0";
+  // All three percentages follow the user's chosen basis, from one shared computation path.
+  const rp = totals ? returnPercents(user?.portfolioReturnBasis ?? "OPEN_COST", totals) : null;
+  // Under NET_INVESTED house money there is no base to divide by; explain the "—" on hover.
+  const houseMoneyTitle = rp?.houseMoney ? t("portfolio.net_invested_unavailable") : undefined;
   // Money-weighted return cannot be derived from the filtered subtotals (it is a
   // root-solve over dated flows, not a ratio), so the class figure comes precomputed
   // from the backend and the filter just picks the matching entry.
@@ -246,21 +237,21 @@ export function HoldingsTab() {
           <Stat label={t("portfolio.current_value")} value={money(totals.totalValue)} />
           <Stat
             label={t("portfolio.unrealized_pnl")}
-            value={pnlStat(totals.totalUnrealizedPnl, totals.unrealizedPnlPct)}
+            value={pnlStat(totals.totalUnrealizedPnl, rp!.unrealizedPnlPct)}
             tone={toneClass(pnlTone(totals.totalUnrealizedPnl))}
-            title={pctTooltip("portfolio.unrealized_pct_tooltip", totals.totalUnrealizedPnl, totals.unrealizedPnlPct, totals.totalCostBasis)}
+            title={houseMoneyTitle ?? pctTooltip("portfolio.unrealized_pct_tooltip", totals.totalUnrealizedPnl, rp!.unrealizedPnlPct, rp!.unrealizedBasis)}
           />
           <Stat
             label={t("portfolio.realized_pnl")}
-            value={pnlStat(totals.totalRealizedPnl, totals.realizedPnlPct)}
+            value={pnlStat(totals.totalRealizedPnl, rp!.realizedPnlPct)}
             tone={toneClass(pnlTone(totals.totalRealizedPnl))}
-            title={pctTooltip("portfolio.realized_pct_tooltip", totals.totalRealizedPnl, totals.realizedPnlPct, totals.totalSoldCostBasis)}
+            title={houseMoneyTitle ?? pctTooltip("portfolio.realized_pct_tooltip", totals.totalRealizedPnl, rp!.realizedPnlPct, rp!.realizedBasis)}
           />
           <Stat
             label={t("portfolio.total_return")}
-            value={pnlStat(totals.totalReturn, totals.totalReturnPct)}
+            value={pnlStat(totals.totalReturn, rp!.totalReturnPct)}
             tone={toneClass(pnlTone(totals.totalReturn))}
-            title={pctTooltip("portfolio.total_return_pct_tooltip", totals.totalReturn, totals.totalReturnPct, deployed)}
+            title={houseMoneyTitle ?? pctTooltip("portfolio.total_return_pct_tooltip", totals.totalReturn, rp!.totalReturnPct, rp!.totalBasis)}
           />
           {mwr && (
             <Stat

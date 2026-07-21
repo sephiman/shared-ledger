@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fractionOf, fractionToPercent, percentLabel, pnlTone, signedMoney } from "./valuation";
+import { fractionOf, fractionToPercent, percentLabel, pnlTone, returnPercents, signedMoney } from "./valuation";
 
 describe("fractionToPercent", () => {
   it("converts backend fractions to percent numbers", () => {
@@ -56,6 +56,103 @@ describe("percentLabel", () => {
   it("renders an em dash when the fraction is undefined", () => {
     expect(percentLabel(null, "en")).toBe("—");
     expect(percentLabel(undefined, "en")).toBe("—");
+  });
+});
+
+describe("returnPercents", () => {
+  // The audited crypto-only household: hundreds of BTC/FET/SUI sell-and-rebuy cycles pile up
+  // ~€1.6M of cumulative sold-lot cost, an order of magnitude over the €138k still invested.
+  // Euro amounts are correct and identical across modes; only the % denominators differ.
+  const churn = {
+    totalUnrealizedPnl: "-103766.94",
+    totalRealizedPnl: "75641.09",
+    totalReturn: "-28125.85", // = unrealized (-103766.94) + realized (75641.09)
+    totalCostBasis: "138464.21", // open-lots cost
+    totalSoldCostBasis: "1626000.00", // cumulative FIFO cost of every sold lot (churn-inflated)
+  };
+
+  it("OPEN_COST bases realized and total on the open cost, keeping them legible", () => {
+    const rp = returnPercents("OPEN_COST", churn);
+    expect(rp.realizedBasis).toBe("138464.21");
+    expect(rp.totalBasis).toBe("138464.21");
+    expect(fractionToPercent(rp.realizedPnlPct)).toBeCloseTo(54.63, 1);
+    expect(fractionToPercent(rp.totalReturnPct)).toBeCloseTo(-20.31, 1);
+  });
+
+  it("OPEN_COST makes the percentages additive like the euros (unrealized + realized = total)", () => {
+    const rp = returnPercents("OPEN_COST", churn);
+    const unrealizedPct = fractionToPercent(fractionOf("-103766.94", churn.totalCostBasis))!;
+    const realizedPct = fractionToPercent(rp.realizedPnlPct)!;
+    const totalPct = fractionToPercent(rp.totalReturnPct)!;
+    expect(unrealizedPct + realizedPct).toBeCloseTo(totalPct, 2);
+  });
+
+  it("TURNOVER reproduces the churn-inflated denominators (the pre-existing behavior)", () => {
+    const rp = returnPercents("TURNOVER", churn);
+    expect(rp.realizedBasis).toBe("1626000.00"); // cost of all sold lots
+    expect(rp.totalBasis).toBe("1764464.21"); // open + sold
+    expect(fractionToPercent(rp.realizedPnlPct)).toBeCloseTo(4.65, 1);
+    expect(fractionToPercent(rp.totalReturnPct)).toBeCloseTo(-1.59, 1);
+  });
+
+  it("keeps a null total return null and never fakes a 0% from a zero base", () => {
+    expect(returnPercents("OPEN_COST", { ...churn, totalReturn: null }).totalReturnPct).toBeNull();
+    expect(returnPercents("OPEN_COST", { ...churn, totalCostBasis: "0" }).realizedPnlPct).toBeNull();
+    expect(returnPercents("TURNOVER", { ...churn, totalSoldCostBasis: "0" }).realizedPnlPct).toBeNull();
+  });
+
+  it("NET_INVESTED nets out recycled capital: base = open cost − realized (churn portfolio)", () => {
+    const rp = returnPercents("NET_INVESTED", churn);
+    expect(rp.houseMoney).toBe(false);
+    // 138464.21 − 75641.09 = 62823.12, shared by all three percentages.
+    expect(rp.unrealizedBasis).toBe("62823.12");
+    expect(rp.realizedBasis).toBe("62823.12");
+    expect(rp.totalBasis).toBe("62823.12");
+    expect(fractionToPercent(rp.totalReturnPct)).toBeCloseTo(-44.77, 1); // shown as -44.8%
+  });
+
+  it("NET_INVESTED keeps all three additive on the one base", () => {
+    const rp = returnPercents("NET_INVESTED", churn);
+    const u = fractionToPercent(rp.unrealizedPnlPct)!;
+    const r = fractionToPercent(rp.realizedPnlPct)!;
+    const total = fractionToPercent(rp.totalReturnPct)!;
+    expect(u + r).toBeCloseTo(total, 2);
+  });
+
+  it("NET_INVESTED on a buy-and-hold portfolio", () => {
+    // open cost 197479.81, realized +25757.62 → net invested 171722.19; total +19936.61 → +11.6%
+    const buyHold = {
+      totalUnrealizedPnl: "-5821.01", // total − realized
+      totalRealizedPnl: "25757.62",
+      totalReturn: "19936.61",
+      totalCostBasis: "197479.81",
+      totalSoldCostBasis: "45104.48", // unused by NET_INVESTED
+    };
+    const rp = returnPercents("NET_INVESTED", buyHold);
+    expect(rp.houseMoney).toBe(false);
+    expect(rp.totalBasis).toBe("171722.19");
+    expect(fractionToPercent(rp.totalReturnPct)).toBeCloseTo(11.61, 1); // shown as +11.6%
+  });
+
+  it("NET_INVESTED shows house money (—) when realized exceeds open cost", () => {
+    const houseMoney = {
+      totalUnrealizedPnl: "1000.00",
+      totalRealizedPnl: "60000.00",
+      totalReturn: "61000.00",
+      totalCostBasis: "50000.00", // net invested = 50000 − 60000 = −10000 (≤ 0)
+      totalSoldCostBasis: "80000.00",
+    };
+    const rp = returnPercents("NET_INVESTED", houseMoney);
+    expect(rp.houseMoney).toBe(true);
+    expect(rp.unrealizedPnlPct).toBeNull();
+    expect(rp.realizedPnlPct).toBeNull();
+    expect(rp.totalReturnPct).toBeNull();
+  });
+
+  it("NET_INVESTED treats an exactly-zero base as house money too", () => {
+    const rp = returnPercents("NET_INVESTED", { ...churn, totalCostBasis: "75641.09" }); // net = 0
+    expect(rp.houseMoney).toBe(true);
+    expect(rp.totalReturnPct).toBeNull();
   });
 });
 

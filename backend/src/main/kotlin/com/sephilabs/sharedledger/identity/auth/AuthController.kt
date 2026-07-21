@@ -4,6 +4,7 @@ import com.sephilabs.sharedledger.common.errors.AppException
 import com.sephilabs.sharedledger.household.HouseholdMemberRepository
 import com.sephilabs.sharedledger.household.HouseholdRepository
 import com.sephilabs.sharedledger.identity.user.HomePanel
+import com.sephilabs.sharedledger.identity.user.PortfolioReturnBasis
 import com.sephilabs.sharedledger.identity.user.User
 import com.sephilabs.sharedledger.identity.user.UserRepository
 import com.sephilabs.sharedledger.observability.AppMetrics
@@ -136,6 +137,13 @@ class AuthController(
         return buildMe(updated)
     }
 
+    @PutMapping("/me/portfolio-return-basis")
+    fun setPortfolioReturnBasis(@Valid @RequestBody body: PortfolioReturnBasisRequest): MeResponse {
+        val current = currentUser.requireUser()
+        val updated = authService.setPortfolioReturnBasis(current.id, body.basis)
+        return buildMe(updated)
+    }
+
     private fun buildMe(user: User): MeResponse {
         val memberships = members.findAllByIdUserId(user.id)
         val byId = households.findAllById(memberships.map { it.id.householdId }).associateBy { it.id }
@@ -147,6 +155,8 @@ class AuthController(
         val defaultId = user.defaultHouseholdId?.takeIf { id -> list.any { it.householdId == id } }
         // Drop ids that are no longer valid panels so a removed panel can't linger in the payload.
         val hiddenPanels = user.hiddenHomePanels.split(',').filter { it in HomePanel.ids }
-        return MeResponse(user.id, user.email, user.locale, defaultId, hiddenPanels, list)
+        // Fall back to the default if the stored value is ever unknown (e.g. a rolled-back enum).
+        val returnBasis = user.portfolioReturnBasis.takeIf { it in PortfolioReturnBasis.ids } ?: PortfolioReturnBasis.DEFAULT.id
+        return MeResponse(user.id, user.email, user.locale, defaultId, hiddenPanels, returnBasis, list)
     }
 }

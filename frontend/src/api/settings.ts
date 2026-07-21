@@ -123,6 +123,17 @@ export function useUpdateHomePanels() {
   });
 }
 
+export function useUpdatePortfolioReturnBasis() {
+  const { setUser } = useAuth();
+  return useMutation({
+    mutationFn: async (basis: string) =>
+      (await apiClient.put<Me>("/auth/me/portfolio-return-basis", { basis })).data,
+    // The tile and Portfolio page read the basis straight from /auth/me; pushing the
+    // response into the auth context re-renders the percentages without a refetch.
+    onSuccess: (me) => setUser(me),
+  });
+}
+
 export function useDeleteHousehold() {
   return useMutation({
     mutationFn: async (householdId: string) => {

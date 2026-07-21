@@ -32,7 +32,7 @@ const VALUE_COLOR = "#0ea5e9";
 const INVESTED_COLOR = "#6b7280";
 const REALIZED_COLOR = "#22c55e";
 const UNREALIZED_COLOR = "#a855f7";
-const TWR_COLOR = "#06b6d4";
+const TWR_COLOR = "#d946ef";
 const ZERO_LINE_COLOR = "#9ca3af";
 
 // Both stacked panels share one synced cursor and align their plot areas by using the

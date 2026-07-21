@@ -34,6 +34,11 @@ data class HomePanelsRequest(
     val hiddenPanels: List<String>,
 )
 
+data class PortfolioReturnBasisRequest(
+    @field:NotBlank(message = "validation.required")
+    val basis: String,
+)
+
 data class HouseholdMembershipDto(
     val householdId: UUID,
     val name: String,
@@ -47,6 +52,7 @@ data class MeResponse(
     val locale: String,
     val defaultHouseholdId: UUID?,
     val hiddenHomePanels: List<String>,
+    val portfolioReturnBasis: String,
     val households: List<HouseholdMembershipDto>,
 )
 

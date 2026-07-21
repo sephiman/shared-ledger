@@ -47,6 +47,114 @@ export function fractionOf(numerator: string | null | undefined, denominator: st
   }
 }
 
+/** The base a user chose for the portfolio return percentages; mirrors the backend enum. */
+export type ReturnBasis = "OPEN_COST" | "NET_INVESTED" | "TURNOVER";
+
+/**
+ * Smallest net-invested base we divide by. At or below this (covers ≤ 0 "house money" plus
+ * sub-cent noise) there is no own-money base to show a return over — the percentages go to "—".
+ */
+export const NET_INVESTED_MIN_BASE = new Decimal("0.01");
+
+/** Euro amounts (backend strings) the return percentages are derived from. */
+export interface ReturnAmounts {
+  totalUnrealizedPnl: string | null;
+  totalRealizedPnl: string;
+  totalReturn: string | null;
+  /** Cost of the currently-held (open) lots. */
+  totalCostBasis: string;
+  /** FIFO cost of every sold lot over the whole history. */
+  totalSoldCostBasis: string;
+}
+
+export interface ReturnPercents {
+  unrealizedPnlPct: string | null;
+  /** Denominator used for unrealized %, for the "over €X" tooltip. */
+  unrealizedBasis: string;
+  realizedPnlPct: string | null;
+  /** Denominator used for realized %, for the "over €X" tooltip. */
+  realizedBasis: string;
+  totalReturnPct: string | null;
+  /** Denominator used for total return %, for the "over €X" tooltip. */
+  totalBasis: string;
+  /** NET_INVESTED only: the base is ≤ NET_INVESTED_MIN_BASE, so every percentage is unavailable. */
+  houseMoney: boolean;
+}
+
+/**
+ * All three portfolio return percentages for the chosen basis, from euro amounts the summary
+ * already carries — the euro amounts are identical in every mode, only the denominator changes.
+ * This is the single computation path: no consumer derives these independently.
+ *
+ * - OPEN_COST (default): all three over the open-lots cost, so unrealized/realized/total share
+ *   one base and add up like the euros.
+ * - NET_INVESTED: all three over the net money contributed from outside (open cost − realized,
+ *   so buys funded by prior sales cancel) — "your own money at risk"; also one shared base.
+ *   When that base is ≤ NET_INVESTED_MIN_BASE the percentages are unavailable (house money).
+ * - TURNOVER: realized over the cost of all sold lots, total over open + sold cost, unrealized
+ *   over open cost — the historical behavior, whose denominators grow with sell-and-rebuy churn.
+ */
+export function returnPercents(basis: ReturnBasis, a: ReturnAmounts): ReturnPercents {
+  if (basis === "TURNOVER") {
+    let deployed: string;
+    try {
+      deployed = new Decimal(a.totalCostBasis).plus(a.totalSoldCostBasis).toString();
+    } catch {
+      deployed = a.totalCostBasis;
+    }
+    return {
+      unrealizedPnlPct: fractionOf(a.totalUnrealizedPnl, a.totalCostBasis),
+      unrealizedBasis: a.totalCostBasis,
+      realizedPnlPct: fractionOf(a.totalRealizedPnl, a.totalSoldCostBasis),
+      realizedBasis: a.totalSoldCostBasis,
+      totalReturnPct: fractionOf(a.totalReturn, deployed),
+      totalBasis: deployed,
+      houseMoney: false,
+    };
+  }
+  if (basis === "NET_INVESTED") {
+    // Net money put in from outside: buys funded by earlier sales cancel out.
+    let net: Decimal;
+    try {
+      net = new Decimal(a.totalCostBasis).minus(a.totalRealizedPnl);
+    } catch {
+      net = new Decimal(0);
+    }
+    const base = net.toString();
+    if (net.lt(NET_INVESTED_MIN_BASE)) {
+      // House money: more taken out than ever put in — no base to divide by.
+      return {
+        unrealizedPnlPct: null,
+        unrealizedBasis: base,
+        realizedPnlPct: null,
+        realizedBasis: base,
+        totalReturnPct: null,
+        totalBasis: base,
+        houseMoney: true,
+      };
+    }
+    return {
+      unrealizedPnlPct: fractionOf(a.totalUnrealizedPnl, base),
+      unrealizedBasis: base,
+      realizedPnlPct: fractionOf(a.totalRealizedPnl, base),
+      realizedBasis: base,
+      totalReturnPct: fractionOf(a.totalReturn, base),
+      totalBasis: base,
+      houseMoney: false,
+    };
+  }
+  // OPEN_COST (default): everything over the cost of the positions still held.
+  return {
+    unrealizedPnlPct: fractionOf(a.totalUnrealizedPnl, a.totalCostBasis),
+    unrealizedBasis: a.totalCostBasis,
+    realizedPnlPct: fractionOf(a.totalRealizedPnl, a.totalCostBasis),
+    realizedBasis: a.totalCostBasis,
+    totalReturnPct: fractionOf(a.totalReturn, a.totalCostBasis),
+    totalBasis: a.totalCostBasis,
+    houseMoney: false,
+  };
+}
+
 /** "16.6%" from a backend fraction string; "—" when undefined. [signed] adds "+" for gains. */
 export function percentLabel(fraction: string | null | undefined, locale: string, signed = false): string {
   const pct = fractionToPercent(fraction);

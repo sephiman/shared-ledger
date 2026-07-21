@@ -33,4 +33,8 @@ class User(
     // CSV of HomePanel ids the user chose to hide on Home; empty = all visible.
     @Column(name = "hidden_home_panels", nullable = false)
     var hiddenHomePanels: String = "",
+
+    // Which base the portfolio return percentages are shown over; see PortfolioReturnBasis.
+    @Column(name = "portfolio_return_basis", nullable = false, length = 16)
+    var portfolioReturnBasis: String = PortfolioReturnBasis.DEFAULT.id,
 ) : TimestampedEntity()

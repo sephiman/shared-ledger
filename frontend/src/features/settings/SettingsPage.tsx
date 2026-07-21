@@ -11,6 +11,7 @@ import { CreateHouseholdDialog } from "@/features/household/CreateHouseholdDialo
 import { CustomCategoryDialog } from "./CustomCategoryDialog";
 import { NotificationsCard } from "./NotificationsCard";
 import { HomePanelsCard } from "./HomePanelsCard";
+import { PortfolioReturnBasisCard } from "./PortfolioReturnBasisCard";
 import { AutoSnapshotCard } from "./AutoSnapshotCard";
 import { getCurrencyOptions } from "@/lib/currency";
 import { formatDate } from "@/lib/dates";
@@ -146,6 +147,8 @@ export function SettingsPage() {
       </Card>
 
       <HomePanelsCard />
+
+      <PortfolioReturnBasisCard />
 
       {user && (
         <Card>

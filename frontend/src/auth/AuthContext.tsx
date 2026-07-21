@@ -15,6 +15,8 @@ export interface Me {
   defaultHouseholdId: string | null;
   /** Home panels this user switched off in Settings (empty = all visible). */
   hiddenHomePanels: string[];
+  /** Base for the portfolio return percentages (see features/portfolio/valuation.ts). */
+  portfolioReturnBasis: "OPEN_COST" | "NET_INVESTED" | "TURNOVER";
   households: HouseholdMembership[];
 }
 

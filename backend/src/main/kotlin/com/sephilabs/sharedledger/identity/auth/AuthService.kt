@@ -10,6 +10,7 @@ import com.sephilabs.sharedledger.household.HouseholdRepository
 import com.sephilabs.sharedledger.household.HouseholdRole
 import com.sephilabs.sharedledger.household.invitation.InvitationService
 import com.sephilabs.sharedledger.identity.user.HomePanel
+import com.sephilabs.sharedledger.identity.user.PortfolioReturnBasis
 import com.sephilabs.sharedledger.identity.user.User
 import com.sephilabs.sharedledger.identity.user.UserRepository
 import com.sephilabs.sharedledger.observability.AppMetrics
@@ -110,6 +111,16 @@ class AuthService(
         val user = loadManaged(userId)
         // Store in enum order so equivalent selections serialize identically.
         user.hiddenHomePanels = HomePanel.entries.map { it.id }.filter { it in hiddenPanels }.joinToString(",")
+        return user
+    }
+
+    @Transactional
+    fun setPortfolioReturnBasis(userId: UUID, basis: String): User {
+        if (basis !in PortfolioReturnBasis.ids) {
+            throw AppException.badRequest("INVALID_PORTFOLIO_RETURN_BASIS")
+        }
+        val user = loadManaged(userId)
+        user.portfolioReturnBasis = basis
         return user
     }
 
