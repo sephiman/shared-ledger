@@ -20,6 +20,7 @@ import {
 } from "@/api/portfolio";
 import { apiErrorMessage } from "@/api/client";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select } from "@/components/ui/primitives";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { formatMoney, formatNumber, formatPrice } from "@/lib/money";
 import { formatDate, isoToday } from "@/lib/dates";
 import { useToggleSet } from "@/lib/useToggleSet";
@@ -233,7 +234,17 @@ export function HoldingsTab() {
 
       {totals && filtered.length > 0 && (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-          <Stat label={t("portfolio.invested")} value={money(totals.totalCostBasis)} />
+          <Stat label={t("portfolio.invested")} value={money(totals.totalCostBasis)}>
+            <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 tabular-nums">
+              {t("portfolio.net_invested_label")}: {money(rp!.netInvested)}{" "}
+              <InfoTip label={t("portfolio.net_invested_info")}>
+                {t(rp!.netInvestedHouseMoney ? "portfolio.net_invested_tooltip_house" : "portfolio.net_invested_tooltip", {
+                  open: money(totals.totalCostBasis),
+                  realized: money(totals.totalRealizedPnl),
+                })}
+              </InfoTip>
+            </p>
+          </Stat>
           <Stat label={t("portfolio.current_value")} value={money(totals.totalValue)} />
           <Stat
             label={t("portfolio.unrealized_pnl")}

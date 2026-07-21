@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "@/auth/AuthContext";
 import { usePortfolioSummary } from "@/api/portfolio";
 import { Card, CardBody, CardHeader } from "@/components/ui/primitives";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { formatMoney } from "@/lib/money";
 import { pnlTone, signedMoney, percentLabel, returnPercents } from "@/features/portfolio/valuation";
 
@@ -78,6 +79,15 @@ export function PortfolioOverviewTile({ householdId, currency, locale }: { house
         </div>
         <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 tabular-nums">
           {t("portfolio.invested")}: {money(data.totalCostBasis)}
+        </p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 tabular-nums">
+          {t("portfolio.net_invested_label")}: {money(rp.netInvested)}{" "}
+          <InfoTip label={t("portfolio.net_invested_info")}>
+            {t(rp.netInvestedHouseMoney ? "portfolio.net_invested_tooltip_house" : "portfolio.net_invested_tooltip", {
+              open: money(data.totalCostBasis),
+              realized: money(data.totalRealizedPnl),
+            })}
+          </InfoTip>
         </p>
 
         <ul className="mt-3 space-y-1 text-sm">

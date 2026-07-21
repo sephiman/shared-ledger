@@ -154,6 +154,43 @@ describe("returnPercents", () => {
     expect(rp.houseMoney).toBe(true);
     expect(rp.totalReturnPct).toBeNull();
   });
+
+  it("exposes net invested (open cost − realized) identically in every mode", () => {
+    // 138464.21 − 75641.09 = 62823.12 — the always-on 'Own money' figure, not basis-dependent.
+    for (const b of ["OPEN_COST", "NET_INVESTED", "TURNOVER"] as const) {
+      const rp = returnPercents(b, churn);
+      expect(rp.netInvested).toBe("62823.12");
+      expect(rp.netInvestedHouseMoney).toBe(false);
+    }
+    // Buy-and-hold: 197479.81 − 25757.62 = 171722.19.
+    const buyHold = {
+      totalUnrealizedPnl: "-5821.01",
+      totalRealizedPnl: "25757.62",
+      totalReturn: "19936.61",
+      totalCostBasis: "197479.81",
+      totalSoldCostBasis: "45104.48",
+    };
+    expect(returnPercents("OPEN_COST", buyHold).netInvested).toBe("171722.19");
+  });
+
+  it("flags net-invested house money in every mode, but only NET_INVESTED blanks its percentages", () => {
+    const houseMoney = {
+      totalUnrealizedPnl: "1000.00",
+      totalRealizedPnl: "60000.00",
+      totalReturn: "61000.00",
+      totalCostBasis: "50000.00", // net invested = 50000 − 60000 = −10000
+      totalSoldCostBasis: "80000.00",
+    };
+    for (const b of ["OPEN_COST", "NET_INVESTED", "TURNOVER"] as const) {
+      const rp = returnPercents(b, houseMoney);
+      expect(rp.netInvested).toBe("-10000");
+      expect(rp.netInvestedHouseMoney).toBe(true);
+    }
+    // netInvestedHouseMoney is a fact for the 'Own money' line; only NET_INVESTED nulls its %.
+    expect(returnPercents("OPEN_COST", houseMoney).houseMoney).toBe(false);
+    expect(returnPercents("OPEN_COST", houseMoney).totalReturnPct).not.toBeNull();
+    expect(returnPercents("NET_INVESTED", houseMoney).houseMoney).toBe(true);
+  });
 });
 
 describe("signedMoney", () => {

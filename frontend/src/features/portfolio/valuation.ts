@@ -79,6 +79,14 @@ export interface ReturnPercents {
   totalBasis: string;
   /** NET_INVESTED only: the base is ≤ NET_INVESTED_MIN_BASE, so every percentage is unavailable. */
   houseMoney: boolean;
+  /**
+   * Net money contributed from outside the portfolio (open-lots cost − realized P&L, so buys
+   * funded by prior sales cancel out) — "your own money at risk". Mode-independent: the same
+   * value the NET_INVESTED base uses, always present so it can be shown regardless of basis.
+   */
+  netInvested: string;
+  /** True when netInvested ≤ NET_INVESTED_MIN_BASE ("house money"): positions funded by gains. */
+  netInvestedHouseMoney: boolean;
 }
 
 /**
@@ -95,6 +103,18 @@ export interface ReturnPercents {
  *   over open cost — the historical behavior, whose denominators grow with sell-and-rebuy churn.
  */
 export function returnPercents(basis: ReturnBasis, a: ReturnAmounts): ReturnPercents {
+  // Net money contributed from outside the portfolio — buys funded by earlier sales cancel out.
+  // Computed once here, so the always-on "Own money" line and the NET_INVESTED base agree.
+  let net: Decimal;
+  try {
+    net = new Decimal(a.totalCostBasis).minus(a.totalRealizedPnl);
+  } catch {
+    net = new Decimal(0);
+  }
+  const netInvested = net.toString();
+  const netInvestedHouseMoney = net.lt(NET_INVESTED_MIN_BASE);
+  const common = { netInvested, netInvestedHouseMoney };
+
   if (basis === "TURNOVER") {
     let deployed: string;
     try {
@@ -110,37 +130,32 @@ export function returnPercents(basis: ReturnBasis, a: ReturnAmounts): ReturnPerc
       totalReturnPct: fractionOf(a.totalReturn, deployed),
       totalBasis: deployed,
       houseMoney: false,
+      ...common,
     };
   }
   if (basis === "NET_INVESTED") {
-    // Net money put in from outside: buys funded by earlier sales cancel out.
-    let net: Decimal;
-    try {
-      net = new Decimal(a.totalCostBasis).minus(a.totalRealizedPnl);
-    } catch {
-      net = new Decimal(0);
-    }
-    const base = net.toString();
-    if (net.lt(NET_INVESTED_MIN_BASE)) {
+    if (netInvestedHouseMoney) {
       // House money: more taken out than ever put in — no base to divide by.
       return {
         unrealizedPnlPct: null,
-        unrealizedBasis: base,
+        unrealizedBasis: netInvested,
         realizedPnlPct: null,
-        realizedBasis: base,
+        realizedBasis: netInvested,
         totalReturnPct: null,
-        totalBasis: base,
+        totalBasis: netInvested,
         houseMoney: true,
+        ...common,
       };
     }
     return {
-      unrealizedPnlPct: fractionOf(a.totalUnrealizedPnl, base),
-      unrealizedBasis: base,
-      realizedPnlPct: fractionOf(a.totalRealizedPnl, base),
-      realizedBasis: base,
-      totalReturnPct: fractionOf(a.totalReturn, base),
-      totalBasis: base,
+      unrealizedPnlPct: fractionOf(a.totalUnrealizedPnl, netInvested),
+      unrealizedBasis: netInvested,
+      realizedPnlPct: fractionOf(a.totalRealizedPnl, netInvested),
+      realizedBasis: netInvested,
+      totalReturnPct: fractionOf(a.totalReturn, netInvested),
+      totalBasis: netInvested,
       houseMoney: false,
+      ...common,
     };
   }
   // OPEN_COST (default): everything over the cost of the positions still held.
@@ -152,6 +167,7 @@ export function returnPercents(basis: ReturnBasis, a: ReturnAmounts): ReturnPerc
     totalReturnPct: fractionOf(a.totalReturn, a.totalCostBasis),
     totalBasis: a.totalCostBasis,
     houseMoney: false,
+    ...common,
   };
 }
 
