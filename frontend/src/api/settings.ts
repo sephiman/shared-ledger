@@ -64,10 +64,30 @@ export function useHouseholdMembers(householdId: string) {
   });
 }
 
-export function useInvitations(householdId: string) {
+/**
+ * Promote a member to owner (or demote back). Owner-only server-side; the household always keeps
+ * at least one owner (`LAST_HOUSEHOLD_OWNER`). Refreshes auth because an owner may change their own
+ * role, and the whole UI reads `role` from the session's membership list.
+ */
+export function useUpdateMemberRole(householdId: string) {
+  const qc = useQueryClient();
+  const { refresh } = useAuth();
+  return useMutation({
+    mutationFn: async ({ userId, role }: { userId: string; role: "owner" | "member" }) =>
+      (await apiClient.patch<HouseholdMemberRow>(`/households/${householdId}/members/${userId}`, { role })).data,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["household-members", householdId] });
+      void refresh();
+    },
+  });
+}
+
+/** Listing invitations is owner-only; pass `enabled: false` for members so it never 403s. */
+export function useInvitations(householdId: string, enabled = true) {
   return useQuery({
     queryKey: ["invitations", householdId],
     queryFn: async () => (await apiClient.get<Invitation[]>(`/households/${householdId}/invitations`)).data,
+    enabled,
   });
 }
 

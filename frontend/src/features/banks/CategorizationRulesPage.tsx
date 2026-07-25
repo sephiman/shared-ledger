@@ -33,7 +33,6 @@ export function CategorizationRulesPage() {
   const { t, i18n } = useTranslation();
   const household = useActiveHousehold();
   const householdId = household.householdId;
-  const isOwner = household.role === "owner";
 
   const { data: rules = [], isLoading } = useCategorizationRules(householdId);
   const { data: categories = [] } = useCategories(householdId);
@@ -96,7 +95,7 @@ export function CategorizationRulesPage() {
         <Link to="/settings" className="text-sm text-primary">{t("common.back")}</Link>
       </div>
 
-      {isOwner && <AddRuleCard householdId={householdId} categories={categories} />}
+      <AddRuleCard householdId={householdId} categories={categories} />
 
       <Card>
         <CardBody className="space-y-4">
@@ -155,7 +154,7 @@ export function CategorizationRulesPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3 text-sm">
-            {isOwner && filtered.length > 0 && (
+            {filtered.length > 0 && (
               <label className="inline-flex cursor-pointer items-center gap-2">
                 <Checkbox
                   checked={allSelected}
@@ -217,14 +216,12 @@ export function CategorizationRulesPage() {
                     ) : (
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex min-w-0 items-start gap-3">
-                          {isOwner && (
-                            <Checkbox
-                              className="mt-1"
-                              checked={selected.has(r.id)}
-                              onChange={() => toggleSelected(r.id)}
-                              aria-label={t("banks.select_rule")}
-                            />
-                          )}
+                          <Checkbox
+                            className="mt-1"
+                            checked={selected.has(r.id)}
+                            onChange={() => toggleSelected(r.id)}
+                            aria-label={t("banks.select_rule")}
+                          />
                           <div className="min-w-0 break-words text-sm">
                             <span className="font-medium">{t(`banks.field_${r.matchField}`)}</span>{" "}
                             {t(`banks.op_${r.matchOp}`)}{" "}
@@ -236,32 +233,30 @@ export function CategorizationRulesPage() {
                             </p>
                           </div>
                         </div>
-                        {isOwner && (
-                          <div className="inline-flex gap-1">
-                            <Button
-                              variant="ghost"
-                              className="px-2"
-                              aria-label={t("common.edit")}
-                              title={t("common.edit")}
-                              onClick={() => setEditingId(r.id)}
-                            >
-                              <span aria-hidden>✏️</span>
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              className="px-2 text-red-600 dark:text-red-400"
-                              aria-label={t("common.delete")}
-                              title={t("common.delete")}
-                              disabled={del.isPending}
-                              onClick={() => {
-                                if (selected.has(r.id)) toggleSelected(r.id);
-                                del.mutate(r.id);
-                              }}
-                            >
-                              <span aria-hidden>🗑️</span>
-                            </Button>
-                          </div>
-                        )}
+                        <div className="inline-flex gap-1">
+                          <Button
+                            variant="ghost"
+                            className="px-2"
+                            aria-label={t("common.edit")}
+                            title={t("common.edit")}
+                            onClick={() => setEditingId(r.id)}
+                          >
+                            <span aria-hidden>✏️</span>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            className="px-2 text-red-600 dark:text-red-400"
+                            aria-label={t("common.delete")}
+                            title={t("common.delete")}
+                            disabled={del.isPending}
+                            onClick={() => {
+                              if (selected.has(r.id)) toggleSelected(r.id);
+                              del.mutate(r.id);
+                            }}
+                          >
+                            <span aria-hidden>🗑️</span>
+                          </Button>
+                        </div>
                       </div>
                     )}
                   </li>

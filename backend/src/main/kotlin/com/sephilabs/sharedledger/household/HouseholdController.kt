@@ -6,6 +6,7 @@ import com.sephilabs.sharedledger.identity.auth.CurrentUser
 import com.sephilabs.sharedledger.identity.user.UserRepository
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
 import org.springframework.http.ResponseEntity
@@ -47,6 +48,11 @@ data class HouseholdMemberDto(
     val email: String,
     val role: HouseholdRole,
     val joinedAt: Instant,
+)
+
+data class MemberRoleUpdateRequest(
+    @field:NotNull(message = "validation.required")
+    val role: HouseholdRole,
 )
 
 @RestController
@@ -109,6 +115,30 @@ class HouseholdController(
                 HouseholdMemberDto(m.id.userId, email, m.role, m.joinedAt)
             }
             .sortedWith(compareBy({ if (it.role == HouseholdRole.owner) 0 else 1 }, { it.joinedAt }))
+    }
+
+    /**
+     * Promote a member to `owner`, or demote an owner back to `member`. The household must keep at
+     * least one owner — otherwise settings, invitations and deletion would all become unreachable
+     * with no way back, since this endpoint is itself owner-only.
+     */
+    @RequireHouseholdOwner
+    @PatchMapping("/{householdId}/members/{userId}")
+    @Transactional
+    fun updateMemberRole(
+        @PathVariable householdId: UUID,
+        @PathVariable userId: UUID,
+        @Valid @RequestBody body: MemberRoleUpdateRequest,
+    ): HouseholdMemberDto {
+        val membership = members.findByIdHouseholdIdAndIdUserId(householdId, userId)
+            ?: throw AppException.notFound("MEMBER_NOT_FOUND")
+        val user = users.findById(userId).orElseThrow { AppException.notFound("MEMBER_NOT_FOUND") }
+        if (membership.role == HouseholdRole.owner && body.role != HouseholdRole.owner) {
+            val owners = members.findAllByIdHouseholdId(householdId).count { it.role == HouseholdRole.owner }
+            if (owners <= 1) throw AppException.conflict("LAST_HOUSEHOLD_OWNER")
+        }
+        membership.role = body.role
+        return HouseholdMemberDto(userId, user.email, membership.role, membership.joinedAt)
     }
 
     @RequireHouseholdOwner

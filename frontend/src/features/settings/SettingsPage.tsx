@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold, useAuth } from "@/auth/AuthContext";
-import { useChangePassword, useDeleteHousehold, useHousehold, useHouseholdMembers, useInvitations, useIssueInvitation, useRevokeInvitation, useSetDefaultHousehold, useUpdateHousehold, useWipeHouseholdData } from "@/api/settings";
+import { useChangePassword, useDeleteHousehold, useHousehold, useHouseholdMembers, useInvitations, useIssueInvitation, useRevokeInvitation, useSetDefaultHousehold, useUpdateHousehold, useUpdateMemberRole, useWipeHouseholdData, type HouseholdMemberRow } from "@/api/settings";
 import { useCategories, useDeleteCustomCategory, type Category } from "@/api/catalog";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select } from "@/components/ui/primitives";
 import { apiErrorMessage } from "@/api/client";
@@ -54,9 +54,13 @@ export function SettingsPage() {
   }, [hh]);
 
   const { data: members = [] } = useHouseholdMembers(household.householdId);
-  const { data: invitations = [] } = useInvitations(household.householdId);
+  // Mirrors the server's LAST_HOUSEHOLD_OWNER guard, so demoting the only owner is disabled up front.
+  const lastOwner = members.filter((m) => m.role === "owner").length <= 1;
+  // Owner-only endpoint: querying it as a member would 403 and pop an error toast the user never asked for.
+  const { data: invitations = [] } = useInvitations(household.householdId, isOwner);
   const issue = useIssueInvitation(household.householdId);
   const revoke = useRevokeInvitation(household.householdId);
+  const updateRole = useUpdateMemberRole(household.householdId);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"owner" | "member">("member");
   const [issuedToken, setIssuedToken] = useState<string | null>(null);
@@ -349,7 +353,7 @@ export function SettingsPage() {
       {isOwner && <NotificationsCard householdId={household.householdId} />}
 
       {bankConfig?.featureEnabled && (
-        <BanksCard householdId={household.householdId} isOwner={isOwner} locale={i18n.language} />
+        <BanksCard householdId={household.householdId} locale={i18n.language} />
       )}
 
       {bankConfig?.featureEnabled && (
@@ -503,6 +507,7 @@ export function SettingsPage() {
                     <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
                       {t(`settings.${m.role}`)} · {formatDate(m.joinedAt, i18n.language)}
                     </p>
+                    {isOwner && <RoleAction member={m} lastOwner={lastOwner} pending={updateRole.isPending} onChange={updateRole.mutate} />}
                   </li>
                 ))}
               </ul>
@@ -512,6 +517,7 @@ export function SettingsPage() {
                     <th className="py-2">{t("auth.email")}</th>
                     <th>{t("settings.invitation_role")}</th>
                     <th>{t("settings.joined_at")}</th>
+                    {isOwner && <th />}
                   </tr>
                 </thead>
                 <tbody>
@@ -527,6 +533,11 @@ export function SettingsPage() {
                       </td>
                       <td>{t(`settings.${m.role}`)}</td>
                       <td>{formatDate(m.joinedAt, i18n.language)}</td>
+                      {isOwner && (
+                        <td className="text-right">
+                          <RoleAction member={m} lastOwner={lastOwner} pending={updateRole.isPending} onChange={updateRole.mutate} />
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -568,10 +579,10 @@ export function SettingsPage() {
               </div>
             </div>
             {issuedToken && (
-              <div className="rounded border border-sky-300 bg-sky-50 p-3 text-sm">
+              <div className="rounded border border-sky-300 bg-sky-50 p-3 text-sm text-gray-800 dark:border-sky-900 dark:bg-sky-950/30 dark:text-gray-200">
                 <p className="font-medium">{t("settings.issued_token")}</p>
-                <code className="block break-all rounded bg-white px-2 py-1">{issuedToken}</code>
-                <p className="mt-2 text-xs text-gray-600 dark:text-gray-300">{window.location.origin}/register?invite={issuedToken}</p>
+                <code className="block break-all rounded bg-white px-2 py-1 text-gray-900 dark:bg-gray-900 dark:text-gray-100">{issuedToken}</code>
+                <p className="mt-2 break-all text-xs text-gray-600 dark:text-gray-300">{window.location.origin}/register?invite={issuedToken}</p>
               </div>
             )}
             {invitations.length === 0 ? (
@@ -699,5 +710,36 @@ export function SettingsPage() {
         onSaved={() => { setCustomDialogOpen(false); setCustomEditing(null); }}
       />
     </div>
+  );
+}
+
+/**
+ * Promote/demote control shown to owners on each member row. Demoting the only owner is disabled
+ * here and refused by the server (`LAST_HOUSEHOLD_OWNER`) — an owner may demote themselves as long
+ * as somebody else keeps the role.
+ */
+function RoleAction({
+  member,
+  lastOwner,
+  pending,
+  onChange,
+}: {
+  member: HouseholdMemberRow;
+  lastOwner: boolean;
+  pending: boolean;
+  onChange: (input: { userId: string; role: "owner" | "member" }) => void;
+}) {
+  const { t } = useTranslation();
+  const promoting = member.role === "member";
+  const blocked = !promoting && lastOwner;
+  return (
+    <Button
+      variant="ghost"
+      disabled={pending || blocked}
+      title={blocked ? t("errors.LAST_HOUSEHOLD_OWNER") : undefined}
+      onClick={() => onChange({ userId: member.userId, role: promoting ? "owner" : "member" })}
+    >
+      {promoting ? t("settings.make_owner") : t("settings.make_member")}
+    </Button>
   );
 }

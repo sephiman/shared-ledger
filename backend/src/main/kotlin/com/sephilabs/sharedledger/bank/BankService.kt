@@ -7,6 +7,7 @@ import com.sephilabs.sharedledger.bank.connector.PsuContext
 import com.sephilabs.sharedledger.bank.sync.BankConnectionLinked
 import com.sephilabs.sharedledger.common.errors.AppException
 import com.sephilabs.sharedledger.config.AppProperties
+import com.sephilabs.sharedledger.household.HouseholdRole
 import com.sephilabs.sharedledger.identity.user.User
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.scheduling.support.CronExpression
@@ -69,15 +70,40 @@ class BankService(
     }
 
     @Transactional(readOnly = true)
-    fun listConnections(householdId: UUID): List<BankConnectionDto> =
-        connections.findAllByHouseholdIdOrderByCreatedAtAsc(householdId).map { it.toDto() }
+    fun listConnections(householdId: UUID, by: User, role: HouseholdRole): List<BankConnectionDto> =
+        connections.findAllByHouseholdIdOrderByCreatedAtAsc(householdId).map { it.toDto(canManage(it, by, role)) }
+
+    /**
+     * True when [by] may sync, re-link, edit or delete [connection]: household owners always, plus
+     * the member who linked it or whose bank account it is. Rows predating per-member linking have
+     * no `createdByUserId`/`holderUserId` and so stay owner-only.
+     */
+    fun canManage(connection: BankConnection, by: User, role: HouseholdRole): Boolean =
+        role == HouseholdRole.owner ||
+            connection.createdByUserId == by.id ||
+            connection.holderUserId == by.id
+
+    /** Resolve a connection in this household and assert the caller may manage it. */
+    private fun manageable(householdId: UUID, id: UUID, by: User, role: HouseholdRole): BankConnection {
+        val connection = connections.findByIdAndHouseholdId(id, householdId)
+            ?: throw AppException.notFound("BANK_CONNECTION_NOT_FOUND")
+        if (!canManage(connection, by, role)) throw AppException.forbidden("NOT_CONNECTION_MANAGER")
+        return connection
+    }
+
+    /** Authorization-only variant, for callers that hand the work off elsewhere (e.g. "Sync now"). */
+    @Transactional(readOnly = true)
+    fun requireManageable(householdId: UUID, id: UUID, by: User, role: HouseholdRole) {
+        manageable(householdId, id, by, role)
+    }
 
     @Transactional
-    fun startLink(householdId: UUID, request: StartLinkRequest, by: User): StartLinkResponse {
+    fun startLink(householdId: UUID, request: StartLinkRequest, by: User, role: HouseholdRole): StartLinkResponse {
         requireConfigured()
+        // Any member may link a *new* bank of their own; re-linking an existing connection is
+        // restricted to whoever may manage it.
         if (request.relinkConnectionId != null) {
-            connections.findByIdAndHouseholdId(request.relinkConnectionId, householdId)
-                ?: throw AppException.notFound("BANK_CONNECTION_NOT_FOUND")
+            manageable(householdId, request.relinkConnectionId, by, role)
         }
         val state = UUID.randomUUID().toString().replace("-", "")
         val validUntil = Instant.now().plus(Duration.ofDays(props.enableBanking.consentValidDays))
@@ -108,11 +134,20 @@ class BankService(
     }
 
     @Transactional
-    fun completeLink(householdId: UUID, request: CompleteLinkRequest, by: User, psu: PsuContext? = null): BankConnectionDto {
+    fun completeLink(
+        householdId: UUID,
+        request: CompleteLinkRequest,
+        by: User,
+        role: HouseholdRole,
+        psu: PsuContext? = null,
+    ): BankConnectionDto {
         requireConfigured()
         val auth = authSessions.findById(request.state).orElse(null)
             ?: throw AppException.badRequest("BANK_AUTH_STATE_INVALID")
         if (auth.householdId != householdId) throw AppException.forbidden("BANK_AUTH_STATE_MISMATCH")
+        // Now that any member can start a link, the callback must be finished by the same member who
+        // started it — otherwise one member could bind another's SCA session to a connection.
+        if (auth.holderUserId != by.id) throw AppException.forbidden("BANK_AUTH_STATE_MISMATCH")
 
         val session = try {
             connector.completeAuthorization(request.code)
@@ -121,7 +156,9 @@ class BankService(
         }
 
         val connection = auth.relinkConnectionId
-            ?.let { connections.findByIdAndHouseholdId(it, householdId) }
+            // Re-check rather than trust the start-link decision: roles can change mid-flow, and the
+            // bank redirect can come back days later.
+            ?.let { manageable(householdId, it, by, role) }
             ?: BankConnection(
                 householdId = householdId,
                 aspspName = auth.aspspName,
@@ -160,24 +197,28 @@ class BankService(
         authSessions.delete(auth)
         // Initial backfill sync runs off-thread once this transaction commits.
         events.publishEvent(BankConnectionLinked(connection.id, psu))
-        return connection.toDto()
+        return connection.toDto(canManage(connection, by, role))
     }
 
     @Transactional
-    fun update(householdId: UUID, id: UUID, request: UpdateConnectionRequest, by: User): BankConnectionDto {
-        val connection = connections.findByIdAndHouseholdId(id, householdId)
-            ?: throw AppException.notFound("BANK_CONNECTION_NOT_FOUND")
+    fun update(
+        householdId: UUID,
+        id: UUID,
+        request: UpdateConnectionRequest,
+        by: User,
+        role: HouseholdRole,
+    ): BankConnectionDto {
+        val connection = manageable(householdId, id, by, role)
         request.label?.let { connection.label = it }
         request.ingestionEnabled?.let { connection.ingestionEnabled = it }
         request.syncFrequency?.let { connection.syncFrequency = it }
         connection.updatedByUserId = by.id
-        return connection.toDto()
+        return connection.toDto(canManage = true)
     }
 
     @Transactional
-    fun delete(householdId: UUID, id: UUID) {
-        val connection = connections.findByIdAndHouseholdId(id, householdId)
-            ?: throw AppException.notFound("BANK_CONNECTION_NOT_FOUND")
+    fun delete(householdId: UUID, id: UUID, by: User, role: HouseholdRole) {
+        val connection = manageable(householdId, id, by, role)
         // Cascades remove accounts, pending movements, and sync runs (FK ON DELETE CASCADE).
         connections.delete(connection)
     }
@@ -192,7 +233,7 @@ class BankService(
         return "••••${trimmed.takeLast(4)}"
     }
 
-    private fun BankConnection.toDto(): BankConnectionDto {
+    private fun BankConnection.toDto(canManage: Boolean): BankConnectionDto {
         val lastRun = syncRuns.findFirstByConnectionIdOrderByStartedAtDesc(id)
         return BankConnectionDto(
             id = id,
@@ -210,6 +251,7 @@ class BankService(
             },
             lastSyncStatus = lastRun?.status,
             lastSyncError = lastRun?.errorMessage,
+            canManage = canManage,
         )
     }
 }

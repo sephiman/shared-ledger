@@ -46,6 +46,9 @@ data class BankConnectionDto(
     val accounts: List<BankAccountDto>,
     val lastSyncStatus: SyncRunStatus?,
     val lastSyncError: String?,
+    // Whether the caller may sync, re-link, edit or delete this connection: owners always, plus the
+    // member who linked it. Every member sees every connection, but only manages their own.
+    val canManage: Boolean = false,
 )
 
 data class StartLinkRequest(

@@ -57,6 +57,8 @@ export interface BankConnection {
   accounts: BankAccount[];
   lastSyncStatus: SyncRunStatus | null;
   lastSyncError: string | null;
+  /** Owners, plus the member who linked it. Every member sees every connection, manages only their own. */
+  canManage: boolean;
 }
 
 export interface PendingMovement {

@@ -29,7 +29,12 @@ function statusClass(status: ConnectionStatus): string {
   }
 }
 
-export function BanksCard({ householdId, isOwner, locale }: { householdId: string; isOwner: boolean; locale: string }) {
+/**
+ * Linking is open to every member — each relative passes SCA at their own bank, so credentials are
+ * never shared. Managing an existing connection is gated per row by `connection.canManage` (the
+ * member who linked it, plus owners), mirroring the server check.
+ */
+export function BanksCard({ householdId, locale }: { householdId: string; locale: string }) {
   const { t } = useTranslation();
   const { data: connections = [] } = useBankConnections(householdId);
   const { data: config } = useBankConfig(householdId);
@@ -50,7 +55,7 @@ export function BanksCard({ householdId, isOwner, locale }: { householdId: strin
   const [aspspName, setAspspName] = useState("");
   const [label, setLabel] = useState("");
   const [linkError, setLinkError] = useState<string | null>(null);
-  const { data: aspsps = [], isLoading: aspspsLoading } = useAspsps(householdId, country, isOwner);
+  const { data: aspsps = [], isLoading: aspspsLoading } = useAspsps(householdId, country, true);
 
   const beginLink = async (relinkConnectionId?: string, presetAspsp?: string, presetCountry?: string) => {
     setLinkError(null);
@@ -91,36 +96,34 @@ export function BanksCard({ householdId, isOwner, locale }: { householdId: strin
           </p>
         )}
 
-        {isOwner && (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-            <div>
-              <Label>{t("banks.country")}</Label>
-              <Select value={country} onChange={(e) => { setCountry(e.target.value); setAspspName(""); }}>
-                {COUNTRIES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </Select>
-            </div>
-            <div>
-              <Label>{t("banks.bank")}</Label>
-              <Select value={aspspName} onChange={(e) => setAspspName(e.target.value)} disabled={aspspsLoading}>
-                <option value="">{aspspsLoading ? t("common.loading") : t("banks.pick_bank")}</option>
-                {aspsps.map((a) => (
-                  <option key={`${a.name}-${a.country}`} value={a.name}>{a.name}</option>
-                ))}
-              </Select>
-            </div>
-            <div>
-              <Label>{t("banks.label")}</Label>
-              <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("banks.label_placeholder")} />
-            </div>
-            <div className="flex items-end">
-              <Button disabled={startLink.isPending || !aspspName} onClick={() => beginLink()}>
-                {t("banks.link_bank")}
-              </Button>
-            </div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+          <div>
+            <Label>{t("banks.country")}</Label>
+            <Select value={country} onChange={(e) => { setCountry(e.target.value); setAspspName(""); }}>
+              {COUNTRIES.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </Select>
           </div>
-        )}
+          <div>
+            <Label>{t("banks.bank")}</Label>
+            <Select value={aspspName} onChange={(e) => setAspspName(e.target.value)} disabled={aspspsLoading}>
+              <option value="">{aspspsLoading ? t("common.loading") : t("banks.pick_bank")}</option>
+              {aspsps.map((a) => (
+                <option key={`${a.name}-${a.country}`} value={a.name}>{a.name}</option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <Label>{t("banks.label")}</Label>
+            <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("banks.label_placeholder")} />
+          </div>
+          <div className="flex items-end">
+            <Button disabled={startLink.isPending || !aspspName} onClick={() => beginLink()}>
+              {t("banks.link_bank")}
+            </Button>
+          </div>
+        </div>
         {linkError && <FieldError message={linkError} />}
 
         {connections.length === 0 ? (
@@ -132,7 +135,6 @@ export function BanksCard({ householdId, isOwner, locale }: { householdId: strin
                 key={c.id}
                 householdId={householdId}
                 connection={c}
-                isOwner={isOwner}
                 locale={locale}
                 onRelink={() => beginLink(c.id, c.aspspName, c.aspspCountry)}
               />
@@ -147,13 +149,11 @@ export function BanksCard({ householdId, isOwner, locale }: { householdId: strin
 function ConnectionRow({
   householdId,
   connection,
-  isOwner,
   locale,
   onRelink,
 }: {
   householdId: string;
   connection: BankConnection;
-  isOwner: boolean;
   locale: string;
   onRelink: () => void;
 }) {
@@ -180,7 +180,7 @@ function ConnectionRow({
             {t(`banks.status_${connection.status}`)}
           </span>
         </div>
-        {isOwner && (
+        {connection.canManage && (
           <div className="flex flex-wrap gap-1">
             <Button variant="ghost" disabled={sync.isPending} onClick={() => sync.mutate(connection.id)}>
               {t("banks.sync_now")}

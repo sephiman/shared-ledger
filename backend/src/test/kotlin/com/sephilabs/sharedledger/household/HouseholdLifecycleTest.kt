@@ -108,6 +108,35 @@ class HouseholdLifecycleTest @Autowired constructor(
     }
 
     @Test
+    fun `an owner promotes a member, and the household never loses its last owner`() {
+        val owner = newUser()
+        val relative = newUser()
+        val household = households.save(Household(name = "H", currency = "EUR", defaultLocale = "en"))
+        members.save(HouseholdMember(HouseholdMemberId(household.id, owner.id), HouseholdRole.owner))
+        members.save(HouseholdMember(HouseholdMemberId(household.id, relative.id), HouseholdRole.member))
+
+        // The sole owner cannot step down — that would strand the household with no one to manage it.
+        assertThatThrownBy {
+            controller.updateMemberRole(household.id, owner.id, MemberRoleUpdateRequest(HouseholdRole.member))
+        }.isInstanceOf(AppException::class.java).hasMessageContaining("LAST_HOUSEHOLD_OWNER")
+
+        val promoted = controller.updateMemberRole(household.id, relative.id, MemberRoleUpdateRequest(HouseholdRole.owner))
+        assertThat(promoted.role).isEqualTo(HouseholdRole.owner)
+        assertThat(promoted.email).isEqualTo(relative.email)
+        assertThat(members.findByIdHouseholdIdAndIdUserId(household.id, relative.id)!!.role).isEqualTo(HouseholdRole.owner)
+
+        // With a second owner in place, the first may now hand over.
+        val demoted = controller.updateMemberRole(household.id, owner.id, MemberRoleUpdateRequest(HouseholdRole.member))
+        assertThat(demoted.role).isEqualTo(HouseholdRole.member)
+        assertThat(members.findByIdHouseholdIdAndIdUserId(household.id, owner.id)!!.role).isEqualTo(HouseholdRole.member)
+
+        // Someone who is not a member of this household has no role to change.
+        assertThatThrownBy {
+            controller.updateMemberRole(household.id, newUser().id, MemberRoleUpdateRequest(HouseholdRole.owner))
+        }.isInstanceOf(AppException::class.java).hasMessageContaining("MEMBER_NOT_FOUND")
+    }
+
+    @Test
     fun `delete household removes it and its memberships when nobody has it as default`() {
         val owner = newUser()
         val keeper = households.save(Household(name = "Keep", currency = "EUR", defaultLocale = "en"))

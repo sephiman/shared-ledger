@@ -32,10 +32,11 @@ Postgres is **not** part of this compose file. It runs externally on a Docker ne
 - All financial data belongs to a household, not directly to a user.
 - A user may belong to one or more households.
 - Each household has its own currency (default EUR) and default locale.
-- Roles within a household: **owner** and **member**. Only owners may modify household settings, manage invitations, or delete the household.
+- Roles within a household: **owner** and **member**. Only owners may modify household settings, manage invitations, change roles, or delete the household. Two deliberate exceptions live under *Settings* but are open to every member: **linking a bank** (each member links their own account with their own SCA — sharing bank credentials to work around the role would defeat the point) and **categorisation rules** (shared logic over the movements members already confirm). Both are described under *Bank ingestion*.
 - Every household-scoped API endpoint verifies the caller is a member of the household. Household IDs in paths are never trusted without that check.
 - **Switching households**: when a user belongs to more than one household, a dropdown appears in the header to switch the active household. With a single household the dropdown is hidden.
 - **Default household**: each user can pick one of their memberships as their default. On login (and on any new device), the app selects the default first; if none is set, the first membership is used. The default is stored per user and survives a clean browser.
+- **Changing a member's role**: owners can promote a member to `owner` or demote an owner back to `member` from *Settings → Members & invitations*. The household must always keep **at least one owner** — demoting the last one is refused with `LAST_HOUSEHOLD_OWNER` (and the button is disabled), since this action is itself owner-only and there would be no way back. An owner may hand over by promoting someone else first, then demoting themselves.
 - **Creating a household**: any authenticated user can create a new household from the header dropdown or from *Settings → Households*. The creator becomes its `owner`.
 - **Deleting a household** (owner only, hard delete): permanently removes the household and every record cascaded from it (transactions, snapshots, movements, budgets, recurring templates, FIRE settings, invitations, memberships). Confirmation requires typing `delete`. The operation is **refused with `HOUSEHOLD_IS_DEFAULT`** if any user — yourself or anyone else — has it set as their default; pick a different default first, then delete.
 
@@ -294,8 +295,9 @@ Long-term wealth projection toward financial independence, derived from the hous
 - Household name, currency and default locale (owners only).
 - Custom categories: create, rename, change essential flag, move between groups, or hard-delete with cascade (owners only). Members see the list read-only.
 - **Auto-snapshot** (owners only): enable scheduled net-worth snapshot creation and pick the frequency — daily, weekly or monthly. Off by default; a daily background job creates the snapshot when one is due.
-- Members & invitations: every member sees the member list (role, joined date); owners issue and revoke invitations and see pending ones.
+- Members & invitations: every member sees the member list (role, joined date); owners issue and revoke invitations, see pending ones, and change any member's role (see *Households*).
 - FIRE settings are edited on the FIRE page itself (saving is owner-only); assets, liabilities and their amortization schedules are managed in the Wealth hub tabs, not in Settings.
+- **Banks** (any member): link your own bank, and manage the connections you linked. See *Bank ingestion* for who can manage what.
 - **Notifications** (owners only): configure the per-household Telegram integration (see below).
 - **Danger zone — Delete all data** (owners only): a confirmation-gated action (type `delete`) that permanently wipes *every* piece of the household's financial data while keeping the household itself and its membership/invitations. It hard-deletes (including soft-deleted rows) transactions, budgets, recurring templates, net-worth snapshots and movements, cash adjustments, assets, liabilities and lendings (with their value/balance/amortization/schedule/payment history), the investment portfolio (holdings, lots and valuations), bank connections (with their accounts, sync runs, pending movements and categorization rules), and the FIRE (including its tax-bracket table), Telegram, auto-snapshot and cash-estimate settings. Global reference data (categories, asset classes, FX rates, price history) is never touched.
 
@@ -352,11 +354,18 @@ Wise could be added via its own API) with the always-available CSV import as the
   > use (per bank) in the Control Panel, then re-link the connection in the app. This whitelist step
   > is Control-Panel-only — there is **no API** to do it from the app. Applying for **full
   > production** removes the restriction so any authorised account is returned automatically.
-- **Linking (from Settings → Banks)**: the app first explains what will happen (redirect to the
-  bank for SCA, only movements are read, the permission expires in 90–180 days and needs
-  re-linking, only linked accounts are accessible, data stays self-hosted). The bank picker is the
-  provider's ASPSP catalogue filtered by country (not a fixed list). Choosing a bank redirects the
-  account holder to authenticate; on return the account is associated with the household.
+- **Linking (from Settings → Banks) is open to every member, not just owners**: the app first
+  explains what will happen (redirect to the bank for SCA, only movements are read, the permission
+  expires in 90–180 days and needs re-linking, only linked accounts are accessible, data stays
+  self-hosted). The bank picker is the provider's ASPSP catalogue filtered by country (not a fixed
+  list). Choosing a bank redirects the account holder to authenticate; on return the account is
+  associated with the household.
+- **Who can manage a connection.** Every member sees every connection in the household (and the
+  movements it brings in — bank data is household data). *Managing* one — sync now, re-link, rename,
+  disable ingestion, delete — belongs to the member who linked it, plus any owner; for anyone else
+  those actions are hidden in the UI and refused by the API (`NOT_CONNECTION_MANAGER`). Connections
+  created before per-member linking have no recorded linker and stay owner-only. The SCA callback
+  must be finished by the same member who started it.
 - **Two moments**: the account holder passes SCA at their own bank (a person, never the server);
   the app then manages the ongoing consent session and prompts for re-link before it expires.
   Relatives each link their own account with their own SCA — credentials are never shared.
@@ -408,10 +417,11 @@ Wise could be added via its own API) with the always-available CSV import as the
   (manual or learned) already matches the movement**: a confirmation that differs from a matching
   rule's suggestion is treated as a one-off exception, not a new rule. No ML. An **Apply rules**
   action re-runs the rules over the uncategorized pending items on demand (useful after adding
-  rules). Rules are managed on their **own page** (Settings → Categorisation rules) with free-text
-  search over the matched value, combinable filters (match field, direction, category,
-  manual/learned origin), sorting (creation date, value, category), pagination, in-place editing,
-  and multi-select bulk delete — handy for pruning piled-up learned rules.
+  rules). Rules are managed on their **own page** (Settings → Categorisation rules) **by any member**
+  — they are shared household categorisation logic, at the same level as the transactions and pending
+  movements they act on — with free-text search over the matched value, combinable filters (match
+  field, direction, category, manual/learned origin), sorting (creation date, value, category),
+  pagination, in-place editing, and multi-select bulk delete — handy for pruning piled-up learned rules.
 - **Multi-currency** (e.g. Wise): non-EUR movements are converted to EUR at the ECB rate of the
   booking date, keeping the original amount/currency on the pending item.
 - **Read-only**: only account/movement information is ever requested; there is no payment

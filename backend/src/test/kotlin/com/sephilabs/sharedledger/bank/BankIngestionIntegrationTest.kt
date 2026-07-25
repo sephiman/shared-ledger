@@ -11,6 +11,7 @@ import com.sephilabs.sharedledger.config.AppProperties
 import com.sephilabs.sharedledger.catalog.CategoryService
 import com.sephilabs.sharedledger.household.Household
 import com.sephilabs.sharedledger.household.HouseholdRepository
+import com.sephilabs.sharedledger.household.HouseholdRole
 import com.sephilabs.sharedledger.identity.user.User
 import com.sephilabs.sharedledger.identity.user.UserRepository
 import com.sephilabs.sharedledger.networth.movement.MovementRepository
@@ -655,12 +656,12 @@ class BankIngestionIntegrationTest @Autowired constructor(
             ),
         )
         // First connection ingests the two movements above.
-        bankService.startLink(household.id, StartLinkRequest(aspspName = "ING", country = "NL", label = "Joint account"), user)
-        bankService.completeLink(household.id, CompleteLinkRequest(code = "code", state = fake.lastState!!), user)
+        bankService.startLink(household.id, StartLinkRequest(aspspName = "ING", country = "NL", label = "Joint account"), user, HouseholdRole.owner)
+        bankService.completeLink(household.id, CompleteLinkRequest(code = "code", state = fake.lastState!!), user, HouseholdRole.owner)
         // The second connection (unlabelled → bank-name fallback) also sees a third movement: 3 vs 2.
         fake.movements.add(movement("m-3", today, Direction.expense, "30.00", "Shop C"))
-        bankService.startLink(household.id, StartLinkRequest(aspspName = "Revolut", country = "NL", label = null), user)
-        bankService.completeLink(household.id, CompleteLinkRequest(code = "code", state = fake.lastState!!), user)
+        bankService.startLink(household.id, StartLinkRequest(aspspName = "Revolut", country = "NL", label = null), user, HouseholdRole.owner)
+        bankService.completeLink(household.id, CompleteLinkRequest(code = "code", state = fake.lastState!!), user, HouseholdRole.owner)
 
         val counts = pendingService.pendingCounts(household.id)
         assertThat(counts.count).isEqualTo(5)
@@ -687,9 +688,81 @@ class BankIngestionIntegrationTest @Autowired constructor(
         return MovementPage(ms, key)
     }
 
+    @Test
+    fun `a member links their own bank and manages only that connection`() {
+        val (owner, household) = seed()
+        val relative = users.save(User(email = "rel${System.nanoTime()}@example.com", passwordHash = "x", locale = "en"))
+        val roommate = users.save(User(email = "mate${System.nanoTime()}@example.com", passwordHash = "x", locale = "en"))
+
+        // A plain member can link — no owner role involved anywhere in the flow.
+        bankService.startLink(
+            household.id,
+            StartLinkRequest(aspspName = "ING", country = "NL", label = "Relative's ING"),
+            relative,
+            HouseholdRole.member,
+        )
+        val linked = bankService.completeLink(
+            household.id,
+            CompleteLinkRequest(code = "code", state = fake.lastState!!),
+            relative,
+            HouseholdRole.member,
+        )
+        assertThat(linked.canManage).isTrue()
+
+        // The linker and any owner may manage it; another member sees it but may not.
+        assertThat(bankService.listConnections(household.id, relative, HouseholdRole.member).single().canManage).isTrue()
+        assertThat(bankService.listConnections(household.id, owner, HouseholdRole.owner).single().canManage).isTrue()
+        assertThat(bankService.listConnections(household.id, roommate, HouseholdRole.member).single().canManage).isFalse()
+
+        assertThatThrownBy { bankService.delete(household.id, linked.id, roommate, HouseholdRole.member) }
+            .isInstanceOf(AppException::class.java)
+            .hasMessageContaining("NOT_CONNECTION_MANAGER")
+        assertThatThrownBy {
+            bankService.update(household.id, linked.id, UpdateConnectionRequest(label = "hijacked"), roommate, HouseholdRole.member)
+        }.isInstanceOf(AppException::class.java).hasMessageContaining("NOT_CONNECTION_MANAGER")
+        assertThatThrownBy {
+            bankService.startLink(
+                household.id,
+                StartLinkRequest(aspspName = "ING", country = "NL", relinkConnectionId = linked.id),
+                roommate,
+                HouseholdRole.member,
+            )
+        }.isInstanceOf(AppException::class.java).hasMessageContaining("NOT_CONNECTION_MANAGER")
+
+        // The linker renames their own connection; the owner can too.
+        assertThat(bankService.update(household.id, linked.id, UpdateConnectionRequest(label = "Mine"), relative, HouseholdRole.member).label)
+            .isEqualTo("Mine")
+        assertThat(bankService.update(household.id, linked.id, UpdateConnectionRequest(label = "Ours"), owner, HouseholdRole.owner).label)
+            .isEqualTo("Ours")
+    }
+
+    @Test
+    fun `a member cannot complete a link another member started`() {
+        val (_, household) = seed()
+        val relative = users.save(User(email = "rel${System.nanoTime()}@example.com", passwordHash = "x", locale = "en"))
+        val roommate = users.save(User(email = "mate${System.nanoTime()}@example.com", passwordHash = "x", locale = "en"))
+
+        bankService.startLink(
+            household.id,
+            StartLinkRequest(aspspName = "ING", country = "NL", label = null),
+            relative,
+            HouseholdRole.member,
+        )
+        assertThatThrownBy {
+            bankService.completeLink(
+                household.id,
+                CompleteLinkRequest(code = "code", state = fake.lastState!!),
+                roommate,
+                HouseholdRole.member,
+            )
+        }.isInstanceOf(AppException::class.java).hasMessageContaining("BANK_AUTH_STATE_MISMATCH")
+
+        assertThat(connections.findAllByHouseholdIdOrderByCreatedAtAsc(household.id)).isEmpty()
+    }
+
     private fun link(household: Household, user: User) {
-        bankService.startLink(household.id, StartLinkRequest(aspspName = "ING", country = "NL", label = "Test"), user)
-        bankService.completeLink(household.id, CompleteLinkRequest(code = "code", state = fake.lastState!!), user)
+        bankService.startLink(household.id, StartLinkRequest(aspspName = "ING", country = "NL", label = "Test"), user, HouseholdRole.owner)
+        bankService.completeLink(household.id, CompleteLinkRequest(code = "code", state = fake.lastState!!), user, HouseholdRole.owner)
     }
 
     private fun expenseCategory(household: Household): String =

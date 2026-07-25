@@ -1,6 +1,5 @@
 package com.sephilabs.sharedledger.bank
 
-import com.sephilabs.sharedledger.household.RequireHouseholdOwner
 import com.sephilabs.sharedledger.identity.auth.CurrentUser
 import jakarta.validation.Valid
 import org.springframework.http.ResponseEntity
@@ -14,6 +13,11 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
+/**
+ * Rules are shared household categorisation logic, writable by any member — the same level as the
+ * transactions and pending movements they act on. Members link their own banks (see [BankController]),
+ * so gating the rules that tidy up their inbox behind the owner role would strand them.
+ */
 @RestController
 @RequestMapping("/api/households/{householdId}/banks/rules")
 class CategorizationRuleController(
@@ -24,14 +28,12 @@ class CategorizationRuleController(
     @GetMapping
     fun list(@PathVariable householdId: UUID): List<CategorizationRuleDto> = service.list(householdId)
 
-    @RequireHouseholdOwner
     @PostMapping
     fun create(
         @PathVariable householdId: UUID,
         @Valid @RequestBody body: CategorizationRuleRequest,
     ): CategorizationRuleDto = service.create(householdId, body, currentUser.requireUser())
 
-    @RequireHouseholdOwner
     @PatchMapping("/{id}")
     fun update(
         @PathVariable householdId: UUID,
@@ -39,14 +41,12 @@ class CategorizationRuleController(
         @Valid @RequestBody body: CategorizationRuleRequest,
     ): CategorizationRuleDto = service.update(householdId, id, body)
 
-    @RequireHouseholdOwner
     @DeleteMapping("/{id}")
     fun delete(@PathVariable householdId: UUID, @PathVariable id: UUID): ResponseEntity<Void> {
         service.delete(householdId, id)
         return ResponseEntity.noContent().build()
     }
 
-    @RequireHouseholdOwner
     @PostMapping("/delete-batch")
     fun deleteBatch(
         @PathVariable householdId: UUID,
