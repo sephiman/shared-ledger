@@ -1,0 +1,15 @@
+echo "🔍 Running pre-push verification checks..."
+
+# 1. Frontend TypeScript & Build check
+echo "📦 Building Frontend (tsc & vite build)..."
+cd frontend || exit 1
+npm run build
+FRONTEND_STATUS=$?
+cd ..
+
+if [ $FRONTEND_STATUS -ne 0 ]; then
+  echo "❌ Frontend build check failed! Aborting git push."
+  exit 1
+fi
+
+echo "✅ Pre-push verification checks passed!"
