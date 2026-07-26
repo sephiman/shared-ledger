@@ -223,6 +223,29 @@ class HoldingLifecycleIntegrationTest @Autowired constructor(
         assertThat(service.get(household.id, holding.id).lots).isEmpty()
     }
 
+    @Test
+    fun `lots are returned in descending order of trade date`() {
+        val (user, household) = seed()
+        val holding = service.create(
+            household.id,
+            HoldingRequest(assetClass = HoldingAssetClass.stock, symbol = "MSFT"),
+            user,
+        )
+        val olderLot = service.addLot(
+            household.id, holding.id,
+            LotRequest(tradedOn = LocalDate.of(2025, 1, 1), quantity = BigDecimal("10"), unitPrice = BigDecimal("100")),
+            user,
+        )
+        val newerLot = service.addLot(
+            household.id, holding.id,
+            LotRequest(tradedOn = LocalDate.of(2025, 6, 1), quantity = BigDecimal("5"), unitPrice = BigDecimal("120")),
+            user,
+        )
+
+        val detail = service.get(household.id, holding.id)
+        assertThat(detail.lots.map { it.id }).containsExactly(newerLot.id, olderLot.id)
+    }
+
     private fun seed(): Pair<User, Household> {
         val user = users.save(User(email = "hl${System.nanoTime()}@example.com", passwordHash = "x", locale = "en"))
         val household = households.save(Household(name = "H", currency = "EUR", defaultLocale = "en"))

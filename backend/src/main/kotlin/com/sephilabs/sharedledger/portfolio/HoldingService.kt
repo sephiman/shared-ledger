@@ -290,6 +290,9 @@ class HoldingService(
         val entries = lotEntities.map { it.toEntry() }
         val state = PortfolioValuationCalculator.replay(entries, props.portfolio.costMethod)
         val breakdown = PortfolioValuationCalculator.breakdownByLot(entries, props.portfolio.costMethod)
+        val sortedLotEntities = lotEntities.sortedWith(
+            compareByDescending<HoldingLot> { it.tradedOn }.thenByDescending { it.createdAt }
+        )
         return HoldingDto(
             id = holding.id,
             assetClass = holding.assetClass,
@@ -301,7 +304,7 @@ class HoldingService(
             providerSymbol = holding.providerSymbol,
             linked = holding.linked,
             active = holding.active,
-            lots = lotEntities.map { toDto(it, breakdown[it.id]) },
+            lots = sortedLotEntities.map { toDto(it, breakdown[it.id]) },
             netQuantity = state.netQuantity,
             remainingCostBasis = state.remainingCostBasisBase,
             realizedPnl = state.realizedPnlBase,

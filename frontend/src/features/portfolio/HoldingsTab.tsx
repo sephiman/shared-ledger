@@ -632,6 +632,11 @@ function LotsEditor({ holding, currency, locale }: { holding: Holding; currency:
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
 
+  const sortedLots = useMemo(
+    () => [...holding.lots].sort((a, b) => b.tradedOn.localeCompare(a.tradedOn)),
+    [holding.lots]
+  );
+
   function openForm(type: LotType) {
     setFormType((current) => (current === type ? null : type));
     setError(null);
@@ -721,11 +726,11 @@ function LotsEditor({ holding, currency, locale }: { holding: Holding; currency:
         </div>
       )}
 
-      {holding.lots.length === 0 ? (
+      {sortedLots.length === 0 ? (
         <p className="text-xs text-gray-500 dark:text-gray-400">{t("portfolio.no_lots")}</p>
       ) : (
         <ul className="space-y-1">
-          {holding.lots.map((lot) => {
+          {sortedLots.map((lot) => {
             const remaining = lot.remainingQty;
             // A BUY whose remaining quantity no longer matches what was bought has been (partly) sold.
             const partlySold = lot.type === "BUY" && remaining != null && !new Decimal(remaining).eq(lot.quantity);
