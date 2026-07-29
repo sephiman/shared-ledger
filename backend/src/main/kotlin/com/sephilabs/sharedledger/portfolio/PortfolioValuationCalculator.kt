@@ -5,6 +5,7 @@ import com.sephilabs.sharedledger.config.AppProperties.CostMethod
 import java.math.BigDecimal
 import java.math.MathContext
 import java.math.RoundingMode
+import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
@@ -46,6 +47,10 @@ object PortfolioValuationCalculator {
         val currency: String,
         // FX from the price currency into the household base currency; 1 when already base.
         val fxToBase: BigDecimal,
+        // When this observation was recorded (price_history.as_of). Distinct from [priceDate]:
+        // the date is the trading day the price belongs to, this is the moment we read it —
+        // the only figure fine-grained enough for an intraday cadence like crypto's.
+        val observedAt: Instant,
     )
 
     data class HoldingValuationResult(

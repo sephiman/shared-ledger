@@ -26,6 +26,8 @@ import { formatDate, isoToday } from "@/lib/dates";
 import { useToggleSet } from "@/lib/useToggleSet";
 import { SymbolSearchCombobox } from "./SymbolSearchCombobox";
 import { fractionToPercent, percentLabel, pnlTone, returnPercents, signedMoney } from "./valuation";
+import { formatPriceAge, oldestStalePriceAge, priceAge, priceAsOfLabel, type PriceAge } from "./priceFreshness";
+import { cn } from "@/lib/cn";
 
 const ASSET_CLASSES: HoldingAssetClass[] = ["crypto", "etf", "stock", "fund"];
 
@@ -158,6 +160,14 @@ export function HoldingsTab() {
         }
       : subtotals(filtered);
   const locale = i18n.language;
+  // One reference instant for the whole render, so every row's age and the "oldest price"
+  // line are measured against the same clock.
+  const now = new Date();
+  // Null unless something is actually stale — the summary line is a symptom, not furniture.
+  const oldestStaleAge = oldestStalePriceAge(filtered, now);
+  const oldestStaleLine = oldestStaleAge
+    ? t("portfolio.oldest_price", { age: formatPriceAge(oldestStaleAge, locale) })
+    : null;
   const money = (v: string | number | null | undefined, currency = household.currency) =>
     v == null ? "—" : formatMoney(v, currency, locale);
   // Per-unit prices (current price, avg cost) at full precision — tiny coins keep every decimal.
@@ -201,7 +211,14 @@ export function HoldingsTab() {
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-sm text-gray-500 dark:text-gray-400">{t("portfolio.description")}</p>
+        {/* `relative` + anchor="container": the icon trails a sentence that wraps differently per
+            language and width, so the panel opens from this paragraph's edge, not the icon's. */}
+        <p className="relative text-sm text-gray-500 dark:text-gray-400">
+          {t("portfolio.description")}{" "}
+          <InfoTip label={t("portfolio.cadence_info")} anchor="container">
+            {t("portfolio.cadence_tooltip")}
+          </InfoTip>
+        </p>
         <div className="flex gap-2">
           <a
             href={`/api/households/${household.householdId}/portfolio/export.csv`}
@@ -285,7 +302,10 @@ export function HoldingsTab() {
 
       {summary?.anyStale && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
-          <span>{t("portfolio.stale_prices_warning")}</span>
+          <div className="min-w-0">
+            <p>{t("portfolio.stale_prices_warning")}</p>
+            {oldestStaleAge && <p className="mt-0.5 text-xs">{oldestStaleLine}</p>}
+          </div>
           <Button
             variant="secondary"
             className="shrink-0"
@@ -297,6 +317,13 @@ export function HoldingsTab() {
               : t("portfolio.refresh_prices")}
           </Button>
         </div>
+      )}
+
+      {/* A price can pass its own class tolerance while the backend's wider global rule stays
+          silent (a 6-day-old daily close). Then there is no notice to sit inside, so the worst
+          case still gets a line of its own — never shown when nothing is stale. */}
+      {oldestStaleAge && !summary?.anyStale && (
+        <p className="text-xs text-amber-700 dark:text-amber-300">{oldestStaleLine}</p>
       )}
 
       {panel.kind !== "closed" && (
@@ -320,6 +347,7 @@ export function HoldingsTab() {
               <ul className="space-y-2 lg:hidden">
                 {filtered.map((row) => {
                   const isOpen = expanded.has(row.holding.id);
+                  const age = priceAge(row, now);
                   return (
                     <li key={row.holding.id} className="rounded-md border border-border dark:border-gray-700">
                       <button
@@ -347,6 +375,9 @@ export function HoldingsTab() {
                             )}
                             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                               {formatQty(row.holding.netQuantity)} · {t("portfolio.cost_basis")}: {money(row.holding.remainingCostBasis)}
+                              {/* No price column to mark on a card, so the dot trails this line — and
+                                  costs no extra height. Expanding the card gives the date in words. */}
+                              {age?.stale && <StalePriceDot age={age} locale={locale} className="ml-1.5" />}
                             </p>
                             <PriceBadge row={row} />
                           </div>
@@ -401,6 +432,7 @@ export function HoldingsTab() {
                   {filtered.map((row) => {
                     const isOpen = expanded.has(row.holding.id);
                     const avg = avgCost(row);
+                    const age = priceAge(row, now);
                     return (
                       <Fragment key={row.holding.id}>
                         <tr
@@ -435,6 +467,8 @@ export function HoldingsTab() {
                                       : undefined
                                   }
                                 >
+                                  {/* Leads the number so stale rows keep their digits aligned with the rest. */}
+                                  {age?.stale && <StalePriceDot age={age} locale={locale} className="mr-1.5" />}
                                   {price(row.currentPrice, row.priceCurrency ?? row.holding.nativeCurrency)}
                                 </span>
                                 {avg != null && (
@@ -523,6 +557,23 @@ function Stat({
   );
 }
 
+/**
+ * The whole collapsed-row signal for a price past its class tolerance: one amber dot, with
+ * the date it came from on hover. A fresh row shows nothing at all — the age in words lives
+ * in the expanded holding, where there is room for it.
+ */
+function StalePriceDot({ age, locale, className }: { age: PriceAge; locale: string; className?: string }) {
+  const { t } = useTranslation();
+  return (
+    <span
+      role="img"
+      aria-label={t("portfolio.stale_price")}
+      title={t("portfolio.price_age_tooltip", { when: priceAsOfLabel(age, locale) })}
+      className={cn("inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500 align-middle", className)}
+    />
+  );
+}
+
 function PriceBadge({ row }: { row: HoldingSummary }) {
   const { t } = useTranslation();
   if (row.holding.assetClass === "fund") {
@@ -554,6 +605,15 @@ function HoldingDetail({
   const { t, i18n } = useTranslation();
   const household = useActiveHousehold();
   const holding = row.holding;
+  const locale = i18n.language;
+  // Where the age lives in full, fresh or stale: the row is open, so there is room to say it
+  // in words. Funds have no provider to date a price from — they are valued by hand.
+  const age = priceAge(row, new Date());
+  const freshness = age
+    ? t("portfolio.price_from", { date: priceAsOfLabel(age, locale), age: formatPriceAge(age, locale) })
+    : holding.assetClass === "fund"
+      ? t("portfolio.price_manual")
+      : null;
 
   return (
     <div className="space-y-3 text-sm">
@@ -564,6 +624,9 @@ function HoldingDetail({
             : t("portfolio.not_linked")}
           {holding.isin && ` · ISIN ${holding.isin}`}
           {` · ${holding.nativeCurrency}`}
+          {freshness && (
+            <span className={age?.stale ? "text-amber-600 dark:text-amber-400" : undefined}> · {freshness}</span>
+          )}
         </p>
         <div className="flex gap-1">
           <Button variant="ghost" className="px-2" aria-label={t("common.edit")} title={t("common.edit")} onClick={onEdit}>
@@ -580,7 +643,7 @@ function HoldingDetail({
         </div>
       </div>
       {!holding.linked && holding.assetClass !== "fund" && <LinkPanel holding={holding} />}
-      <LotsEditor holding={holding} currency={household.currency} locale={i18n.language} />
+      <LotsEditor holding={holding} currency={household.currency} locale={locale} />
     </div>
   );
 }

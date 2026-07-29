@@ -7,12 +7,21 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import java.math.BigDecimal
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneOffset
 import java.util.UUID
 
 class PortfolioValuationCalculatorTest {
 
     private val asOf = LocalDate.of(2026, 6, 30)
+
+    /** A EUR price recorded the night after its trading day — the shape the refresh jobs store. */
+    private fun priceInput(price: String, priceDate: LocalDate = asOf) =
+        PriceInput(BigDecimal(price), priceDate, "EUR", BigDecimal.ONE, observedAt(priceDate))
+
+    private fun observedAt(priceDate: LocalDate): Instant =
+        priceDate.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant()
 
     private fun buy(day: Int, qty: String, price: String, fee: String? = null, fx: String = "1", id: UUID? = null) =
         LedgerEntry(LotType.BUY, asOf.minusDays(200L - day), BigDecimal(qty), BigDecimal(price), fee?.let(::BigDecimal), BigDecimal(fx), id)
@@ -107,7 +116,7 @@ class PortfolioValuationCalculatorTest {
 
         // Priced at 1800: value 18 000, unrealized 3 000.
         val result = PortfolioValuationCalculator.value(
-            state, PriceInput(BigDecimal("1800"), asOf, "EUR", BigDecimal.ONE), asOf, staleThresholdDays = 7,
+            state, priceInput("1800"), asOf, staleThresholdDays = 7,
         )
         assertThat(result.soldCostBasisBase).isEqualByComparingTo(BigDecimal("10000.00"))
         // Unrealized % = 3 000 / 15 000 (open lots) = 0.2 — not 3 000 / 10 000.
@@ -214,7 +223,7 @@ class PortfolioValuationCalculatorTest {
             )
         )
         val result = PortfolioValuationCalculator.value(
-            state, PriceInput(BigDecimal("180"), asOf, "EUR", BigDecimal.ONE), asOf, staleThresholdDays = 7,
+            state, priceInput("180"), asOf, staleThresholdDays = 7,
         )
         assertThat(result.netQuantity).isEqualByComparingTo(BigDecimal("5"))
         assertThat(result.remainingCostBasisBase).isEqualByComparingTo(BigDecimal("500.00"))
@@ -254,8 +263,8 @@ class PortfolioValuationCalculatorTest {
     @Test
     fun `stale threshold boundary is inclusive`() {
         val state = PortfolioValuationCalculator.replay(listOf(buy(1, "1", "1")))
-        val onThreshold = PriceInput(BigDecimal.ONE, asOf.minusDays(7), "EUR", BigDecimal.ONE)
-        val pastThreshold = PriceInput(BigDecimal.ONE, asOf.minusDays(8), "EUR", BigDecimal.ONE)
+        val onThreshold = priceInput("1", asOf.minusDays(7))
+        val pastThreshold = priceInput("1", asOf.minusDays(8))
         assertThat(PortfolioValuationCalculator.value(state, onThreshold, asOf, 7).stale).isFalse()
         assertThat(PortfolioValuationCalculator.value(state, pastThreshold, asOf, 7).stale).isTrue()
     }

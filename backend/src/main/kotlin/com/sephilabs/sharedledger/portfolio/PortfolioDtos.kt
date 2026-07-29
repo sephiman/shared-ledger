@@ -108,6 +108,10 @@ data class HoldingSummaryDto(
     val currentPrice: BigDecimal?,
     val priceCurrency: String?,
     val priceAsOf: LocalDate?,
+    // When the price was recorded (price_history.as_of), as opposed to the trading day
+    // [priceAsOf] belongs to. Only this is fine-grained enough for an intraday cadence:
+    // crypto's hourly row is re-observed all day long under one unchanged price date.
+    val priceObservedAt: Instant?,
     val stale: Boolean,
     @JsonFormat(shape = JsonFormat.Shape.STRING)
     val currentValue: BigDecimal?,

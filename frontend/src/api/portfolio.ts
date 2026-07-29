@@ -97,7 +97,10 @@ export interface HoldingSummary {
   holding: Holding;
   currentPrice: string | null;
   priceCurrency: string | null;
+  /** Trading day the price belongs to. */
   priceAsOf: string | null;
+  /** When that price was recorded (instant) — the only figure that dates an intraday refresh. */
+  priceObservedAt: string | null;
   stale: boolean;
   currentValue: string | null;
   unrealizedPnl: string | null;

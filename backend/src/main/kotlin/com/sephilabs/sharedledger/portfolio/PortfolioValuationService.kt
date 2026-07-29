@@ -59,6 +59,9 @@ class PortfolioValuationService(
                 currentPrice = row.price?.price,
                 priceCurrency = row.price?.currency,
                 priceAsOf = row.result.priceAsOf,
+                // Read off the same price the valuation used, so the row's age and its
+                // price can never disagree. Null exactly when unpriced, like currentPrice.
+                priceObservedAt = row.price?.observedAt,
                 stale = row.result.stale,
                 currentValue = row.result.currentValueBase,
                 unrealizedPnl = row.result.unrealizedPnlAbs,
@@ -362,7 +365,7 @@ class PortfolioValuationService(
                 currency, baseCurrency, date,
             )?.rate ?: return null
         }
-        return PortfolioValuationCalculator.PriceInput(point.price, point.priceDate, currency, fx)
+        return PortfolioValuationCalculator.PriceInput(point.price, point.priceDate, currency, fx, point.asOf)
     }
 
     /**

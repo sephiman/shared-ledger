@@ -16,6 +16,7 @@ import org.springframework.context.annotation.Import
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 
 @Import(StubPriceProviderConfig::class)
 class PortfolioValuationIntegrationTest @Autowired constructor(
@@ -137,6 +138,24 @@ class PortfolioValuationIntegrationTest @Autowired constructor(
         val unpricedRow = summary.holdings.single { it.holding.symbol == "NOPRICE" }
         assertThat(unpricedRow.currentValue).isNull()
         assertThat(unpricedRow.weight).isNull()
+        // No price observation to date, so no age for the UI to show.
+        assertThat(unpricedRow.priceObservedAt).isNull()
+    }
+
+    @Test
+    fun `summary exposes when each price was observed, not just its trading day`() {
+        val (user, household) = seed()
+        val coinId = "btc-observed-${System.nanoTime()}"
+        val holding = createLinkedCrypto(household.id, user, "BTC", coinId)
+        addLot(household.id, holding.id, user, LocalDate.now().minusDays(5), "1", "50000")
+        // Crypto's hourly refresh re-observes today's row all day long: the price date never
+        // moves, the observation instant does — which is why the row carries both.
+        val observedAt = Instant.now().minusSeconds(3600).truncatedTo(ChronoUnit.MILLIS)
+        storePrice("coingecko", coinId, "EUR", LocalDate.now(), "60000", asOf = observedAt)
+
+        val row = service.summary(household.id).holdings.single()
+        assertThat(row.priceAsOf).isEqualTo(LocalDate.now())
+        assertThat(row.priceObservedAt).isEqualTo(observedAt)
     }
 
     @Test
@@ -589,7 +608,14 @@ class PortfolioValuationIntegrationTest @Autowired constructor(
         user,
     )
 
-    private fun storePrice(provider: String, symbol: String, currency: String, date: LocalDate, price: String) {
+    private fun storePrice(
+        provider: String,
+        symbol: String,
+        currency: String,
+        date: LocalDate,
+        price: String,
+        asOf: Instant = Instant.now(),
+    ) {
         prices.save(
             PricePoint(
                 provider = provider,
@@ -597,7 +623,7 @@ class PortfolioValuationIntegrationTest @Autowired constructor(
                 currency = currency,
                 price = BigDecimal(price),
                 priceDate = date,
-                asOf = Instant.now(),
+                asOf = asOf,
             )
         )
     }
