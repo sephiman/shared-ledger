@@ -12,7 +12,16 @@ import java.time.LocalDate
  * implement the same interface. Every adapter throws [BankConnectorException] on failure — callers
  * catch that one type, exactly like the portfolio price providers' `ProviderException`.
  */
-open class BankConnectorException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)
+open class BankConnectorException(
+    message: String,
+    cause: Throwable? = null,
+    /**
+     * The provider's machine-readable code when it sent one (`ASPSP_ERROR`,
+     * `WRONG_TRANSACTIONS_PERIOD`, `PSU_HEADER_NOT_PROVIDED`, …). Recorded on the sync run so a
+     * failing connection says *why* in the UI instead of showing a bare HTTP status.
+     */
+    val providerCode: String? = null,
+) : RuntimeException(message, cause)
 
 /**
  * The ASPSP rejected an unattended (background) fetch for exceeding its per-consent daily budget
@@ -26,7 +35,8 @@ class RateLimitExceededException(message: String, cause: Throwable? = null) : Ba
  * - [LONGEST]: find the earliest available transaction and fetch everything forward. `dateFrom` is
  *   only a starting hint and `dateTo` is ignored; no WRONG_TRANSACTIONS_PERIOD. Used for the full
  *   on-link history sync.
- * - [DEFAULT]: bounded by `dateFrom` (inclusive) / `dateTo` (exclusive). Used for incremental syncs.
+ * - [DEFAULT]: bounded by `dateFrom` / `dateTo`, **both inclusive** (the provider documents
+ *   "including the date"). Used for incremental syncs.
  */
 enum class FetchStrategy { LONGEST, DEFAULT }
 

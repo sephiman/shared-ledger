@@ -1033,6 +1033,7 @@
     "BANK_NOT_CONFIGURED": "La integración bancaria no está configurada en este servidor",
     "BANK_PROVIDER_ERROR": "El proveedor bancario devolvió un error; inténtalo más tarde",
     "ASPSP_RATE_LIMIT_EXCEEDED": "Se alcanzó el límite diario del banco para sincronizaciones en segundo plano; se reanudará automáticamente en unas horas",
+    "ASPSP_ERROR": "El banco rechazó la petición; normalmente es algo temporal por su parte — prueba «Sincronizar ahora», que se ejecuta mientras estás conectado",
     "BANK_CONNECTION_NOT_FOUND": "Conexión bancaria no encontrada",
     "BANK_AUTH_STATE_INVALID": "Esta solicitud de vinculación ha caducado; empieza de nuevo",
     "BANK_AUTH_STATE_MISMATCH": "Esta vinculación no pertenece a la unidad actual",

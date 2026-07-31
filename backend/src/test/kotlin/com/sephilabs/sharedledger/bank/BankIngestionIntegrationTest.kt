@@ -59,6 +59,7 @@ class BankIngestionIntegrationTest @Autowired constructor(
         fake.fetchCalls.clear()
         fake.scriptedPages.clear()
         fake.failWithRateLimitAfter = -1
+        fake.failWithProviderErrorAfter = -1
         fake.accounts = listOf(com.sephilabs.sharedledger.bank.connector.AuthorizedAccount("acc-1", "NL00INGB0001234567", "Checking", "EUR"))
     }
 
@@ -595,7 +596,8 @@ class BankIngestionIntegrationTest @Autowired constructor(
         val call = fake.fetchCalls.single()
         assertThat(call.strategy).isEqualTo(FetchStrategy.DEFAULT)
         assertThat(call.dateFrom).isEqualTo(lastBooking.minusDays(props.enableBanking.syncOverlapDays))
-        assertThat(call.dateTo).isEqualTo(today.plusDays(1)) // exclusive → includes today
+        // Inclusive upper bound → today, never a future date (strict ASPSPs reject one).
+        assertThat(call.dateTo).isEqualTo(today)
         assertThat(call.interactive).isFalse()
     }
 
@@ -643,6 +645,58 @@ class BankIngestionIntegrationTest @Autowired constructor(
         val skipped = syncService.sync(connectionId, SyncMode.SCHEDULED, null)
         assertThat(skipped).isZero()
         assertThat(fake.fetchCalls).isEmpty()
+    }
+
+    @Test
+    fun `a provider error mid-pagination keeps the pages already fetched and records the code`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        link(household, user)
+        val connectionId = connections.findAllByHouseholdIdOrderByCreatedAtAsc(household.id).single().id
+        val syncPointBefore = connections.findById(connectionId).get().lastSyncedAt
+
+        // Page 1 arrives, then the ASPSP breaks (Bankinter's 400 ASPSP_ERROR) — the movements we
+        // already hold must survive instead of being thrown away with the run.
+        fake.scriptedPages.addLast(
+            MovementPage(
+                movements = listOf(movement("pp-1", today.minusDays(2), Direction.expense, "7.00", "Shop")),
+                continuationKey = "next-page",
+            ),
+        )
+        fake.failWithProviderErrorAfter = 1
+        fake.fetchCalls.clear()
+
+        val ingested = syncService.sync(connectionId, SyncMode.SCHEDULED, null)
+
+        assertThat(ingested).isEqualTo(1)
+        assertThat(pendingService.pendingCount(household.id)).isEqualTo(1)
+        val run = syncRuns.findFirstByConnectionIdOrderByStartedAtDesc(connectionId)!!
+        assertThat(run.status).isEqualTo(SyncRunStatus.error)
+        // The provider's own code, not a generic BANK_PROVIDER_ERROR or a bare HTTP status.
+        assertThat(run.errorCode).isEqualTo("ASPSP_ERROR")
+        assertThat(run.newMovements).isEqualTo(1)
+        val connection = connections.findById(connectionId).get()
+        assertThat(connection.status).isEqualTo(ConnectionStatus.suspended)
+        // The failed run must not advance the sync point — a full-history retry stays possible.
+        assertThat(connection.lastSyncedAt).isEqualTo(syncPointBefore)
+    }
+
+    @Test
+    fun `a stale background window is clamped to the unattended history limit`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        // A long-dormant account: its newest stored movement is far outside the background window.
+        fake.movements.add(movement("old-1", today.minusDays(300), Direction.expense, "5.00", "Shop"))
+        link(household, user) // initial sync is strategy=longest, so it ingests the old movement
+        val connectionId = connections.findAllByHouseholdIdOrderByCreatedAtAsc(household.id).single().id
+
+        fake.fetchCalls.clear()
+        syncService.sync(connectionId, SyncMode.SCHEDULED, null)
+
+        // Without the clamp this would ask for 303 days of history and be rejected outright.
+        val call = fake.fetchCalls.single()
+        assertThat(call.dateFrom).isEqualTo(today.minusDays(props.enableBanking.backfillDays))
+        assertThat(call.dateTo).isEqualTo(today)
     }
 
     @Test

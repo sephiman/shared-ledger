@@ -3,10 +3,14 @@ package com.sephilabs.sharedledger.bank.connector
 import com.sephilabs.sharedledger.config.AppProperties
 import com.sephilabs.sharedledger.transaction.Direction
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
+import org.assertj.core.api.Assertions.catchThrowableOfType
 import org.junit.jupiter.api.Test
+import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.test.web.client.MockRestServiceServer
 import org.springframework.test.web.client.match.MockRestRequestMatchers.method
+import org.springframework.test.web.client.response.MockRestResponseCreators.withStatus
 import org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess
 import org.springframework.web.client.RestClient
 import java.security.KeyPairGenerator
@@ -14,9 +18,10 @@ import java.time.LocalDate
 import java.util.Base64
 
 /**
- * Focused coverage for [EnableBankingConnector.mapMovement] — the JSON → [BankMovement] mapping that
- * [com.sephilabs.sharedledger.bank.FakeBankConnector] bypasses. Drives the real connector over a
- * mocked HTTP layer so ASPSP payload quirks (here: ING pending entries) are exercised end-to-end.
+ * Focused coverage for the parts of [EnableBankingConnector] that
+ * [com.sephilabs.sharedledger.bank.FakeBankConnector] bypasses: the JSON → [BankMovement] mapping and
+ * the provider's error bodies. Drives the real connector over a mocked HTTP layer so ASPSP quirks
+ * (ING pending entries, Bankinter's `ASPSP_ERROR`) are exercised end-to-end.
  */
 class EnableBankingConnectorMappingTest {
 
@@ -124,6 +129,43 @@ class EnableBankingConnectorMappingTest {
         val page = connector.fetchMovements("s", "a", null, null, FetchStrategy.DEFAULT, null, null)
         assertThat(page.movements).hasSize(1)
         assertThat(page.movements.single().direction).isEqualTo(Direction.income)
+    }
+
+    @Test
+    fun `an ASPSP error carries the provider code and its message, not the HTTP status`() {
+        // Real Bankinter failure body: `code` is the numeric status, the machine code is in `error`.
+        val connector = connectorFailing(
+            HttpStatus.BAD_REQUEST,
+            """{"code":400,"message":"Error interacting with ASPSP","detail":"Unknown error","error":"ASPSP_ERROR"}""",
+        )
+
+        val thrown = catchThrowableOfType(
+            { connector.fetchMovements("s", "a", null, null, FetchStrategy.DEFAULT, null, null) },
+            BankConnectorException::class.java,
+        )
+
+        assertThat(thrown.providerCode).isEqualTo("ASPSP_ERROR")
+        assertThat(thrown.message).isEqualTo("ASPSP_ERROR: Error interacting with ASPSP — Unknown error")
+    }
+
+    @Test
+    fun `a rate limit is recognised from the error field even though code holds the status`() {
+        val connector = connectorFailing(
+            HttpStatus.TOO_MANY_REQUESTS,
+            """{"code":429,"message":"Rate limit exceeded","error":"ASPSP_RATE_LIMIT_EXCEEDED"}""",
+        )
+
+        // Must be the dedicated type: the sync service backs off on it instead of failing hard.
+        assertThatThrownBy { connector.fetchMovements("s", "a", null, null, FetchStrategy.DEFAULT, null, null) }
+            .isInstanceOf(RateLimitExceededException::class.java)
+    }
+
+    private fun connectorFailing(status: HttpStatus, body: String): EnableBankingConnector {
+        val builder = RestClient.builder()
+        val server = MockRestServiceServer.bindTo(builder).build()
+        server.expect(method(org.springframework.http.HttpMethod.GET))
+            .andRespond(withStatus(status).body(body).contentType(MediaType.APPLICATION_JSON))
+        return EnableBankingConnector(props, EnableBankingJwt(props), builder)
     }
 
     private fun generatePkcs8PrivateKey(): String {

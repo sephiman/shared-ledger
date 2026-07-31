@@ -159,8 +159,10 @@ data class AppProperties(
         val minRequestIntervalMs: Long = 300,
         // Requested consent lifetime; the bank may shorten it (90–180 days in practice).
         val consentValidDays: Long = 90,
-        // How far back to pull on the first sync (banks usually cap history to ~90 days). Only a
-        // fallback: the initial sync uses strategy=longest (full history), not this window.
+        // How far back a background (strategy=default) window may reach — banks usually cap
+        // unattended history to ~90 days, and strict ones reject an over-long window outright rather
+        // than trimming it. Also the starting window when an account has nothing stored yet; the
+        // initial on-link sync uses strategy=longest (full history) and ignores this.
         val backfillDays: Long = 90,
         // Incremental (background) sync re-reads from the last sync point minus this overlap so
         // late-booked items aren't missed; dedup makes the re-read idempotent.

@@ -1033,6 +1033,7 @@
     "BANK_NOT_CONFIGURED": "Bank ingestion is not configured on this server",
     "BANK_PROVIDER_ERROR": "The bank provider returned an error; try again later",
     "ASPSP_RATE_LIMIT_EXCEEDED": "The bank's daily background limit was reached; sync will resume automatically in a few hours",
+    "ASPSP_ERROR": "The bank refused the request; this is usually temporary on their side — try \"Sync now\", which runs while you are online",
     "BANK_CONNECTION_NOT_FOUND": "Bank connection not found",
     "BANK_AUTH_STATE_INVALID": "This link request has expired; start again",
     "BANK_AUTH_STATE_MISMATCH": "This link does not belong to the current household",

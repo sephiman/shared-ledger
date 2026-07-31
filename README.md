@@ -382,12 +382,19 @@ Wise could be added via its own API) with the always-available CSV import as the
     fetch and is *not* gated by the per-day budget — it pages through all history.
   - **Background (scheduled, 1–2×/day, never live)** — an **incremental** sync using
     `strategy=default` from the **last sync point minus a small overlap** (a few days, to catch
-    late-booked items) up to now. Unattended fetches are limited by the bank to **~4 per consent per
-    day**; on `ASPSP_RATE_LIMIT_EXCEEDED` the connection **backs off ~6h** and retries, surfacing the
-    status. "Sync now" from the UI is interactive (PSU) and incremental.
+    late-booked items) up to **today**. Both window bounds are **inclusive** and the upper one is
+    never a future date, and the lower one is **clamped to the ~90-day unattended history window**:
+    strict banks (Bankinter) reject an out-of-range or future window outright with a bare
+    `ASPSP_ERROR` instead of trimming it. Unattended fetches are limited by the bank to **~4 per
+    consent per day**; on `ASPSP_RATE_LIMIT_EXCEEDED` the connection **backs off ~6h** and retries,
+    surfacing the status. "Sync now" from the UI is interactive (PSU) and incremental — some banks
+    only serve transactions while the holder is online, so it is also the workaround when background
+    fetches keep failing.
   - **Pagination**: every fetch pages via `continuation_key`; the **only** stop condition is a
     response with **no** continuation key — an empty (or short) page may still carry one, so paging
-    continues until it's absent. Page size varies by bank.
+    continues until it's absent. Page size varies by bank. If the bank breaks **mid-pagination**, the
+    pages already delivered are still stored (dedup makes it idempotent) — a bank that dies on page 2
+    still yields page 1 instead of nothing — while the run is recorded as failed so it is retried.
   - **Dedup / idempotency**: movements are keyed by **(connection + bank movement id)**, where the id
     is `entry_reference` when present, else `transaction_id`, else a stable composite — because
     `entry_reference` can be missing or duplicated. The overlap re-read therefore never duplicates.

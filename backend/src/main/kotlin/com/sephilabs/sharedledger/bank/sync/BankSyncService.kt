@@ -225,28 +225,50 @@ class BankSyncService(
                 n
             }
         } catch (ex: Exception) {
-            log.error("bank_sync_failed connection={}", connectionId, ex)
+            val providerCode = (ex as? BankConnectorException)?.providerCode
+            log.error(
+                "bank_sync_failed connection={} fetched={} providerCode={}",
+                connectionId, fetched.size, providerCode, ex,
+            )
             metrics.bankSyncFailure()
             val callsAtEnd = callsUsed
             write {
+                // Keep the pages the bank already delivered before it broke — persisting is idempotent
+                // (dedup by bankMovementId), and an ASPSP that dies mid-pagination would otherwise
+                // never yield a single movement however often we retry. lastSyncedAt is deliberately
+                // left untouched: the run failed, so a full-history retry must stay possible.
+                val n = saveNew(connection, fetched)
                 markConnection(connectionId) {
                     it.status = ConnectionStatus.suspended
                     if (background) { it.callsUsedToday = callsAtEnd; it.callsResetOn = today }
                 }
                 finishRun(
-                    runId, SyncRunStatus.error, 0,
-                    if (ex is BankConnectorException) "BANK_PROVIDER_ERROR" else "BANK_SYNC_ERROR",
+                    runId, SyncRunStatus.error, n,
+                    providerCode ?: if (ex is BankConnectorException) "BANK_PROVIDER_ERROR" else "BANK_SYNC_ERROR",
                     ex.message?.take(500),
                 )
+                metrics.bankMovementsIngested(n)
+                if (n > 0) {
+                    notifications.bankMovementsToReview(
+                        connection.householdId, n, connection.aspspName, connection.label,
+                        NotifyActor.Schedule(connection.householdId),
+                    )
+                }
+                n
             }
-            0
         }
     }
 
     /**
      * Window for the incremental (DEFAULT) strategy: resume from the account's latest stored booking
-     * date minus the overlap buffer (inclusive), up to tomorrow (exclusive → includes today). LONGEST
-     * ignores the window (the provider finds the earliest transaction and pulls everything forward).
+     * date minus the overlap buffer, up to today. LONGEST ignores the window (the provider finds the
+     * earliest transaction and pulls everything forward).
+     *
+     * Both bounds are **inclusive** at the provider ("including the date"), so the upper bound is
+     * today and never tomorrow: a strict ASPSP (Bankinter) answers a future `date_to` with a bare
+     * `ASPSP_ERROR`. For the same reason the lower bound is clamped to the unattended history window
+     * ([AppProperties.EnableBanking.backfillDays]) — asking a bank for more than it will ever serve
+     * in the background gets the whole page rejected rather than trimmed.
      */
     private fun fetchWindow(
         strategy: FetchStrategy,
@@ -255,9 +277,10 @@ class BankSyncService(
         today: LocalDate,
     ): Pair<LocalDate?, LocalDate?> {
         if (strategy == FetchStrategy.LONGEST) return null to null
-        val last = pending.findMaxBookingDate(connectionId, accountId)
-            ?: today.minusDays(props.enableBanking.backfillDays)
-        return last.minusDays(props.enableBanking.syncOverlapDays) to today.plusDays(1)
+        val earliest = today.minusDays(props.enableBanking.backfillDays)
+        val last = pending.findMaxBookingDate(connectionId, accountId) ?: earliest
+        val from = last.minusDays(props.enableBanking.syncOverlapDays)
+        return maxOf(from, earliest) to today
     }
 
     /** Dedup + persist fetched movements by (connection, bankMovementId). Returns the count of new rows. */

@@ -6,6 +6,7 @@ import com.sephilabs.sharedledger.bank.connector.AuthStartRequest
 import com.sephilabs.sharedledger.bank.connector.AuthorizedAccount
 import com.sephilabs.sharedledger.bank.connector.AuthorizedSession
 import com.sephilabs.sharedledger.bank.connector.BankConnector
+import com.sephilabs.sharedledger.bank.connector.BankConnectorException
 import com.sephilabs.sharedledger.bank.connector.BankMovement
 import com.sephilabs.sharedledger.bank.connector.ConsentStatus
 import com.sephilabs.sharedledger.bank.connector.FetchStrategy
@@ -48,6 +49,10 @@ class FakeBankConnector : BankConnector {
     /** When >= 0, throw ASPSP_RATE_LIMIT_EXCEEDED once this many fetch calls have succeeded. */
     var failWithRateLimitAfter: Int = -1
 
+    /** When >= 0, throw a provider error ([providerErrorCode]) once this many fetch calls succeeded. */
+    var failWithProviderErrorAfter: Int = -1
+    var providerErrorCode: String = "ASPSP_ERROR"
+
     override fun listAspsps(country: String): List<Aspsp> = aspsps.filter { it.country == country }
 
     override fun startAuthorization(request: AuthStartRequest): AuthStart {
@@ -73,10 +78,14 @@ class FakeBankConnector : BankConnector {
         if (failWithRateLimitAfter >= 0 && fetchCalls.size > failWithRateLimitAfter) {
             throw RateLimitExceededException("ASPSP_RATE_LIMIT_EXCEEDED")
         }
+        if (failWithProviderErrorAfter >= 0 && fetchCalls.size > failWithProviderErrorAfter) {
+            throw BankConnectorException("$providerErrorCode: Error interacting with ASPSP", null, providerErrorCode)
+        }
         if (scriptedPages.isNotEmpty()) return scriptedPages.removeFirst()
+        // Both bounds inclusive, as the provider documents them.
         val filtered = movements.filter {
             (dateFrom == null || !it.bookingDate.isBefore(dateFrom)) &&
-                (dateTo == null || it.bookingDate.isBefore(dateTo))
+                (dateTo == null || !it.bookingDate.isAfter(dateTo))
         }
         return MovementPage(movements = filtered, continuationKey = null)
     }

@@ -39,7 +39,7 @@ class EnableBankingConnector(
         const val RATE_LIMIT_CODE = "ASPSP_RATE_LIMIT_EXCEEDED"
     }
 
-    override fun listAspsps(country: String): List<Aspsp> = call {
+    override fun listAspsps(country: String): List<Aspsp> = call("aspsps country=$country") {
         val body = get("/aspsps?country=$country")
         body.path("aspsps").map {
             Aspsp(
@@ -50,7 +50,7 @@ class EnableBankingConnector(
         }
     }
 
-    override fun startAuthorization(request: AuthStartRequest): AuthStart = call {
+    override fun startAuthorization(request: AuthStartRequest): AuthStart = call("auth aspsp='${request.aspspName}'") {
         val payload = mapOf(
             "access" to mapOf("valid_until" to DateTimeFormatter.ISO_INSTANT.format(request.validUntil)),
             "aspsp" to mapOf("name" to request.aspspName, "country" to request.country),
@@ -65,7 +65,7 @@ class EnableBankingConnector(
         )
     }
 
-    override fun completeAuthorization(code: String): AuthorizedSession = call {
+    override fun completeAuthorization(code: String): AuthorizedSession = call("sessions") {
         val body = post("/sessions", mapOf("code" to code))
         val accountsNode = body.path("accounts")
         if (!accountsNode.isArray || accountsNode.isEmpty) {
@@ -94,7 +94,7 @@ class EnableBankingConnector(
         )
     }
 
-    override fun sessionStatus(sessionId: String): ConsentStatus = call {
+    override fun sessionStatus(sessionId: String): ConsentStatus = call("session status") {
         val body = get("/sessions/$sessionId")
         when (body.path("status").asText().uppercase()) {
             "AUTHORIZED", "VALID", "ACTIVE" -> ConsentStatus.ACTIVE
@@ -111,7 +111,7 @@ class EnableBankingConnector(
         strategy: FetchStrategy,
         continuationKey: String?,
         psu: PsuContext?,
-    ): MovementPage = call {
+    ): MovementPage {
         val query = buildString {
             append("/accounts/").append(accountUid).append("/transactions")
             append("?strategy=").append(if (strategy == FetchStrategy.LONGEST) "longest" else "default")
@@ -127,6 +127,19 @@ class EnableBankingConnector(
         } else {
             emptyMap()
         }
+        // The op label (not the raw query — it carries the opaque continuation key) is what a failure
+        // log shows, so an ASPSP that refuses one particular window/page is identifiable afterwards.
+        val op = "transactions account=$accountUid strategy=$strategy from=$dateFrom to=$dateTo " +
+            "page=${if (continuationKey == null) "first" else "next"} psu=${psu != null}"
+        return fetchPage(op, query, headers, accountUid)
+    }
+
+    private fun fetchPage(
+        op: String,
+        query: String,
+        headers: Map<String, String>,
+        accountUid: String,
+    ): MovementPage = call(op) {
         val body = get(query, headers)
         val raw = body.path("transactions")
         val movements = raw.mapNotNull { txn ->
@@ -215,30 +228,59 @@ class EnableBankingConnector(
         return mapper.readTree(body)
     }
 
-    private fun <T> call(block: () -> T): T {
+    private fun <T> call(op: String, block: () -> T): T {
         pace()
         return try {
             block()
         } catch (ex: BankConnectorException) {
             throw ex
         } catch (ex: RestClientResponseException) {
-            val code = errorCodeOf(ex.responseBodyAsString)
-            log.warn("Enable Banking call failed status={} code={}", ex.statusCode.value(), code)
-            if (code == RATE_LIMIT_CODE) throw RateLimitExceededException(RATE_LIMIT_CODE, ex)
-            throw BankConnectorException(code ?: (ex.message ?: "Enable Banking call failed"), ex)
+            val error = errorOf(ex.responseBodyAsString)
+            log.warn(
+                "eb_call_failed op='{}' status={} code={} message='{}' detail='{}'",
+                op, ex.statusCode.value(), error.code, error.message, error.detail,
+            )
+            if (error.code == RATE_LIMIT_CODE) throw RateLimitExceededException(RATE_LIMIT_CODE, ex)
+            throw BankConnectorException(
+                error.describe() ?: ex.message ?: "Enable Banking call failed",
+                ex,
+                error.code,
+            )
         } catch (ex: Exception) {
-            log.warn("Enable Banking call failed: {}", ex.message)
+            log.warn("eb_call_failed op='{}' error={}", op, ex.message)
             throw BankConnectorException(ex.message ?: "Enable Banking call failed", ex)
         }
     }
 
-    /** Enable Banking error bodies carry the machine code under `code` (sometimes `error`). */
-    private fun errorCodeOf(body: String?): String? =
-        if (body.isNullOrBlank()) null
-        else runCatching {
+    /**
+     * An Enable Banking error body looks like
+     * `{"code": 400, "message": "Error interacting with ASPSP", "detail": "…", "error": "ASPSP_ERROR"}`:
+     * `code` is the **numeric HTTP status** and the machine-readable code lives in `error`. Reading
+     * `code` first (as this used to) yielded "400"/"429", so `ASPSP_RATE_LIMIT_EXCEEDED` was never
+     * recognised — a rate-limited connection was treated as a hard failure instead of backing off —
+     * and every provider error reached the UI as a bare status number.
+     */
+    private data class ProviderError(val code: String?, val message: String?, val detail: String?) {
+        /** e.g. `ASPSP_ERROR: Error interacting with ASPSP — Unknown error`, for the UI and the run log. */
+        fun describe(): String? {
+            val head = code ?: return message
+            val tail = listOfNotNull(message, detail?.takeIf { it != message }).joinToString(" — ")
+            return if (tail.isBlank()) head else "$head: $tail"
+        }
+    }
+
+    private fun errorOf(body: String?): ProviderError {
+        if (body.isNullOrBlank()) return ProviderError(null, null, null)
+        return runCatching {
             val node = mapper.readTree(body)
-            node.path("code").textOrNull() ?: node.path("error").textOrNull()
-        }.getOrNull()
+            ProviderError(
+                // `code` only counts as the machine code when it isn't the numeric status.
+                code = node.path("error").textOrNull() ?: node.path("code").takeIf { it.isTextual }?.textOrNull(),
+                message = node.path("message").textOrNull(),
+                detail = node.path("detail").textOrNull(),
+            )
+        }.getOrElse { ProviderError(null, body.take(200), null) }
+    }
 
     @Synchronized
     private fun pace() {
