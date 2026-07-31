@@ -1,6 +1,7 @@
 package com.sephilabs.sharedledger.bank
 
 import com.sephilabs.sharedledger.IntegrationTestBase
+import com.sephilabs.sharedledger.bank.connector.AuthorizedAccount
 import com.sephilabs.sharedledger.bank.connector.BankMovement
 import com.sephilabs.sharedledger.bank.connector.FetchStrategy
 import com.sephilabs.sharedledger.bank.connector.MovementPage
@@ -60,7 +61,9 @@ class BankIngestionIntegrationTest @Autowired constructor(
         fake.scriptedPages.clear()
         fake.failWithRateLimitAfter = -1
         fake.failWithProviderErrorAfter = -1
-        fake.accounts = listOf(com.sephilabs.sharedledger.bank.connector.AuthorizedAccount("acc-1", "NL00INGB0001234567", "Checking", "EUR"))
+        fake.failingAccountUids.clear()
+        fake.failLongestOnly = false
+        fake.accounts = listOf(AuthorizedAccount("acc-1", "NL00INGB0001234567", "Checking", "EUR"))
     }
 
     @Test
@@ -679,6 +682,53 @@ class BankIngestionIntegrationTest @Autowired constructor(
         assertThat(connection.status).isEqualTo(ConnectionStatus.suspended)
         // The failed run must not advance the sync point — a full-history retry stays possible.
         assertThat(connection.lastSyncedAt).isEqualTo(syncPointBefore)
+    }
+
+    @Test
+    fun `one account the bank refuses does not cost the other accounts their movements`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        fake.accounts = listOf(
+            AuthorizedAccount("acc-ok", "NL00INGB0001234567", "Checking", "EUR"),
+            AuthorizedAccount("acc-bad", "ES0000000000000000", "Card", "EUR"),
+        )
+        fake.movements.add(movement("iso-1", today.minusDays(1), Direction.expense, "6.00", "Shop"))
+        // The ASPSP refuses one account outright (a stale uid, or a product it won't serve).
+        fake.failingAccountUids += "acc-bad"
+
+        link(household, user)
+
+        // The healthy account still delivered, and the run says which provider code broke the other.
+        assertThat(pendingService.pendingCount(household.id)).isEqualTo(1)
+        assertThat(fake.fetchCalls.map { it.accountUid }).contains("acc-ok", "acc-bad")
+        val connectionId = connections.findAllByHouseholdIdOrderByCreatedAtAsc(household.id).single().id
+        val run = syncRuns.findFirstByConnectionIdOrderByStartedAtDesc(connectionId)!!
+        assertThat(run.status).isEqualTo(SyncRunStatus.error)
+        assertThat(run.errorCode).isEqualTo("ASPSP_ERROR")
+        assertThat(run.newMovements).isEqualTo(1)
+    }
+
+    @Test
+    fun `an ASPSP that refuses the dateless full-history fetch is retried with a bounded window`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        fake.movements.add(movement("fb-1", today.minusDays(1), Direction.expense, "8.00", "Shop"))
+        // Bankinter's shape: strategy=longest is refused, a bounded date range is served.
+        fake.failingAccountUids += "acc-1"
+        fake.failLongestOnly = true
+
+        link(household, user)
+
+        assertThat(fake.fetchCalls.first().strategy).isEqualTo(FetchStrategy.LONGEST)
+        val retry = fake.fetchCalls[1]
+        assertThat(retry.strategy).isEqualTo(FetchStrategy.DEFAULT)
+        assertThat(retry.dateFrom).isEqualTo(today.minusDays(props.enableBanking.backfillDays))
+        assertThat(retry.dateTo).isEqualTo(today)
+        // Recovered: the movement is in the inbox and the run counts as a success.
+        assertThat(pendingService.pendingCount(household.id)).isEqualTo(1)
+        val connectionId = connections.findAllByHouseholdIdOrderByCreatedAtAsc(household.id).single().id
+        assertThat(syncRuns.findFirstByConnectionIdOrderByStartedAtDesc(connectionId)!!.status)
+            .isEqualTo(SyncRunStatus.success)
     }
 
     @Test

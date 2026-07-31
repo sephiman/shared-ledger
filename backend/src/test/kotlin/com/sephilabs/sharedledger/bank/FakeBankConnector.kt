@@ -33,8 +33,9 @@ class FakeBankConnector : BankConnector {
     var status: ConsentStatus = ConsentStatus.ACTIVE
     val movements: MutableList<BankMovement> = mutableListOf()
 
-    /** Every fetchMovements invocation, for asserting strategy / window / interactivity / paging. */
+    /** Every fetchMovements invocation, for asserting account / strategy / window / interactivity / paging. */
     data class FetchCall(
+        val accountUid: String,
         val strategy: FetchStrategy,
         val dateFrom: LocalDate?,
         val dateTo: LocalDate?,
@@ -52,6 +53,12 @@ class FakeBankConnector : BankConnector {
     /** When >= 0, throw a provider error ([providerErrorCode]) once this many fetch calls succeeded. */
     var failWithProviderErrorAfter: Int = -1
     var providerErrorCode: String = "ASPSP_ERROR"
+
+    /** Account uids the ASPSP refuses with a provider error (per-account isolation tests). */
+    val failingAccountUids: MutableSet<String> = mutableSetOf()
+
+    /** When true, [failingAccountUids] fail only on `strategy=longest`, so a bounded retry succeeds. */
+    var failLongestOnly: Boolean = false
 
     override fun listAspsps(country: String): List<Aspsp> = aspsps.filter { it.country == country }
 
@@ -74,11 +81,13 @@ class FakeBankConnector : BankConnector {
         continuationKey: String?,
         psu: PsuContext?,
     ): MovementPage {
-        fetchCalls += FetchCall(strategy, dateFrom, dateTo, psu != null, continuationKey)
+        fetchCalls += FetchCall(accountUid, strategy, dateFrom, dateTo, psu != null, continuationKey)
         if (failWithRateLimitAfter >= 0 && fetchCalls.size > failWithRateLimitAfter) {
             throw RateLimitExceededException("ASPSP_RATE_LIMIT_EXCEEDED")
         }
-        if (failWithProviderErrorAfter >= 0 && fetchCalls.size > failWithProviderErrorAfter) {
+        val accountRefused = accountUid in failingAccountUids &&
+            (!failLongestOnly || strategy == FetchStrategy.LONGEST)
+        if (accountRefused || (failWithProviderErrorAfter >= 0 && fetchCalls.size > failWithProviderErrorAfter)) {
             throw BankConnectorException("$providerErrorCode: Error interacting with ASPSP", null, providerErrorCode)
         }
         if (scriptedPages.isNotEmpty()) return scriptedPages.removeFirst()

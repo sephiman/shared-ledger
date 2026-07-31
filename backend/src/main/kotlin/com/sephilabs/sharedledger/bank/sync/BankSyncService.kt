@@ -1,6 +1,7 @@
 package com.sephilabs.sharedledger.bank.sync
 
 import com.sephilabs.sharedledger.bank.BankConnection
+import com.sephilabs.sharedledger.bank.BankConnectionAccount
 import com.sephilabs.sharedledger.bank.BankConnectionRepository
 import com.sephilabs.sharedledger.bank.BankConnectionAccountRepository
 import com.sephilabs.sharedledger.bank.BankFxConverter
@@ -153,20 +154,25 @@ class BankSyncService(
 
             val accountList = accounts.findAllByConnectionId(connectionId)
             log.info("bank_sync_accounts connection={} accounts={} strategy={}", connectionId, accountList.size, strategy)
-            budget@ for (account in accountList) {
-                val (dateFrom, dateTo) = fetchWindow(strategy, connectionId, account.id, today)
-                log.info("bank_sync_account connection={} account={} dateFrom={} dateTo={}", connectionId, account.id, dateFrom, dateTo)
+
+            /** Pages one account into [fetched]. False = the background call budget ran out mid-account. */
+            fun fetchAccount(account: BankConnectionAccount, using: FetchStrategy): Boolean {
+                val (dateFrom, dateTo) = fetchWindow(using, connectionId, account.id, today)
+                log.info(
+                    "bank_sync_account connection={} account={} strategy={} dateFrom={} dateTo={}",
+                    connectionId, account.id, using, dateFrom, dateTo,
+                )
                 var continuationKey: String? = null
                 var pages = 0
                 var fetchedForAccount = 0
                 do {
                     if (background && maxCalls - callsUsed <= 0) {
                         log.info("bank_sync_paused connection={} reason=call_budget", connectionId)
-                        break@budget
+                        return false
                     }
                     // Stop condition is ONLY "no continuation_key" — an empty/short page may still
                     // carry one, so we keep paging until it's absent.
-                    val page = connector.fetchMovements(sessionId, account.accountUid, dateFrom, dateTo, strategy, continuationKey, psu)
+                    val page = connector.fetchMovements(sessionId, account.accountUid, dateFrom, dateTo, using, continuationKey, psu)
                     if (background) callsUsed++
                     pages++
                     fetchedForAccount += page.movements.size
@@ -184,8 +190,52 @@ class BankSyncService(
                     "bank_sync_account_done connection={} account={} pages={} fetched={}",
                     connectionId, account.id, pages, fetchedForAccount,
                 )
+                return true
             }
-            log.info("bank_sync_fetched connection={} totalFetched={}", connectionId, fetched.size)
+
+            // Accounts are isolated from each other exactly as connections are: one account the ASPSP
+            // refuses (a stale uid left by a re-link, or a product it won't serve) must not cost the
+            // others their movements. Failures are collected and re-thrown after the loop, where the
+            // failure path persists whatever the healthy accounts delivered.
+            val failures = mutableListOf<BankConnectorException>()
+            for (account in accountList) {
+                try {
+                    if (!fetchAccount(account, strategy)) break
+                } catch (ex: RateLimitExceededException) {
+                    throw ex // budget/backoff is a property of the consent, not of one account
+                } catch (ex: BankConnectorException) {
+                    log.warn(
+                        "bank_sync_account_failed connection={} account={} strategy={} code={} error='{}'",
+                        connectionId, account.id, strategy, ex.providerCode, ex.message,
+                    )
+                    // A dateless full-history request has no window to blame, so an ASPSP error there
+                    // is worth one bounded retry: some banks refuse `longest` yet serve a date range.
+                    if (strategy != FetchStrategy.LONGEST) {
+                        failures += ex
+                        continue
+                    }
+                    try {
+                        if (!fetchAccount(account, FetchStrategy.DEFAULT)) break
+                        log.info(
+                            "bank_sync_account_recovered connection={} account={} strategy=DEFAULT",
+                            connectionId, account.id,
+                        )
+                    } catch (retryEx: RateLimitExceededException) {
+                        throw retryEx
+                    } catch (retryEx: BankConnectorException) {
+                        log.warn(
+                            "bank_sync_account_failed connection={} account={} strategy=DEFAULT code={} error='{}'",
+                            connectionId, account.id, retryEx.providerCode, retryEx.message,
+                        )
+                        failures += retryEx
+                    }
+                }
+            }
+            log.info(
+                "bank_sync_fetched connection={} totalFetched={} accountFailures={}/{}",
+                connectionId, fetched.size, failures.size, accountList.size,
+            )
+            if (failures.isNotEmpty()) throw failures.first()
 
             // ---- Persist phase: one short transaction ----
             val callsAtEnd = callsUsed
