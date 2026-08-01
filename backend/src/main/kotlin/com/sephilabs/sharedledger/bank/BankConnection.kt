@@ -101,8 +101,8 @@ interface BankConnectionRepository : JpaRepository<BankConnection, UUID> {
     @Query("SELECT COUNT(c) FROM BankConnection c WHERE c.householdId = :hid AND (c.appId IS NULL OR c.appId <> :appId)")
     fun countMismatchedAppId(@Param("hid") householdId: UUID, @Param("appId") appId: String): Long
 
-    /** One-time upgrade stamp for connections predating the per-household app id. Parameterized on
-     *  purpose — this used to be interpolated into V030 and any quote in the value broke startup. */
+    /** One-time upgrade stamp for connections predating the per-household app id. The id is a bound
+     *  parameter: it comes from deployment config, so it can hold anything, quotes included. */
     @Modifying
     @Query("UPDATE BankConnection c SET c.appId = :appId WHERE c.appId IS NULL")
     fun stampMissingAppId(@Param("appId") appId: String): Int

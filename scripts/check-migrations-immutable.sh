@@ -2,7 +2,7 @@
 #
 # Flyway records a checksum for every migration it applies and refuses to start if the file
 # changed afterwards — a reworded comment is enough, since the checksum covers the raw file
-# line by line. A prod outage on 2026-08-01 came from exactly that.
+# line by line, so an edit crash-loops every environment that already ran it.
 #
 # So: a migration that already exists in the base revision is frozen. Adding new ones is fine.
 #

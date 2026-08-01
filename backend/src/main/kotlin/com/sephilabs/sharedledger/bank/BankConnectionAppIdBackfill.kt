@@ -13,10 +13,8 @@ import org.springframework.transaction.support.TransactionTemplate
  * Enable Banking application they were authorized under, so an owner pasting that same application
  * into Settings -> Banks does not have to re-link.
  *
- * This deliberately lives in code rather than in V030. A migration that interpolates a
- * deployment-time value is a syntax error waiting to happen — any apostrophe in the id breaks
- * startup for a fresh install — and it makes the same migration mean different things per
- * environment. Here the id is a bound parameter.
+ * The stamp lives here rather than in the migration because the id is deployment configuration:
+ * as a bound parameter it can hold any value, and the migration stays identical everywhere.
  *
  * Idempotent: only rows with no app id are touched, and a blank [AppProperties.EnableBanking.appId]
  * (the normal state, once an upgrade is done) skips the query entirely.
