@@ -40,6 +40,14 @@ class BankConnection(
     @Column(name = "aspsp_country", nullable = false, length = 2)
     var aspspCountry: String,
 
+    /**
+     * The Enable Banking application this authorization was granted under, stamped at link time. The
+     * bank tied its consent to that application, so a different one means "re-link", not "carry on"
+     * — sync refuses. Null only for rows V030 could not attribute; treated as a mismatch.
+     */
+    @Column(name = "app_id", length = 128)
+    var appId: String? = null,
+
     @Column(name = "label", length = 120)
     var label: String? = null,
 
@@ -95,6 +103,14 @@ interface BankConnectionRepository : JpaRepository<BankConnection, UUID> {
     fun findByIdAndHouseholdId(id: UUID, householdId: UUID): BankConnection?
     fun findAllByHouseholdIdOrderByCreatedAtAsc(householdId: UUID): List<BankConnection>
     fun countByHouseholdId(householdId: UUID): Long
+
+    /**
+     * Backs the warning shown before saving credentials that would orphan connections. A null app id
+     * counts: it predates the stamping and cannot be proven to belong to [appId].
+     */
+    @Query("SELECT COUNT(c) FROM BankConnection c WHERE c.householdId = :hid AND (c.appId IS NULL OR c.appId <> :appId)")
+    fun countMismatchedAppId(@Param("hid") householdId: UUID, @Param("appId") appId: String): Long
+
     fun findAllByIngestionEnabledTrue(): List<BankConnection>
     fun findAllByStatus(status: ConnectionStatus): List<BankConnection>
 }

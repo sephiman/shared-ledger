@@ -7,21 +7,24 @@ import java.time.LocalDate
  * implementation (Restricted Production). Alternative providers (Yapily, or Wise via its own API)
  * would implement the same contract; the CSV importer remains the always-available fallback.
  *
+ * Every method takes the [EbCredentials] to act under, so the connector stays a stateless singleton
+ * (one process-wide request pacer) rather than being built per household.
+ *
  * All methods talk to the provider over HTTP and throw [BankConnectorException] on any failure.
  */
 interface BankConnector {
 
     /** The bank (ASPSP) catalogue for a country, so the picker is never a hard-coded list. */
-    fun listAspsps(country: String): List<Aspsp>
+    fun listAspsps(creds: EbCredentials, country: String): List<Aspsp>
 
     /** Begin an SCA authorization; returns the URL to redirect the holder to their bank. */
-    fun startAuthorization(request: AuthStartRequest): AuthStart
+    fun startAuthorization(creds: EbCredentials, request: AuthStartRequest): AuthStart
 
     /** Exchange the redirect `code` for a session and the accounts it authorizes. */
-    fun completeAuthorization(code: String): AuthorizedSession
+    fun completeAuthorization(creds: EbCredentials, code: String): AuthorizedSession
 
     /** Current consent status for a session (drives expiry/suspension handling). */
-    fun sessionStatus(sessionId: String): ConsentStatus
+    fun sessionStatus(creds: EbCredentials, sessionId: String): ConsentStatus
 
     /**
      * One page of an account's movements. Pass the previous page's `continuationKey` to page
@@ -33,6 +36,7 @@ interface BankConnector {
      * [dateTo] (exclusive). [psu], when present, marks the call as interactive (not background).
      */
     fun fetchMovements(
+        creds: EbCredentials,
         sessionId: String,
         accountUid: String,
         dateFrom: LocalDate?,

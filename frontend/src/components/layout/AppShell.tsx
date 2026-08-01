@@ -21,9 +21,9 @@ export function AppShell() {
   const { t } = useTranslation();
   const { resolvedTheme } = useTheme();
   const household = useActiveHousehold();
-  // Only query (and poll) the count once at least one bank is linked; otherwise it's always 0.
+  // Only query (and poll) the count once the household can actually ingest; otherwise it's 0.
   const { data: bankConfig } = useBankConfig(household.householdId);
-  const hasBanks = (bankConfig?.connectionCount ?? 0) > 0;
+  const hasBanks = (bankConfig?.credentialsConfigured ?? false) && (bankConfig?.connectionCount ?? 0) > 0;
   const pendingCount = usePendingCount(household.householdId, hasBanks).data?.count ?? 0;
   const logoSrc = resolvedTheme === "dark" ? "/SharedLedgerDark.png" : "/SharedLedgerLight.png";
 

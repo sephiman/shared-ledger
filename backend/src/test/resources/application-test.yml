@@ -33,10 +33,8 @@ app:
     # Deterministic 32-byte AES key (base64 of "01234567890123456789012345678901") for tests.
     token-key: "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE="
   enable-banking:
-    # Present so the feature reads as "configured" in tests; the fake connector replaces the real
-    # HTTP client, so app-id/private-key are never actually used to sign JWTs.
-    app-id: "test-app"
-    private-key: "test-key"
+    # The application id + private key are per-household rows now (tests seed them); only the
+    # at-rest encryption key stays configuration.
     secret-key: "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE="
     sync-cron: "0 0 0 29 2 ?"
     reminder-cron: "0 0 0 29 2 ?"

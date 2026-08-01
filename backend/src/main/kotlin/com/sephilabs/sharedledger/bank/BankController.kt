@@ -39,7 +39,7 @@ class BankController(
 
     @GetMapping("/aspsps")
     fun aspsps(@PathVariable householdId: UUID, @RequestParam country: String): List<AspspDto> =
-        bankService.listAspsps(country)
+        bankService.listAspsps(householdId, country)
 
     @GetMapping("/connections")
     fun connections(@PathVariable householdId: UUID): List<BankConnectionDto> =

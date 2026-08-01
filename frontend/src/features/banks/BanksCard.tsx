@@ -22,17 +22,28 @@ function statusClass(status: ConnectionStatus): string {
   switch (status) {
     case "active":
       return "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200";
+    // Expired and the two credential states are all "needs your attention, nothing is broken".
     case "expired":
+    case "credentials_required":
+    case "credentials_mismatch":
       return "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200";
     default:
       return "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200";
   }
 }
 
+/** A connection parked by the credential gate: syncing is impossible until an owner acts. */
+function isCredentialState(status: ConnectionStatus): boolean {
+  return status === "credentials_required" || status === "credentials_mismatch";
+}
+
 /**
  * Linking is open to every member — each relative passes SCA at their own bank, so credentials are
  * never shared. Managing an existing connection is gated per row by `connection.canManage` (the
  * member who linked it, plus owners), mirroring the server check.
+ *
+ * Rendered when the household has credentials **or** still has connections: without credentials the
+ * link form is hidden but existing connections stay visible, carrying the status that says why.
  */
 export function BanksCard({ householdId, locale }: { householdId: string; locale: string }) {
   const { t } = useTranslation();
@@ -51,11 +62,13 @@ export function BanksCard({ householdId, locale }: { householdId: string; locale
     return Array.from(byMinute.entries()).sort((a, b) => a[0] - b[0]).map((e) => e[1]);
   }, [config?.nextSyncTimes, locale]);
 
+  const canLink = config?.credentialsConfigured ?? false;
   const [country, setCountry] = useState("NL");
   const [aspspName, setAspspName] = useState("");
   const [label, setLabel] = useState("");
   const [linkError, setLinkError] = useState<string | null>(null);
-  const { data: aspsps = [], isLoading: aspspsLoading } = useAspsps(householdId, country, true);
+  // Without credentials the catalogue call would only ever return BANK_CREDENTIALS_REQUIRED.
+  const { data: aspsps = [], isLoading: aspspsLoading } = useAspsps(householdId, country, canLink);
 
   const beginLink = async (relinkConnectionId?: string, presetAspsp?: string, presetCountry?: string) => {
     setLinkError(null);
@@ -90,41 +103,51 @@ export function BanksCard({ householdId, locale }: { householdId: string; locale
           </ul>
         </div>
 
-        {syncTimes.length > 0 && (
+        {canLink && syncTimes.length > 0 && (
           <p className="text-sm text-gray-500 dark:text-gray-400">
             {t("banks.auto_sync_schedule", { times: syncTimes.join(", ") })}
           </p>
         )}
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-          <div>
-            <Label>{t("banks.country")}</Label>
-            <Select value={country} onChange={(e) => { setCountry(e.target.value); setAspspName(""); }}>
-              {COUNTRIES.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </Select>
+        {!canLink && (
+          <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+            {t("banks.credentials_needed_notice")}
           </div>
-          <div>
-            <Label>{t("banks.bank")}</Label>
-            <Select value={aspspName} onChange={(e) => setAspspName(e.target.value)} disabled={aspspsLoading}>
-              <option value="">{aspspsLoading ? t("common.loading") : t("banks.pick_bank")}</option>
-              {aspsps.map((a) => (
-                <option key={`${a.name}-${a.country}`} value={a.name}>{a.name}</option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Label>{t("banks.label")}</Label>
-            <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("banks.label_placeholder")} />
-          </div>
-          <div className="flex items-end">
-            <Button disabled={startLink.isPending || !aspspName} onClick={() => beginLink()}>
-              {t("banks.link_bank")}
-            </Button>
-          </div>
-        </div>
-        {linkError && <FieldError message={linkError} />}
+        )}
+
+        {canLink && (
+          <>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+              <div>
+                <Label>{t("banks.country")}</Label>
+                <Select value={country} onChange={(e) => { setCountry(e.target.value); setAspspName(""); }}>
+                  {COUNTRIES.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </Select>
+              </div>
+              <div>
+                <Label>{t("banks.bank")}</Label>
+                <Select value={aspspName} onChange={(e) => setAspspName(e.target.value)} disabled={aspspsLoading}>
+                  <option value="">{aspspsLoading ? t("common.loading") : t("banks.pick_bank")}</option>
+                  {aspsps.map((a) => (
+                    <option key={`${a.name}-${a.country}`} value={a.name}>{a.name}</option>
+                  ))}
+                </Select>
+              </div>
+              <div>
+                <Label>{t("banks.label")}</Label>
+                <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("banks.label_placeholder")} />
+              </div>
+              <div className="flex items-end">
+                <Button disabled={startLink.isPending || !aspspName} onClick={() => beginLink()}>
+                  {t("banks.link_bank")}
+                </Button>
+              </div>
+            </div>
+            {linkError && <FieldError message={linkError} />}
+          </>
+        )}
 
         {connections.length === 0 ? (
           <p className="text-sm text-gray-500 dark:text-gray-400">{t("banks.no_connections")}</p>
@@ -136,6 +159,7 @@ export function BanksCard({ householdId, locale }: { householdId: string; locale
                 householdId={householdId}
                 connection={c}
                 locale={locale}
+                canLink={canLink}
                 onRelink={() => beginLink(c.id, c.aspspName, c.aspspCountry)}
               />
             ))}
@@ -150,11 +174,14 @@ function ConnectionRow({
   householdId,
   connection,
   locale,
+  canLink,
   onRelink,
 }: {
   householdId: string;
   connection: BankConnection;
   locale: string;
+  /** False while the household has no Enable Banking credentials — nothing can reach the provider. */
+  canLink: boolean;
   onRelink: () => void;
 }) {
   const { t } = useTranslation();
@@ -182,11 +209,12 @@ function ConnectionRow({
         </div>
         {connection.canManage && (
           <div className="flex flex-wrap gap-1">
-            <Button variant="ghost" disabled={sync.isPending} onClick={() => sync.mutate(connection.id)}>
+            {/* Everything but Delete needs the provider, so it needs credentials first. */}
+            <Button variant="ghost" disabled={sync.isPending || !canLink} onClick={() => sync.mutate(connection.id)}>
               {t("banks.sync_now")}
             </Button>
             {connection.status !== "active" && (
-              <Button variant="ghost" onClick={onRelink}>{t("banks.relink")}</Button>
+              <Button variant="ghost" disabled={!canLink} onClick={onRelink}>{t("banks.relink")}</Button>
             )}
             <Button
               variant="ghost"
@@ -200,6 +228,13 @@ function ConnectionRow({
           </div>
         )}
       </div>
+      {isCredentialState(connection.status) && (
+        <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+          {connection.status === "credentials_required"
+            ? t("banks.status_credentials_required_hint")
+            : t("banks.status_credentials_mismatch_hint")}
+        </p>
+      )}
       <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
         {t("banks.expires")}: {expires} · {t("banks.last_synced")}: {lastSynced}
         {connection.accounts.length > 0 && ` · ${connection.accounts.map((a) => a.name ?? a.ibanMasked ?? "").filter(Boolean).join(", ")}`}

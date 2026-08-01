@@ -11,7 +11,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/primitives";
 export function PendingBankTile({ householdId }: { householdId: string }) {
   const { t } = useTranslation();
   const { data: bankConfig } = useBankConfig(householdId);
-  const hasBanks = (bankConfig?.connectionCount ?? 0) > 0;
+  const hasBanks = (bankConfig?.credentialsConfigured ?? false) && (bankConfig?.connectionCount ?? 0) > 0;
   const { data: pending } = usePendingCount(householdId, hasBanks);
 
   if (!pending || pending.count === 0) return null;

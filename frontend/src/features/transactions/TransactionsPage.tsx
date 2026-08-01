@@ -9,7 +9,7 @@ import {
   type TransactionFilters,
 } from "@/api/transactions";
 import { useCategories } from "@/api/catalog";
-import { useBankConnections, usePendingCount } from "@/api/banks";
+import { useBankConfig, useBankConnections, usePendingCount } from "@/api/banks";
 import { Button, Card, CardBody, CardHeader, Input, Label, Select } from "@/components/ui/primitives";
 import { TabBar } from "@/components/ui/TabBar";
 import { formatMoney } from "@/lib/money";
@@ -78,9 +78,14 @@ export function TransactionsPage() {
   const { data: categories = [] } = useCategories(household.householdId);
   const del = useDeleteTransaction(household.householdId);
 
-  // The "Pending" inbox sub-view only appears once at least one bank is linked.
-  const { data: connections = [] } = useBankConnections(household.householdId);
-  const showPending = connections.length > 0;
+  // The "Pending" inbox only appears with credentials + at least one bank linked; without
+  // credentials nothing can be ingested to review.
+  const { data: bankConfig } = useBankConfig(household.householdId);
+  const { data: connections = [] } = useBankConnections(
+    household.householdId,
+    bankConfig?.credentialsConfigured ?? false,
+  );
+  const showPending = (bankConfig?.credentialsConfigured ?? false) && connections.length > 0;
   const pendingCount = usePendingCount(household.householdId, showPending).data?.count ?? 0;
   const tab = showPending && searchParams.get("tab") === "pending" ? "pending" : "confirmed";
   const selectTab = (value: string) => {

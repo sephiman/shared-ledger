@@ -1,7 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "./client";
 
-export type ConnectionStatus = "active" | "expired" | "suspended" | "error";
+export type ConnectionStatus =
+  | "active"
+  | "expired"
+  | "suspended"
+  | "error"
+  // Credential states: no household credentials, or a different application than this connection
+  // was authorized under (re-link needed).
+  | "credentials_required"
+  | "credentials_mismatch";
 export type SyncFrequency = "daily" | "twice_daily";
 export type MovementStatus = "pending" | "confirmed" | "rejected";
 export type Direction = "income" | "expense";
@@ -24,10 +32,35 @@ export interface PendingCount {
 }
 
 export interface BankConfig {
-  featureEnabled: boolean;
+  /** Whether THIS household configured its own Enable Banking application (no instance fallback). */
+  credentialsConfigured: boolean;
   connectionCount: number;
   /** Upcoming background-sync run times as ISO instants; rendered in the viewer's timezone. */
   nextSyncTimes: string[];
+}
+
+export interface BankCredentials {
+  appId: string | null;
+  /** The private key is write-only; the form only learns whether one is stored. */
+  privateKeyConfigured: boolean;
+  /** What to register as the SCA redirect in the EB application. */
+  redirectUrl: string;
+  connectionCount: number;
+  /** Connections authorized under a different application; they need re-linking. */
+  mismatchedConnectionCount: number;
+}
+
+export interface BankCredentialsInput {
+  appId: string;
+  /** Omit or leave blank to keep the stored key. */
+  privateKey?: string | null;
+  /** Acknowledges the "N connections will need re-linking" warning. */
+  confirm?: boolean;
+}
+
+export interface BankCredentialsTestResult {
+  ok: boolean;
+  message: string | null;
 }
 
 export interface Aspsp {
@@ -188,6 +221,16 @@ export function useBankConfig(householdId: string) {
   });
 }
 
+/** Owner-only: the household's Enable Banking application. Never returns the private key. */
+export function useBankCredentials(householdId: string, enabled = true) {
+  return useQuery({
+    queryKey: ["banks", householdId, "credentials"],
+    queryFn: async () =>
+      (await apiClient.get<BankCredentials>(`${base(householdId)}/credentials`)).data,
+    enabled,
+  });
+}
+
 export function useAspsps(householdId: string, country: string, enabled: boolean) {
   return useQuery({
     queryKey: ["banks", householdId, "aspsps", country],
@@ -247,6 +290,27 @@ export function useCategorizationRules(householdId: string) {
   return useQuery({
     queryKey: ["banks", householdId, "rules"],
     queryFn: async () => (await apiClient.get<CategorizationRule[]>(`${base(householdId)}/rules`)).data,
+  });
+}
+
+// --- Credential mutations --------------------------------------------------------------------
+
+/** Saving credentials changes which connections still work, so the whole bank tree is invalidated. */
+export function useSaveBankCredentials(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: BankCredentialsInput) =>
+      (await apiClient.put<BankCredentials>(`${base(householdId)}/credentials`, input)).data,
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["banks", householdId] }),
+    meta: { silentSuccess: true },
+  });
+}
+
+export function useValidateBankCredentials(householdId: string) {
+  return useMutation({
+    mutationFn: async () =>
+      (await apiClient.post<BankCredentialsTestResult>(`${base(householdId)}/credentials/validate`)).data,
+    meta: { silentSuccess: true },
   });
 }
 

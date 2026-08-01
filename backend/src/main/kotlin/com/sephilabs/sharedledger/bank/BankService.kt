@@ -21,14 +21,16 @@ import java.util.UUID
 
 /**
  * Facade over the split bank storage (connections + accounts + auth sessions + sync runs). Manages
- * the link/re-link lifecycle and the config that drives UI visibility. The feature is only usable
- * when the operator configured Enable Banking via env (`props.enableBanking.configured`).
+ * the link/re-link lifecycle and the config that drives UI visibility. Usable only by households
+ * that configured their own application in Settings → Banks ([BankCredentialsService]).
  */
 @Service
 class BankService(
     private val props: AppProperties,
     private val connector: BankConnector,
     private val crypto: BankCrypto,
+    private val credentials: BankCredentialsService,
+    private val callbackUrl: BankCallbackUrl,
     private val connections: BankConnectionRepository,
     private val accounts: BankConnectionAccountRepository,
     private val authSessions: BankAuthSessionRepository,
@@ -37,13 +39,15 @@ class BankService(
 ) {
 
     @Transactional(readOnly = true)
-    fun config(householdId: UUID): BankConfigDto =
-        BankConfigDto(
-            featureEnabled = props.enableBanking.configured,
+    fun config(householdId: UUID): BankConfigDto {
+        val configured = credentials.findRow(householdId) != null
+        return BankConfigDto(
+            credentialsConfigured = configured,
             connectionCount = connections.countByHouseholdId(householdId),
             // Absolute instants so the UI can render them in the viewer's own timezone (DST-correct).
-            nextSyncTimes = if (props.enableBanking.configured) upcomingSyncRuns(count = 3) else emptyList(),
+            nextSyncTimes = if (configured) upcomingSyncRuns(count = 3) else emptyList(),
         )
+    }
 
     /** The next [count] background-sync fire times, from the configured cron + scheduler zone. */
     private fun upcomingSyncRuns(count: Int): List<Instant> {
@@ -60,18 +64,32 @@ class BankService(
     }
 
     @Transactional(readOnly = true)
-    fun listAspsps(country: String): List<AspspDto> {
-        requireConfigured()
+    fun listAspsps(householdId: UUID, country: String): List<AspspDto> {
+        val creds = credentials.require(householdId)
         return try {
-            connector.listAspsps(country.uppercase()).map { AspspDto(it.name, it.country, it.logoUrl) }
+            connector.listAspsps(creds, country.uppercase()).map { AspspDto(it.name, it.country, it.logoUrl) }
         } catch (ex: BankConnectorException) {
             throw AppException.badRequest("BANK_PROVIDER_ERROR", ex.message ?: "")
         }
     }
 
     @Transactional(readOnly = true)
-    fun listConnections(householdId: UUID, by: User, role: HouseholdRole): List<BankConnectionDto> =
-        connections.findAllByHouseholdIdOrderByCreatedAtAsc(householdId).map { it.toDto(canManage(it, by, role)) }
+    fun listConnections(householdId: UUID, by: User, role: HouseholdRole): List<BankConnectionDto> {
+        val configuredAppId = credentials.findRow(householdId)?.appId
+        return connections.findAllByHouseholdIdOrderByCreatedAtAsc(householdId)
+            .map { it.toDto(canManage(it, by, role), configuredAppId) }
+    }
+
+    /**
+     * The status to *show*. The stored one only catches up on the next sync, so a household that
+     * just lost or changed its credentials would keep displaying a stale `active` for hours —
+     * exactly when it needs telling. [BankSyncService] applies the same rule when it persists.
+     */
+    private fun effectiveStatus(connection: BankConnection, configuredAppId: String?): ConnectionStatus = when {
+        configuredAppId == null -> ConnectionStatus.credentials_required
+        configuredAppId != connection.appId -> ConnectionStatus.credentials_mismatch
+        else -> connection.status
+    }
 
     /**
      * True when [by] may sync, re-link, edit or delete [connection]: household owners always, plus
@@ -99,7 +117,7 @@ class BankService(
 
     @Transactional
     fun startLink(householdId: UUID, request: StartLinkRequest, by: User, role: HouseholdRole): StartLinkResponse {
-        requireConfigured()
+        val creds = credentials.require(householdId)
         // Any member may link a *new* bank of their own; re-linking an existing connection is
         // restricted to whoever may manage it.
         if (request.relinkConnectionId != null) {
@@ -120,11 +138,13 @@ class BankService(
         )
         val start = try {
             connector.startAuthorization(
+                creds,
                 com.sephilabs.sharedledger.bank.connector.AuthStartRequest(
                     aspspName = request.aspspName,
                     country = request.country.uppercase(),
                     state = state,
                     validUntil = validUntil,
+                    redirectUrl = callbackUrl.current(),
                 ),
             )
         } catch (ex: BankConnectorException) {
@@ -141,7 +161,7 @@ class BankService(
         role: HouseholdRole,
         psu: PsuContext? = null,
     ): BankConnectionDto {
-        requireConfigured()
+        val creds = credentials.require(householdId)
         val auth = authSessions.findById(request.state).orElse(null)
             ?: throw AppException.badRequest("BANK_AUTH_STATE_INVALID")
         if (auth.householdId != householdId) throw AppException.forbidden("BANK_AUTH_STATE_MISMATCH")
@@ -150,7 +170,7 @@ class BankService(
         if (auth.holderUserId != by.id) throw AppException.forbidden("BANK_AUTH_STATE_MISMATCH")
 
         val session = try {
-            connector.completeAuthorization(request.code)
+            connector.completeAuthorization(creds, request.code)
         } catch (ex: BankConnectorException) {
             throw AppException.badRequest("BANK_PROVIDER_ERROR", ex.message ?: "")
         }
@@ -168,6 +188,9 @@ class BankService(
                 createdByUserId = by.id,
             )
         connection.sessionIdEnc = crypto.encrypt(session.sessionId)
+        // On a re-link this deliberately overwrites — that is how a "credentials changed"
+        // connection is repaired.
+        connection.appId = creds.appId
         connection.status = ConnectionStatus.active
         connection.consentExpiresAt = session.consentExpiresAt
         connection.updatedByUserId = by.id
@@ -197,7 +220,7 @@ class BankService(
         authSessions.delete(auth)
         // Initial backfill sync runs off-thread once this transaction commits.
         events.publishEvent(BankConnectionLinked(connection.id, psu))
-        return connection.toDto(canManage(connection, by, role))
+        return connection.toDto(canManage(connection, by, role), creds.appId)
     }
 
     @Transactional
@@ -213,7 +236,7 @@ class BankService(
         request.ingestionEnabled?.let { connection.ingestionEnabled = it }
         request.syncFrequency?.let { connection.syncFrequency = it }
         connection.updatedByUserId = by.id
-        return connection.toDto(canManage = true)
+        return connection.toDto(canManage = true, configuredAppId = credentials.findRow(householdId)?.appId)
     }
 
     @Transactional
@@ -223,17 +246,13 @@ class BankService(
         connections.delete(connection)
     }
 
-    private fun requireConfigured() {
-        if (!props.enableBanking.configured) throw AppException.badRequest("BANK_NOT_CONFIGURED")
-    }
-
     private fun maskIban(iban: String?): String? {
         val trimmed = iban?.replace(" ", "") ?: return null
         if (trimmed.length <= 4) return trimmed
         return "••••${trimmed.takeLast(4)}"
     }
 
-    private fun BankConnection.toDto(canManage: Boolean): BankConnectionDto {
+    private fun BankConnection.toDto(canManage: Boolean, configuredAppId: String?): BankConnectionDto {
         val lastRun = syncRuns.findFirstByConnectionIdOrderByStartedAtDesc(id)
         return BankConnectionDto(
             id = id,
@@ -241,7 +260,7 @@ class BankService(
             aspspName = aspspName,
             aspspCountry = aspspCountry,
             label = label,
-            status = status,
+            status = effectiveStatus(this, configuredAppId),
             consentExpiresAt = consentExpiresAt,
             lastSyncedAt = lastSyncedAt,
             ingestionEnabled = ingestionEnabled,

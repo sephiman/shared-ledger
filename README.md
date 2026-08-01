@@ -343,11 +343,29 @@ capital reallocations, a net-worth movement — see the review inbox below). Thi
 connector abstraction (Enable Banking is the primary provider; Yapily is a documented alternative;
 Wise could be added via its own API) with the always-available CSV import as the fallback.
 
-- **One-time operator prerequisite** (outside the app): create an API application in the
-  [Enable Banking Control Panel](https://enablebanking.com), activate **Restricted Production**
-  (real data, free, only for linked accounts — no eIDAS/TPP licence needed), and put its
-  application id + RSA private key in the backend env (see §5). The whole feature stays hidden until
-  those are set.
+- **Credentials are per household, configured in the app** (Settings → Banks → *Enable Banking
+  credentials*, owner-only). Each household creates its own API application in the
+  [Enable Banking Control Panel](https://enablebanking.com), activates **Restricted Production**
+  (real data, free, only for linked accounts — no eIDAS/TPP licence needed), and pastes the
+  application id + RSA private key into the card. The key is validated on save (PKCS#8; a PKCS#1
+  paste is rejected with the conversion command), stored AES-GCM encrypted with
+  `ENABLE_BANKING_SECRET_KEY`, and **never shown again** — same write-only contract as the Telegram
+  bot token. A *Validate credentials* button makes a harmless authenticated call so a wrong
+  application id or mismatched key surfaces at save time, not at the first sync. There is **no
+  instance-wide fallback**: a household without credentials sees only that card, and the rest of the
+  feature (link form, pending inbox, nav badge, Home card) stays hidden.
+  - The card also shows the **redirect URL to register** in that application, with a copy button.
+    That URL is *instance* configuration, not per household — `ENABLE_BANKING_REDIRECT_URL` (§5) —
+    so every household registers the same value in its own EB application. It must match exactly or
+    every link is rejected. If the variable is unset the app derives the URL from the request
+    (`Origin` / `Referer`, falling back to the proxied `Host`), which keeps local development
+    working; set it explicitly in production so the value can't shift with how the app is reached.
+  - **Sync identity.** Every connection records the application id it was authorized under, because
+    the bank ties its consent to that application. Sync uses only the credentials saved here: enter
+    the same application id and key your connections were created with and they keep working; a
+    different application marks them *credentials changed — re-link needed* rather than silently
+    failing or re-routing them. Saving credentials with a different application id warns first
+    ("N existing connection(s) … will need re-linking") and needs a confirmation.
   > **Restricted Production caveat — whitelist each account.** In this mode Enable Banking only
   > returns accounts you have explicitly linked to the *application* in the Control Panel
   > ("Activate by linking accounts"). A holder can pass SCA at *any* bank, but if that specific
@@ -400,6 +418,12 @@ Wise could be added via its own API) with the always-available CSV import as the
     `entry_reference` can be missing or duplicated. The overlap re-read therefore never duplicates.
   - Each connection syncs independently — one expired, backing-off, or failing connection never blocks
     the others — and every run is audited (success/error + code + new-movement count).
+  - **Credential states are parked, not failed.** Before anything else, each run resolves the
+    household's credentials: none configured → the connection shows *credentials required*; a
+    different application id than it was linked under → *credentials changed — re-link needed*.
+    Either way the run stops there with no sync-run record, no notification and no error metric, so
+    background sync stays quiet. Both states are re-checked every run and clear themselves as soon
+    as the credentials line up again — no manual nudge needed.
 - **Review inbox** (a **Pending (N)** sub-view inside Transactions, plus a nav badge and a Home
   card, all at household level): per-movement **confirm / edit / reject** and **batch** actions.
   Each row is edited inline before confirming — direction, category (confirm stays disabled until
@@ -562,7 +586,7 @@ Edit `.env` and set at minimum:
 | `APP_COOKIE_SECURE` | `true` in production. Set to `false` only when running on plain HTTP for local dev. |
 | `TELEGRAM_TOKEN_KEY` | Base64 AES key (16/24/32 bytes) used to encrypt stored Telegram bot tokens at rest. Generate with `openssl rand -base64 32`. Required only if a household saves a bot token; keep it stable (rotating it makes stored tokens undecryptable). Optional: `TELEGRAM_API_BASE_URL`, `TELEGRAM_TIMEOUT_MS`. |
 | Portfolio pricing | All optional — holdings work unpriced without them. `EQUITY_PRICE_PROVIDER` (`yahoo` default, or `eodhd` / `twelve_data`), `COINGECKO_API_KEY` (Demo key for crypto), `EODHD_API_KEY` / `TWELVEDATA_API_KEY` (only for those providers). FX (Frankfurter) and Yahoo need no key. Base-URL overrides exist for each provider; see `.env.example`. |
-| Bank ingestion | All optional — the feature stays hidden unless configured. `ENABLE_BANKING_APP_ID` + `ENABLE_BANKING_PRIVATE_KEY` (the API application id and its PKCS#8 PEM RSA private key from the Enable Banking Control Panel; for a single env line replace newlines with `\n`), `ENABLE_BANKING_REDIRECT_URL` (your public frontend URL + `/settings/banks/callback`), and `ENABLE_BANKING_SECRET_KEY` (base64 AES key, `openssl rand -base64 32`, encrypts the stored bank session at rest; keep it stable). Optional overrides: `ENABLE_BANKING_BASE_URL`, `ENABLE_BANKING_CONSENT_VALID_DAYS`, `ENABLE_BANKING_BACKFILL_DAYS`, `ENABLE_BANKING_TIMEOUT_MS`, `ENABLE_BANKING_MAX_CALLS_PER_DAY` (keep at 4 in production — the PSD2 unattended-access cap). |
+| Bank ingestion | All optional. The application id and private key are **not** env vars — each household pastes its own in Settings → Banks. What stays here: `ENABLE_BANKING_SECRET_KEY` (base64 AES key, `openssl rand -base64 32`; encrypts the stored credentials and bank sessions at rest — keep it stable, rotating it makes them undecryptable) and `ENABLE_BANKING_REDIRECT_URL` (your public frontend URL + `/settings/banks/callback`; it identifies the instance, so every household registers the same value in its own EB application — left blank the app derives it from the request, fine for local dev). `ENABLE_BANKING_APP_ID` is read **once**, by the `V030` migration, to stamp connections created before credentials were per household (see §Upgrading below); drop it afterwards. Optional overrides: `ENABLE_BANKING_BASE_URL`, `ENABLE_BANKING_CONSENT_VALID_DAYS`, `ENABLE_BANKING_BACKFILL_DAYS`, `ENABLE_BANKING_TIMEOUT_MS`, `ENABLE_BANKING_MAX_CALLS_PER_DAY` (keep at 4 in production — the PSD2 unattended-access cap). |
 | `FIRE_MONTE_CARLO_TRIALS` | Trials per scenario for the FIRE Monte Carlo simulation. Default `10000`. |
 
 The `.env` file is git-ignored. `docker compose` reads it implicitly and the backend reads variables from it (via `env_file`).
@@ -629,6 +653,29 @@ After step 6:
 - **Rate limiting.** Login attempts are limited per source IP via Bucket4j in-memory (5/min, 20/hour by default). State resets on restart — acceptable for a self-hosted single replica.
 - **Logs.** JSON to stdout, rotated by Docker (`json-file`, 10MB × 5).
 - **Backups.** Postgres is the only durable state; back up the `sharedledger` database with your usual tooling.
+
+### Upgrading: Enable Banking credentials become per household
+
+Applies only to instances that already had bank connections linked through the old instance-wide
+env vars. Existing connections survive with **zero re-linking**, provided the env vars are still in
+place at deploy time:
+
+1. **Deploy with `ENABLE_BANKING_APP_ID` still set.** Migration `V030` adds
+   `bank_connections.app_id` and backfills it from that env var, stamping every existing connection
+   with the application it was actually authorized under. This is the bridge — without it the
+   connections cannot be attributed and would need re-linking.
+2. **An owner opens Settings → Banks and pastes the *same* application id and private key** into
+   the credentials card (the key is the same file that was in `ENABLE_BANKING_PRIVATE_KEY`; both the
+   full PEM and a bare base64 line are accepted). The ids match, so every connection keeps syncing
+   untouched. Between steps 1 and 2 the connections show *credentials required* and background sync
+   skips them quietly — an expected, brief gap; the status text says exactly what to do.
+3. **Remove `ENABLE_BANKING_APP_ID` and `ENABLE_BANKING_PRIVATE_KEY`** — both now live in the
+   household credentials. **Keep `ENABLE_BANKING_SECRET_KEY`** (it encrypts the stored credentials
+   and sessions at rest; losing it makes both undecryptable) **and `ENABLE_BANKING_REDIRECT_URL`**
+   (unchanged — it is instance configuration and is what the credentials card tells each household
+   to register).
+
+Multi-household instances repeat step 2 per household; each one may use its own EB application.
 
 ---
 

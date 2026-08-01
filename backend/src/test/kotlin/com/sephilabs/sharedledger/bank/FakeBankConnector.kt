@@ -9,6 +9,7 @@ import com.sephilabs.sharedledger.bank.connector.BankConnector
 import com.sephilabs.sharedledger.bank.connector.BankConnectorException
 import com.sephilabs.sharedledger.bank.connector.BankMovement
 import com.sephilabs.sharedledger.bank.connector.ConsentStatus
+import com.sephilabs.sharedledger.bank.connector.EbCredentials
 import com.sephilabs.sharedledger.bank.connector.FetchStrategy
 import com.sephilabs.sharedledger.bank.connector.MovementPage
 import com.sephilabs.sharedledger.bank.connector.PsuContext
@@ -60,19 +61,34 @@ class FakeBankConnector : BankConnector {
     /** When true, [failingAccountUids] fail only on `strategy=longest`, so a bounded retry succeeds. */
     var failLongestOnly: Boolean = false
 
-    override fun listAspsps(country: String): List<Aspsp> = aspsps.filter { it.country == country }
+    /** Which application the last call ran under, and the redirect URL it passed to `/auth`. */
+    var lastCreds: EbCredentials? = null
+    var lastRedirectUrl: String? = null
 
-    override fun startAuthorization(request: AuthStartRequest): AuthStart {
+    override fun listAspsps(creds: EbCredentials, country: String): List<Aspsp> {
+        lastCreds = creds
+        return aspsps.filter { it.country == country }
+    }
+
+    override fun startAuthorization(creds: EbCredentials, request: AuthStartRequest): AuthStart {
+        lastCreds = creds
         lastState = request.state
+        lastRedirectUrl = request.redirectUrl
         return AuthStart(url = "https://bank.example/sca?state=${request.state}", authorizationId = "auth-1")
     }
 
-    override fun completeAuthorization(code: String): AuthorizedSession =
-        AuthorizedSession(sessionId = sessionId, accounts = accounts, consentExpiresAt = consentExpiresAt)
+    override fun completeAuthorization(creds: EbCredentials, code: String): AuthorizedSession {
+        lastCreds = creds
+        return AuthorizedSession(sessionId = sessionId, accounts = accounts, consentExpiresAt = consentExpiresAt)
+    }
 
-    override fun sessionStatus(sessionId: String): ConsentStatus = status
+    override fun sessionStatus(creds: EbCredentials, sessionId: String): ConsentStatus {
+        lastCreds = creds
+        return status
+    }
 
     override fun fetchMovements(
+        creds: EbCredentials,
         sessionId: String,
         accountUid: String,
         dateFrom: LocalDate?,
@@ -81,6 +97,7 @@ class FakeBankConnector : BankConnector {
         continuationKey: String?,
         psu: PsuContext?,
     ): MovementPage {
+        lastCreds = creds
         fetchCalls += FetchCall(accountUid, strategy, dateFrom, dateTo, psu != null, continuationKey)
         if (failWithRateLimitAfter >= 0 && fetchCalls.size > failWithRateLimitAfter) {
             throw RateLimitExceededException("ASPSP_RATE_LIMIT_EXCEEDED")

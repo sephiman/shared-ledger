@@ -25,22 +25,23 @@ import java.util.Base64
  */
 class EnableBankingConnectorMappingTest {
 
-    // A real (throwaway) RSA key so EnableBankingJwt.bearer() signs without hitting config.
     private val props = AppProperties(
         enableBanking = AppProperties.EnableBanking(
             baseUrl = "https://api.enablebanking.test",
-            appId = "test-app",
-            privateKey = generatePkcs8PrivateKey(),
             minRequestIntervalMs = 0,
         ),
     )
+
+    // A real (throwaway) RSA key so EnableBankingJwt.bearer() signs for real; credentials are
+    // per-household now, so they arrive as a call argument rather than from configuration.
+    private val creds = EbCredentials(appId = "test-app", privateKeyBase64 = generatePkcs8PrivateKey())
 
     private fun connectorReturning(transactionsJson: String): EnableBankingConnector {
         val builder = RestClient.builder()
         val server = MockRestServiceServer.bindTo(builder).build()
         server.expect(method(org.springframework.http.HttpMethod.GET))
             .andRespond(withSuccess("""{"transactions":$transactionsJson}""", MediaType.APPLICATION_JSON))
-        return EnableBankingConnector(props, EnableBankingJwt(props), builder)
+        return EnableBankingConnector(props, EnableBankingJwt(), builder)
     }
 
     @Test
@@ -60,7 +61,7 @@ class EnableBankingConnectorMappingTest {
         )
 
         val page = connector.fetchMovements(
-            "session-1", "acc-1", LocalDate.parse("2026-07-06"), LocalDate.parse("2026-07-11"),
+            creds, "session-1", "acc-1", LocalDate.parse("2026-07-06"), LocalDate.parse("2026-07-11"),
             FetchStrategy.DEFAULT, null, null,
         )
 
@@ -84,7 +85,7 @@ class EnableBankingConnectorMappingTest {
         )
 
         val m = connector.fetchMovements(
-            "s", "a", null, null, FetchStrategy.DEFAULT, null, null,
+            creds, "s", "a", null, null, FetchStrategy.DEFAULT, null, null,
         ).movements.single()
         assertThat(m.direction).isEqualTo(Direction.income)
         assertThat(m.amount).isEqualByComparingTo("1000.00")
@@ -106,7 +107,7 @@ class EnableBankingConnectorMappingTest {
         )
 
         val m = connector.fetchMovements(
-            "s", "a", null, null, FetchStrategy.DEFAULT, null, null,
+            creds, "s", "a", null, null, FetchStrategy.DEFAULT, null, null,
         ).movements.single()
         assertThat(m.direction).isEqualTo(Direction.expense)
         assertThat(m.bookingDate).isEqualTo(LocalDate.parse("2026-07-08"))
@@ -126,7 +127,7 @@ class EnableBankingConnectorMappingTest {
         )
 
         // First row (no amount, no date) drops; the valid second row survives.
-        val page = connector.fetchMovements("s", "a", null, null, FetchStrategy.DEFAULT, null, null)
+        val page = connector.fetchMovements(creds, "s", "a", null, null, FetchStrategy.DEFAULT, null, null)
         assertThat(page.movements).hasSize(1)
         assertThat(page.movements.single().direction).isEqualTo(Direction.income)
     }
@@ -140,7 +141,7 @@ class EnableBankingConnectorMappingTest {
         )
 
         val thrown = catchThrowableOfType(
-            { connector.fetchMovements("s", "a", null, null, FetchStrategy.DEFAULT, null, null) },
+            { connector.fetchMovements(creds, "s", "a", null, null, FetchStrategy.DEFAULT, null, null) },
             BankConnectorException::class.java,
         )
 
@@ -156,7 +157,7 @@ class EnableBankingConnectorMappingTest {
         )
 
         // Must be the dedicated type: the sync service backs off on it instead of failing hard.
-        assertThatThrownBy { connector.fetchMovements("s", "a", null, null, FetchStrategy.DEFAULT, null, null) }
+        assertThatThrownBy { connector.fetchMovements(creds, "s", "a", null, null, FetchStrategy.DEFAULT, null, null) }
             .isInstanceOf(RateLimitExceededException::class.java)
     }
 
@@ -165,7 +166,7 @@ class EnableBankingConnectorMappingTest {
         val server = MockRestServiceServer.bindTo(builder).build()
         server.expect(method(org.springframework.http.HttpMethod.GET))
             .andRespond(withStatus(status).body(body).contentType(MediaType.APPLICATION_JSON))
-        return EnableBankingConnector(props, EnableBankingJwt(props), builder)
+        return EnableBankingConnector(props, EnableBankingJwt(), builder)
     }
 
     private fun generatePkcs8PrivateKey(): String {

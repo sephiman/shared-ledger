@@ -1,7 +1,13 @@
 package com.sephilabs.sharedledger.bank
 
-/** Consent lifecycle for a connection, surfaced in Settings. */
-enum class ConnectionStatus { active, expired, suspended, error }
+/**
+ * Consent lifecycle for a connection, surfaced in Settings. The last two are credential states, not
+ * consent states — what a connection shows instead of failing silently: [credentials_required] when
+ * the household has none configured (the expected state right after the per-household migration),
+ * [credentials_mismatch] when the configured application isn't the one the bank granted the consent
+ * to, so re-linking is the only fix. Both are re-checked on every sync and clear themselves.
+ */
+enum class ConnectionStatus { active, expired, suspended, error, credentials_required, credentials_mismatch }
 
 /** How often the scheduled sync runs a connection (within the ≤4 calls/consent/day budget). */
 enum class SyncFrequency { daily, twice_daily }

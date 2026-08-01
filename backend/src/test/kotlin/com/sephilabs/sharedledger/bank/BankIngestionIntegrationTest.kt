@@ -23,11 +23,15 @@ import com.sephilabs.sharedledger.transaction.Direction
 import com.sephilabs.sharedledger.transaction.TransactionRepository
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.context.annotation.Import
 import org.springframework.data.domain.PageRequest
+import org.springframework.mock.web.MockHttpServletRequest
+import org.springframework.web.context.request.RequestContextHolder
+import org.springframework.web.context.request.ServletRequestAttributes
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
@@ -49,8 +53,21 @@ class BankIngestionIntegrationTest @Autowired constructor(
     private val fxRates: FxRateRepository,
     private val categories: CategoryService,
     private val props: AppProperties,
+    private val credentialsService: BankCredentialsService,
     private val fake: FakeBankConnector,
 ) : IntegrationTestBase() {
+
+    /** Linking resolves its redirect URL from the current request (see BankCallbackUrl), so these
+     *  service-level tests bind one. */
+    @BeforeEach
+    fun bindRequest() {
+        RequestContextHolder.setRequestAttributes(ServletRequestAttributes(MockHttpServletRequest()))
+    }
+
+    @AfterEach
+    fun unbindRequest() {
+        RequestContextHolder.resetRequestAttributes()
+    }
 
     // The fake connector is a shared singleton across tests; reset its seeded state each time.
     @BeforeEach
@@ -397,7 +414,7 @@ class BankIngestionIntegrationTest @Autowired constructor(
     fun `visibility reflects configuration and linked connections`() {
         val (user, household) = seed()
         val before = bankService.config(household.id)
-        assertThat(before.featureEnabled).isTrue()
+        assertThat(before.credentialsConfigured).isTrue()
         assertThat(before.connectionCount).isZero()
 
         link(household, user)
@@ -885,9 +902,15 @@ class BankIngestionIntegrationTest @Autowired constructor(
             reference = null,
         )
 
+    /** Credentials are per household now, so seeding them is part of "this household is set up". */
     private fun seed(): Pair<User, Household> {
         val user = users.save(User(email = "bank${System.nanoTime()}@example.com", passwordHash = "x", locale = "en"))
         val household = households.save(Household(name = "H", currency = "EUR", defaultLocale = "en"))
+        credentialsService.save(household.id, TEST_APP_ID, BankTestKeys.pkcs8Base64, confirm = false, byUserId = user.id)
         return user to household
+    }
+
+    private companion object {
+        const val TEST_APP_ID = "test-app"
     }
 }

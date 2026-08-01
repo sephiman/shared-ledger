@@ -2,6 +2,7 @@ package com.sephilabs.sharedledger.household.admin
 
 import com.sephilabs.sharedledger.bank.BankAuthSessionRepository
 import com.sephilabs.sharedledger.bank.BankConnectionRepository
+import com.sephilabs.sharedledger.bank.BankCredentialsRepository
 import com.sephilabs.sharedledger.bank.CategorizationRuleRepository
 import com.sephilabs.sharedledger.bank.PendingMovementRepository
 import com.sephilabs.sharedledger.budget.BudgetRepository
@@ -54,6 +55,7 @@ class HouseholdDataWipeService(
     private val categorizationRules: CategorizationRuleRepository,
     private val bankAuthSessions: BankAuthSessionRepository,
     private val bankConnections: BankConnectionRepository,
+    private val bankCredentials: BankCredentialsRepository,
     private val fireSettings: FireSettingsRepository,
     private val fireTaxBrackets: FireTaxBracketRepository,
     private val telegramSettings: TelegramSettingsRepository,
@@ -89,6 +91,8 @@ class HouseholdDataWipeService(
         val ruleCount = categorizationRules.hardDeleteAllByHouseholdId(householdId)
         val authSessionCount = bankAuthSessions.hardDeleteAllByHouseholdId(householdId)
         val connectionCount = bankConnections.hardDeleteAllByHouseholdId(householdId)
+        // As telegram_settings below: a wiped household starts over, application included.
+        val bankCredentialCount = bankCredentials.hardDeleteAllByHouseholdId(householdId)
 
         // 5. Per-household settings.
         val fireCount = fireSettings.hardDeleteAllByHouseholdId(householdId)
@@ -100,10 +104,10 @@ class HouseholdDataWipeService(
         log.info(
             "household_data_wipe household={} by_user={} tx={} mv={} snap={} snap_liab_balances={} cash_adj={} " +
                 "recurring={} budgets={} custom_categories={} holdings={} assets={} liabilities={} lendings={} " +
-                "pending={} rules={} auth_sessions={} bank_connections={} fire={} fire_brackets={} telegram={} auto_snapshot={} cash_settings={}",
+                "pending={} rules={} auth_sessions={} bank_connections={} bank_credentials={} fire={} fire_brackets={} telegram={} auto_snapshot={} cash_settings={}",
             householdId, byUserId, txCount, movementCount, snapshotCount, balanceCount, cashAdjustmentCount,
             recurringCount, budgetCount, customCategoryCount, holdingCount, assetCount, liabilityCount, lendingCount,
-            pendingCount, ruleCount, authSessionCount, connectionCount, fireCount, fireBracketCount, telegramCount, autoSnapshotCount, cashSettingsCount,
+            pendingCount, ruleCount, authSessionCount, connectionCount, bankCredentialCount, fireCount, fireBracketCount, telegramCount, autoSnapshotCount, cashSettingsCount,
         )
     }
 }

@@ -4,6 +4,7 @@ import com.sephilabs.sharedledger.bank.BankConnection
 import com.sephilabs.sharedledger.bank.BankConnectionAccount
 import com.sephilabs.sharedledger.bank.BankConnectionRepository
 import com.sephilabs.sharedledger.bank.BankConnectionAccountRepository
+import com.sephilabs.sharedledger.bank.BankCredentialsService
 import com.sephilabs.sharedledger.bank.BankFxConverter
 import com.sephilabs.sharedledger.bank.BankSyncRun
 import com.sephilabs.sharedledger.bank.BankSyncRunRepository
@@ -64,6 +65,7 @@ class BankSyncService(
     private val props: AppProperties,
     private val connector: BankConnector,
     private val crypto: BankCrypto,
+    private val credentialsService: BankCredentialsService,
     private val connections: BankConnectionRepository,
     private val accounts: BankConnectionAccountRepository,
     private val pending: PendingMovementRepository,
@@ -96,6 +98,28 @@ class BankSyncService(
     fun sync(connectionId: UUID, mode: SyncMode = SyncMode.SCHEDULED, psu: PsuContext? = null): Int {
         val connection = connections.findById(connectionId).orElse(null) ?: return 0
         if (!connection.ingestionEnabled) return 0
+
+        // Credential gate, before anything is recorded: a household without credentials, or one on a
+        // different application, is *parked* rather than retried into a wall of failures — no run, no
+        // metric, no notification. Re-evaluated every run, so fixing the credentials heals it.
+        val creds = credentialsService.resolve(connection.householdId)
+        if (creds == null) {
+            log.info("bank_sync_skipped connection={} reason=no_credentials", connectionId)
+            if (connection.status != ConnectionStatus.credentials_required) {
+                write { markConnection(connectionId) { it.status = ConnectionStatus.credentials_required } }
+            }
+            return 0
+        }
+        if (creds.appId != connection.appId) {
+            log.info(
+                "bank_sync_skipped connection={} reason=app_id_mismatch connectionAppId={} credentialsAppId={}",
+                connectionId, connection.appId ?: "<none>", creds.appId,
+            )
+            if (connection.status != ConnectionStatus.credentials_mismatch) {
+                write { markConnection(connectionId) { it.status = ConnectionStatus.credentials_mismatch } }
+            }
+            return 0
+        }
 
         val today = LocalDate.now()
         val background = mode == SyncMode.SCHEDULED
@@ -136,7 +160,7 @@ class BankSyncService(
 
         return try {
             // ---- HTTP phase: no DB transaction is held while we talk to the provider ----
-            val status = connector.sessionStatus(sessionId)
+            val status = connector.sessionStatus(creds, sessionId)
             if (background) callsUsed++
             log.info("bank_sync_session connection={} consentStatus={}", connectionId, status)
             if (status != ConsentStatus.ACTIVE) {
@@ -172,7 +196,7 @@ class BankSyncService(
                     }
                     // Stop condition is ONLY "no continuation_key" — an empty/short page may still
                     // carry one, so we keep paging until it's absent.
-                    val page = connector.fetchMovements(sessionId, account.accountUid, dateFrom, dateTo, using, continuationKey, psu)
+                    val page = connector.fetchMovements(creds, sessionId, account.accountUid, dateFrom, dateTo, using, continuationKey, psu)
                     if (background) callsUsed++
                     pages++
                     fetchedForAccount += page.movements.size

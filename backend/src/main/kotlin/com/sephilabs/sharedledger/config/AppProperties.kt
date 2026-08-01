@@ -140,21 +140,21 @@ data class AppProperties(
     )
 
     /**
-     * Enable Banking (PSD2 AIS aggregator, Restricted Production). The operator creates the API
-     * application in the Enable Banking Control Panel once and supplies its id + RSA private key
-     * via env. The feature is only exposed when both are present ([configured]) — see the
-     * three-level visibility in the Settings/Banks UI.
+     * Enable Banking (PSD2 AIS aggregator, Restricted Production). The API application id and its
+     * private key are **not** here: they are per-household configuration owned by
+     * `BankCredentialsService` (Settings → Banks). What stays instance-wide is the encryption key
+     * that protects them at rest plus the provider tuning below.
      */
     data class EnableBanking(
         val baseUrl: String = "https://api.enablebanking.com",
-        // The API application id (JWT `kid`). Blank = feature not configured.
-        val appId: String = "",
-        // PKCS#8 PEM RSA private key used to sign the JWT bearer. Blank = feature not configured.
-        val privateKey: String = "",
-        // Where the bank sends the PSU back after SCA — the SPA callback route.
-        val redirectUrl: String = "",
-        // Base64 AES key (16/24/32 bytes) encrypting the per-connection session id at rest.
+        // Base64 AES key (16/24/32 bytes) encrypting the stored household credentials and the
+        // per-connection session id at rest. The one Enable Banking secret that remains an env var.
         val secretKey: String = "",
+        // Where the bank sends the PSU back after SCA — this instance's public frontend URL plus the
+        // SPA callback route. Not a secret and not per household: it identifies the *instance*, so
+        // every household registers the same value in its own EB application. Blank falls back to
+        // deriving it from the request (see BankCallbackUrl).
+        val redirectUrl: String = "",
         val timeoutMs: Long = 15000,
         val minRequestIntervalMs: Long = 300,
         // Requested consent lifetime; the bank may shorten it (90–180 days in practice).
@@ -177,7 +177,5 @@ data class AppProperties(
         val syncCron: String = "0 0 7,19 * * *",
         // Warn this many days before a consent expires so the holder can re-link in time.
         val reminderDaysBefore: Long = 7,
-    ) {
-        val configured: Boolean get() = appId.isNotBlank() && privateKey.isNotBlank()
-    }
+    )
 }

@@ -17,6 +17,7 @@ import { getCurrencyOptions } from "@/lib/currency";
 import { formatDate } from "@/lib/dates";
 import { useBankConfig } from "@/api/banks";
 import { BanksCard } from "@/features/banks/BanksCard";
+import { BankCredentialsCard } from "@/features/banks/BankCredentialsCard";
 
 export function SettingsPage() {
   const { t, i18n } = useTranslation();
@@ -352,11 +353,15 @@ export function SettingsPage() {
 
       {isOwner && <NotificationsCard householdId={household.householdId} />}
 
-      {bankConfig?.featureEnabled && (
+      {/* Always available to owners, so the bank feature can be configured from scratch. */}
+      {isOwner && <BankCredentialsCard householdId={household.householdId} />}
+
+      {/* Connections stay visible without credentials, so the gap explains itself. */}
+      {(bankConfig?.credentialsConfigured || (bankConfig?.connectionCount ?? 0) > 0) && (
         <BanksCard householdId={household.householdId} locale={i18n.language} />
       )}
 
-      {bankConfig?.featureEnabled && (
+      {bankConfig?.credentialsConfigured && (
         <Card>
           <CardHeader>
             <p className="font-medium">{t("banks.rules_title")}</p>

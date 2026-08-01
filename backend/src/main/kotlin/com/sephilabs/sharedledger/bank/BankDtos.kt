@@ -13,15 +13,48 @@ import java.util.UUID
 
 // --- Config / visibility ---------------------------------------------------------------------
 
-/** Drives the three-level UI visibility: feature toggle (env) + how many banks are linked. */
+/**
+ * Drives UI visibility. The credentials card is always shown to owners; everything else waits for
+ * [credentialsConfigured], except the connections list, which stays visible while connections exist
+ * so the migration gap is explained rather than hidden.
+ */
 data class BankConfigDto(
-    val featureEnabled: Boolean,
+    val credentialsConfigured: Boolean,
     val connectionCount: Long,
     // Upcoming background-sync fire times (absolute instants); the UI renders them in the viewer's zone.
     val nextSyncTimes: List<Instant> = emptyList(),
 )
 
 data class AspspDto(val name: String, val country: String, val logoUrl: String?)
+
+// --- Household credentials (owner-only) -------------------------------------------------------
+
+/**
+ * The private key is write-only like the Telegram bot token — accepted on save, never returned, so
+ * the form can only report that one exists. [redirectUrl] is what to register at Enable Banking.
+ */
+data class BankCredentialsDto(
+    val appId: String?,
+    val privateKeyConfigured: Boolean,
+    val redirectUrl: String,
+    val connectionCount: Long,
+    // Connections authorized under a different (or unknown) application; they need re-linking.
+    val mismatchedConnectionCount: Long,
+)
+
+data class BankCredentialsUpdateRequest(
+    @field:NotBlank(message = "validation.required")
+    @field:Size(max = 128, message = "validation.invalid")
+    val appId: String,
+    // Blank/null keeps the stored key; any value replaces it (validated, then re-encrypted).
+    val privateKey: String? = null,
+    // Acknowledges the "N connections will need re-linking" warning; without it that save is refused.
+    // Nullable so an omitted value doesn't break Jackson deserialization of this primitive
+    // (see CategorizationRuleRequest.priority).
+    val confirm: Boolean? = null,
+)
+
+data class BankCredentialsTestResult(val ok: Boolean, val message: String?)
 
 // --- Connections -----------------------------------------------------------------------------
 

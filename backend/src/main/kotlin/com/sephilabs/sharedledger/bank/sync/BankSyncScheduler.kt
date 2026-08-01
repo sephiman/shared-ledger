@@ -2,6 +2,7 @@ package com.sephilabs.sharedledger.bank.sync
 
 import com.sephilabs.sharedledger.bank.BankConnection
 import com.sephilabs.sharedledger.bank.BankConnectionRepository
+import com.sephilabs.sharedledger.bank.BankCredentialsService
 import com.sephilabs.sharedledger.bank.ConnectionStatus
 import com.sephilabs.sharedledger.config.AppProperties
 import com.sephilabs.sharedledger.notification.NotificationPublisher
@@ -22,6 +23,7 @@ import java.time.ZoneOffset
 class BankSyncScheduler(
     private val props: AppProperties,
     private val connections: BankConnectionRepository,
+    private val credentials: BankCredentialsService,
     private val syncService: BankSyncService,
     private val notifications: NotificationPublisher,
 ) {
@@ -29,14 +31,11 @@ class BankSyncScheduler(
 
     @Scheduled(cron = "\${app.enable-banking.sync-cron}", zone = "\${app.scheduler.timezone}")
     fun syncAll() {
-        if (!props.enableBanking.configured) {
-            log.info("bank_sync_run skipped=not_configured")
-            return
-        }
         val now = Instant.now()
         val ingesting = connections.findAllByIngestionEnabledTrue()
-        val eligible = ingesting
-            .filter { it.status == ConnectionStatus.active || it.status == ConnectionStatus.suspended }
+        // Credential states are eligible on purpose: the sync service re-checks and skips quietly
+        // while they persist, so a connection recovers on its own once an owner fixes them.
+        val eligible = ingesting.filter { it.status in SYNCABLE_STATUSES }
         // A connection that hit the bank's rate limit waits out its backoff before we try again.
         val due = eligible.filter { it.syncBackoffUntil?.isAfter(now) != true }
         log.info(
@@ -55,14 +54,23 @@ class BankSyncScheduler(
     /** Daily re-link reminders for consents nearing expiry (per connection, staggered). */
     @Scheduled(cron = "\${app.enable-banking.reminder-cron}", zone = "\${app.scheduler.timezone}")
     fun remindExpiring() {
-        if (!props.enableBanking.configured) return
         val threshold = LocalDate.now().plusDays(props.enableBanking.reminderDaysBefore)
         connections.findAllByStatus(ConnectionStatus.active).forEach { connection ->
             val expiresOn = connection.consentExpiresAt?.atZone(ZoneOffset.UTC)?.toLocalDate() ?: return@forEach
-            if (!expiresOn.isAfter(threshold)) {
+            // "Re-link soon" is unactionable for a household that can't link at all right now.
+            if (!expiresOn.isAfter(threshold) && credentials.resolve(connection.householdId) != null) {
                 remind(connection, expiresOn)
             }
         }
+    }
+
+    private companion object {
+        val SYNCABLE_STATUSES = setOf(
+            ConnectionStatus.active,
+            ConnectionStatus.suspended,
+            ConnectionStatus.credentials_required,
+            ConnectionStatus.credentials_mismatch,
+        )
     }
 
     private fun remind(connection: BankConnection, expiresOn: LocalDate) {

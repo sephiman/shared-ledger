@@ -47,6 +47,13 @@ enum class FetchStrategy { LONGEST, DEFAULT }
  */
 data class PsuContext(val ipAddress: String, val userAgent: String)
 
+/**
+ * The API application a provider call is made under, resolved per household (see
+ * `BankCredentialsService`). [privateKeyBase64] is the bare PKCS#8 body — validated before it is
+ * stored, so signing can treat it as well-formed.
+ */
+data class EbCredentials(val appId: String, val privateKeyBase64: String)
+
 /** One bank in the provider's catalogue, filtered by country. */
 data class Aspsp(
     val name: String,
@@ -61,6 +68,8 @@ data class AuthStartRequest(
     // Opaque value round-tripped through the bank redirect; we validate it on return.
     val state: String,
     val validUntil: Instant,
+    // Must match a redirect URL registered in the household's EB application (see BankCallbackUrl).
+    val redirectUrl: String,
 )
 
 /** The provider's answer: send the holder here to authenticate at their bank. */

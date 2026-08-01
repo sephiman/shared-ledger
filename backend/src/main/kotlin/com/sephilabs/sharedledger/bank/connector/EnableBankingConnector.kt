@@ -14,10 +14,11 @@ import java.time.format.DateTimeFormatter
 
 /**
  * Primary [BankConnector]: Enable Banking's PSD2 AIS API (Restricted Production, read-only).
- * Every call carries a fresh RS256 JWT bearer ([EnableBankingJwt]); JSON is mapped defensively via
- * JsonNode because ASPSP payloads vary in which optional fields they populate. Any HTTP or mapping
- * failure surfaces as [BankConnectorException] so the sync service can mark the connection and move
- * on without killing the run.
+ * Every call carries a fresh RS256 JWT bearer ([EnableBankingJwt]) minted from the caller's
+ * per-household [EbCredentials]; JSON is mapped defensively via JsonNode because ASPSP payloads vary
+ * in which optional fields they populate. Any HTTP or mapping failure surfaces as
+ * [BankConnectorException] so the sync service can mark the connection and move on without killing
+ * the run. Stateless as to credentials, so [pace] throttles the whole process, not one household.
  */
 @Component
 class EnableBankingConnector(
@@ -39,8 +40,8 @@ class EnableBankingConnector(
         const val RATE_LIMIT_CODE = "ASPSP_RATE_LIMIT_EXCEEDED"
     }
 
-    override fun listAspsps(country: String): List<Aspsp> = call("aspsps country=$country") {
-        val body = get("/aspsps?country=$country")
+    override fun listAspsps(creds: EbCredentials, country: String): List<Aspsp> = call("aspsps country=$country") {
+        val body = get(creds, "/aspsps?country=$country")
         body.path("aspsps").map {
             Aspsp(
                 name = it.path("name").asText(),
@@ -50,23 +51,26 @@ class EnableBankingConnector(
         }
     }
 
-    override fun startAuthorization(request: AuthStartRequest): AuthStart = call("auth aspsp='${request.aspspName}'") {
+    override fun startAuthorization(
+        creds: EbCredentials,
+        request: AuthStartRequest,
+    ): AuthStart = call("auth aspsp='${request.aspspName}'") {
         val payload = mapOf(
             "access" to mapOf("valid_until" to DateTimeFormatter.ISO_INSTANT.format(request.validUntil)),
             "aspsp" to mapOf("name" to request.aspspName, "country" to request.country),
             "state" to request.state,
-            "redirect_url" to props.enableBanking.redirectUrl,
+            "redirect_url" to request.redirectUrl,
             "psu_type" to "personal",
         )
-        val body = post("/auth", payload)
+        val body = post(creds, "/auth", payload)
         AuthStart(
             url = body.path("url").textOrNull() ?: throw BankConnectorException("Auth start returned no url"),
             authorizationId = body.path("authorization_id").textOrNull(),
         )
     }
 
-    override fun completeAuthorization(code: String): AuthorizedSession = call("sessions") {
-        val body = post("/sessions", mapOf("code" to code))
+    override fun completeAuthorization(creds: EbCredentials, code: String): AuthorizedSession = call("sessions") {
+        val body = post(creds, "/sessions", mapOf("code" to code))
         val accountsNode = body.path("accounts")
         if (!accountsNode.isArray || accountsNode.isEmpty) {
             // No accounts on the session means the sync will have nothing to fetch — log the payload
@@ -94,8 +98,8 @@ class EnableBankingConnector(
         )
     }
 
-    override fun sessionStatus(sessionId: String): ConsentStatus = call("session status") {
-        val body = get("/sessions/$sessionId")
+    override fun sessionStatus(creds: EbCredentials, sessionId: String): ConsentStatus = call("session status") {
+        val body = get(creds, "/sessions/$sessionId")
         when (body.path("status").asText().uppercase()) {
             "AUTHORIZED", "VALID", "ACTIVE" -> ConsentStatus.ACTIVE
             "EXPIRED", "REVOKED", "CLOSED" -> ConsentStatus.EXPIRED
@@ -104,6 +108,7 @@ class EnableBankingConnector(
     }
 
     override fun fetchMovements(
+        creds: EbCredentials,
         sessionId: String,
         accountUid: String,
         dateFrom: LocalDate?,
@@ -131,16 +136,17 @@ class EnableBankingConnector(
         // log shows, so an ASPSP that refuses one particular window/page is identifiable afterwards.
         val op = "transactions account=$accountUid strategy=$strategy from=$dateFrom to=$dateTo " +
             "page=${if (continuationKey == null) "first" else "next"} psu=${psu != null}"
-        return fetchPage(op, query, headers, accountUid)
+        return fetchPage(creds, op, query, headers, accountUid)
     }
 
     private fun fetchPage(
+        creds: EbCredentials,
         op: String,
         query: String,
         headers: Map<String, String>,
         accountUid: String,
     ): MovementPage = call(op) {
-        val body = get(query, headers)
+        val body = get(creds, query, headers)
         val raw = body.path("transactions")
         val movements = raw.mapNotNull { txn ->
             mapMovement(txn) ?: run {
@@ -214,15 +220,19 @@ class EnableBankingConnector(
 
     // --- HTTP plumbing -----------------------------------------------------------------------
 
-    private fun get(path: String, headers: Map<String, String> = emptyMap()): JsonNode {
-        var req = client.get().uri(path).header("Authorization", "Bearer ${jwt.bearer()}")
+    private fun get(
+        creds: EbCredentials,
+        path: String,
+        headers: Map<String, String> = emptyMap(),
+    ): JsonNode {
+        var req = client.get().uri(path).header("Authorization", "Bearer ${jwt.bearer(creds)}")
         headers.forEach { (k, v) -> req = req.header(k, v) }
         val body = req.retrieve().body(String::class.java) ?: throw BankConnectorException("Empty response for $path")
         return mapper.readTree(body)
     }
 
-    private fun post(path: String, payload: Any): JsonNode {
-        val body = client.post().uri(path).header("Authorization", "Bearer ${jwt.bearer()}")
+    private fun post(creds: EbCredentials, path: String, payload: Any): JsonNode {
+        val body = client.post().uri(path).header("Authorization", "Bearer ${jwt.bearer(creds)}")
             .body(payload).retrieve().body(String::class.java)
             ?: throw BankConnectorException("Empty response for $path")
         return mapper.readTree(body)
