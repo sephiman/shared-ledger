@@ -1,31 +1,17 @@
 import type { HoldingSummary } from "@/api/portfolio";
 import { formatDate } from "@/lib/dates";
 
-/**
- * How old each holding's price is, and whether that is old enough to point out.
- *
- * The measure follows the refresh cadence of the asset class, so the age shown and the
- * threshold that colors it always speak about the same thing:
- *
- * - **crypto** refreshes intraday, so its age comes from the observation instant
- *   (`price_history.as_of`) — the price date sits at today all day and would say nothing.
- * - **ETFs / stocks** get one price per trading day, so their age is a count of calendar
- *   days since that day. The observation instant would read "8h ago" for a Friday close
- *   seen on Monday morning (it was fetched the night after the close) — technically true
- *   about the fetch, misleading about the price.
- *
- * Deliberately no market calendar: the equity tolerance is generous enough to cover a
- * weekend plus a holiday, which is all a "is this number suspiciously old?" hint needs.
- */
+/** How old each holding's price is, and whether that is old enough to point out. The measure follows the
+ *  asset class's refresh cadence: **crypto** refreshes intraday so its age comes from the observation
+ *  instant, while **ETFs/stocks** get one price per trading day so their age counts calendar days (the
+ *  instant would read "8h ago" for a Friday close seen Monday). No market calendar — the equity tolerance
+ *  already covers a weekend plus a holiday. */
 
 /** Crypto refreshes roughly hourly; beyond this a run has been missed. */
 export const CRYPTO_STALE_AFTER_HOURS = 3;
 
-/**
- * Equities publish one close per trading day. Four calendar days spans a long weekend
- * (a Friday close is still the correct price on Monday, and on Tuesday after a holiday),
- * so only a genuinely missed refresh trips it.
- */
+/** Equities publish one close per trading day, and four calendar days spans a long weekend, so only a
+ *  genuinely missed refresh trips it. */
 export const EQUITY_STALE_AFTER_DAYS = 4;
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -42,12 +28,8 @@ export interface PriceAge {
   dayGranular: boolean;
 }
 
-/**
- * Age of the price behind one holding, or null when there is nothing to date:
- * a closed position (its value is 0 regardless of price), an unpriced holding, or a
- * fund — funds have no provider at all, and their "price" is whatever was last entered
- * by hand in a snapshot.
- */
+/** Age of one holding's price, or null when there is nothing to date: a closed position, an unpriced
+ *  holding, or a fund — funds have no provider and their "price" is whatever a snapshot last recorded. */
 export function priceAge(row: HoldingSummary, now: Date): PriceAge | null {
   if (row.holding.closed || row.holding.assetClass === "fund" || row.currentPrice == null) return null;
 
@@ -76,12 +58,8 @@ export function priceAge(row: HoldingSummary, now: Date): PriceAge | null {
   };
 }
 
-/**
- * The worst age among the holdings that are actually past their tolerance — the one
- * glanceable figure behind the stale-price notice, and null when nothing is stale (so no
- * summary line is shown at all). Rows without an age (closed, unpriced, funds) drop out on
- * their own, making this open, priced holdings by construction.
- */
+/** The worst age among holdings actually past their tolerance — the figure behind the stale-price notice,
+ *  null when nothing is stale. Rows without an age drop out on their own. */
 export function oldestStalePriceAge(rows: HoldingSummary[], now: Date): PriceAge | null {
   let oldest: PriceAge | null = null;
   for (const row of rows) {
@@ -91,19 +69,14 @@ export function oldestStalePriceAge(rows: HoldingSummary[], now: Date): PriceAge
   return oldest;
 }
 
-/**
- * The moment a price refers to: the trading day for a daily close, day plus clock time when
- * the cadence is intraday. Shown in the expanded holding — the one place the exact time of a
- * crypto observation is available.
- */
+/** The moment a price refers to: the trading day for a daily close, day plus clock time when the cadence is
+ *  intraday. Shown in the expanded holding. */
 export function priceAsOfLabel(age: PriceAge, locale: string): string {
   return formatDate(age.asOf, locale, age.dayGranular ? "PP" : "PPp");
 }
 
-/**
- * Compact localized age: "2h ago" / "3d ago", "hace 2 h" / "hace 3 d". Day-granular ages
- * never borrow a smaller unit — a daily close is not "8 hours" fresh.
- */
+/** Compact localized age: "2h ago" / "3d ago", "hace 2 h" / "hace 3 d". Day-granular ages never borrow a
+ *  smaller unit — a daily close is not "8 hours" fresh. */
 export function formatPriceAge(age: PriceAge, locale: string): string {
   const days = Math.floor(age.ageMs / DAY_MS);
   if (age.dayGranular || days >= 1) {

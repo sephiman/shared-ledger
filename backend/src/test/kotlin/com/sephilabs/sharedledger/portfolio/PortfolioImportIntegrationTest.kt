@@ -9,12 +9,10 @@ import com.sephilabs.sharedledger.portfolio.price.SymbolCandidate
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.context.annotation.Import
 import java.io.ByteArrayInputStream
 import java.math.BigDecimal
 import java.nio.charset.StandardCharsets
 
-@Import(StubPriceProviderConfig::class)
 class PortfolioImportIntegrationTest @Autowired constructor(
     private val users: UserRepository,
     private val households: HouseholdRepository,

@@ -8,11 +8,8 @@ import java.text.Normalizer
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
-/**
- * European CSV: ';' separator + ',' decimal. Opens directly in Excel for ES/NL/DE locales
- * without prompting for column splitting. Programmatic readers (pandas, csv libs) work
- * with `sep=";"` and `decimal=","`.
- */
+/** European CSV: ';' separator + ',' decimal, so exports open directly in Excel for ES/NL/DE locales.
+ *  Programmatic readers need `sep=";"` and `decimal=","`. */
 object Csv {
 
     const val SEPARATOR: Char = ';'

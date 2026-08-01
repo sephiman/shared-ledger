@@ -17,12 +17,10 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.context.annotation.Import
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
 
-@Import(StubPriceProviderConfig::class)
 class SnapshotPortfolioIntegrationTest @Autowired constructor(
     private val users: UserRepository,
     private val households: HouseholdRepository,

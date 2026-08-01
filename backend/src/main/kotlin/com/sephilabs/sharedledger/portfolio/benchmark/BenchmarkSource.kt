@@ -14,13 +14,9 @@ interface BenchmarkSource {
     fun dailyCloses(benchmark: Benchmark, from: LocalDate, to: LocalDate): List<DailyPrice>
 }
 
-/**
- * Default benchmark source: always keyless, and deliberately independent of the household's
- * configured equity provider — a benchmark stays comparable whether the user prices holdings
- * via Yahoo, EODHD or Twelve Data. Equity/commodity benchmarks come from a dedicated Yahoo
- * client (indices like `^GSPC`, futures like `GC=F`, ETFs like `URTH`); crypto benchmarks
- * come from Binance USDT klines (treated as USD), reusing the existing keyless fallback bean.
- */
+/** Default benchmark source: always keyless and deliberately independent of the household's equity
+ *  provider, so a benchmark stays comparable however holdings are priced. Equity/commodity come from a
+ *  dedicated Yahoo client (`^GSPC`, `GC=F`, `URTH`); crypto from Binance USDT klines. */
 @Component
 class DefaultBenchmarkSource(
     props: AppProperties,

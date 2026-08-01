@@ -21,10 +21,8 @@ import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 
-/**
- * In-memory [BankConnector] for integration tests — no real HTTP, no JWT. Seed the fields, then
- * drive the services exactly as production would (link -> sync -> inbox -> confirm).
- */
+/** In-memory [BankConnector] for integration tests — no HTTP, no JWT. Seed the fields, then drive the
+ *  services as production would (link -> sync -> inbox -> confirm). */
 class FakeBankConnector : BankConnector {
     var aspsps: List<Aspsp> = listOf(Aspsp("ING", "NL", null), Aspsp("BBVA", "ES", null))
     var lastState: String? = null

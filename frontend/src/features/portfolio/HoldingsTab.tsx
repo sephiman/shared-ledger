@@ -43,10 +43,9 @@ function formatQty(value: string): string {
   }
 }
 
-/** Average purchase cost per unit = remaining cost basis / net quantity, in base currency.
- *  Null when the position holds nothing (closed / zero quantity) so we skip the avg line.
- *  The quotient is bounded to 12 dp — the scale prices are stored at — so the division
- *  tail doesn't run to decimal.js's 20 significant digits; formatPrice then trims zeros. */
+/** Average purchase cost per unit = remaining cost basis / net quantity, in base currency; null for a
+ *  closed position. Bounded to 12 dp (the scale prices are stored at) so the division tail doesn't run to
+ *  decimal.js's 20 significant digits. */
 function avgCost(row: HoldingSummary): string | null {
   try {
     const qty = new Decimal(row.holding.netQuantity);
@@ -557,11 +556,8 @@ function Stat({
   );
 }
 
-/**
- * The whole collapsed-row signal for a price past its class tolerance: one amber dot, with
- * the date it came from on hover. A fresh row shows nothing at all — the age in words lives
- * in the expanded holding, where there is room for it.
- */
+/** The whole collapsed-row signal for a price past its class tolerance: one amber dot, with its date on
+ *  hover. A fresh row shows nothing; the age in words lives in the expanded holding. */
 function StalePriceDot({ age, locale, className }: { age: PriceAge; locale: string; className?: string }) {
   const { t } = useTranslation();
   return (

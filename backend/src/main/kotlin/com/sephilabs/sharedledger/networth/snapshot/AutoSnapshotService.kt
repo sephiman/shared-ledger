@@ -66,10 +66,7 @@ class AutoSnapshotService(
         return created
     }
 
-    /**
-     * Creates the snapshot for [today] if the frequency makes it due and none exists yet.
-     * Returns true when a snapshot was created.
-     */
+    /** Creates the snapshot for [today] if the frequency makes it due and none exists. True when created. */
     fun runForHousehold(householdId: UUID, frequency: SnapshotFrequency, today: LocalDate): Boolean {
         if (!isDue(frequency, today)) return false
         // One snapshot per date: never duplicate a manual or earlier-run snapshot, never edit one.

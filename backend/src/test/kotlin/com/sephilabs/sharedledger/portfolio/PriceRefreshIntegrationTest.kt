@@ -11,11 +11,9 @@ import com.sephilabs.sharedledger.portfolio.price.PriceRefreshService
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.context.annotation.Import
 import java.math.BigDecimal
 import java.time.LocalDate
 
-@Import(StubPriceProviderConfig::class)
 class PriceRefreshIntegrationTest @Autowired constructor(
     private val users: UserRepository,
     private val households: HouseholdRepository,

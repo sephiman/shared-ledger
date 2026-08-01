@@ -7,11 +7,8 @@ import org.junit.jupiter.api.Test
 import java.math.BigDecimal
 import java.time.LocalDate
 
-/**
- * Fixtures are hand-verifiable: spans are picked so days / 365.25 is exact
- * (2022-01-01 → 2026-01-01 = 1461 days = 4.0 years, 2024 being a leap year),
- * and amounts are powers of the expected rate (1000 × 1.1⁴ = 1464.10).
- */
+/** Fixtures are hand-verifiable: spans make days / 365.25 exact (2022-01-01 → 2026-01-01 = 1461 days =
+ *  4.0 years) and amounts are powers of the expected rate (1000 × 1.1⁴ = 1464.10). */
 class MoneyWeightedReturnTest {
 
     private fun flow(date: String, amount: String) = Flow(LocalDate.parse(date), BigDecimal(amount))

@@ -7,10 +7,8 @@ import org.springframework.web.client.RestClient
 import java.math.BigDecimal
 import java.time.LocalDate
 
-/**
- * Frankfurter adapter for ECB reference FX rates. Keyless. Returns business-day
- * observations only; weekends/holidays are forward-filled at read time, never stored.
- */
+/** Frankfurter adapter for ECB reference FX rates. Keyless. Business-day observations only;
+ *  weekends/holidays are forward-filled at read time, never stored. */
 @Component
 class FrankfurterClient(
     props: AppProperties,

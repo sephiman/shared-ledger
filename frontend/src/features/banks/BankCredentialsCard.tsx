@@ -22,10 +22,8 @@ function looksLikePkcs1(raw: string): boolean {
   return /BEGIN\s+RSA\s+PRIVATE\s+KEY/i.test(raw);
 }
 
-/**
- * Owner-only Enable Banking application for this household — always visible, so the feature can be
- * set up from scratch. As with the Telegram card, the private key is write-only.
- */
+/** Owner-only Enable Banking application for this household — always visible, so the feature can be set up
+ *  from scratch. The private key is write-only. */
 export function BankCredentialsCard({ householdId }: { householdId: string }) {
   const { t } = useTranslation();
   const { data: credentials } = useBankCredentials(householdId);

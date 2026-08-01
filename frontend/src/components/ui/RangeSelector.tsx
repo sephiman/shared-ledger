@@ -30,11 +30,8 @@ function isoMonthsAgo(months: number): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
-/**
- * Resolve a {@link RangeValue} to concrete `from`/`to` bounds (ISO dates).
- * `undefined` means unbounded (`from` omitted = all history, `to` omitted = today).
- * Mirrors the semantics the portfolio evolution chart has always used.
- */
+/** Resolve a {@link RangeValue} to concrete `from`/`to` ISO bounds. `undefined` means unbounded (`from`
+ *  omitted = all history, `to` omitted = today). */
 export function resolveRange(v: RangeValue): { from?: string; to?: string } {
   const from =
     v.preset === "all"
@@ -46,10 +43,8 @@ export function resolveRange(v: RangeValue): { from?: string; to?: string } {
   return { from, to };
 }
 
-/**
- * Number of trailing months to request from month-bucketed endpoints (e.g. heatmap),
- * which count back from the current month. 9999 signals "full history".
- */
+/** Trailing months to request from month-bucketed endpoints (e.g. heatmap), which count back from the
+ *  current month. 9999 signals "full history". */
 export function rangeToMonths(v: RangeValue): number {
   if (v.preset === "all") return 9999;
   if (v.preset !== "custom") return RANGE_MONTHS[v.preset];
@@ -60,11 +55,8 @@ export function rangeToMonths(v: RangeValue): number {
   return (now.getFullYear() - f.getFullYear()) * 12 + (now.getMonth() - f.getMonth()) + 1;
 }
 
-/**
- * Range picker shared by the portfolio evolution chart and analytics panels:
- * preset dropdown (3m / 6m / 1y / 2y / all / custom) plus From–To date inputs when custom.
- * Renders sibling fields meant to sit inside a flex/grid row.
- */
+/** Range picker shared by the portfolio evolution chart and analytics panels: preset dropdown plus From–To
+ *  inputs when custom. Renders sibling fields meant to sit inside a flex/grid row. */
 export function RangeSelector({
   value,
   onChange,

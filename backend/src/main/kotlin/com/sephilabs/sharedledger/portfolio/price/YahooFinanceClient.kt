@@ -9,18 +9,10 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 
-/**
- * Yahoo Finance adapter (UNOFFICIAL) — the default equity provider: keyless, no hard
- * daily quota, long daily history, and native EUR for Xetra listings (`WEBN.DE`).
- * It is a ToS-gray endpoint that can change without notice, so every call sends a
- * realistic User-Agent, transport failures retry once against the query2 fallback
- * host, and all errors surface as [ProviderException] — the refresh layer degrades
- * to last-known-price/stale instead of crashing. Both endpoints used here work
- * without the consent-cookie/crumb handshake; if Yahoo starts requiring it, that
- * handshake (cookie + /v1/test/getcrumb) is the first thing to add.
- * Symbols use Yahoo's TICKER.SUFFIX convention (.DE Xetra, .MI Milan, .L London,
- * .PA Paris, none for US) stored in provider_symbol.
- */
+/** Yahoo Finance adapter (UNOFFICIAL) — the default equity provider: keyless, no hard quota, long history,
+ *  native EUR for Xetra listings. A ToS-gray endpoint that can change without notice, so calls send a
+ *  realistic User-Agent, transport failures retry once against query2, and errors surface as
+ *  [ProviderException]. Symbols use Yahoo's TICKER.SUFFIX convention (.DE, .MI, .L, .PA, none for US). */
 class YahooFinanceClient(
     props: AppProperties,
     primaryBuilder: RestClient.Builder,

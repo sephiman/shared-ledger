@@ -22,15 +22,10 @@ data class Outstanding(
     val allocations: List<PaymentAllocation>,
 )
 
-/**
- * Computes the outstanding balance of a lending given its terms, the list of payments received,
- * and an "as of" date. Payments apply interest-first, then principal.
- *
- * Algorithm: build a chronologically sorted event list (start, capitalization boundaries when
- * compound, each payment, terminator). Between any two events accrue simple-day-prorated
- * interest on the current principal. At each capitalization event fold accrued interest into
- * principal; at each payment event apply the payment interest-first.
- */
+/** Outstanding balance of a lending given its terms, payments received and an as-of date; payments apply
+ *  interest-first. Builds a sorted event list (start, capitalization boundaries when compound, payments,
+ *  terminator), accruing simple day-prorated interest between events, folding interest into principal at
+ *  each capitalization. */
 object LendingBalanceCalculator {
 
     private val MC = MathContext.DECIMAL64

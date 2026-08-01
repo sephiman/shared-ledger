@@ -17,13 +17,9 @@ export function formatMoney(value: string | number | Decimal | null | undefined,
   }).format(d.toNumber());
 }
 
-/**
- * Per-unit price. Prices of €1 or more show the standard 2 decimals (BTC 55,567.73);
- * only sub-unit prices expand to their full stored precision so tiny coins don't
- * collapse to 0.00 — PEPE 0.000002403511 keeps all 12 decimals, with NO rounding and
- * NO significant-figure truncation. European grouping and currency symbol. Use for
- * unit/current prices only; EUR aggregates (totals, P&L) stay at 2dp via {@link formatMoney}.
- */
+/** Per-unit price. €1 and above show the standard 2 decimals; only sub-unit prices expand to their full
+ *  stored precision so tiny coins don't collapse to 0.00 (PEPE keeps all 12 decimals, no rounding and no
+ *  significant-figure truncation). Unit prices only — EUR aggregates stay at 2dp via {@link formatMoney}. */
 export function formatPrice(value: string | number | Decimal | null | undefined, currency: string, locale: string): string {
   const d = toDecimal(value);
   // Never fewer than 2 (so 5 reads as 5.00); cap at Intl's 20-fraction-digit ceiling.
@@ -49,11 +45,8 @@ function currencySymbol(currency: string, locale: string): string {
   return parts.find((p) => p.type === "currency")?.value ?? currency;
 }
 
-/**
- * Compact money for narrow chart axes, with locale (European) grouping and the
- * currency symbol after the abbreviation: 70000 -> "70k€", 1_500_000 -> "1,5M€".
- * Full precision belongs in tooltips via {@link formatMoney}.
- */
+/** Compact money for narrow chart axes, currency symbol after the abbreviation: 70000 -> "70k€",
+ *  1_500_000 -> "1,5M€". Full precision belongs in tooltips via {@link formatMoney}. */
 export function formatCompactMoney(value: number, currency: string, locale: string): string {
   const sym = currencySymbol(currency, locale);
   const abs = Math.abs(value);

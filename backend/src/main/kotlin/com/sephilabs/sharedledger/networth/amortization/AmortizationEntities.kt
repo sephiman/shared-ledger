@@ -46,11 +46,9 @@ enum class PrepaymentMode {
     reduce_instalment,
 }
 
-/**
- * One part of an amortizable liability. A liability's total instalment is the sum of its parts
- * (a real Florius mortgage has two parts under a unified instalment). The starting point is the
- * current state ([originalPrincipal] at [startDate]); the schedule projects forward.
- */
+/** One part of an amortizable liability; a liability's total instalment is the sum of its parts (a real
+ *  Florius mortgage has two under a unified instalment). Starts from the current state
+ *  ([originalPrincipal] at [startDate]) and projects forward. */
 @Entity
 @Table(name = "amortization_parts")
 @SQLRestriction("deleted_at IS NULL")
@@ -157,10 +155,8 @@ class AmortizationPrepayment(
     var updatedByUserId: UUID,
 ) : SoftDeletableEntity()
 
-/**
- * An instalment charged by the monthly job: the exact generated history (date, interest split,
- * resulting balance), write-once. Idempotency comes from the unique (part_id, charge_date) index.
- */
+/** An instalment charged by the monthly job — the exact generated history, write-once. Idempotency comes
+ *  from the unique (part_id, charge_date) index. */
 @Entity
 @Table(name = "amortization_entries")
 class AmortizationEntry(

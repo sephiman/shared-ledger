@@ -11,15 +11,14 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import java.util.concurrent.Executor
 import java.util.concurrent.ThreadPoolExecutor
 
-/**
- * Enables @Async and provides a small, bounded executor for Telegram dispatch so a backlog or a
- * slow Telegram API can never exhaust threads or block request/scheduler threads.
- */
+/** Enables @Async with a small bounded executor for Telegram dispatch, so a backlog or a slow Telegram API
+ *  can never exhaust threads or block request/scheduler threads. */
 @Configuration
 @EnableAsync
 class AsyncConfig : AsyncConfigurer {
 
     @Bean("telegramExecutor")
+    @Profile("!test")
     fun telegramExecutor(): Executor = ThreadPoolTaskExecutor().apply {
         corePoolSize = 2
         maxPoolSize = 4
@@ -29,11 +28,9 @@ class AsyncConfig : AsyncConfigurer {
         initialize()
     }
 
-    /**
-     * Backfill fans a handful of provider calls per holding; a small bounded pool keeps request
-     * threads free, while CallerRuns degrades to synchronous under a large backlog rather than
-     * dropping work. The test profile supplies a synchronous executor of the same name instead.
-     */
+    /** Backfill fans a handful of provider calls per holding; a small bounded pool keeps request threads free,
+     *  and CallerRuns degrades to synchronous under backlog rather than dropping work. Tests supply a
+     *  synchronous executor of the same name. */
     @Bean("backfillExecutor")
     @Profile("!test")
     fun backfillExecutor(): Executor = ThreadPoolTaskExecutor().apply {
@@ -45,12 +42,9 @@ class AsyncConfig : AsyncConfigurer {
         initialize()
     }
 
-    /**
-     * Bank sync fans out per-connection provider I/O (auth check + one transactions call per
-     * account). A small bounded pool keeps the linking request thread free — the initial sync runs
-     * off-thread after the connection commits (see BankConnectionLinkedListener). The test profile
-     * supplies a synchronous executor of the same name so tests can assert on results immediately.
-     */
+    /** Bank sync fans out per-connection provider I/O. A small bounded pool keeps the linking request thread
+     *  free — the initial sync runs off-thread after the connection commits. Tests supply a synchronous
+     *  executor of the same name so they can assert on results immediately. */
     @Bean("bankSyncExecutor")
     @Profile("!test")
     fun bankSyncExecutor(): Executor = ThreadPoolTaskExecutor().apply {

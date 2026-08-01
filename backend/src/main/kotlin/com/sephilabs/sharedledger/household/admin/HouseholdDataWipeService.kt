@@ -26,19 +26,10 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
 
-/**
- * Permanently deletes every piece of a household's financial data, leaving only the household
- * itself and its membership/invitations intact. Every root table is hard-deleted (native queries
- * that bypass @SQLRestriction so soft-deleted rows go too); child tables are cleaned up via their
- * `ON DELETE CASCADE` foreign keys (amortization parts/entries, liability & asset value series,
- * holding lots & valuations, lending schedules & payments, bank accounts & sync runs, snapshot rows).
- *
- * Delete order respects the foreign keys that are NOT cascading between root tables:
- *  - transactions before recurring_templates (transactions.recurring_template_id → recurring_templates)
- *  - snapshots and movements before liabilities/assets
- *    (snapshot_liability_balances / net_worth_movements → liabilities; snapshot asset rows → assets)
- *  - pending_movements / auth sessions before bank_connections.
- */
+/** Hard-deletes every piece of a household's financial data, leaving the household, memberships and
+ *  invitations. Root tables go via native queries that bypass @SQLRestriction; children go by ON DELETE
+ *  CASCADE. Delete order respects the non-cascading FKs between roots: transactions before
+ *  recurring_templates, snapshots/movements before liabilities & assets, pending/auth before connections. */
 @Service
 class HouseholdDataWipeService(
     private val transactions: TransactionRepository,

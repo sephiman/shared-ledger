@@ -5,15 +5,9 @@ import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
-/**
- * A keyed store of rate-limit buckets that evicts idle keys, so a stream of distinct keys
- * (e.g. spoofed source IPs on the login endpoint) can't grow the map without bound.
- *
- * Eviction is lossless: [retention] is set to the longest bandwidth window, so any key idle
- * longer than that has fully refilled and a freshly rebuilt bucket is identical to the evicted
- * one. The sweep is opportunistic (piggy-backed on [tryAcquire], throttled to [SWEEP_INTERVAL]),
- * so there is no scheduler dependency and no background thread.
- */
+/** Keyed rate-limit buckets that evict idle keys, so a stream of distinct keys (spoofed source IPs on
+ *  login) can't grow the map without bound. Eviction is lossless: [retention] is the longest bandwidth
+ *  window, so an evicted key had fully refilled. The sweep piggy-backs on [tryAcquire] — no background thread. */
 class EvictingBucketStore<K : Any>(
     private val retention: Duration,
     private val build: () -> Bucket,
@@ -32,7 +26,6 @@ class EvictingBucketStore<K : Any>(
         return entry.bucket.tryConsume(1)
     }
 
-    /** Test/inspection hook: number of live keys. */
     fun size(): Int = entries.size
 
     private fun maybeSweep(now: Long) {

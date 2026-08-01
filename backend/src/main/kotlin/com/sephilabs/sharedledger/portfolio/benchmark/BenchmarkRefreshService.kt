@@ -13,13 +13,9 @@ import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
 import java.time.LocalDate
 
-/**
- * Gap-fill and backfill engine for benchmark_price, mirroring [PriceRefreshService]: rows are
- * upserted by the unique (benchmark_key, date) key, so overlapping runs and re-runs after a
- * failure self-heal, and every refresh resumes from the last stored date. A failing benchmark
- * never aborts the others. Foreign-currency benchmarks (all USD in the seed set) trigger an FX
- * top-up so the read-time EUR conversion has rates covering the whole window.
- */
+/** Gap-fill/backfill for benchmark_price, mirroring [PriceRefreshService]: rows upserted by (benchmark_key,
+ *  date) so re-runs self-heal, each refresh resuming from the last stored date. A failing benchmark never
+ *  aborts the others; foreign-currency ones trigger an FX top-up for the read-time EUR conversion. */
 @Service
 class BenchmarkRefreshService(
     private val benchmarks: BenchmarkRepository,
@@ -48,11 +44,8 @@ class BenchmarkRefreshService(
         }
     }
 
-    /**
-     * Bootstraps the whole lookback window when nothing is stored, then only extends the head
-     * down to the lookback floor and tails up to today. Since the floor advances with `today`,
-     * a filled series never re-pulls its history — only the new day is fetched each run.
-     */
+    /** Bootstraps the whole lookback window when nothing is stored, then only extends the head to the lookback
+     *  floor and tails to today. The floor advances with `today`, so a filled series never re-pulls history. */
     private fun gapFill(benchmark: Benchmark, today: LocalDate) {
         val desiredFrom = today.minusDays(props.portfolio.benchmarkHistoryLookbackDays)
         ensureFx(benchmark.currency, today, desiredFrom)

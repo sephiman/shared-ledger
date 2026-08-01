@@ -127,11 +127,8 @@ class PortfolioValuationService(
         )
     }
 
-    /**
-     * Values the household portfolio at an arbitrary date: the ledger is replayed up to
-     * that date (net quantity is date-dependent) and priced with the last stored price
-     * and FX rate <= that date (forward-fill). Used for snapshot prefill and freezing.
-     */
+    /** Values the portfolio at an arbitrary date: the ledger is replayed up to it (net quantity is
+     *  date-dependent) and priced with the last price and FX rate <= that date. Used for snapshot prefill. */
     @Transactional(readOnly = true)
     fun valuationAt(householdId: UUID, date: LocalDate): PortfolioValuationDto {
         val all = holdings.findAllByHouseholdIdOrderBySymbolAsc(householdId).filter { it.active }
@@ -287,12 +284,8 @@ class PortfolioValuationService(
         return PortfolioEvolutionDto(points)
     }
 
-    /**
-     * The sample dates the [evolution] TWR curve would produce for the same filters, or null
-     * when there is no curve (no lots, or an empty window). Benchmark overlays call this so
-     * their X axis and 0 %-anchor line up exactly with the user's TWR curve — same start
-     * (`from` or the earliest filtered lot), same end, same adaptive step.
-     */
+    /** The sample dates the [evolution] TWR curve would produce for the same filters, or null when there is no
+     *  curve. Benchmark overlays call this so their X axis and 0 %-anchor line up exactly with the TWR curve. */
     @Transactional(readOnly = true)
     fun sampleWindow(
         householdId: UUID,
@@ -313,10 +306,8 @@ class PortfolioValuationService(
         return buildSampleDates(start, end)
     }
 
-    /**
-     * Adaptive sampling that keeps long ("all time") ranges light: daily up to
-     * MAX_EVOLUTION_POINTS points, then every stepDays. The end date is always included.
-     */
+    /** Adaptive sampling that keeps long ("all time") ranges light: daily up to MAX_EVOLUTION_POINTS points,
+     *  then every stepDays. The end date is always included. */
     private fun buildSampleDates(start: LocalDate, end: LocalDate): List<LocalDate> {
         val totalDays = java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1
         val stepDays = maxOf(1L, (totalDays + MAX_EVOLUTION_POINTS - 1) / MAX_EVOLUTION_POINTS)
@@ -368,11 +359,8 @@ class PortfolioValuationService(
         return PortfolioValuationCalculator.PriceInput(point.price, point.priceDate, currency, fx, point.asOf)
     }
 
-    /**
-     * Fills each BUY lot's unrealized P&L = remaining quantity × current price (in base) −
-     * remaining cost basis. Left null when the holding is unpriced. Summed over the BUY lots
-     * these reconcile with the holding-level unrealized P&L (netQuantity × price − cost basis).
-     */
+    /** Fills each BUY lot's unrealized P&L = remaining quantity × current price − remaining cost basis; null
+     *  when the holding is unpriced. Summed over BUY lots these reconcile with the holding-level figure. */
     private fun withLotUnrealized(dto: HoldingDto, price: PortfolioValuationCalculator.PriceInput?): HoldingDto {
         if (price == null) return dto
         val perUnitBase = price.price.multiply(price.fxToBase, MathContext.DECIMAL64)
@@ -391,14 +379,9 @@ class PortfolioValuationService(
         return dto.copy(lots = lots)
     }
 
-    /**
-     * Money-weighted return (XIRR) over [lots], with [terminalValue] — the current value of
-     * the same holdings' open positions — as the closing inflow at [asOf]. Every flow is in
-     * base currency at its own frozen trade-time FX rate; nothing is re-converted with
-     * today's rates. Takes the lots and value of any subset, so a per-holding variant is a
-     * parameter change, not a rework. With [anyUnpriced] the terminal value is incomplete
-     * and the result is marked unavailable — never a wrong number.
-     */
+    /** Money-weighted return over [lots] with [terminalValue] as the closing inflow at [asOf]. Every flow uses
+     *  its own frozen trade-time FX rate; nothing is re-converted at today's rates. With [anyUnpriced] the
+     *  terminal value is incomplete and the result is marked unavailable — never a wrong number. */
     internal fun moneyWeightedReturn(
         lots: List<HoldingLot>,
         terminalValue: BigDecimal,

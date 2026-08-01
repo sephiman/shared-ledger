@@ -9,11 +9,9 @@ import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
-/**
- * One observed price per (provider, provider_symbol, currency, price_date).
- * Keyed by provider coordinates, not user symbols, so rows are shared across households.
- * Non-trading days are never stored; reads forward-fill from the last row <= date.
- */
+/** One observed price per (provider, provider_symbol, currency, price_date) — keyed by provider
+ *  coordinates, not user symbols, so rows are shared across households. Non-trading days are never stored;
+ *  reads forward-fill from the last row <= date. */
 @Entity
 @Table(name = "price_history")
 class PricePoint(

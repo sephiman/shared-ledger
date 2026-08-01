@@ -8,12 +8,9 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
 
-/**
- * Per-household Enable Banking credentials. No instance-wide fallback: a household without them
- * can't use the feature, and its connections are parked rather than re-routed through someone
- * else's application. Keys are validated with the same parse the JWT signer uses, so a bad paste
- * fails at the form instead of at the first sync.
- */
+/** Per-household credentials, no instance-wide fallback: a household without them has its connections
+ *  parked rather than re-routed through someone else's application. Keys are validated with the same
+ *  parse the JWT signer uses, so a bad paste fails at the form instead of at the first sync. */
 @Service
 class BankCredentialsService(
     private val repo: BankCredentialsRepository,
@@ -40,11 +37,8 @@ class BankCredentialsService(
     fun mismatchedConnections(householdId: UUID, appId: String): Long =
         connections.countMismatchedAppId(householdId, appId)
 
-    /**
-     * A blank [rawPrivateKey] keeps the stored one — the form never receives the key back, so
-     * "unchanged" has to be expressible. Switching to an application other than the one existing
-     * connections were authorized under needs [confirm]; the caller sees the count first.
-     */
+    /** A blank [rawPrivateKey] keeps the stored one — the form never receives the key back. Switching to an
+     *  application other than the one existing connections were authorized under needs [confirm]. */
     @Transactional
     fun save(
         householdId: UUID,
@@ -82,10 +76,8 @@ class BankCredentialsService(
         return repo.save(row)
     }
 
-    /**
-     * Normalizes a paste (full PEM or bare base64) and proves it parses as PKCS#8. PKCS#1 is the
-     * common wrong paste, so it gets its own message carrying the conversion command.
-     */
+    /** Normalizes a paste (PEM or bare base64) and proves it parses as PKCS#8. PKCS#1 is the common wrong
+     *  paste, so it gets its own message carrying the conversion command. */
     fun validatedKey(raw: String): String {
         val normalized = EbPrivateKey.normalize(raw)
         if (normalized.isBlank()) throw AppException.badRequest("BANK_PRIVATE_KEY_INVALID")

@@ -34,11 +34,8 @@ interface Props {
   onSave: () => void;
 }
 
-/**
- * Every FIRE parameter lives here (not on the general Settings page) and persists per
- * household. Each setting carries a terse repercussion line instantiated with the
- * household's own numbers whenever the projection provides them.
- */
+/** Every FIRE parameter lives here (not general Settings) and persists per household. Each setting carries
+ *  a terse repercussion line instantiated with the household's own numbers when the projection has them. */
 export function FireSettingsCard({
   form,
   errors,

@@ -8,11 +8,8 @@ import { CashTab } from "./CashTab";
 type Flow = "movements" | "cash";
 const FLOWS: Flow[] = ["movements", "cash"];
 
-/**
- * Container for how money moves: capital reallocations (Movements) and cash adjustments (Cash).
- * Movements is the established sub-tab and the default; the active one lives in a `flow` search
- * param alongside the hub's `tab` param.
- */
+/** Container for how money moves: capital reallocations (Movements) and cash adjustments (Cash). The active
+ *  sub-tab lives in a `flow` search param alongside the hub's `tab`. */
 export function FlowsTab() {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();

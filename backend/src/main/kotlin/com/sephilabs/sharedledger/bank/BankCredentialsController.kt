@@ -15,12 +15,8 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
-/**
- * Owner-only per-household Enable Banking credentials, same contract as
- * [com.sephilabs.sharedledger.notification.TelegramSettingsController]: the secret is accepted on
- * save, encrypted at rest and never returned. Unlike linking (open to every member with their own
- * SCA), choosing the API application is a decision for the whole household.
- */
+/** Owner-only: the secret is accepted on save, encrypted at rest, never returned. Unlike linking (per
+ *  member, own SCA), choosing the API application is a decision for the whole household. */
 @RestController
 @RequestMapping("/api/households/{householdId}/banks/credentials")
 @RequireHouseholdOwner
@@ -54,14 +50,9 @@ class BankCredentialsController(
         return saved.toDto(householdId)
     }
 
-    /**
-     * Parity with the Telegram test button, so a wrong application id or mismatched key surfaces
-     * here rather than at the first sync. The catalogue is application-agnostic — what matters is
-     * that the provider accepts the signature, not what comes back.
-     *
-     * Not @Transactional: the provider call is slow HTTP and would hold a pooled DB connection for
-     * its duration (the credential lookup opens its own).
-     */
+    /** Surfaces a wrong application id or mismatched key here rather than at the first sync — what matters
+     *  is that the provider accepts the signature. Not @Transactional: the provider call is slow HTTP and
+     *  would hold a pooled DB connection for its duration. */
     @PostMapping("/validate")
     fun validate(@PathVariable householdId: UUID): BankCredentialsTestResult {
         val creds = credentials.require(householdId)

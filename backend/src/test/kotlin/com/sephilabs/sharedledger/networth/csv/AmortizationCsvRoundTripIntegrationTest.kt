@@ -14,11 +14,8 @@ import org.springframework.beans.factory.annotation.Autowired
 import java.math.BigDecimal
 import java.time.LocalDate
 
-/**
- * Closes the CSV loop for amortizable liabilities: the liabilities export + the schedules export
- * together reconstruct the loan (definition, parts, revisions, prepayments, generated instalments)
- * in a fresh household, and re-importing is idempotent.
- */
+/** Closes the CSV loop for amortizable liabilities: the liabilities + schedules exports together
+ *  reconstruct the loan in a fresh household, and re-importing is idempotent. */
 class AmortizationCsvRoundTripIntegrationTest @Autowired constructor(
     private val users: UserRepository,
     private val households: HouseholdRepository,

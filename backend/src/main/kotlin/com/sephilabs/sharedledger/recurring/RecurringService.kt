@@ -127,15 +127,10 @@ class RecurringService(
         return sb.toString()
     }
 
-    /**
-     * Materialize this template up to today: catches up any pending cadence occurrences AND
-     * force-fires one entry dated today regardless of the cadence rule, AND advances
-     * `lastMaterializedThrough = today`.
-     *
-     * Idempotent per (template, date): the unique partial index on (recurring_template_id, occurrence_date)
-     * guarantees no duplicates, so calling this twice on the same day inserts nothing the second time.
-     * Returns the number of new transactions created.
-     */
+    /** Materialize this template up to today: catches up pending cadence occurrences, force-fires one entry
+     *  dated today regardless of the cadence rule, and advances `lastMaterializedThrough`. Idempotent per
+     *  (template, date) via the unique partial index, so a second call the same day inserts nothing. Returns
+     *  the number of new transactions. */
     @Transactional
     fun fireNow(householdId: UUID, templateId: UUID, by: User): Int {
         val template = loadOwn(householdId, templateId)

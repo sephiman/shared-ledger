@@ -13,11 +13,9 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
-/**
- * Rules are shared household categorisation logic, writable by any member — the same level as the
- * transactions and pending movements they act on. Members link their own banks (see [BankController]),
- * so gating the rules that tidy up their inbox behind the owner role would strand them.
- */
+/** Rules are shared household logic, writable by any member — the same level as the movements they act
+ *  on. Members link their own banks, so gating their inbox cleanup behind the owner role would strand
+ *  them. */
 @RestController
 @RequestMapping("/api/households/{householdId}/banks/rules")
 class CategorizationRuleController(

@@ -184,11 +184,8 @@ export function EvolutionTab() {
   );
 }
 
-/**
- * Clickable chart legend: renders every series (including hidden ones, dimmed + struck through)
- * so a toggled-off series can always be brought back. Recharts injects extra props when used as
- * `<Legend content>`; we ignore them and drive the list from our own `entries`.
- */
+/** Clickable chart legend rendering every series, including hidden ones (dimmed + struck through), so a
+ *  toggled-off series can always be brought back. Recharts injects extra props we ignore. */
 function ClickableLegend({
   entries,
   hidden,

@@ -8,15 +8,9 @@ object InFileDuplicateResolver {
         val adjustedCount: Int,
     )
 
-    /**
-     * Walks [rows] in order and rewrites the description of any row that duplicates an
-     * earlier-in-file row, appending (2), (3), … until the key is unique against both the
-     * in-file rows already processed and [existingKeys] (rows already in the DB).
-     *
-     * Rows whose original key already exists in [existingKeys] are left untouched — they
-     * will be DB-skipped at execute time. Disambiguating them would silently insert a
-     * phantom row on every re-import of the same CSV.
-     */
+    /** Rewrites the description of any row duplicating an earlier in-file row, appending (2), (3), … until the
+     *  key is unique against both. Rows whose original key is already in [existingKeys] are left untouched —
+     *  they get DB-skipped at execute time, and disambiguating them would insert a phantom row on re-import. */
     fun <T> resolveAll(
         rows: MutableList<T>,
         existingKeys: Set<String>,

@@ -1,10 +1,7 @@
 import type { AmortizationMethod } from "@/api/amortization";
 
-/**
- * Client-side conversion between a part's driving inputs so the form can show the other two as
- * computed/read-only. Mirrors the backend AmortizationCalculator's French closed form; the backend
- * stays the source of truth (it recomputes on save).
- */
+/** Client-side conversion between a part's driving inputs so the form can show the other two as read-only.
+ *  Mirrors the backend AmortizationCalculator's French closed form; the backend recomputes on save. */
 
 export type Driver = "term" | "endDate" | "instalment";
 
@@ -67,10 +64,8 @@ export interface Derived {
   instalment: number | null;
 }
 
-/**
- * Given the driving field, compute the other two for display. Instalment-driving applies to French
- * only (for the other methods the instalment is derived per period); those use term ↔ end date.
- */
+/** Given the driving field, compute the other two for display. Instalment-driving is French-only; the
+ *  other methods use term ↔ end date. */
 export function computeDerived(input: {
   principal: number;
   annualRate: number;

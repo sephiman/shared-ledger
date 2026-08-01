@@ -6,13 +6,9 @@ import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import java.time.LocalDate
 
-/**
- * Cron entry points for the portfolio price jobs. Ordering matters at night:
- * FX runs first (00:30) so the equity job (01:00) converts with the day's rate.
- * Crypto refreshes hourly and is FX-independent (priced directly in base currency).
- * Benchmarks refresh after equities (01:15) and top up their own FX. Each job swallows
- * its own failures so one bad provider never kills the scheduler.
- */
+/** Cron entry points for the price jobs. Ordering matters: FX runs first (00:30) so the equity job (01:00)
+ *  converts with the day's rate; benchmarks follow (01:15) and top up their own FX. Crypto is hourly and
+ *  FX-independent. Each job swallows its failures so one bad provider never kills the scheduler. */
 @Component
 class PortfolioPriceScheduler(
     private val refreshService: PriceRefreshService,

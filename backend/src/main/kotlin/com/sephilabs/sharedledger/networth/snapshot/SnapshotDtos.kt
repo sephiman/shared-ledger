@@ -80,11 +80,8 @@ data class PrefillView(
     val activeLiabilities: List<UUID>,
 )
 
-/**
- * Computed value of each active named asset and liability at a given date (amortizable liabilities
- * from their schedule, manual ones from their series). Keyed by id; money as decimal strings. Used to
- * auto-fill the snapshot form per date, like the portfolio valuation does for asset classes.
- */
+/** Computed value of each active named asset and liability at a date (amortizable from their schedule,
+ *  manual from their series). Keyed by id, money as decimal strings; auto-fills the snapshot form. */
 data class NamedValuesDto(
     val assets: Map<String, String>,
     val liabilities: Map<String, String>,

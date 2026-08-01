@@ -28,10 +28,8 @@ import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
-/**
- * Named assets & liabilities feed their own dated series into snapshots: named assets add to the
- * assets total, net worth = assets − liabilities, and names are resolved (incl. soft-deleted).
- */
+/** Named assets & liabilities feed their dated series into snapshots: assets add to the total, net worth =
+ *  assets − liabilities, and names resolve even when soft-deleted. */
 class NamedValueSnapshotIntegrationTest @Autowired constructor(
     private val users: UserRepository,
     private val households: HouseholdRepository,

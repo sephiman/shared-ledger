@@ -10,24 +10,17 @@ import com.sephilabs.sharedledger.portfolio.HoldingProvider
 import com.sephilabs.sharedledger.portfolio.HoldingRequest
 import com.sephilabs.sharedledger.portfolio.HoldingService
 import com.sephilabs.sharedledger.portfolio.LotRequest
-import com.sephilabs.sharedledger.portfolio.StubPriceProviderConfig
 import com.sephilabs.sharedledger.portfolio.price.FxRate
 import com.sephilabs.sharedledger.portfolio.price.FxRateRepository
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.context.annotation.Import
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
 
-/**
- * Uses test-only benchmark rows (unique keys) rather than the seeded set, and a currency
- * (SEK) no other test touches: fx_rates and benchmark_price are shared across the whole
- * integration-test run, so reusing USD/seeded keys here would collide with (or leak into)
- * other classes.
- */
-@Import(StubPriceProviderConfig::class)
+/** Uses test-only benchmark keys and a currency (SEK) no other test touches: fx_rates and benchmark_price
+ *  are shared across the whole integration-test run, so seeded keys would collide across classes. */
 class BenchmarkSeriesIntegrationTest @Autowired constructor(
     private val users: UserRepository,
     private val households: HouseholdRepository,

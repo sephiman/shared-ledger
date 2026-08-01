@@ -13,11 +13,8 @@ import java.util.UUID
 
 // --- Config / visibility ---------------------------------------------------------------------
 
-/**
- * Drives UI visibility. The credentials card is always shown to owners; everything else waits for
- * [credentialsConfigured], except the connections list, which stays visible while connections exist
- * so the migration gap is explained rather than hidden.
- */
+/** Drives UI visibility. Everything waits for [credentialsConfigured] except the connections list, which
+ *  stays visible while connections exist so the migration gap is explained rather than hidden. */
 data class BankConfigDto(
     val credentialsConfigured: Boolean,
     val connectionCount: Long,
@@ -29,10 +26,8 @@ data class AspspDto(val name: String, val country: String, val logoUrl: String?)
 
 // --- Household credentials (owner-only) -------------------------------------------------------
 
-/**
- * The private key is write-only like the Telegram bot token — accepted on save, never returned, so
- * the form can only report that one exists. [redirectUrl] is what to register at Enable Banking.
- */
+/** The private key is write-only — accepted on save, never returned. [redirectUrl] is what to register
+ *  at Enable Banking. */
 data class BankCredentialsDto(
     val appId: String?,
     val privateKeyConfigured: Boolean,
@@ -150,12 +145,9 @@ data class ConfirmMovementRequest(
     val saveRule: Boolean = true,
 )
 
-/**
- * Confirm a pending item as a net-worth movement (capital reallocation) instead of a transaction.
- * The target rules mirror [com.sephilabs.sharedledger.networth.movement.MovementService.validateTarget]:
- * contribution/withdrawal require [assetClassCode], debt_payment requires [liabilityId]. The item's
- * date and amount are reused; no category or learned rule is involved.
- */
+/** Confirm a pending item as a net-worth movement instead of a transaction. Target rules mirror
+ *  [com.sephilabs.sharedledger.networth.movement.MovementService.validateTarget]. The item's date and
+ *  amount are reused; no category or learned rule is involved. */
 data class ConfirmAsMovementRequest(
     @field:NotNull(message = "validation.required")
     val type: MovementType,
@@ -202,7 +194,6 @@ data class PendingCountDto(val count: Long, val byConnection: List<PendingConnec
 /** Pending inbox size of one bank connection; [label] falls back to the bank name when unlabelled. */
 data class PendingConnectionCountDto(val connectionId: UUID, val label: String, val count: Long)
 
-/** Result of running categorisation rules over the uncategorized pending inbox. */
 data class ApplyRulesResultDto(val categorized: Int = 0)
 
 // --- Categorisation rules --------------------------------------------------------------------
@@ -219,7 +210,6 @@ data class CategorizationRuleDto(
     val createdAt: Instant,
 )
 
-/** Result of a bulk rule delete. */
 data class DeletedCountDto(val deleted: Int)
 
 data class CategorizationRuleRequest(

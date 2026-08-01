@@ -9,13 +9,9 @@ import java.security.spec.PKCS8EncodedKeySpec
 import java.time.Instant
 import java.util.Base64
 
-/**
- * Builds the RS256 JWT bearer that authenticates every Enable Banking call. Hand-rolled with
- * java.security (no extra JWT dependency), matching the "explicit crypto" style of [BankCrypto]:
- * header `{typ:JWT, alg:RS256, kid:<appId>}`, claims `{iss, aud, iat, exp}`, signed with the
- * application's RSA private key. A fresh short-lived token is minted per request (cheap).
- * The identity comes from the caller's [EbCredentials], so the signer holds no configuration.
- */
+/** The RS256 JWT bearer authenticating every Enable Banking call. Hand-rolled with java.security (no JWT
+ *  dependency): header `{typ:JWT, alg:RS256, kid:<appId>}`, claims `{iss, aud, iat, exp}`. A fresh
+ *  short-lived token per request; the identity comes from [EbCredentials], so the signer holds no config. */
 @Component
 class EnableBankingJwt {
     // A minimal, self-contained mapper — the payloads are two small maps, so no shared bean needed.
@@ -51,29 +47,24 @@ class EnableBankingJwt {
     }
 }
 
-/**
- * Shared by the JWT signer and by the validation that runs before a key is stored
- * (`BankCredentialsService`), so a key that saves is by construction a key that can sign.
- */
+/** Shared by the JWT signer and by the validation that runs before a key is stored, so a key that saves
+ *  is by construction a key that can sign. */
 object EbPrivateKey {
 
-    /** Strips literal `\n` escapes, PEM armour and whitespace, so any accepted paste lands on the
-     *  same bare base64 body. */
+    /** Strips literal `\n` escapes, PEM armour and whitespace, so any accepted paste lands on the same body. */
     fun normalize(raw: String): String = raw
         .replace("\\n", "\n")
         .replace(PEM_ARMOUR, "")
         .replace(WHITESPACE, "")
 
-    /** Parses a normalized base64 **PKCS#8** body. Throws when it is not a usable RSA private key. */
+    /** Parses a normalized base64 PKCS#8 body. Throws when it is not a usable RSA private key. */
     fun parse(base64Body: String): PrivateKey {
         val der = Base64.getDecoder().decode(base64Body)
         return KeyFactory.getInstance("RSA").generatePrivate(PKCS8EncodedKeySpec(der))
     }
 
-    /**
-     * PKCS#8 names the algorithm with the rsaEncryption OID up front; PKCS#1 goes straight into the
-     * integers. Only used to pick the more helpful of two rejection messages.
-     */
+    /** PKCS#8 names the algorithm with the rsaEncryption OID up front; PKCS#1 goes straight into the
+     *  integers. Only used to pick the more helpful of two rejection messages. */
     fun looksLikePkcs1(base64Body: String): Boolean {
         val der = runCatching { Base64.getDecoder().decode(base64Body) }.getOrNull() ?: return false
         if (der.isEmpty() || der[0] != 0x30.toByte()) return false

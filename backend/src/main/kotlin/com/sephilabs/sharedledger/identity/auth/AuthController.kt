@@ -64,12 +64,9 @@ class AuthController(
         }
     }
 
-    /**
-     * Authenticate and persist the SecurityContext into the HTTP session so the
-     * SESSION cookie is written on the response. Shared by login and register —
-     * registering must drop the new user into a real authenticated session, not
-     * rely on the client issuing a follow-up /login.
-     */
+    /** Authenticate and persist the SecurityContext into the HTTP session so the SESSION cookie is written.
+     *  Shared by login and register — registering must land in a real authenticated session, not depend on
+     *  the client issuing a follow-up /login. */
     private fun openSession(email: String, password: String, request: HttpServletRequest, response: HttpServletResponse) {
         val auth = authManager.authenticate(UsernamePasswordAuthenticationToken(email, password))
         // Session-fixation defense: if the client already had a session, rotate its id now that

@@ -2,10 +2,8 @@ import { type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
 
-/**
- * Expandable "How is this calculated?" affordance. Every derived FIRE figure carries one,
- * with the formula instantiated with the household's own numbers (§ methodological transparency).
- */
+/** Expandable "How is this calculated?" affordance. Every derived FIRE figure carries one, with the
+ *  formula instantiated with the household's own numbers. */
 export function Explain({ children, className }: { children: ReactNode; className?: string }) {
   const { t } = useTranslation();
   return (

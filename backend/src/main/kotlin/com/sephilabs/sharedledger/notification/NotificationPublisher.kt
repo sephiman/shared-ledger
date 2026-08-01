@@ -12,14 +12,9 @@ import org.springframework.stereotype.Component
 import java.math.BigDecimal
 import java.util.UUID
 
-/**
- * Builds the immutable mobile-card field snapshot for each notifiable change and publishes a
- * domain event. Mutation services call this inside their transaction; the field values are read
- * synchronously here so nothing JPA-managed crosses to the async listener thread.
- *
- * Contract: CSV import flows MUST NOT call this — they write directly to repositories, which is
- * exactly how imports remain silent regardless of toggles.
- */
+/** Builds the immutable mobile-card field snapshot for each notifiable change and publishes a domain event.
+ *  Called inside the mutation's transaction and read synchronously, so nothing JPA-managed crosses to the
+ *  async listener. CSV import flows MUST NOT call this — that is how imports stay silent. */
 @Component
 class NotificationPublisher(
     private val events: ApplicationEventPublisher,
@@ -86,12 +81,8 @@ class NotificationPublisher(
         )
     }
 
-    /**
-     * A portfolio trade (BUY/SELL lot). [typeName] is the LotType name ("BUY"/"SELL");
-     * [amountBase] is the cost (BUY) or proceeds (SELL) in the household base currency.
-     * Holding lifecycle (create/link/unlink/delete) is intentionally not notified, and
-     * the CSV importer never calls this — it passes notify=false to the service.
-     */
+    /** A portfolio trade. [typeName] is the LotType name ("BUY"/"SELL"), [amountBase] the cost or proceeds in
+     *  base currency. Holding lifecycle is intentionally not notified, and the CSV importer never calls this. */
     fun holdingTrade(
         householdId: UUID,
         symbol: String,
@@ -169,11 +160,8 @@ class NotificationPublisher(
         )
     }
 
-    /**
-     * One aggregated message after a batch confirm of N pending bank movements. Single confirms go
-     * through [transaction] (the normal per-transaction notification) instead, so this only fires
-     * for batches — mirroring the recurring-materialization summary.
-     */
+    /** One aggregated message after a batch confirm of N pending movements. Single confirms go through
+     *  [transaction] instead, so this only fires for batches — mirroring the recurring summary. */
     fun bankMovementsConfirmed(householdId: UUID, count: Int, actor: NotifyActor) {
         if (count <= 0) return
         events.publishEvent(
@@ -187,11 +175,8 @@ class NotificationPublisher(
         )
     }
 
-    /**
-     * Heads-up after a sync ingests N new movements into the review inbox (before any confirm).
-     * Gated by the same `notify_bank_movements` toggle as the confirm summary. Uses a CREATE change
-     * event so its header ("new to review") stays distinct from the confirm summary's header.
-     */
+    /** Heads-up after a sync ingests N new movements, before any confirm. Same `notify_bank_movements` toggle
+     *  as the confirm summary; uses a CREATE change event so its header ("new to review") stays distinct. */
     fun bankMovementsToReview(
         householdId: UUID,
         count: Int,
@@ -239,10 +224,8 @@ class NotificationPublisher(
         )
     }
 
-    /**
-     * A recorded prepayment against an amortizable liability. Reuses the LENDING_PAYMENT event/toggle
-     * (the requirement is to emit the events the bot already consumes, not add a subsystem).
-     */
+    /** A recorded prepayment against an amortizable liability. Reuses the LENDING_PAYMENT event/toggle — the
+     *  requirement is to emit events the bot already consumes, not add a subsystem. */
     fun amortizationPrepayment(
         householdId: UUID,
         liabilityName: String,
@@ -267,10 +250,8 @@ class NotificationPublisher(
         )
     }
 
-    /**
-     * The monthly instalments charged by the amortization job for one liability. Reuses the
-     * RECURRING_LENDING materialization event/toggle ("recurring lending schedule execution").
-     */
+    /** The monthly instalments charged by the amortization job for one liability. Reuses the RECURRING_LENDING
+     *  materialization event/toggle. */
     fun amortizationInstalments(
         householdId: UUID,
         liabilityName: String,

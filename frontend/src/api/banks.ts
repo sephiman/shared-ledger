@@ -201,11 +201,8 @@ function invalidateAll(qc: ReturnType<typeof useQueryClient>, householdId: strin
   void qc.invalidateQueries({ queryKey: ["budgets", householdId] });
 }
 
-/**
- * Sync and link kick off background server work (they return 202 before movements are ingested),
- * so a single immediate invalidation refetches too early. Re-invalidate a few times to catch the
- * background completion; the count/badge also poll on their own as a backstop.
- */
+/** Sync and link return 202 before movements are ingested, so one immediate invalidation refetches too
+ *  early. Re-invalidate a few times to catch the background completion; the badge also polls as a backstop. */
 function invalidateBanksSoon(qc: ReturnType<typeof useQueryClient>, householdId: string) {
   [1500, 4000, 9000].forEach((ms) =>
     setTimeout(() => void qc.invalidateQueries({ queryKey: ["banks", householdId] }), ms),

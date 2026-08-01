@@ -14,11 +14,8 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 
-/**
- * Scheduled bank sync (twice daily, within the ≤4 calls/consent/day budget) plus a daily re-link
- * reminder. Each connection is synced independently and guarded, so one failing or expiring
- * connection never blocks the others (staggered expiries → per-connection reminders).
- */
+/** Scheduled bank sync (twice daily, within the ≤4 calls/consent/day budget) plus a daily re-link
+ *  reminder. Each connection is synced independently and guarded, so one failure never blocks the others. */
 @Component
 class BankSyncScheduler(
     private val props: AppProperties,

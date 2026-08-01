@@ -11,11 +11,8 @@ import java.math.RoundingMode
 import java.time.LocalDate
 import java.util.UUID
 
-/**
- * Pure schedule computation for amortizable liabilities: current balance, projected schedule, and
- * prepayment simulation. No mutations and no notifications, so it is safe to call from
- * [com.sephilabs.sharedledger.networth.NamedValueResolver] (snapshots) as well as the controller.
- */
+/** Pure schedule computation: current balance, projected schedule, prepayment simulation. No mutations and
+ *  no notifications, so [com.sephilabs.sharedledger.networth.NamedValueResolver] can call it too. */
 @Service
 class AmortizationScheduleService(
     private val liabilities: LiabilityRepository,

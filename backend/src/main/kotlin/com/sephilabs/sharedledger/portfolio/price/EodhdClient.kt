@@ -7,13 +7,9 @@ import org.springframework.web.client.RestClient
 import java.math.BigDecimal
 import java.time.LocalDate
 
-/**
- * EODHD adapter — an official, config-selectable equity alternative
- * (app.portfolio.equity-provider: eodhd). Its free tier covers European UCITS ETFs
- * (Xetra, EUR) but allows only 20 API calls/day and 1 year of history — set
- * equity-history-ceiling-days: 365 when selecting it. Symbols use EODHD's
- * CODE.EXCHANGE convention (WEBN.XETRA, AAPL.US) as the provider_symbol.
- */
+/** EODHD adapter — config-selectable equity alternative (app.portfolio.equity-provider: eodhd). Free tier
+ *  covers European UCITS ETFs but allows 20 calls/day and 1 year of history, so set
+ *  equity-history-ceiling-days: 365 with it. Symbols use CODE.EXCHANGE (WEBN.XETRA, AAPL.US). */
 class EodhdClient(
     private val props: AppProperties,
     restClientBuilder: RestClient.Builder,

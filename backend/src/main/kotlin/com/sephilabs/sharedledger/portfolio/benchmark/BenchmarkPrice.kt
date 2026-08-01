@@ -9,10 +9,8 @@ import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
-/**
- * One observed close per (benchmark_key, price_date), in the benchmark's own currency.
- * Non-trading days are never stored; reads forward-fill from the last row <= date.
- */
+/** One observed close per (benchmark_key, price_date), in the benchmark's own currency. Non-trading days
+ *  are never stored; reads forward-fill from the last row <= date. */
 @Entity
 @Table(name = "benchmark_price")
 class BenchmarkPrice(

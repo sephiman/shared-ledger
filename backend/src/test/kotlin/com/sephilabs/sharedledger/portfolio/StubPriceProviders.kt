@@ -14,10 +14,8 @@ import org.springframework.context.annotation.Primary
 import java.math.BigDecimal
 import java.time.LocalDate
 
-/**
- * Controllable in-memory provider stubs. Imported by portfolio integration tests so
- * no test ever performs real HTTP; seed the maps, then exercise the services.
- */
+/** Controllable in-memory provider stubs, so no portfolio integration test performs real HTTP. Seed the
+ *  maps, then exercise the services. */
 class StubCryptoProvider : CryptoPriceProvider {
     val history = mutableMapOf<String, MutableList<DailyPrice>>()
     val current = mutableMapOf<String, BigDecimal>()

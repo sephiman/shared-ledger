@@ -16,11 +16,8 @@ data class SymbolCandidate(
 
 data class DailyPrice(val date: LocalDate, val price: BigDecimal)
 
-/**
- * Equity history plus the currency the provider says the instrument trades in.
- * Yahoo's search results carry no currency, so the chart's meta.currency is the
- * source of truth; null when the provider does not report one (EODHD).
- */
+/** Equity history plus the currency the provider says the instrument trades in. Yahoo's search results
+ *  carry none, so the chart's meta.currency is the source of truth; null when unreported (EODHD). */
 data class EquityHistory(val currency: String?, val prices: List<DailyPrice>)
 
 class ProviderException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)
@@ -47,12 +44,9 @@ interface FxRateProvider {
     fun history(base: String, quote: String, from: LocalDate, to: LocalDate): List<DailyPrice>
 }
 
-/**
- * Secondary crypto history source used when the primary can't serve a range
- * (CoinGecko's 365-day Demo ceiling) or is unavailable. Quotes are USD(T) closes
- * for a Binance-style pair (BTCUSDT); the caller converts to the base currency.
- * An unknown pair returns an empty list, never an error.
- */
+/** Secondary crypto history source for ranges the primary can't serve (CoinGecko's 365-day Demo ceiling)
+ *  or while it is down. Quotes are USD(T) closes for a Binance-style pair; the caller converts to base.
+ *  An unknown pair returns an empty list, never an error. */
 interface CryptoHistoryFallback {
     fun dailyHistoryUsd(pair: String, from: LocalDate, to: LocalDate): List<DailyPrice>
 }

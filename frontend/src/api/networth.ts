@@ -437,7 +437,6 @@ function invalidateMovements(qc: ReturnType<typeof useQueryClient>, householdId:
   void qc.invalidateQueries({ queryKey: ["fire-projection", householdId] });
 }
 
-/** Invalidate everything that depends on the cash series after a mutation. */
 function invalidateCash(qc: ReturnType<typeof useQueryClient>, householdId: string) {
   void qc.invalidateQueries({ queryKey: ["cash-adjustments", householdId] });
   void qc.invalidateQueries({ queryKey: ["cash-estimate", householdId] });

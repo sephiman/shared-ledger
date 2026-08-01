@@ -5,10 +5,8 @@ import { Card, CardBody, CardHeader } from "@/components/ui/primitives";
 import { Explain } from "./Explain";
 import { formatHitProbability, hitMedianYear, scenarioLabel } from "./fireLabels";
 
-/**
- * Scenario × tier summary: deterministic hit year, Monte Carlo probability and median year,
- * plus the Coast FIRE counterparts (contributions stopped today).
- */
+/** Scenario × tier summary: deterministic hit year, Monte Carlo probability and median year, plus the
+ *  Coast FIRE counterparts (contributions stopped today). */
 export function FireScenarioTable({ projection }: { projection: FireProjection }) {
   const { t } = useTranslation();
 

@@ -3,10 +3,7 @@ import { Select } from "@/components/ui/primitives";
 
 export type TabBarItem = { value: string; label: string };
 
-/**
- * Sticky sub-page tab header. Shows a row of tabs on desktop and collapses to a
- * dropdown on mobile so long tab lists fit on narrow screens.
- */
+/** Sticky sub-page tab header: a row of tabs on desktop, collapsing to a dropdown on mobile. */
 export function TabBar({
   items,
   value,

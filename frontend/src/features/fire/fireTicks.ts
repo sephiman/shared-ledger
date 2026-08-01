@@ -1,8 +1,5 @@
-/**
- * "Nice" ascending ticks for a zero-based money axis: steps of 1 / 2 / 2.5 / 5 × 10^k,
- * aiming for ~targetCount ticks. Recharts' automatic ticks occasionally render out of
- * order with multi-series tuple areas; an explicit sorted list makes the axis deterministic.
- */
+/** "Nice" ascending ticks for a zero-based money axis: steps of 1 / 2 / 2.5 / 5 × 10^k. Recharts' automatic
+ *  ticks occasionally render out of order with multi-series tuple areas; an explicit sorted list is deterministic. */
 export function niceMoneyTicks(max: number, targetCount = 6): number[] {
   if (!Number.isFinite(max) || max <= 0) return [0];
   const rawStep = max / Math.max(1, targetCount - 1);

@@ -20,11 +20,8 @@ export interface EvolutionRow {
   [classKey: string]: number | string | null;
 }
 
-/**
- * Keep only snapshots whose date falls within the resolved range bounds (inclusive).
- * Reuses the portfolio chart's {@link resolveRange} so both charts share range semantics.
- * Snapshot dates are ISO (`YYYY-MM-DD`), so lexical comparison matches chronological order.
- */
+/** Keep only snapshots inside the resolved range (inclusive), reusing {@link resolveRange} so both charts
+ *  share semantics. ISO dates compare lexically, which matches chronological order. */
 export function filterSnapshotsByRange<T extends { snapshotDate: string }>(
   snapshots: T[],
   range: RangeValue,
@@ -33,12 +30,9 @@ export function filterSnapshotsByRange<T extends { snapshotDate: string }>(
   return snapshots.filter((s) => (!from || s.snapshotDate >= from) && (!to || s.snapshotDate <= to));
 }
 
-/**
- * Build chart rows from snapshots. Net worth is recomputed from the *visible* asset classes
- * minus liabilities (unless liabilities are hidden), so toggling a series off in the legend
- * lowers/raises the net-worth line accordingly. Every class value is still written to the row
- * (whether hidden or not) so the tooltip can render it.
- */
+/** Build chart rows from snapshots. Net worth is recomputed from the *visible* asset classes minus
+ *  liabilities, so toggling a series in the legend moves the net-worth line. Every class value is still
+ *  written to the row so the tooltip can render it. */
 export function buildEvolutionRows(
   snapshots: SnapshotLike[],
   assetClasses: { code: string }[],

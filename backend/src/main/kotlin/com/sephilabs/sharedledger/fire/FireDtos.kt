@@ -164,12 +164,9 @@ data class FireTierOutput(
     val targetCurve: List<FireScenarioYear>,
 )
 
-/**
- * The single definition of the spending bases for the whole panel. `essentialMonthly` /
- * `totalMonthly` are the EFFECTIVE values (the manual override when active, the live
- * trailing-12 otherwise) and feed every downstream computation; the derived values are
- * carried alongside so the UI can always show the gap against an override.
- */
+/** The single definition of the spending bases. `essentialMonthly`/`totalMonthly` are the EFFECTIVE values
+ *  (manual override when active, live trailing-12 otherwise) and feed everything downstream; the derived
+ *  values ride alongside so the UI can show the gap against an override. */
 data class FireSpendingBasis(
     @JsonFormat(shape = JsonFormat.Shape.STRING) val essentialMonthly: BigDecimal,
     @JsonFormat(shape = JsonFormat.Shape.STRING) val totalMonthly: BigDecimal,
@@ -227,7 +224,6 @@ data class FireHistoricalContribution(
 data class FireProjectionResponse(
     val startYear: Int,
     @JsonFormat(shape = JsonFormat.Shape.STRING) val startingValue: BigDecimal,
-    /** Date of the latest snapshot — the projection's data as-of date. */
     val snapshotDate: LocalDate?,
     val settings: FireSettingsDto,
     val spending: FireSpendingBasis,

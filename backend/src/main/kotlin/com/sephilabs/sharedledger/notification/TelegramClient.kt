@@ -6,13 +6,9 @@ import org.springframework.http.MediaType
 import org.springframework.stereotype.Component
 import org.springframework.web.client.RestClient
 
-/**
- * Thin wrapper over the Telegram Bot API `sendMessage` endpoint.
- *
- * Errors (bad token, unknown chat, network) are returned as [SendResult] with `ok=false` and the
- * Telegram-provided description rather than thrown, so the synchronous Test endpoint can surface
- * the raw verdict inline and the async listener can log it without retrying.
- */
+/** Thin wrapper over the Telegram Bot API `sendMessage`. Errors (bad token, unknown chat, network) come
+ *  back as [SendResult] with `ok=false` and Telegram's description rather than thrown, so the synchronous
+ *  Test endpoint can show the raw verdict and the async listener can log it without retrying. */
 @Component
 class TelegramClient(props: AppProperties) {
     private val rest: RestClient = RestClient.builder().baseUrl(props.telegram.baseUrl).build()

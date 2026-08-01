@@ -3,10 +3,8 @@ package com.sephilabs.sharedledger.fire
 import java.math.BigDecimal
 import java.time.LocalDate
 
-/**
- * Named defaults and conventions for the FIRE projection. Values that a household can
- * override live in `fire_settings`; these are only the seeds and the fixed conventions.
- */
+/** Seeds and fixed conventions for the FIRE projection; anything a household can override lives in
+ *  `fire_settings`. */
 object FireDefaults {
 
     val DEFAULT_EXPECTED_INFLATION_PCT: BigDecimal = BigDecimal("2.0")
@@ -16,10 +14,8 @@ object FireDefaults {
     /** Used for the taxable-gain share of withdrawals only while movements are insufficient to derive it. */
     val DEFAULT_FALLBACK_GAIN_FRACTION_PCT: BigDecimal = BigDecimal("50.0")
 
-    /**
-     * Spanish savings-base scale (Ley 7/2024, fiscal years 2025-2026). Seed values only:
-     * every household gets an editable copy in `fire_tax_brackets`.
-     */
+    /** Spanish savings-base scale (Ley 7/2024, FY 2025-2026). Seed only: every household gets an editable copy
+     *  in `fire_tax_brackets`. */
     val SPANISH_SAVINGS_TAX_BRACKETS: List<TaxBracket> = listOf(
         TaxBracket(BigDecimal("0.00"), BigDecimal("19.0")),
         TaxBracket(BigDecimal("6000.00"), BigDecimal("21.0")),
@@ -41,11 +37,8 @@ object FireDefaults {
     /** A sub-period must span at least this many days before its annualized return joins the historical sample. */
     const val MIN_HISTORICAL_PERIOD_DAYS: Long = 90
 
-    /**
-     * The real (XIRR) return is only trustworthy if recorded movements cover the contributions
-     * made since the first snapshot in range. When the first movement lags the first snapshot by
-     * more than this, the uncovered history is flagged as possibly overstating the return.
-     */
+    /** The real (XIRR) return is only trustworthy if movements cover contributions since the first snapshot in
+     *  range. A larger lag flags the uncovered history as possibly overstating the return. */
     const val MOVEMENT_COVERAGE_GAP_MONTHS: Long = 1
 
     /** Lower bound used when scanning history "since inception" (predates any real data). */

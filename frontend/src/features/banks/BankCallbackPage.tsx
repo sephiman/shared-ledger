@@ -7,10 +7,8 @@ import { apiErrorMessage } from "@/api/client";
 import { showToast } from "@/lib/toastBus";
 import { Card, CardBody } from "@/components/ui/primitives";
 
-/**
- * Landing route the bank redirects to after SCA. Reads `code`+`state`, completes the link for the
- * active household, then returns to Settings. State validation happens server-side.
- */
+/** Landing route the bank redirects to after SCA: reads `code`+`state`, completes the link for the active
+ *  household, returns to Settings. State validation happens server-side. */
 export function BankCallbackPage() {
   const { t } = useTranslation();
   const household = useActiveHousehold();

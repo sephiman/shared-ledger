@@ -9,11 +9,8 @@ import java.io.InputStreamReader
 import java.io.PushbackInputStream
 import java.nio.charset.StandardCharsets
 
-/**
- * Parses the European-CSV dialect used by our exports: `;` separator, `,` decimal, optional UTF-8 BOM,
- * CRLF/LF tolerant, RFC 4180 quoting (escape `"` by doubling). Returns each row as a map keyed by the
- * lowercased, trimmed header name.
- */
+/** Parses the European-CSV dialect our exports use: `;` separator, `,` decimal, optional BOM, CRLF/LF
+ *  tolerant, RFC 4180 quoting. Rows come back keyed by lowercased, trimmed header name. */
 object CsvReader {
 
     private val mapper: CsvMapper = CsvMapper().apply {

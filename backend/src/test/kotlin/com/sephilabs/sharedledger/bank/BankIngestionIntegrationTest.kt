@@ -27,7 +27,6 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.context.annotation.Import
 import org.springframework.data.domain.PageRequest
 import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.web.context.request.RequestContextHolder
@@ -36,7 +35,6 @@ import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
 
-@Import(FakeBankConnectorConfig::class)
 class BankIngestionIntegrationTest @Autowired constructor(
     private val users: UserRepository,
     private val households: HouseholdRepository,
@@ -57,8 +55,7 @@ class BankIngestionIntegrationTest @Autowired constructor(
     private val fake: FakeBankConnector,
 ) : IntegrationTestBase() {
 
-    /** Linking resolves its redirect URL from the current request (see BankCallbackUrl), so these
-     *  service-level tests bind one. */
+    /** Linking resolves its redirect URL from the current request (see BankCallbackUrl), so bind one. */
     @BeforeEach
     fun bindRequest() {
         RequestContextHolder.setRequestAttributes(ServletRequestAttributes(MockHttpServletRequest()))
@@ -902,7 +899,6 @@ class BankIngestionIntegrationTest @Autowired constructor(
             reference = null,
         )
 
-    /** Credentials are per household now, so seeding them is part of "this household is set up". */
     private fun seed(): Pair<User, Household> {
         val user = users.save(User(email = "bank${System.nanoTime()}@example.com", passwordHash = "x", locale = "en"))
         val household = households.save(Household(name = "H", currency = "EUR", defaultLocale = "en"))

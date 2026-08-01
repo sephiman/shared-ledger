@@ -8,8 +8,8 @@ import java.util.UUID
 
 interface HoldingRepository : JpaRepository<Holding, UUID> {
 
-    /** Hard-delete every holding of the household, INCLUDING soft-deleted (native, bypasses @SQLRestriction).
-     *  holding_lots and holding_valuations are removed via ON DELETE CASCADE. */
+    /** Hard-delete every holding incl. soft-deleted (native, bypasses @SQLRestriction); lots and valuations cascade.
+     *  Hard-delete every holding incl. soft-deleted (native, bypasses @SQLRestriction); lots and valuations cascade. */
     @Modifying
     @Query(value = "DELETE FROM holdings WHERE household_id = :hid", nativeQuery = true)
     fun hardDeleteAllByHouseholdId(@Param("hid") householdId: UUID): Int

@@ -10,10 +10,8 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 
-/**
- * CoinGecko adapter (Demo plan). Prices are requested directly in the household base
- * currency (vs_currency), so crypto valuations never need an FX conversion.
- */
+/** CoinGecko adapter (Demo plan). Prices are requested directly in the base currency (vs_currency), so
+ *  crypto valuations never need an FX conversion. */
 @Component
 class CoinGeckoClient(
     private val props: AppProperties,

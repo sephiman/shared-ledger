@@ -9,12 +9,8 @@ import java.time.Instant
 import java.time.LocalDate
 import java.util.concurrent.Executor
 
-/**
- * User-triggered "refresh prices now" from the portfolio UI. Runs the same gap-fill the
- * nightly scheduler runs (FX before equities, plus crypto), off the request thread and
- * against the shared price_history/fx_rates, so stale or missing holding prices catch up.
- * A cooldown collapses rapid re-clicks so the button can't hammer providers.
- */
+/** User-triggered "refresh prices now": the same gap-fill the nightly scheduler runs, off the request
+ *  thread and against the shared price_history/fx_rates. A cooldown collapses rapid re-clicks. */
 @Service
 class ManualPriceRefreshService(
     private val refresh: PriceRefreshService,
@@ -27,10 +23,8 @@ class ManualPriceRefreshService(
     @Volatile
     private var lastRunAt: Instant? = null
 
-    /**
-     * Kicks off a full gap-fill off-thread. Returns false when a run already happened within
-     * the cooldown (nothing re-fetched), so the caller can tell the user it was skipped.
-     */
+    /** Kicks off a full gap-fill off-thread. False when a run already happened within the cooldown, so the
+     *  caller can tell the user it was skipped. */
     fun trigger(now: Instant = Instant.now()): Boolean {
         synchronized(lock) {
             val last = lastRunAt

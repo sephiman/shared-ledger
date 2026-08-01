@@ -9,12 +9,9 @@ import org.springframework.stereotype.Component
 import java.time.LocalDate
 import java.util.concurrent.Executor
 
-/**
- * On first start (or after adding a new benchmark), populates benchmark_price so the overlay
- * has history without waiting for the nightly cron. Runs only when at least one enabled
- * benchmark has no stored data, and off the startup thread via the shared backfill executor,
- * so a normal restart makes no provider calls. Steady-state incremental updates are the cron's.
- */
+/** On first start (or after adding a benchmark), populates benchmark_price so the overlay has history
+ *  without waiting for the nightly cron. Runs only when an enabled benchmark has no stored data, off the
+ *  startup thread, so a normal restart makes no provider calls. */
 @Component
 class BenchmarkBackfillRunner(
     private val benchmarks: BenchmarkRepository,

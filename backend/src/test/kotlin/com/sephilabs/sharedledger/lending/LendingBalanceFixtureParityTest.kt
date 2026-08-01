@@ -9,10 +9,8 @@ import java.math.BigDecimal
 import java.time.LocalDate
 import java.util.UUID
 
-/**
- * Verifies the Kotlin calculator against the same fixtures the frontend Vitest test consumes
- * (backend/src/test/resources/lending-balance-fixtures.json), guaranteeing both ports agree.
- */
+/** Checks the Kotlin calculator against the fixtures the frontend Vitest test consumes
+ *  (backend/src/test/resources/lending-balance-fixtures.json), so both ports agree. */
 class LendingBalanceFixtureParityTest {
 
     private val mapper = ObjectMapper()

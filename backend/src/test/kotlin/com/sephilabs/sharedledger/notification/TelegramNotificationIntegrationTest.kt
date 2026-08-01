@@ -31,7 +31,6 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
-import org.springframework.context.annotation.Import
 import org.springframework.context.annotation.Primary
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.security.core.context.SecurityContextHolder
@@ -60,7 +59,6 @@ class RecordingTelegramConfig {
     fun recordingTelegramClient(props: AppProperties) = RecordingTelegramClient(props)
 }
 
-@Import(RecordingTelegramConfig::class)
 class TelegramNotificationIntegrationTest @Autowired constructor(
     private val users: UserRepository,
     private val households: HouseholdRepository,
@@ -92,7 +90,7 @@ class TelegramNotificationIntegrationTest @Autowired constructor(
 
         transactions.create(household.id, expense(), user)
 
-        awaitSent(1)
+        assertSent(1)
         val text = client.sent.single().text
         assertThat(text).contains("Transaction created")
         assertThat(text).contains("by ${user.email}")
@@ -106,7 +104,6 @@ class TelegramNotificationIntegrationTest @Autowired constructor(
 
         transactions.create(household.id, expense(), user)
         // Positive control on an enabled entity would require movements; instead assert nothing arrives.
-        sleepBriefly()
         assertThat(client.sent).isEmpty()
     }
 
@@ -116,7 +113,6 @@ class TelegramNotificationIntegrationTest @Autowired constructor(
         seedSettings(household.id, user.id) { active = false }
 
         transactions.create(household.id, expense(), user)
-        sleepBriefly()
         assertThat(client.sent).isEmpty()
     }
 
@@ -128,7 +124,6 @@ class TelegramNotificationIntegrationTest @Autowired constructor(
         )
 
         transactions.create(household.id, expense(), user)
-        sleepBriefly()
         assertThat(client.sent).isEmpty()
     }
 
@@ -141,11 +136,10 @@ class TelegramNotificationIntegrationTest @Autowired constructor(
             "2025-03-01;expense;groceries.groceries;10,00;Imported;;\n"
         val result = transactionImport.execute(household.id, csv.byteInputStream(Charsets.UTF_8), user)
         assertThat(result.inserted).isEqualTo(1)
-        sleepBriefly()
         assertThat(client.sent).withFailMessage("imports must not notify").isEmpty()
 
         transactions.create(household.id, expense(), user)
-        awaitSent(1)
+        assertSent(1)
         assertThat(client.sent.single().text).contains("Transaction created")
     }
 
@@ -173,7 +167,7 @@ class TelegramNotificationIntegrationTest @Autowired constructor(
         val created = recurring.fireNow(household.id, templateId, owner)
 
         assertThat(created).isEqualTo(1)
-        awaitSent(1)
+        assertSent(1)
         val text = client.sent.single().text
         assertThat(text).contains("Recurring transaction created")
         assertThat(text).doesNotContain("(1)")
@@ -211,7 +205,7 @@ class TelegramNotificationIntegrationTest @Autowired constructor(
         val created = materializer.runForHousehold(household.id, LocalDate.now())
         assertThat(created).isGreaterThanOrEqualTo(1)
 
-        awaitSent(1)
+        assertSent(1)
         val text = client.sent.single().text
         assertThat(text).contains("Recurring transactions created")
         assertThat(text).contains("Monthly groceries")
@@ -262,7 +256,7 @@ class TelegramNotificationIntegrationTest @Autowired constructor(
             LotRequest(type = LotType.BUY, tradedOn = LocalDate.of(2025, 3, 1), quantity = BigDecimal("1"), unitPrice = BigDecimal("40000")),
             user,
         )
-        awaitSent(1)
+        assertSent(1)
         assertThat(client.sent.last().text)
             .contains("Trade recorded").contains("Buy").contains("BTC").contains("by ${user.email}")
             .contains("40000 EUR")
@@ -272,7 +266,7 @@ class TelegramNotificationIntegrationTest @Autowired constructor(
             LotRequest(type = LotType.SELL, tradedOn = LocalDate.of(2025, 4, 1), quantity = BigDecimal("0.5"), unitPrice = BigDecimal("50000")),
             user,
         )
-        awaitSent(2)
+        assertSent(2)
         assertThat(client.sent.last().text).contains("Trade recorded").contains("Sell").contains("50000 EUR")
     }
 
@@ -291,7 +285,6 @@ class TelegramNotificationIntegrationTest @Autowired constructor(
             LotRequest(type = LotType.BUY, tradedOn = LocalDate.of(2025, 3, 1), quantity = BigDecimal("1"), unitPrice = BigDecimal("2000")),
             user,
         )
-        sleepBriefly()
         assertThat(client.sent).isEmpty()
     }
 
@@ -304,7 +297,6 @@ class TelegramNotificationIntegrationTest @Autowired constructor(
             "BUY;crypto;SOL;;EUR;;2025-03-01;10;100;EUR;;\n"
         val result = portfolioImport.execute(household.id, csv.byteInputStream(Charsets.UTF_8), user)
         assertThat(result.inserted).isEqualTo(1)
-        sleepBriefly()
         assertThat(client.sent).withFailMessage("portfolio imports must not notify").isEmpty()
     }
 
@@ -327,13 +319,10 @@ class TelegramNotificationIntegrationTest @Autowired constructor(
         settingsRepo.save(settings)
     }
 
-    private fun awaitSent(atLeast: Int) {
-        val deadline = System.currentTimeMillis() + 5000
-        while (client.sent.size < atLeast && System.currentTimeMillis() < deadline) Thread.sleep(50)
+    /** The test `telegramExecutor` blocks on dispatch, so it has already run by the time we assert. */
+    private fun assertSent(atLeast: Int) {
         assertThat(client.sent.size).isGreaterThanOrEqualTo(atLeast)
     }
-
-    private fun sleepBriefly() = Thread.sleep(800)
 
     private fun seed(): Pair<User, Household> {
         val user = users.save(User(email = "tg${System.nanoTime()}@example.com", passwordHash = "x", locale = "en"))

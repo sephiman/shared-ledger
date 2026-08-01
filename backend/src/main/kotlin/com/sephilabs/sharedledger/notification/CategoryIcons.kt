@@ -1,10 +1,7 @@
 package com.sephilabs.sharedledger.notification
 
-/**
- * Backend mirror of `frontend/src/lib/categoryGroup.ts`. The category-group emoji shown on the
- * mobile cards is reused verbatim in Telegram notifications. Keep this in sync with the frontend
- * GROUP_ICONS map.
- */
+/** Backend mirror of `frontend/src/lib/categoryGroup.ts` — the category-group emoji shown on mobile cards
+ *  is reused verbatim in Telegram. Keep in sync with the frontend GROUP_ICONS map. */
 object CategoryIcons {
     private val GROUP_ICONS = mapOf(
         "income" to "💵",                 // 💵

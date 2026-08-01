@@ -78,10 +78,8 @@ class CustomCategoryWriter(
         return entity
     }
 
-    /**
-     * Hard-deletes the custom category along with every transaction, budget, and
-     * recurring template referencing it in this household. All in one transaction.
-     */
+    /** Hard-deletes the custom category along with every transaction, budget and recurring template
+     *  referencing it in this household, in one transaction. */
     @Transactional
     fun delete(householdId: UUID, code: String) {
         val entity = customs.findByIdHouseholdIdAndIdCode(householdId, code)
@@ -117,7 +115,6 @@ class CustomCategoryWriter(
         }
     }
 
-    /** Returns the set of distinct expense group codes from the global catalog. */
     private fun allowedExpenseGroups(): Set<String> =
         globals.findAllByOrderBySortOrderAsc()
             .asSequence()

@@ -21,12 +21,9 @@ function isoOf(d: Date): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
-/**
- * Resolve the selected scope to inclusive ISO from/to bounds. Scope semantics
- * mirror the recurring-share tab: trailing12 spans the 11 months before the
- * current month through the end of the current month; ytd runs Jan 1 → today.
- * Returns null while a custom range is incomplete or inverted.
- */
+/** Resolve the selected scope to inclusive ISO from/to bounds, mirroring the recurring-share tab:
+ *  trailing12 spans the 11 months before the current month through its end; ytd runs Jan 1 → today.
+ *  Null while a custom range is incomplete or inverted. */
 export function resolveMoneyFlowRange(state: MoneyFlowScopeState, today: Date): { from: string; to: string } | null {
   switch (state.scope) {
     case "month":
@@ -136,11 +133,8 @@ function splitSmallFlows(
   };
 }
 
-/**
- * Map the backend's semantic nodes/links to Recharts' index-based Sankey data,
- * collapsing sub-threshold flows into an "Others" node per side. The hub,
- * "Saved" and "Deficit" nodes never collapse.
- */
+/** Map the backend's semantic nodes/links to Recharts' index-based Sankey data, collapsing sub-threshold
+ *  flows into an "Others" node per side. The hub, "Saved" and "Deficit" never collapse. */
 export function buildMoneyFlowSankey(data: MoneyFlowResponse, opts: BuildMoneyFlowOptions): MoneyFlowSankeyData {
   if (data.nodes.length === 0) return { nodes: [], links: [] };
 

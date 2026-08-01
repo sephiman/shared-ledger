@@ -505,11 +505,8 @@ class AnalyticsServiceTest @Autowired constructor(
         return user to household
     }
 
-    /**
-     * SnapshotService.create rejects a request that omits any asset class from the catalog,
-     * so tests must include all six (cash, fund, etfs, stocks, crypto, pension).
-     * Pass the codes/values that matter for the test; the rest default to 0.
-     */
+    /** SnapshotService.create rejects a request omitting any catalog asset class, so tests must pass all six.
+     *  Give the codes that matter; the rest default to 0. */
     private fun fullAssetSet(vararg values: Pair<String, String>): List<AssetValueInput> {
         val overrides = values.toMap()
         return listOf("cash", "fund", "etfs", "stocks", "crypto", "pension").map { code ->

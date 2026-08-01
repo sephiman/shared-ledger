@@ -7,13 +7,9 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.web.client.RestClient
 
-/**
- * Selects the equity price provider from config (app.portfolio.equity-provider).
- * YAHOO (unofficial, keyless, no hard quota) is the default; EODHD and TWELVE_DATA
- * are official fallbacks a config switch can restore if Yahoo breaks. Exactly one
- * EquityPriceProvider bean exists, so the rest of the app — and the @Primary test
- * stubs — stay oblivious to which adapter is active.
- */
+/** Selects the equity price provider from config. YAHOO (keyless, no hard quota) is the default; EODHD and
+ *  TWELVE_DATA are official fallbacks. Exactly one EquityPriceProvider bean exists, so the rest of the app
+ *  — and the @Primary test stubs — stay oblivious to which adapter is active. */
 @Configuration
 class EquityProviderConfig {
 

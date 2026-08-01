@@ -5,10 +5,8 @@ import { formatMoney, formatPercent } from "@/lib/money";
 import { Explain } from "./Explain";
 import { TIER_COLORS, TIER_ORDER } from "./fireLabels";
 
-/**
- * One box per active tier: target today, the spending base it derives from, current
- * coverage, and the instantiated formula behind it.
- */
+/** One box per active tier: target today, the spending base it derives from, current coverage, and the
+ *  instantiated formula behind it. */
 export function FireTiersCard({ projection, currency }: { projection: FireProjection; currency: string }) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;

@@ -15,10 +15,8 @@ import java.util.UUID
 /** Named asset types. Validated in the service layer (no DB CHECK constraint). */
 enum class AssetType { property, vehicle, other }
 
-/**
- * A named asset (house, car, …) that adds to net worth. Its value over time lives in its own
- * dated series ([AssetValueEntry]); this entity only carries identity + active flag.
- */
+/** A named asset (house, car, …) that adds to net worth. Its value over time lives in its own dated series
+ *  ([AssetValueEntry]); this entity carries only identity + active flag. */
 @Entity
 @Table(name = "assets")
 @SQLRestriction("deleted_at IS NULL")

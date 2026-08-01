@@ -11,7 +11,6 @@ export function formatDate(value: string | Date, locale: string, pattern = "PP")
   return format(d, pattern, { locale: locales[locale] ?? enUS });
 }
 
-/** Shift an ISO (yyyy-MM-dd) date by a number of days, returning ISO. */
 export function addDaysIso(iso: string, days: number): string {
   return format(addDays(parseISO(iso), days), "yyyy-MM-dd");
 }

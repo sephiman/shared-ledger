@@ -10,14 +10,9 @@ import org.springframework.stereotype.Component
 import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.transaction.PlatformTransactionManager
 
-/**
- * One-off, idempotent startup migration: re-resolves equity holdings still linked to
- * a previous provider (EODHD/Twelve Data coordinates) to the active provider's
- * symbols. Best effort via ISIN, falling back to the ticker; a unique match relinks
- * and re-backfills (now down to the earliest lot), an ambiguous or missing match
- * unlinks the holding for manual re-search, and a provider outage leaves it
- * untouched to retry on the next startup. Old price_history rows stay orphaned.
- */
+/** One-off idempotent startup migration: re-resolves equity holdings still on a previous provider's
+ *  coordinates to the active one, via ISIN then ticker. A unique match relinks and re-backfills, an
+ *  ambiguous one unlinks for manual re-search, a provider outage retries next startup. */
 @Component
 class EquityProviderMigration(
     private val holdings: HoldingRepository,

@@ -31,12 +31,9 @@ class TransactionService(
     fun create(householdId: UUID, request: TransactionRequest, by: User): Transaction =
         createInternal(householdId, request, by, notify = true)
 
-    /**
-     * Shared creation logic (category validation, save, metrics) with the per-transaction
-     * notification made optional. The bank review inbox reuses this: single confirm notifies
-     * normally (notify=true), while batch confirm suppresses per-item notifications and emits one
-     * aggregated summary instead. Public transaction endpoints always go through [create].
-     */
+    /** Shared creation logic (category validation, save, metrics) with the notification made optional. The bank
+     *  review inbox reuses it: single confirm notifies, batch confirm suppresses per-item and emits one
+     *  summary. Public endpoints always go through [create]. */
     @Transactional
     fun createInternal(householdId: UUID, request: TransactionRequest, by: User, notify: Boolean): Transaction {
         val category = categoryService.requireForDirection(householdId, request.categoryCode, request.direction.name)

@@ -19,12 +19,9 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
-/**
- * Bank linking is deliberately **not** owner-only: each member links their own account with their
- * own SCA, so a household of relatives never shares bank credentials. Managing an existing
- * connection (sync, re-link, edit, delete) stays with the member who linked it, plus any owner —
- * see [BankService.canManage].
- */
+/** Linking is deliberately not owner-only: each member links their own account with their own SCA, so a
+ *  household never shares bank credentials. Managing an existing connection stays with the member who
+ *  linked it, plus owners — see [BankService.canManage]. */
 @RestController
 @RequestMapping("/api/households/{householdId}/banks")
 class BankController(

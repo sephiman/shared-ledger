@@ -139,17 +139,18 @@ data class AppProperties(
         val minRequestIntervalMs: Long = 1000,
     )
 
-    /**
-     * Enable Banking (PSD2 AIS aggregator, Restricted Production). The API application id and its
-     * private key are **not** here: they are per-household configuration owned by
-     * `BankCredentialsService` (Settings → Banks). What stays instance-wide is the encryption key
-     * that protects them at rest plus the provider tuning below.
-     */
+    /** Enable Banking (PSD2 AIS, Restricted Production). The application id and private key are **not** here —
+     *  they are per-household config owned by `BankCredentialsService`. Instance-wide is only the encryption
+     *  key protecting them at rest plus the provider tuning below. */
     data class EnableBanking(
         val baseUrl: String = "https://api.enablebanking.com",
         // Base64 AES key (16/24/32 bytes) encrypting the stored household credentials and the
         // per-connection session id at rest. The one Enable Banking secret that remains an env var.
         val secretKey: String = "",
+        // Legacy, upgrade-only: the instance-wide application id used before credentials became
+        // per-household. Consumed once by BankConnectionAppIdBackfill to attribute connections
+        // linked under it; blank (the normal state) makes that a no-op.
+        val appId: String = "",
         // Where the bank sends the PSU back after SCA — this instance's public frontend URL plus the
         // SPA callback route. Not a secret and not per household: it identifies the *instance*, so
         // every household registers the same value in its own EB application. Blank falls back to

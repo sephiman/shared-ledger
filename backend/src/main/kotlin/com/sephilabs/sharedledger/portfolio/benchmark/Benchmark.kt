@@ -7,15 +7,11 @@ import jakarta.persistence.Enumerated
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 
-/** How the refresh job sources a benchmark's daily closes. */
 enum class BenchmarkKind { equity, crypto }
 
-/**
- * A reference index or asset the user can overlay on the portfolio ROI (TWR) chart.
- * The row is the extension point: a new benchmark is one seeded record (plus an i18n
- * label) — the chart, endpoints and refresh job are all data-driven off this table.
- * Closes are stored in [currency] and converted to the base currency at read time.
- */
+/** A reference index or asset overlaid on the portfolio ROI (TWR) chart. The row is the extension point: a
+ *  new benchmark is one seeded record plus an i18n label. Closes are stored in [currency] and converted
+ *  to base at read time. */
 @Entity
 @Table(name = "benchmark")
 class Benchmark(

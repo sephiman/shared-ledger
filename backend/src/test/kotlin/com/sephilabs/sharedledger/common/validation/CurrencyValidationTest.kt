@@ -8,11 +8,8 @@ import jakarta.validation.Validator
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 
-/**
- * Verifies the @ValidCurrency annotation actually fires on each DTO that takes a currency code
- * from the user. Uses a bare jakarta Validator (no Spring context) — this is the same set of
- * violations the @Valid pipeline would surface on a real HTTP request.
- */
+/** Verifies @ValidCurrency actually fires on each DTO taking a user-supplied currency code. A bare jakarta
+ *  Validator (no Spring context) surfaces the same violations the @Valid pipeline would. */
 class CurrencyValidationTest {
 
     private val validator: Validator = Validation.buildDefaultValidatorFactory().validator

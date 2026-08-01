@@ -8,10 +8,8 @@ import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.web.context.request.RequestContextHolder
 import org.springframework.web.context.request.ServletRequestAttributes
 
-/**
- * The SCA redirect URL must be identical in the `/auth` payload, the credentials card, and whatever
- * the operator registered at Enable Banking. These pin the precedence that keeps the three in step.
- */
+/** The SCA redirect URL must be identical in the `/auth` payload, the credentials card and the operator's
+ *  Enable Banking registration. These pin the precedence that keeps the three in step. */
 class BankCallbackUrlTest {
 
     @AfterEach

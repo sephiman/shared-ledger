@@ -7,20 +7,10 @@ import java.time.temporal.ChronoUnit
 import kotlin.math.abs
 import kotlin.math.pow
 
-/**
- * Money-weighted return (XIRR) over the portfolio's lot cash flows. Pure math, no
- * pricing or persistence: the caller supplies the dated flows (buys as outflows,
- * sells as inflows, the current value of open holdings as a terminal inflow) already
- * converted to the base currency at their trade-time FX rates.
- *
- * The rate is the root of the net-present-value function, found by bisection with an
- * expanding upper bracket — slower than Newton but never diverges, and the expansion
- * covers the huge annualized rates short histories produce. BigDecimal at the
- * boundaries; the iterative root finding runs in Double.
- *
- * Deliberately independent from the FIRE domain's snapshot-based return: different
- * data source, different scope.
- */
+/** Money-weighted return (XIRR) over the portfolio's lot cash flows. Pure math: the caller supplies the
+ *  dated flows (buys out, sells in, current value of open holdings as a terminal inflow) already in base
+ *  currency at trade-time FX. Root of the NPV function by bisection with an expanding upper bracket —
+ *  slower than Newton but never diverges. Deliberately independent of FIRE's snapshot-based return. */
 object MoneyWeightedReturn {
 
     /** Signed base-currency flow: money put in (buys) negative, money coming back (sells, terminal value) positive. */
@@ -38,10 +28,8 @@ object MoneyWeightedReturn {
     }
 
     data class Result(
-        /**
-         * Scale-4 fraction (0.1234 = +12.34 %): the annualized rate, or the cumulative
-         * money-weighted return when [annualized] is false. Null iff [failure] is set.
-         */
+        /** Scale-4 fraction (0.1234 = +12.34 %): the annualized rate, or the cumulative return when [annualized]
+         *  is false. Null iff [failure] is set. */
         val value: BigDecimal?,
         /** False when the history spans less than [MIN_ANNUALIZATION_DAYS]: annualizing a short period produces absurd numbers. */
         val annualized: Boolean,
@@ -59,7 +47,6 @@ object MoneyWeightedReturn {
     /** +1000 % annualized: the initial upper bracket, generous for a multi-year household portfolio. */
     const val INITIAL_RATE_CEILING: Double = 10.0
 
-    /** The upper bracket grows by this factor while NPV has not changed sign yet. */
     const val RATE_CEILING_GROWTH: Double = 10.0
 
     /** Beyond this annualized rate the search gives up ([Failure.NO_SIGN_CHANGE]). */
@@ -71,11 +58,8 @@ object MoneyWeightedReturn {
     /** Bracket width below which the midpoint is accepted even if NPV has not hit [NPV_EPSILON]. */
     const val RATE_EPSILON: Double = 1e-10
 
-    /**
-     * Money-weighted return of [flows] with the history classified against [asOf] (the
-     * terminal-value date): annualized for spans of at least [MIN_ANNUALIZATION_DAYS],
-     * cumulative otherwise. Zero-amount flows are ignored.
-     */
+    /** Money-weighted return of [flows] classified against [asOf] (the terminal-value date): annualized for
+     *  spans of at least [MIN_ANNUALIZATION_DAYS], cumulative otherwise. Zero-amount flows are ignored. */
     fun compute(flows: List<Flow>, asOf: LocalDate): Result {
         val live = flows.filter { it.amountBase.signum() != 0 }
         if (live.none { it.amountBase.signum() < 0 } || live.none { it.amountBase.signum() > 0 }) {
@@ -108,11 +92,8 @@ object MoneyWeightedReturn {
         )
     }
 
-    /**
-     * Root of [npv] by bisection over [[RATE_FLOOR], ceiling], expanding the ceiling by
-     * [RATE_CEILING_GROWTH] up to [MAX_RATE_CEILING] until the endpoints straddle zero.
-     * Null when no sign change exists; NaN when the loop somehow fails to settle.
-     */
+    /** Root of [npv] by bisection over [[RATE_FLOOR], ceiling], growing the ceiling until the endpoints
+     *  straddle zero. Null when no sign change exists; NaN when the loop fails to settle. */
     private fun solve(npv: (Double) -> Double): Double? {
         var lo = RATE_FLOOR
         var npvLo = npv(lo)

@@ -10,13 +10,9 @@ import java.math.BigDecimal
 import java.math.MathContext
 import java.time.LocalDate
 
-/**
- * Converts a non-EUR bank movement into the household base currency (EUR) at the ECB rate of the
- * booking date (closed decision #5). Reuses the portfolio FX store + on-demand fetch exactly like
- * `HoldingService.fxRateToBase`, so bank ingestion needs no FX plumbing of its own. The original
- * amount/currency are preserved on the pending movement; only the converted value drives the
- * generated transaction.
- */
+/** Converts a non-EUR bank movement into the base currency at the ECB rate of the booking date, reusing
+ *  the portfolio FX store like `HoldingService.fxRateToBase`. The original amount/currency stay on the
+ *  pending movement; only the converted value drives the generated transaction. */
 @Component
 class BankFxConverter(
     private val fxRates: FxRateRepository,

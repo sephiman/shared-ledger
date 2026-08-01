@@ -29,11 +29,8 @@ export interface NamedItem {
   latestValueDate?: string | null;
 }
 
-/**
- * One card for a named asset or a simple (non-amortizable) liability. Shared layout: a header with
- * the current value, then the dated value series as a list. Only one editor is open at a time —
- * either the item details or the value history. Asset adds to net worth; liability subtracts.
- */
+/** One card for a named asset or a simple (non-amortizable) liability: header with the current value, then
+ *  the dated series. Only one editor is open at a time. Asset adds to net worth; liability subtracts. */
 export function NamedValueCard({
   kind,
   item,

@@ -10,24 +10,16 @@ import java.time.LocalDate
 import java.util.UUID
 import java.util.concurrent.Executor
 
-/**
- * Requests a price backfill for a holding that was just created, linked, or gained an earlier
- * lot. [newEarliest] is set when an older lot appeared (extend the head down to it); null means
- * a full (re)backfill from the earliest lot.
- */
+/** Requests a price backfill for a holding just created, linked, or given an earlier lot. [newEarliest] is
+ *  set when an older lot appeared (extend the head to it); null means a full (re)backfill. */
 data class HoldingBackfillRequested(
     val holdingId: UUID,
     val newEarliest: LocalDate? = null,
 )
 
-/**
- * Runs the backfill off the request thread and only after the triggering mutation has committed:
- * [TransactionPhase.AFTER_COMMIT] guarantees the holding/lot is visible, and the injected
- * `backfillExecutor` moves the provider calls off the request thread (a synchronous executor is
- * wired in tests). Failure is non-fatal — [PriceRefreshService.backfillForHolding] /
- * [PriceRefreshService.extendBackfill] swallow provider errors and the nightly gap-fill jobs
- * re-attempt any head or tail range still missing.
- */
+/** Runs the backfill off the request thread and only after the triggering mutation commits: AFTER_COMMIT
+ *  guarantees the holding/lot is visible. Failure is non-fatal — provider errors are swallowed and the
+ *  nightly gap-fill re-attempts any range still missing. */
 @Component
 class HoldingBackfillListener(
     private val holdings: HoldingRepository,

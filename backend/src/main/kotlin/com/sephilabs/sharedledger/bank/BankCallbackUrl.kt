@@ -8,19 +8,9 @@ import org.springframework.web.context.request.ServletRequestAttributes
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder
 import java.net.URI
 
-/**
- * The URL Enable Banking sends the holder back to after SCA. It identifies the *instance*, not a
- * household, so it stays operator configuration (`ENABLE_BANKING_REDIRECT_URL`) — every household
- * registers this same value in its own EB application.
- *
- * One source for two consumers that must agree: [BankService.startLink] sends it in the `/auth`
- * payload and the credentials card shows it as "register this"; if they diverged every link would
- * fail at the provider.
- *
- * Blank falls back to asking the *browser* what this instance is (`Origin`, then `Referer`, then the
- * request host), which keeps local development working and survives a proxy that rewrites `Host` or
- * drops `X-Forwarded-Proto`.
- */
+/** The SCA return URL. Operator-level config (`ENABLE_BANKING_REDIRECT_URL`) because it identifies the
+ *  instance, not a household. [BankService.startLink] and the credentials card must show the same value
+ *  or every link fails at the provider. Blank falls back to Origin, then Referer, then the request host. */
 @Component
 class BankCallbackUrl(private val props: AppProperties) {
 

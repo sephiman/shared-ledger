@@ -117,11 +117,8 @@ class HouseholdController(
             .sortedWith(compareBy({ if (it.role == HouseholdRole.owner) 0 else 1 }, { it.joinedAt }))
     }
 
-    /**
-     * Promote a member to `owner`, or demote an owner back to `member`. The household must keep at
-     * least one owner — otherwise settings, invitations and deletion would all become unreachable
-     * with no way back, since this endpoint is itself owner-only.
-     */
+    /** Promote a member to `owner` or demote one back. The household must keep at least one owner — this
+     *  endpoint is itself owner-only, so emptying the role would make settings and deletion unreachable. */
     @RequireHouseholdOwner
     @PatchMapping("/{householdId}/members/{userId}")
     @Transactional

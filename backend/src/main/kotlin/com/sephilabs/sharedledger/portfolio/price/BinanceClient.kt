@@ -10,14 +10,9 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 
-/**
- * Binance public market-data adapter (keyless) — crypto history FALLBACK only.
- * Serves daily USDT closes (treated as USD) beyond CoinGecko's 365-day Demo ceiling
- * or when CoinGecko is down. Pair symbols (BTCUSDT) are built on the fly from the
- * holding's ticker and never persisted, so they cannot collide with the CoinGecko
- * ids used as provider_symbol. Unknown pairs return empty instead of failing —
- * not every CoinGecko coin trades on Binance.
- */
+/** Binance public market-data adapter (keyless) — crypto history FALLBACK only, for ranges beyond
+ *  CoinGecko's 365-day Demo ceiling or while it is down. Pair symbols (BTCUSDT) are built on the fly and
+ *  never persisted, so they cannot collide with CoinGecko ids. Unknown pairs return empty, not an error. */
 @Component
 class BinanceClient(
     props: AppProperties,

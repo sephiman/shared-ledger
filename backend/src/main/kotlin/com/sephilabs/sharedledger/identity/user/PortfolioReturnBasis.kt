@@ -1,13 +1,8 @@
 package com.sephilabs.sharedledger.identity.user
 
-/**
- * How a user prefers the portfolio Realized % and Total return % to be based. The id is the
- * wire/storage format (users.portfolio_return_basis and the /auth/me payload) and must match
- * the frontend registry in features/portfolio/valuation.ts.
- *
- * Purely presentational: it selects the percentage denominators only — the euro amounts are
- * identical in every mode.
- */
+/** How a user bases the portfolio Realized % and Total return %. The id is the wire/storage format and
+ *  must match the frontend registry in features/portfolio/valuation.ts. Purely presentational: it selects
+ *  the percentage denominators only — the euro amounts are identical in every mode. */
 enum class PortfolioReturnBasis(val id: String) {
     // Realized and total return over the cost of the currently-held (open) lots. Unrealized,
     // realized and total then share one base, so the percentages add up like the euro amounts.

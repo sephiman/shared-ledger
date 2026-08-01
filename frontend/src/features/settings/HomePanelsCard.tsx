@@ -6,10 +6,8 @@ import { apiErrorMessage } from "@/api/client";
 import { Card, CardBody, CardHeader, FieldError, Toggle } from "@/components/ui/primitives";
 import { HOME_PANELS, isPanelVisible, setPanelVisible, type HomePanelId } from "@/lib/homePanels";
 
-/**
- * Per-user visibility toggles for the six top Home panels. The preference only hides a panel
- * that would otherwise show; data-dependent tiles still render nothing while they have no data.
- */
+/** Per-user visibility toggles for the six top Home panels. The preference only hides a panel that would
+ *  otherwise show; data-dependent tiles still render nothing while they have no data. */
 export function HomePanelsCard() {
   const { t } = useTranslation();
   const { user } = useAuth();

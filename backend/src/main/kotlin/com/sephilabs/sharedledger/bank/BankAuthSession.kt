@@ -11,10 +11,8 @@ import org.springframework.data.repository.query.Param
 import java.time.Instant
 import java.util.UUID
 
-/**
- * Short-lived record tying a redirect `state` to the household/holder that started a link, so the
- * callback cannot bind an authorization to a different household. Consumed (deleted) on completion.
- */
+/** Ties a redirect `state` to the household/holder that started the link, so the callback cannot bind
+ *  an authorization to a different household. Deleted on completion. */
 @Entity
 @Table(name = "bank_auth_sessions")
 class BankAuthSession(

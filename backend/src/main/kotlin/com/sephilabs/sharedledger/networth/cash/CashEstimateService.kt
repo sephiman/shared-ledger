@@ -15,10 +15,8 @@ import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
-/**
- * Net of the marked flows over a window, split by type so the UI can show a breakdown.
- * From cash's perspective each flow carries its own sign (bidirectional).
- */
+/** Net of the marked flows over a window, split by type for the UI breakdown. Each flow carries its own
+ *  sign from cash's perspective. */
 data class CashFlowBreakdown(
     val transactions: BigDecimal,
     val lendings: BigDecimal,
@@ -27,11 +25,8 @@ data class CashFlowBreakdown(
     val net: BigDecimal get() = transactions + lendings + movements
 }
 
-/**
- * The estimated cash at a date: the anchor (latest adjustment on/before the date) plus the net of
- * the marked flows dated strictly after the anchor. Null [anchorDate] means no adjustment exists —
- * cash has no series yet, so there is no estimate (callers fall back to carry-over behaviour).
- */
+/** Estimated cash at a date: the anchor (latest adjustment on/before it) plus the net of marked flows
+ *  strictly after the anchor. Null [anchorDate] means no adjustment exists, so there is no estimate. */
 data class CashEstimate(
     val date: LocalDate,
     val anchorDate: LocalDate?,
@@ -40,11 +35,8 @@ data class CashEstimate(
     val estimate: BigDecimal?,
 )
 
-/**
- * Computes cash on demand (never cached): the manual adjustment series is the truth, and between
- * adjustments cash is estimated from the signed flows the household marked as affecting cash.
- * See [CashAdjustment] for the end-of-day convention.
- */
+/** Computes cash on demand, never cached: the manual adjustment series is the truth and the marked signed
+ *  flows fill the gaps. See [CashAdjustment] for the end-of-day convention. */
 @Service
 class CashEstimateService(
     private val adjustments: CashAdjustmentRepository,
@@ -78,10 +70,8 @@ class CashEstimateService(
         return s
     }
 
-    /**
-     * The cash estimate at [date]. If no adjustment exists on or before [date], returns an estimate
-     * with null [CashEstimate.estimate] (no anchor to compute from) — cash then behaves as today.
-     */
+    /** The cash estimate at [date]. With no adjustment on or before it, [CashEstimate.estimate] is null (no
+     *  anchor to compute from) and cash behaves as today. */
     @Transactional(readOnly = true)
     fun estimateAt(householdId: UUID, date: LocalDate): CashEstimate {
         val anchor = adjustments
@@ -123,10 +113,8 @@ class CashEstimateService(
                 acc + if (mv.type == MovementType.withdrawal) mv.amount else mv.amount.negate()
             }
 
-    /**
-     * Lent: money lent out (principal on the lending's start date) leaves cash; a repayment received
-     * comes in. Both are stored positive with implicit direction.
-     */
+    /** Lent: principal leaves cash on the lending's start date, a repayment comes back in. Both are stored
+     *  positive with implicit direction. */
     private fun netLendings(householdId: UUID, from: LocalDate, to: LocalDate): BigDecimal {
         val list = lendings.findAllByHouseholdId(householdId)
         if (list.isEmpty()) return ZERO

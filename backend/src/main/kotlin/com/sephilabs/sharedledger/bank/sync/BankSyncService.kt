@@ -38,28 +38,16 @@ import java.time.LocalDate
 import java.util.UUID
 import java.util.concurrent.Executor
 
-/**
- * How a sync was triggered — this decides the fetch strategy and rate-limit handling:
- * - [INITIAL]: first sync after linking. Full history ([FetchStrategy.LONGEST]), interactive
- *   (PSU headers), so it is not gated by the background per-day budget — page through everything.
- * - [MANUAL]: user pressed "Sync now" while online. Interactive; incremental unless nothing has
- *   ever synced (then full, to self-heal a missed initial sync).
- * - [SCHEDULED]: unattended background sync. Incremental ([FetchStrategy.DEFAULT] from the last
- *   sync point minus an overlap), gated by the ≤4 calls/consent/day budget, backs off on rate limit.
- */
+/** How a sync was triggered — decides fetch strategy and rate-limit handling:
+ *  - [INITIAL]: first sync after linking. Full history, interactive, so the background budget doesn't gate it.
+ *  - [MANUAL]: user pressed "Sync now". Interactive; incremental unless nothing ever synced.
+ *  - [SCHEDULED]: unattended. Incremental, gated by the ≤4 calls/consent/day budget, backs off on rate limit. */
 enum class SyncMode { INITIAL, MANUAL, SCHEDULED }
 
-/**
- * Idempotent per-connection sync. The incremental window resumes from the latest booking date
- * already stored (minus a small overlap so late-booked items aren't missed); movements are upserted
- * by (connection, bankMovementId) so re-reads never duplicate. Records a [BankSyncRun] and never
- * lets one connection's failure or expiry affect another.
- *
- * Pagination follows the provider: keep calling with the returned `continuation_key` until a page
- * returns none — an empty page may still carry one. Provider HTTP (and the FX lookups it needs) run
- * **outside** any DB transaction; only the short persist steps use one (via [TransactionTemplate]),
- * so a slow bank never holds a pooled DB connection open. Use [enqueue] to run off the caller's thread.
- */
+/** Idempotent per-connection sync: the incremental window resumes from the latest stored booking date
+ *  minus an overlap, and movements are upserted by (connection, bankMovementId) so re-reads never
+ *  duplicate. Provider HTTP and its FX lookups run **outside** any DB transaction — only the short
+ *  persist steps use one — so a slow bank never holds a pooled connection. [enqueue] runs it off-thread. */
 @Service
 class BankSyncService(
     private val props: AppProperties,
@@ -333,17 +321,10 @@ class BankSyncService(
         }
     }
 
-    /**
-     * Window for the incremental (DEFAULT) strategy: resume from the account's latest stored booking
-     * date minus the overlap buffer, up to today. LONGEST ignores the window (the provider finds the
-     * earliest transaction and pulls everything forward).
-     *
-     * Both bounds are **inclusive** at the provider ("including the date"), so the upper bound is
-     * today and never tomorrow: a strict ASPSP (Bankinter) answers a future `date_to` with a bare
-     * `ASPSP_ERROR`. For the same reason the lower bound is clamped to the unattended history window
-     * ([AppProperties.EnableBanking.backfillDays]) — asking a bank for more than it will ever serve
-     * in the background gets the whole page rejected rather than trimmed.
-     */
+    /** Incremental window: from the account's latest stored booking date minus the overlap buffer, up to
+     *  today. Both bounds are **inclusive** at the provider, so the upper bound is never tomorrow — a strict
+     *  ASPSP (Bankinter) answers a future `date_to` with a bare `ASPSP_ERROR`. The lower bound is clamped to
+     *  [AppProperties.EnableBanking.backfillDays] for the same reason: an over-wide range is rejected whole. */
     private fun fetchWindow(
         strategy: FetchStrategy,
         connectionId: UUID,

@@ -16,11 +16,8 @@ import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
 
-/**
- * Gap-fill and backfill engine for price_history and fx_rates. Idempotent: rows are
- * upserted by their unique (provider coordinates, date) key, so overlapping runs and
- * re-runs after failures self-heal. Every refresh resumes from the last stored date.
- */
+/** Gap-fill and backfill engine for price_history and fx_rates. Idempotent: rows are upserted by their
+ *  unique (provider coordinates, date) key, so overlapping runs and re-runs after failures self-heal. */
 @Service
 class PriceRefreshService(
     private val holdings: HoldingRepository,
@@ -78,12 +75,9 @@ class PriceRefreshService(
         }
     }
 
-    /**
-     * Nightly, after FX: per distinct linked equity symbol, gap-fill EOD prices to today.
-     * Only holdings linked to the ACTIVE equity provider are refreshed; holdings still
-     * linked to another one keep their stored prices and show stale/no-price until
-     * relinked (or migrated). A failing symbol never crashes the job.
-     */
+    /** Nightly, after FX: per distinct linked equity symbol, gap-fill EOD prices to today. Only holdings on the
+     *  ACTIVE provider are refreshed; others keep their stored prices and show stale until relinked. A failing
+     *  symbol never crashes the job. */
     fun refreshEquities(today: LocalDate) {
         val active = props.portfolio.equityProvider.asHoldingProvider()
         val symbols = linkedHoldings(active)
@@ -102,11 +96,8 @@ class PriceRefreshService(
         }
     }
 
-    /**
-     * Fills an equity series in both directions so a failed request-time backfill self-heals:
-     * bootstraps the full ceiling-clamped range when nothing is stored, extends the head down
-     * to the earliest lot, and tails up to today. Returns true if anything was fetched.
-     */
+    /** Fills an equity series both ways so a failed request-time backfill self-heals: bootstraps the
+     *  ceiling-clamped range, extends the head to the earliest lot, tails to today. True if anything was fetched. */
     private fun refreshEquitySymbol(
         provider: String,
         symbol: String,
@@ -132,10 +123,8 @@ class PriceRefreshService(
         return fetched
     }
 
-    /**
-     * A head fetch also tops up the foreign-currency FX head so old-date valuations convert
-     * (the nightly FX job only tails). Returns false when the range is empty.
-     */
+    /** A head fetch also tops up the foreign-currency FX head so old-date valuations convert (the nightly FX
+     *  job only tails). False when the range is empty. */
     private fun fetchEquityRange(
         provider: String,
         symbol: String,
@@ -156,12 +145,9 @@ class PriceRefreshService(
         return true
     }
 
-    /**
-     * The provider's reported listing currency (Yahoo chart meta) is the source of truth:
-     * search results carry none, so a holding's native_currency can be wrong until the
-     * first fetch. On mismatch the holdings are corrected and prices stored under the
-     * real currency — otherwise a USD listing would be valued as EUR with FX=1.
-     */
+    /** The provider's reported listing currency (Yahoo chart meta) is the source of truth: search results carry
+     *  none, so native_currency can be wrong until the first fetch. On mismatch holdings are corrected and
+     *  prices stored under the real currency — otherwise a USD listing would be valued as EUR with FX=1. */
     private fun reconcileCurrency(
         group: List<Holding>,
         expected: String,
@@ -202,12 +188,8 @@ class PriceRefreshService(
         }
     }
 
-    /**
-     * Fetches FX history for one currency: tail gap-fill up to [today], plus a head
-     * extension when [earliestNeeded] (e.g. an old lot date) precedes the stored range.
-     * The head fetch starts a few days early so weekend dates forward-fill from the
-     * preceding business day.
-     */
+    /** FX history for one currency: tail gap-fill to [today], plus a head extension when [earliestNeeded]
+     *  precedes the stored range. The head fetch starts a few days early so weekend dates forward-fill. */
     fun refreshFxCurrency(currency: String, today: LocalDate, earliestNeeded: LocalDate? = null) {
         val maxStored = fxRates.findMaxRateDate(currency, baseCurrency)
         if (maxStored == null) {
@@ -228,10 +210,8 @@ class PriceRefreshService(
         }
     }
 
-    /**
-     * Ranged backfill for a freshly linked holding:
-     * from = max(earliest lot date, provider ceiling), to = today.
-     */
+    /** Ranged backfill for a freshly linked holding: from = max(earliest lot date, provider ceiling) to today.
+     *  Ranged backfill for a freshly linked holding: from = max(earliest lot date, provider ceiling) to today. */
     fun backfillForHolding(holding: Holding, today: LocalDate = LocalDate.now()) {
         if (!holding.linked || !props.portfolio.backfillOnLink) return
         val earliestLot = lots.findMinTradedOn(holding.id) ?: today
@@ -276,19 +256,10 @@ class PriceRefreshService(
         }
     }
 
-    /**
-     * Binance fallback: daily USDT closes for {ticker}USDT (1 USDT = 1 USD by assumption),
-     * converted into the base currency with the ECB rate of each day and upserted into
-     * the SAME (coingecko, id, base) series the holding reads — the pair symbol is never
-     * persisted, so Binance naming can't collide with CoinGecko ids. Days without an FX
-     * rate are skipped; unknown pairs are a silent no-op.
-     *
-     * Idempotent and cheap on repeat: this range sits below the CoinGecko ceiling and is fixed
-     * once filled, so a scheduled refresh must not re-pull it every run. Two guards ensure that —
-     * a short-circuit when the top of the window is already stored (it was covered by CoinGecko
-     * the day before it crossed the ceiling), and a skip of any day already present when a fetch
-     * does happen (initial fill, or a recent gap after a CoinGecko outage).
-     */
+    /** Binance fallback: daily USDT closes (1 USDT = 1 USD) converted to base with each day's ECB rate and
+     *  upserted into the SAME (coingecko, id, base) series the holding reads — the pair symbol is never stored,
+     *  so Binance naming can't collide with CoinGecko ids. Days without an FX rate are skipped. Two guards keep
+     *  a scheduled run from re-pulling it: short-circuit when the window top is stored, and skip days present. */
     private fun fallbackCryptoFill(
         coinId: String,
         ticker: String,
@@ -335,12 +306,9 @@ class PriceRefreshService(
         }
     }
 
-    /**
-     * Gap-fills a crypto series in both directions so a failed request-time backfill self-heals:
-     * bootstraps the whole ceiling-clamped range when nothing is stored, extends the head down to
-     * the earliest lot, and tails up to yesterday (today's row comes from the current-price call).
-     * A lot older than CoinGecko's history ceiling is covered by the Binance fallback.
-     */
+    /** Gap-fills a crypto series both ways so a failed request-time backfill self-heals: bootstraps the
+     *  ceiling-clamped range, extends the head to the earliest lot, tails to yesterday (today's row comes from
+     *  the current-price call). Lots older than CoinGecko's ceiling are covered by the Binance fallback. */
     private fun gapFillCrypto(id: String, ticker: String, group: List<Holding>, today: LocalDate) {
         val currency = baseCurrency
         val earliestLot = earliestLotOf(group, today)

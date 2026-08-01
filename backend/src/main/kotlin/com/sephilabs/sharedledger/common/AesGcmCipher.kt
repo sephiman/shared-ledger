@@ -7,14 +7,9 @@ import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
-/**
- * Shared AES-GCM construction for secrets stored at rest (Telegram bot tokens, Enable Banking
- * session ids). The key is a base64-encoded 16/24/32-byte AES key; the output format is
- * base64( iv(12 bytes) || ciphertext+tag ).
- *
- * Callers pass their own error codes so failures surface with domain-specific messages
- * (e.g. `TELEGRAM_TOKEN_CORRUPT` vs `BANK_SESSION_CORRUPT`).
- */
+/** Shared AES-GCM construction for secrets at rest (Telegram bot tokens, Enable Banking session ids).
+ *  Key is base64 16/24/32 bytes; output is base64( iv(12) || ciphertext+tag ). Callers pass their own
+ *  error codes so failures surface domain-specific (`TELEGRAM_TOKEN_CORRUPT` vs `BANK_SESSION_CORRUPT`). */
 object AesGcmCipher {
 
     private const val TRANSFORMATION = "AES/GCM/NoPadding"

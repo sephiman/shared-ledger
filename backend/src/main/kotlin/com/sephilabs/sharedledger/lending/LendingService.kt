@@ -291,12 +291,9 @@ class LendingService(
         return sb.toString()
     }
 
-    /**
-     * Settles the lending when its balance reaches zero after a payment write. The balance is
-     * evaluated as of the latest payment date (not just today) so future-dated payments are
-     * inside the calculator's window; once principal hits zero no further interest accrues,
-     * so a zero balance at that date is final.
-     */
+    /** Settles the lending when its balance reaches zero after a payment write. Evaluated as of the latest
+     *  payment date, not today, so future-dated payments fall inside the calculator's window; once principal
+     *  hits zero no further interest accrues, so a zero balance at that date is final. */
     private fun settleIfPaidOff(lending: Lending, by: User) {
         val livePayments = payments.findAllByLendingIdOrderByPaymentDateAsc(lending.id)
         val lastPaymentDate = livePayments.maxOfOrNull { it.paymentDate } ?: return

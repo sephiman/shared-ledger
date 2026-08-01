@@ -1,7 +1,6 @@
 import { forwardRef, useEffect, useRef, useState, type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type LabelHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 import { cn } from "@/lib/cn";
 
-/** Small non-interactive status/label pill. */
 export function Badge({ children, tone = "neutral", className }: { children: ReactNode; tone?: "neutral" | "amber" | "sky" | "green" | "red"; className?: string }) {
   const tones = {
     neutral: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300",
@@ -142,13 +141,9 @@ export interface CheckboxTreeGroup {
   children: CheckboxTreeLeaf[];
 }
 
-/**
- * Always-visible, scrollable checkbox tree: each group is a header row with a
- * collapse/expand caret and a (possibly tri-state) checkbox; its children are
- * nested beneath with their own checkboxes. Collapse state is managed internally;
- * checked/indeterminate state and toggles are controlled by the caller so the
- * selection semantics stay with the consumer.
- */
+/** Always-visible scrollable checkbox tree: each group is a header row with a caret and a (possibly
+ *  tri-state) checkbox, children nested beneath. Collapse state is internal; checked/indeterminate state
+ *  and toggles are controlled, so selection semantics stay with the consumer. */
 export function CheckboxTree({
   groups,
   onToggleGroup,

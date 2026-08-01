@@ -7,14 +7,8 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.transaction.PlatformTransactionManager
 
-/**
- * Regression test for the "mutate a detached entity" bug.
- *
- * Before the fix, `HouseholdController.update` had no @Transactional, so the entity returned
- * by `households.findById(...)` was detached. Mutations on it (name / currency / defaultLocale)
- * never reached the database. The test simulates the same call path the controller takes and
- * then re-reads the row in a *separate* transaction to verify the UPDATE actually fired.
- */
+/** Pins that `HouseholdController.update` runs transactionally: mutations on a detached entity never reach
+ *  the database. Re-reads the row in a *separate* transaction to verify the UPDATE actually fired. */
 class HouseholdUpdatePersistenceTest @Autowired constructor(
     private val households: HouseholdRepository,
     private val txManager: PlatformTransactionManager,

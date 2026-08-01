@@ -5,12 +5,9 @@ import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import java.time.LocalDate
 
-/**
- * Fires the auto-snapshot job once a day. Each enabled household's frequency decides
- * whether today is a due date; the job itself is idempotent (skips dates that already
- * have a snapshot), so a same-day restart never double-creates. One try/catch inside
- * runForAll isolates per-household failures.
- */
+/** Fires the auto-snapshot job once a day; each household's frequency decides whether today is due. The
+ *  job is idempotent (skips dates that already have a snapshot), so a same-day restart never
+ *  double-creates. runForAll isolates per-household failures. */
 @Component
 class AutoSnapshotScheduler(private val autoSnapshots: AutoSnapshotService) {
 

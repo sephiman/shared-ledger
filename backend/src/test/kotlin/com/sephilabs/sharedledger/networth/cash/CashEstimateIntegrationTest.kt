@@ -25,11 +25,8 @@ import java.math.BigDecimal
 import java.time.LocalDate
 import java.util.UUID
 
-/**
- * The cash estimate = the latest adjustment on/before the date + the net of the marked flows dated
- * strictly after that adjustment (end-of-day convention). Each flow carries its own sign, per-type
- * toggles gate whole flow types, and with no adjustment there is no estimate.
- */
+/** Cash estimate = latest adjustment on/before the date + net of marked flows strictly after it
+ *  (end-of-day). Each flow carries its own sign, per-type toggles gate flow types, no adjustment = no estimate. */
 class CashEstimateIntegrationTest @Autowired constructor(
     private val users: UserRepository,
     private val households: HouseholdRepository,

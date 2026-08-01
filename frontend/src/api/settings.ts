@@ -64,11 +64,8 @@ export function useHouseholdMembers(householdId: string) {
   });
 }
 
-/**
- * Promote a member to owner (or demote back). Owner-only server-side; the household always keeps
- * at least one owner (`LAST_HOUSEHOLD_OWNER`). Refreshes auth because an owner may change their own
- * role, and the whole UI reads `role` from the session's membership list.
- */
+/** Promote a member to owner (or demote back). Owner-only server-side; the household always keeps at least
+ *  one owner (`LAST_HOUSEHOLD_OWNER`). Refreshes auth because an owner may change their own role. */
 export function useUpdateMemberRole(householdId: string) {
   const qc = useQueryClient();
   const { refresh } = useAuth();

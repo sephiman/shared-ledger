@@ -13,12 +13,9 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
 
-/**
- * CSV export for named assets and liabilities (+ amortization). Symmetric to the portfolio/lending
- * exports: it dumps both the entities and their dated history so an export re-imports faithfully.
- * Amortization exports both the input data (parts/revisions/prepayments) and the generated
- * instalments, discriminated by a `record_type` column.
- */
+/** CSV export for named assets and liabilities (+ amortization): entities and their dated history, so an
+ *  export re-imports faithfully. Amortization dumps both input data and generated instalments,
+ *  discriminated by a `record_type` column. */
 @Service
 class NamedCsvExportService(
     private val assets: AssetRepository,

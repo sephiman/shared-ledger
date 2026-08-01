@@ -20,11 +20,9 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
-    placeholders:
-      # Read once by V030, to stamp connections linked under the old instance-wide Enable Banking
-      # application with its id before credentials became per-household. Empty afterwards is fine —
-      # the migration has already run — so the operator can drop ENABLE_BANKING_APP_ID.
-      ebAppId: ${ENABLE_BANKING_APP_ID:}
+    # No placeholders on purpose: a migration whose text varies per deployment cannot be reviewed
+    # or reasoned about, and an interpolated value containing a quote is a syntax error at startup.
+    # Anything deployment-specific belongs in application code, parameterized.
   servlet:
     multipart:
       enabled: true
@@ -189,6 +187,10 @@ app:
     # identifies this deployment, so every household registers the same value in its own EB app.
     base-url: ${ENABLE_BANKING_BASE_URL:https://api.enablebanking.com}
     secret-key: ${ENABLE_BANKING_SECRET_KEY:}
+    # Legacy, upgrade-only: the instance-wide application id used before credentials became
+    # per-household. Set it for one boot after upgrading past V030 so existing connections get
+    # attributed to the application they were authorized under; drop it afterwards. Blank = no-op.
+    app-id: ${ENABLE_BANKING_APP_ID:}
     # Blank = derive it from the request (fine for local dev; set it in production).
     redirect-url: ${ENABLE_BANKING_REDIRECT_URL:}
     timeout-ms: ${ENABLE_BANKING_TIMEOUT_MS:15000}

@@ -18,10 +18,8 @@ import org.springframework.web.bind.annotation.RestController
 import java.util.Locale
 import java.util.UUID
 
-/**
- * Owner-only per-household Telegram configuration. The bot token is write-only: it is accepted on
- * save, encrypted at rest, and never returned — the GET response only reports whether one exists.
- */
+/** Owner-only per-household Telegram configuration. The bot token is write-only — accepted on save,
+ *  encrypted at rest, never returned; the GET response only reports whether one exists. */
 data class TelegramSettingsDto(
     val active: Boolean,
     val notifyTransactions: Boolean,

@@ -1,6 +1,5 @@
 package com.sephilabs.sharedledger.networth.csv
 
-/** Shared parsing helpers for the named-entity CSV imports. */
 internal object CsvSupport {
     fun parseBoolean(raw: String?): Boolean? = when (raw?.trim()?.lowercase()) {
         "true", "1", "yes", "y", "si", "sí" -> true

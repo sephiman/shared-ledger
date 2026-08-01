@@ -9,12 +9,9 @@ import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
-/**
- * Pure portfolio math over the BUY/SELL movement ledger. Net quantity, remaining cost
- * basis and realized P&L come from replaying the ledger with the configured cost
- * method (FIFO) — nothing is stored denormalized. Intermediate arithmetic uses
- * DECIMAL64; money results are normalized only at the boundary.
- */
+/** Pure portfolio math over the BUY/SELL ledger: net quantity, remaining cost basis and realized P&L come
+ *  from replaying it with the configured cost method (FIFO), nothing stored denormalized. Intermediate
+ *  arithmetic uses DECIMAL64; money results are normalized only at the boundary. */
 object PortfolioValuationCalculator {
     private val MC = MathContext.DECIMAL64
     const val FRACTION_SCALE: Int = 4
@@ -66,14 +63,9 @@ object PortfolioValuationCalculator {
         val stale: Boolean,
     )
 
-    /**
-     * Per-lot FIFO attribution. For a BUY: [remainingQty] is the quantity of this lot not
-     * yet consumed by later sells and [remainingCostBasisBase] its base cost; [realizedPnlBase]
-     * is the gain on the already-sold portion, locked in at the consuming sells' prices. For a
-     * SELL: [realizedPnlBase] is the sale's realized P&L (proceeds − FIFO cost of the buys it
-     * consumed) and the remaining-* fields are zero. Unrealized P&L is intentionally absent —
-     * it needs a current price and is layered on at the valuation boundary.
-     */
+    /** Per-lot FIFO attribution. BUY: [remainingQty]/[remainingCostBasisBase] are the unsold part,
+     *  [realizedPnlBase] the gain on the sold part. SELL: [realizedPnlBase] is the sale's realized P&L and the
+     *  remaining-* fields are zero. Unrealized P&L is absent — it needs a current price, added at valuation. */
     data class LotBreakdown(
         val lotId: UUID,
         val type: LotType,
@@ -89,12 +81,9 @@ object PortfolioValuationCalculator {
 
     private class TrackedLot(val lotId: UUID?, val perUnitCostBase: BigDecimal, var remainingQty: BigDecimal)
 
-    /**
-     * Replays the ledger up to (and including) [upTo]. Entries are processed in
-     * trade-date order, BUYs before SELLs on the same date, insertion order otherwise.
-     * With [strict] an oversell throws [OversellException] (write-time validation);
-     * without it the uncovered remainder is consumed at zero cost so reads never fail.
-     */
+    /** Replays the ledger up to and including [upTo], in trade-date order, BUYs before SELLs on the same date.
+     *  With [strict] an oversell throws [OversellException]; without it the uncovered remainder is consumed at
+     *  zero cost so reads never fail. */
     fun replay(
         entries: List<LedgerEntry>,
         method: CostMethod = CostMethod.FIFO,
@@ -160,13 +149,9 @@ object PortfolioValuationCalculator {
     fun netQuantityAt(entries: List<LedgerEntry>, date: LocalDate, method: CostMethod = CostMethod.FIFO): BigDecimal =
         replay(entries, method, upTo = date).netQuantity
 
-    /**
-     * Disaggregates the ledger into per-lot realized P&L and per-BUY remaining position, using
-     * the same FIFO consumption order as [replay]. Keyed by lot id; entries without an id are
-     * skipped. Summed across lots these reconcile with [replay]'s holding-level totals (subject
-     * to money-scale rounding). Non-strict: an uncovered SELL remainder consumes at zero cost,
-     * matching read-time [replay], so its realized P&L includes the uncovered proceeds.
-     */
+    /** Disaggregates the ledger into per-lot realized P&L and per-BUY remaining position, same FIFO order as
+     *  [replay]; keyed by lot id, entries without one are skipped. Non-strict like read-time [replay], so an
+     *  uncovered SELL remainder consumes at zero cost and its realized P&L includes the uncovered proceeds. */
     fun breakdownByLot(
         entries: List<LedgerEntry>,
         method: CostMethod = CostMethod.FIFO,
@@ -293,10 +278,8 @@ object PortfolioValuationCalculator {
         return valuesById.mapValues { (_, v) -> v.divide(total, FRACTION_SCALE, RoundingMode.HALF_EVEN) }
     }
 
-    /**
-     * [numerator]/[denominator] as a scale-4 fraction (0.1234 = +12.34 %); null when the
-     * numerator is unknown or the denominator is zero — never 0 % from a division by zero.
-     */
+    /** [numerator]/[denominator] as a scale-4 fraction; null when the numerator is unknown or the denominator
+     *  is zero — never 0 % from a division by zero. */
     fun fraction(numerator: BigDecimal?, denominator: BigDecimal): BigDecimal? =
         if (numerator == null || denominator.signum() == 0) null
         else numerator.divide(denominator, FRACTION_SCALE, RoundingMode.HALF_EVEN)

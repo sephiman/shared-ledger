@@ -14,12 +14,9 @@ import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import java.util.UUID
 
-/**
- * A categorisation rule: when [matchField] [matchOp] [matchValue], assign [categoryCode] +
- * [direction]. Lower [priority] wins. Rules with source=learned are created automatically when a
- * movement matching no existing rule is confirmed with a category (remembered by counterparty for
- * next time).
- */
+/** When [matchField] [matchOp] [matchValue], assign [categoryCode] + [direction]. Lower [priority] wins.
+ *  source=learned rules are created automatically when a movement matching no rule is confirmed with a
+ *  category. */
 @Entity
 @Table(name = "bank_categorization_rules")
 class CategorizationRule(

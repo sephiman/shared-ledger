@@ -3,11 +3,8 @@ package com.sephilabs.sharedledger.bank
 import java.security.KeyPairGenerator
 import java.util.Base64
 
-/**
- * One real RSA key pair for the whole test run (generation is the slow part, so it is shared). A
- * genuine key keeps the validation tests honest: what they accept really signs a JWT, and the
- * PKCS#1 form they reject is a real encoding rather than a lookalike.
- */
+/** One real RSA key pair shared across the test run (generation is the slow part). A genuine key keeps the
+ *  validation tests honest: what they accept really signs a JWT, and the PKCS#1 they reject is real. */
 object BankTestKeys {
 
     private val keyPair by lazy { KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair() }
@@ -24,10 +21,8 @@ object BankTestKeys {
         }
     }
 
-    /**
-     * The same key in PKCS#1 — the common wrong paste. A PKCS#8 PrivateKeyInfo is
-     * `SEQUENCE { INTEGER, SEQUENCE, OCTET STRING }` whose OCTET STRING *is* the PKCS#1 body.
-     */
+    /** The same key in PKCS#1 — the common wrong paste. A PKCS#8 PrivateKeyInfo is
+     *  `SEQUENCE { INTEGER, SEQUENCE, OCTET STRING }` whose OCTET STRING *is* the PKCS#1 body. */
     val pkcs1Base64: String by lazy {
         val der = keyPair.private.encoded
         var i = 0

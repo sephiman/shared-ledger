@@ -3,11 +3,8 @@ import { useTranslation } from "react-i18next";
 import { useBankConfig, usePendingCount } from "@/api/banks";
 import { Card, CardBody, CardHeader } from "@/components/ui/primitives";
 
-/**
- * Home card surfacing pending bank movements. Renders nothing when there are none (the same
- * return-null idiom as PortfolioOverviewTile), so it only appears once a bank is linked and has
- * unreviewed movements.
- */
+/** Home card for pending bank movements. Renders nothing when there are none, so it only appears once a
+ *  bank is linked and has unreviewed movements. */
 export function PendingBankTile({ householdId }: { householdId: string }) {
   const { t } = useTranslation();
   const { data: bankConfig } = useBankConfig(householdId);

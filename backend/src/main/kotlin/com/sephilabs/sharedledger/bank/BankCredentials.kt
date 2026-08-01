@@ -11,13 +11,9 @@ import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import java.util.UUID
 
-/**
- * The Enable Banking API application a household signs its provider calls with (one row per
- * household), shaped like [com.sephilabs.sharedledger.notification.TelegramSettings]: owner-only,
- * secret held as AES-GCM ciphertext (see [com.sephilabs.sharedledger.bank.connector.BankCrypto]),
- * never returned by the API. [appId] is not secret — it is the JWT `kid`, echoed back so a
- * connection authorized under a different application is detectable (see `BankConnection.appId`).
- */
+/** The Enable Banking API application a household signs its provider calls with (one row per household).
+ *  The secret is AES-GCM ciphertext, never returned by the API. [appId] is not secret — it is the JWT
+ *  `kid`, echoed back so a connection authorized under a different application is detectable. */
 @Entity
 @Table(name = "bank_credentials")
 class BankCredentials(

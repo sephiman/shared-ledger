@@ -23,12 +23,9 @@ export function benchmarkColors(keys: string[]): Record<string, string> {
   return map;
 }
 
-/**
- * Benchmark TWR points (fractions over the wire) for the selected benchmarks, keyed by date
- * and expressed in percentage points to match the ROI axis. A missing point (data gap) stays
- * null so the chart line breaks there rather than faking a value. Benchmark series share the
- * ROI curve's sample dates, so these merge onto the ROI rows by date.
- */
+/** Benchmark TWR points keyed by date, in percentage points to match the ROI axis. A data gap stays null so
+ *  the line breaks rather than faking a value. Benchmarks share the ROI curve's sample dates, so these
+ *  merge onto the ROI rows by date. */
 export function benchmarkColumnsByDate(
   series: BenchmarkSeries[] | undefined,
   selected: string[],

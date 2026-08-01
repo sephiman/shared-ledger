@@ -21,14 +21,9 @@ import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
-/**
- * The review inbox. Confirming generates a real transaction (reusing
- * [TransactionService.createInternal]) and links it back so the item is never re-ingested. Single
- * confirm notifies normally; batch confirm creates silently and emits one aggregated notification.
- * A pending item can also be confirmed as a net-worth movement instead (see [confirmAsMovement]) —
- * for capital reallocations that shouldn't hit the income/expense ledger. Reject discards (creates
- * nothing) and the item stays hidden on the next sync.
- */
+/** The review inbox. Confirming generates a real transaction (via [TransactionService.createInternal])
+ *  and links it back so the item is never re-ingested; single confirm notifies normally, batch confirm
+ *  emits one aggregated notification. Reject discards and creates nothing. */
 @Service
 class PendingMovementService(
     private val pending: PendingMovementRepository,
@@ -138,12 +133,9 @@ class PendingMovementService(
         return movement.toDto(connections.findById(movement.connectionId).orElse(null), account(movement), false)
     }
 
-    /**
-     * Confirm a pending item as a net-worth movement instead of a transaction: reuses the item's
-     * date and amount, delegates target validation + creation to [MovementService.create], and links
-     * the result via [PendingMovement.createdMovementId]. No category and no rule-learning — those are
-     * transaction concepts. The item is a single-row action only (batch confirm stays transaction-only).
-     */
+    /** Confirm as a net-worth movement: reuses the item's date and amount, delegates to
+     *  [MovementService.create], links via [PendingMovement.createdMovementId]. No category and no
+     *  rule-learning — those are transaction concepts. Single-row only; batch confirm stays transaction-only. */
     @Transactional
     fun confirmAsMovement(householdId: UUID, id: UUID, request: ConfirmAsMovementRequest, by: User): PendingMovementDto {
         val movement = requirePending(householdId, id)
@@ -200,11 +192,8 @@ class PendingMovementService(
         return BatchResultDto(rejected = movements.size)
     }
 
-    /**
-     * Send a rejected item back to the pending inbox. Safe because reject creates nothing — this
-     * only clears the status flip. Confirmed items are terminal (a transaction was generated) and
-     * cannot be restored this way.
-     */
+    /** Send a rejected item back to the inbox. Safe because reject creates nothing. Confirmed items are
+     *  terminal (a transaction exists) and cannot be restored this way. */
     @Transactional
     fun restore(householdId: UUID, id: UUID): PendingMovementDto {
         val movement = pending.findByIdAndHouseholdId(id, householdId)
@@ -221,12 +210,9 @@ class PendingMovementService(
         return BatchResultDto(restored = movements.size)
     }
 
-    /**
-     * Re-run the categorisation rules over the still-pending, *uncategorized* movements, filling each
-     * matching row's suggested category (and direction) from the rule. Only touches rows without a
-     * category — never overwrites an existing suggestion — and leaves everything pending (no confirm,
-     * no transaction). Useful after adding/learning rules for movements ingested before they existed.
-     */
+    /** Re-run the rules over still-pending, *uncategorized* movements, filling each match's suggested
+     *  category. Never overwrites an existing suggestion and confirms nothing — for movements ingested
+     *  before the rules existed. */
     @Transactional
     fun applyRulesToPending(householdId: UUID): ApplyRulesResultDto {
         val rules = categorization.orderedRules(householdId)
@@ -323,17 +309,13 @@ class PendingMovementService(
     private fun account(movement: PendingMovement): BankConnectionAccount? =
         accounts.findById(movement.accountId).orElse(null)
 
-    /** A readable description for the generated transaction from the raw bank fields. */
     private fun movementDescription(m: PendingMovement): String? {
         val parts = listOfNotNull(m.counterparty?.trim()?.ifBlank { null }, m.description?.trim()?.ifBlank { null })
         return parts.distinct().joinToString(" – ").ifBlank { null }
     }
 
-    /**
-     * Possible-duplicate against manual transactions: same direction + amount within a few days
-     * (closed decision #3 — warn only, never auto-discard). Single-movement variant for the
-     * confirm/edit paths; the list path uses [buildDuplicateIndex] to avoid one query per row.
-     */
+    /** Possible-duplicate against manual transactions: same direction + amount within a few days (warn only,
+     *  never auto-discard). The list path uses [buildDuplicateIndex] to avoid one query per row. */
     private fun isPossibleDuplicate(m: PendingMovement): Boolean {
         val window = transactions.findByHouseholdIdAndOccurrenceDateBetween(
             m.householdId, m.bookingDate.minusDays(DUPLICATE_WINDOW_DAYS), m.bookingDate.plusDays(DUPLICATE_WINDOW_DAYS),

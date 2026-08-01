@@ -13,13 +13,9 @@ import java.math.RoundingMode
 import java.time.LocalDate
 import java.util.UUID
 
-/**
- * Reads stored benchmark closes and turns them into a normalized time-weighted-return
- * line comparable to the portfolio ROI (TWR) chart: EUR terms (each date's close converted
- * with the ECB rate <= that date), 0 % at the window's anchor, on the exact same sample
- * dates the user's TWR curve uses. No live provider calls — the background refresh job owns
- * fetching. A price-only series has no cash flows, so its TWR is simply EUR(t)/EUR(anchor)−1.
- */
+/** Turns stored benchmark closes into a normalized TWR line comparable to the portfolio ROI chart: EUR
+ *  terms, 0 % at the window's anchor, on the exact sample dates the user's curve uses. No live provider
+ *  calls. A price-only series has no cash flows, so its TWR is simply EUR(t)/EUR(anchor)−1. */
 @Service
 class BenchmarkService(
     private val valuation: PortfolioValuationService,
@@ -46,10 +42,8 @@ class BenchmarkService(
         )
     }
 
-    /**
-     * Normalized TWR series for the requested (enabled) benchmarks over the same window the
-     * TWR curve covers for these filters. Empty when there is no curve (no lots / empty window).
-     */
+    /** Normalized TWR series for the requested (enabled) benchmarks over the same window the TWR curve covers.
+     *  Empty when there is no curve (no lots / empty window). */
     @Transactional(readOnly = true)
     fun series(
         householdId: UUID,

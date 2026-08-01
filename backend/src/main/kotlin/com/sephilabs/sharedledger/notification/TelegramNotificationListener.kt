@@ -14,15 +14,10 @@ import org.springframework.transaction.event.TransactionalEventListener
 import java.util.Locale
 import java.util.UUID
 
-/**
- * Consumes domain change/materialization events and dispatches Telegram messages.
- *
- * Runs on a dedicated executor (async) so Telegram I/O never blocks the request or the nightly
- * scheduler, and AFTER_COMMIT so a rolled-back write never notifies. [MaterializationEvent] uses
- * `fallbackExecution=true`: the scheduler publishes after its per-row commits with no surrounding
- * transaction (run immediately), while a manual "fire now" runs inside one transaction (waits for
- * commit). Delivery failures are logged for the Grafana pipeline, never surfaced or retried.
- */
+/** Consumes domain change/materialization events and dispatches Telegram messages. Runs async on a
+ *  dedicated executor so Telegram I/O never blocks the request or the scheduler, and AFTER_COMMIT so a
+ *  rolled-back write never notifies. [MaterializationEvent] uses `fallbackExecution=true`: the scheduler
+ *  publishes with no surrounding transaction. Delivery failures are logged, never surfaced or retried. */
 @Component
 class TelegramNotificationListener(
     private val settingsRepo: TelegramSettingsRepository,

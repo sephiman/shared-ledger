@@ -9,12 +9,9 @@ import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
-/**
- * Per-holding valuation frozen when a net-worth snapshot is created. Write-once:
- * rows are only replaced wholesale when the snapshot itself is edited.
- * snapshot_id is a plain column (SQL FK ON DELETE CASCADE) — no JPA relation, so the
- * portfolio package never depends on networth.snapshot.
- */
+/** Per-holding valuation frozen when a net-worth snapshot is created; replaced wholesale only when the
+ *  snapshot is edited. snapshot_id is a plain column (SQL FK ON DELETE CASCADE), so the portfolio package
+ *  never depends on networth.snapshot. */
 @Entity
 @Table(name = "holding_valuations")
 class HoldingValuation(

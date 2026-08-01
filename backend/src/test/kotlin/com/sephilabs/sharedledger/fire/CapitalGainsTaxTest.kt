@@ -4,10 +4,8 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.data.Offset.offset
 import org.junit.jupiter.api.Test
 
-/**
- * Hand-verifiable against the seeded Spanish savings scale (Ley 7/2024):
- * 19% to 6,000 — 21% to 50,000 — 23% to 200,000 — 27% to 300,000 — 30% above.
- */
+/** Hand-verifiable against the seeded Spanish savings scale (Ley 7/2024):
+ *  19% to 6,000 — 21% to 50,000 — 23% to 200,000 — 27% to 300,000 — 30% above. */
 class CapitalGainsTaxTest {
 
     private val brackets = FireDefaults.SPANISH_SAVINGS_TAX_BRACKETS

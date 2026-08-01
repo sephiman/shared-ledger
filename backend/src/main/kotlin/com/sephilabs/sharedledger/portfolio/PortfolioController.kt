@@ -80,10 +80,8 @@ class PortfolioController(
     @GetMapping("/benchmarks")
     fun benchmarks(@PathVariable householdId: UUID): List<BenchmarkDto> = benchmarks.list()
 
-    /**
-     * Normalized TWR (EUR terms) for the selected benchmarks over the same window the ROI
-     * curve covers for these filters. `keys` is a comma-separated list; empty returns all.
-     */
+    /** Normalized TWR (EUR terms) for the selected benchmarks over the same window the ROI curve covers.
+     *  `keys` is comma-separated; empty returns all. */
     @GetMapping("/benchmark-series")
     fun benchmarkSeries(
         @PathVariable householdId: UUID,

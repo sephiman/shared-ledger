@@ -143,12 +143,9 @@ enum class MoneyWeightedReturnUnavailableReason {
     not_computable,
 }
 
-/**
- * Money-weighted return (XIRR) over the whole lot history: buys out, sells in, the
- * current value of open holdings as a terminal inflow — every flow in base currency at
- * its trade-time FX rate. Distinct from the return-on-cost percentages (which ignore
- * timing) and from FIRE's snapshot-based figure (different data source).
- */
+/** Money-weighted return (XIRR) over the whole lot history, every flow in base currency at its trade-time
+ *  FX rate. Distinct from the return-on-cost percentages (which ignore timing) and from FIRE's
+ *  snapshot-based figure (different data source). */
 data class MoneyWeightedReturnDto(
     // Scale-4 fraction (0.1234 = +12.34 %): annualized rate, or the cumulative return
     // when the history spans less than a year. Null when unavailable — never a wrong number.

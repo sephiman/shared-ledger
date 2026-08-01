@@ -13,7 +13,6 @@ export function fractionToPercent(fraction: string | null | undefined): number |
 
 export type PnlTone = "positive" | "negative" | "neutral";
 
-/** Display tone for a signed money/percent value. */
 export function pnlTone(value: string | number | null | undefined): PnlTone {
   if (value == null || value === "") return "neutral";
   try {
@@ -26,16 +25,12 @@ export function pnlTone(value: string | number | null | undefined): PnlTone {
   }
 }
 
-/** Formats a signed amount with an explicit plus for gains. */
 export function signedMoney(value: string, formatted: string): string {
   return new Decimal(value).isPositive() && !new Decimal(value).isZero() ? `+${formatted}` : formatted;
 }
 
-/**
- * numerator/denominator as a fraction string (the backend convention: "0.1234" = +12.34 %),
- * or null when undefined (null numerator, zero/invalid denominator) — mirrors the backend
- * rule so filtered subtotals behave like the summary fields.
- */
+/** numerator/denominator as a fraction string (backend convention: "0.1234" = +12.34 %), or null when the
+ *  denominator is zero or invalid — mirrors the backend rule so filtered subtotals match the summary. */
 export function fractionOf(numerator: string | null | undefined, denominator: string | null | undefined): string | null {
   if (numerator == null || denominator == null) return null;
   try {
@@ -50,10 +45,8 @@ export function fractionOf(numerator: string | null | undefined, denominator: st
 /** The base a user chose for the portfolio return percentages; mirrors the backend enum. */
 export type ReturnBasis = "OPEN_COST" | "NET_INVESTED" | "TURNOVER";
 
-/**
- * Smallest net-invested base we divide by. At or below this (covers ≤ 0 "house money" plus
- * sub-cent noise) there is no own-money base to show a return over — the percentages go to "—".
- */
+/** Smallest net-invested base we divide by. At or below this (≤ 0 "house money" plus sub-cent noise) there
+ *  is no own-money base to show a return over — percentages go to "—". */
 export const NET_INVESTED_MIN_BASE = new Decimal("0.01");
 
 /** Euro amounts (backend strings) the return percentages are derived from. */
@@ -79,29 +72,17 @@ export interface ReturnPercents {
   totalBasis: string;
   /** NET_INVESTED only: the base is ≤ NET_INVESTED_MIN_BASE, so every percentage is unavailable. */
   houseMoney: boolean;
-  /**
-   * Net money contributed from outside the portfolio (open-lots cost − realized P&L, so buys
-   * funded by prior sales cancel out) — "your own money at risk". Mode-independent: the same
-   * value the NET_INVESTED base uses, always present so it can be shown regardless of basis.
-   */
+  /** Net money contributed from outside the portfolio (open-lots cost − realized P&L, so buys funded by prior
+   *  sales cancel) — "your own money at risk". Mode-independent, so it can be shown regardless of basis. */
   netInvested: string;
   /** True when netInvested ≤ NET_INVESTED_MIN_BASE ("house money"): positions funded by gains. */
   netInvestedHouseMoney: boolean;
 }
 
-/**
- * All three portfolio return percentages for the chosen basis, from euro amounts the summary
- * already carries — the euro amounts are identical in every mode, only the denominator changes.
- * This is the single computation path: no consumer derives these independently.
- *
- * - OPEN_COST (default): all three over the open-lots cost, so unrealized/realized/total share
- *   one base and add up like the euros.
- * - NET_INVESTED: all three over the net money contributed from outside (open cost − realized,
- *   so buys funded by prior sales cancel) — "your own money at risk"; also one shared base.
- *   When that base is ≤ NET_INVESTED_MIN_BASE the percentages are unavailable (house money).
- * - TURNOVER: realized over the cost of all sold lots, total over open + sold cost, unrealized
- *   over open cost — the historical behavior, whose denominators grow with sell-and-rebuy churn.
- */
+/** All three portfolio return percentages for the chosen basis, from euro amounts the summary already
+ *  carries — only the denominator changes. The single computation path; no consumer derives these
+ *  independently. OPEN_COST (default) and NET_INVESTED each put all three over one shared base, so they add
+ *  up like the euros; TURNOVER is the historical behavior, whose denominators grow with sell-and-rebuy churn. */
 export function returnPercents(basis: ReturnBasis, a: ReturnAmounts): ReturnPercents {
   // Net money contributed from outside the portfolio — buys funded by earlier sales cancel out.
   // Computed once here, so the always-on "Own money" line and the NET_INVESTED base agree.

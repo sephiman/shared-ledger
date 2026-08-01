@@ -28,11 +28,8 @@ import java.math.BigDecimal
 import java.time.LocalDate
 import java.util.UUID
 
-/**
- * Cash flows into a snapshot through its adjustment series + estimate: the form prefills the
- * estimate (marked computed), correcting it re-anchors (writes a new adjustment), accepting it
- * writes nothing, and with no series cash still just carries over.
- */
+/** Cash reaches a snapshot through its adjustment series + estimate: the form prefills the estimate,
+ *  correcting it re-anchors, accepting it writes nothing, and with no series cash just carries over. */
 class CashSnapshotIntegrationTest @Autowired constructor(
     private val users: UserRepository,
     private val households: HouseholdRepository,

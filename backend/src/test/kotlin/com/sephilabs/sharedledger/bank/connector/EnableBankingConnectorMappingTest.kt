@@ -17,12 +17,9 @@ import java.security.KeyPairGenerator
 import java.time.LocalDate
 import java.util.Base64
 
-/**
- * Focused coverage for the parts of [EnableBankingConnector] that
- * [com.sephilabs.sharedledger.bank.FakeBankConnector] bypasses: the JSON → [BankMovement] mapping and
- * the provider's error bodies. Drives the real connector over a mocked HTTP layer so ASPSP quirks
- * (ING pending entries, Bankinter's `ASPSP_ERROR`) are exercised end-to-end.
- */
+/** Covers what [com.sephilabs.sharedledger.bank.FakeBankConnector] bypasses: the JSON → [BankMovement]
+ *  mapping and the provider's error bodies. Drives the real connector over a mocked HTTP layer so ASPSP
+ *  quirks (ING pending entries, Bankinter's `ASPSP_ERROR`) are exercised end-to-end. */
 class EnableBankingConnectorMappingTest {
 
     private val props = AppProperties(

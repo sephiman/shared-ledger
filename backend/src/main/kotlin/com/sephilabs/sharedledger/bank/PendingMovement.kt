@@ -21,12 +21,9 @@ import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
-/**
- * A raw bank movement awaiting review. Its own entity with its own endpoints — the transaction
- * tables/endpoints are never touched. Confirming generates either a transaction (sets
- * [createdTransactionId]) or a net-worth movement (sets [createdMovementId]) and flips
- * status=confirmed so the item is never re-ingested. Exactly one of the two links is set.
- */
+/** A raw bank movement awaiting review — its own entity, so the transaction tables are never touched.
+ *  Confirming generates either a transaction ([createdTransactionId]) or a net-worth movement
+ *  ([createdMovementId]) and flips status=confirmed. Exactly one of the two links is set. */
 @Entity
 @Table(name = "pending_movements")
 class PendingMovement(
@@ -104,11 +101,8 @@ interface PendingMovementRepository : JpaRepository<PendingMovement, UUID> {
 
     fun findAllByIdInAndHouseholdId(ids: Collection<UUID>, householdId: UUID): List<PendingMovement>
 
-    /**
-     * Row-locking variants used when confirming/rejecting: two concurrent confirms of the same item
-     * would otherwise both pass the in-memory status check and each generate a transaction/movement.
-     * `SELECT … FOR UPDATE` serialises them — the loser blocks, then re-reads status=confirmed.
-     */
+    /** Row-locking variants for confirm/reject: two concurrent confirms would otherwise both pass the
+     *  in-memory status check and each generate a transaction. `SELECT … FOR UPDATE` serialises them. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT m FROM PendingMovement m WHERE m.id = :id AND m.householdId = :hid")
     fun findByIdAndHouseholdIdForUpdate(@Param("id") id: UUID, @Param("hid") householdId: UUID): PendingMovement?
@@ -136,12 +130,9 @@ interface PendingMovementRepository : JpaRepository<PendingMovement, UUID> {
 
     fun findAllByHouseholdIdAndStatus(householdId: UUID, status: MovementStatus): List<PendingMovement>
 
-    /**
-     * The full-dataset pending query behind the review inbox. Text search ([search], a pre-lowercased
-     * `%term%` or null) and categorisation ([categorized]: true = has a suggested category, false =
-     * none, null = either) are applied server-side so the filters cover every row, not just a page.
-     * The possible-duplicate filter is computed cross-table in the service, so it isn't expressed here.
-     */
+    /** The full-dataset pending query behind the review inbox. Text search ([search], a pre-lowercased
+     *  `%term%` or null) and [categorized] (true/false/null = either) are applied server-side so the filters
+     *  cover every row, not just a page. The possible-duplicate filter is computed cross-table in the service. */
     @Query(
         value = """
         SELECT m FROM PendingMovement m
@@ -192,7 +183,6 @@ interface PendingMovementRepository : JpaRepository<PendingMovement, UUID> {
     ): LocalDate?
 }
 
-/** Projection for [PendingMovementRepository.countByHouseholdIdAndStatusGroupedByConnection]. */
 interface ConnectionCountRow {
     val connectionId: UUID
     val count: Long

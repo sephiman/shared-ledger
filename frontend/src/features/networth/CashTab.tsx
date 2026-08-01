@@ -16,10 +16,8 @@ import { Button, Card, CardBody, CardHeader, Input, Label } from "@/components/u
 import { formatMoney } from "@/lib/money";
 import { formatDate, isoToday } from "@/lib/dates";
 
-/**
- * Cash as a hybrid: a manual adjustment series (the truth) on the left, and on the right the
- * per-type flow toggles plus the breakdown of the estimate derived between adjustments.
- */
+/** Cash as a hybrid: the manual adjustment series (the truth) on the left; the per-type flow toggles and
+ *  the breakdown of the estimate derived between adjustments on the right. */
 export function CashTab() {
   const { t, i18n } = useTranslation();
   const household = useActiveHousehold();

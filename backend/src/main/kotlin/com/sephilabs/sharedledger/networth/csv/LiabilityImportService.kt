@@ -21,11 +21,8 @@ import java.time.LocalDate
 import java.time.format.DateTimeParseException
 import java.util.UUID
 
-/**
- * Import for named liabilities and their manual balance history (plus the amortizable flag and
- * charge day). Idempotent: a liability is matched by name and a balance entry is skipped when one
- * with the same date and value already exists. Amortization inputs/entries import separately.
- */
+/** Import for named liabilities and their manual balance history. Idempotent: matched by name, a balance
+ *  entry skipped when same date and value exist. Amortization inputs import separately. */
 @Service
 class LiabilityImportService(
     private val liabilities: LiabilityRepository,

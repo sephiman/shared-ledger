@@ -12,7 +12,6 @@ enum class NotifyEntity {
     BANK_MOVEMENT, BANK_CONNECTION,
 }
 
-/** The action performed on a notifiable entity. */
 enum class NotifyAction { CREATE, UPDATE, DELETE }
 
 /** Who triggered the change; drives the author line in the message. */
@@ -24,11 +23,9 @@ sealed interface NotifyActor {
     data class Schedule(val householdId: UUID) : NotifyActor
 }
 
-/**
- * A single mobile-card line: a label (i18n key) and a typed value the formatter renders in the
- * household locale. Captured at publish time from the live entity so the async listener never
- * touches a JPA entity (no lazy-load / detached access, safe for soft+hard deletes).
- */
+/** One mobile-card line: an i18n label key and a typed value rendered in the household locale. Captured at
+ *  publish time from the live entity, so the async listener never touches a JPA entity (no lazy-load or
+ *  detached access; safe for soft and hard deletes). */
 data class CardField(val labelKey: String, val value: FieldValue)
 
 sealed interface FieldValue {
@@ -48,13 +45,9 @@ sealed interface FieldValue {
     data class Keyed(val i18nKey: String) : FieldValue
 }
 
-/**
- * Published by the mutation services for user-driven create/update/delete. Consumed after the
- * producing transaction commits (so a rolled-back write never notifies).
- *
- * NOTE: only the *Service.create/update/delete methods publish these. CSV import services write
- * directly to repositories and intentionally do not publish — that is how imports stay silent.
- */
+/** Published by the mutation services for user-driven create/update/delete, consumed after the producing
+ *  transaction commits. Only *Service.create/update/delete publish these — CSV imports write straight to
+ *  repositories, which is how imports stay silent. */
 data class EntityChangeEvent(
     val householdId: UUID,
     val entity: NotifyEntity,
@@ -63,10 +56,8 @@ data class EntityChangeEvent(
     val fields: List<CardField>,
 )
 
-/**
- * Published once per template/schedule after the scheduler (or a manual "fire now") materializes
- * N>0 occurrences. Aggregated into a single summary message to avoid floods on catch-up runs.
- */
+/** Published once per template/schedule after the scheduler (or a manual "fire now") materializes N>0
+ *  occurrences. Aggregated into one summary to avoid floods on catch-up runs. */
 data class MaterializationEvent(
     val householdId: UUID,
     val entity: NotifyEntity, // RECURRING_TXN or RECURRING_LENDING

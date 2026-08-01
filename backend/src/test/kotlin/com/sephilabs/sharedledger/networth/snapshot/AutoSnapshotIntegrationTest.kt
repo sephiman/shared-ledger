@@ -14,18 +14,15 @@ import com.sephilabs.sharedledger.portfolio.HoldingProvider
 import com.sephilabs.sharedledger.portfolio.HoldingRequest
 import com.sephilabs.sharedledger.portfolio.HoldingService
 import com.sephilabs.sharedledger.portfolio.LotRequest
-import com.sephilabs.sharedledger.portfolio.StubPriceProviderConfig
 import com.sephilabs.sharedledger.portfolio.price.PricePoint
 import com.sephilabs.sharedledger.portfolio.price.PricePointRepository
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.context.annotation.Import
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
 
-@Import(StubPriceProviderConfig::class)
 class AutoSnapshotIntegrationTest @Autowired constructor(
     private val users: UserRepository,
     private val households: HouseholdRepository,

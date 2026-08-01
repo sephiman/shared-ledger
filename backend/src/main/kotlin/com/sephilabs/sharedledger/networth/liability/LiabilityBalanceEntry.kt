@@ -10,10 +10,8 @@ import java.math.BigDecimal
 import java.time.LocalDate
 import java.util.UUID
 
-/**
- * One dated balance in a liability's own manual balance series (the source of truth for its
- * outstanding amount over time). Amortizable liabilities compute their balance instead (Stage 2).
- */
+/** One dated balance in a liability's manual balance series (the source of truth for its outstanding
+ *  amount). Amortizable liabilities compute their balance instead. */
 @Entity
 @Table(name = "liability_balance_entries")
 @SQLRestriction("deleted_at IS NULL")

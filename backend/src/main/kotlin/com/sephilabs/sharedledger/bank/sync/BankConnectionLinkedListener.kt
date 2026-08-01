@@ -4,12 +4,9 @@ import org.springframework.stereotype.Component
 import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
 
-/**
- * Runs the initial backfill sync after the connection commits. AFTER_COMMIT guarantees the
- * connection + accounts are visible; [BankSyncService.enqueue] moves the provider I/O onto the
- * bank-sync executor (synchronous in tests). Failures are swallowed there and re-attempted by the
- * scheduled sync — one bad link never breaks the flow.
- */
+/** Runs the initial backfill after the connection commits: AFTER_COMMIT guarantees it is visible, and
+ *  [BankSyncService.enqueue] moves the provider I/O off-thread. Failures are swallowed there and
+ *  re-attempted by the scheduled sync — one bad link never breaks the flow. */
 @Component
 class BankConnectionLinkedListener(private val syncService: BankSyncService) {
 

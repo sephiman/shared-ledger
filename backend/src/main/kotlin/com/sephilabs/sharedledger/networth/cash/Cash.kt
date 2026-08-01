@@ -11,15 +11,10 @@ import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
-/**
- * One dated cash adjustment ("at the close of day X I had Y") — the source of truth for cash,
- * mirroring an asset's value series. Between adjustments cash is *estimated* on demand from the
- * marked flows (see [CashEstimateService]); this series is the only persisted truth.
- *
- * End-of-day convention: an adjustment dated D means cash at the close of day D, so only flows
- * dated strictly after D adjust the estimate. Multiple adjustments on the same day tie-break by
- * [created_at] (last created wins).
- */
+/** One dated cash adjustment ("at the close of day X I had Y") — the only persisted truth for cash,
+ *  mirroring an asset's value series; between adjustments cash is estimated (see [CashEstimateService]).
+ *  End-of-day convention: an adjustment dated D means the close of D, so only flows strictly after D
+ *  adjust the estimate. Same-day adjustments tie-break by [created_at]. */
 @Entity
 @Table(name = "cash_adjustments")
 @SQLRestriction("deleted_at IS NULL")
@@ -44,11 +39,8 @@ class CashAdjustment(
     var updatedByUserId: UUID,
 ) : SoftDeletableEntity()
 
-/**
- * Per-household toggles for which flow types feed the cash estimate. Configured in the Cash
- * sub-tab (not general settings). All on by default; a user who captures a flow type incompletely
- * can turn it off and lean on manual adjustments.
- */
+/** Per-household toggles for which flow types feed the cash estimate, configured in the Cash sub-tab. All
+ *  on by default; a user who captures a flow type incompletely can turn it off and lean on adjustments. */
 @Entity
 @Table(name = "cash_estimate_settings")
 class CashEstimateSettings(

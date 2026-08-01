@@ -12,14 +12,9 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
-/**
- * Primary [BankConnector]: Enable Banking's PSD2 AIS API (Restricted Production, read-only).
- * Every call carries a fresh RS256 JWT bearer ([EnableBankingJwt]) minted from the caller's
- * per-household [EbCredentials]; JSON is mapped defensively via JsonNode because ASPSP payloads vary
- * in which optional fields they populate. Any HTTP or mapping failure surfaces as
- * [BankConnectorException] so the sync service can mark the connection and move on without killing
- * the run. Stateless as to credentials, so [pace] throttles the whole process, not one household.
- */
+/** Enable Banking's PSD2 AIS API (Restricted Production, read-only). Every call carries a fresh RS256 JWT
+ *  ([EnableBankingJwt]) minted from the caller's [EbCredentials]; JSON is mapped defensively via JsonNode
+ *  because ASPSP payloads vary. Stateless as to credentials, so [pace] throttles the process, not a household. */
 @Component
 class EnableBankingConnector(
     private val props: AppProperties,
@@ -262,14 +257,9 @@ class EnableBankingConnector(
         }
     }
 
-    /**
-     * An Enable Banking error body looks like
-     * `{"code": 400, "message": "Error interacting with ASPSP", "detail": "…", "error": "ASPSP_ERROR"}`:
-     * `code` is the **numeric HTTP status** and the machine-readable code lives in `error`. Reading
-     * `code` first (as this used to) yielded "400"/"429", so `ASPSP_RATE_LIMIT_EXCEEDED` was never
-     * recognised — a rate-limited connection was treated as a hard failure instead of backing off —
-     * and every provider error reached the UI as a bare status number.
-     */
+    /** An EB error body puts the **numeric HTTP status** in `code` and the machine-readable code in `error`.
+     *  Read `error` — reading `code` yields "400"/"429", so `ASPSP_RATE_LIMIT_EXCEEDED` is never recognised
+     *  and a rate-limited connection gets treated as a hard failure. */
     private data class ProviderError(val code: String?, val message: String?, val detail: String?) {
         /** e.g. `ASPSP_ERROR: Error interacting with ASPSP — Unknown error`, for the UI and the run log. */
         fun describe(): String? {

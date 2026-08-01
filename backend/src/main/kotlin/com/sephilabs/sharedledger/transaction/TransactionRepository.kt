@@ -84,11 +84,8 @@ interface TransactionRepository :
     """)
     fun dateBounds(@Param("hid") householdId: UUID): MinMaxDateRow
 
-    /**
-     * Latest occurrence date actually produced by each recurring template in the household.
-     * This is the ground truth for "last fired" — a template that scanned forward without
-     * generating anything simply has no row here.
-     */
+    /** Latest occurrence date actually produced by each template — the ground truth for "last fired". A
+     *  template that scanned forward without generating anything simply has no row here. */
     @Query("""
         SELECT t.recurringTemplateId as templateId, MAX(t.occurrenceDate) as lastFired
         FROM Transaction t

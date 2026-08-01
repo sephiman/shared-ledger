@@ -8,12 +8,9 @@ import java.math.BigDecimal
 import java.time.LocalDate
 import java.util.UUID
 
-/**
- * Single "value at date" facade over the storage split behind named assets and liabilities.
- * Assets read their own dated series (latest entry on or before the date). A liability reads its
- * amortization schedule when amortizable, otherwise its manual balance series — callers (snapshots)
- * never learn how a value is produced.
- */
+/** Single "value at date" facade over named assets and liabilities. Assets read their own dated series; a
+ *  liability reads its amortization schedule when amortizable, else its manual balance series. Callers
+ *  (snapshots) never learn how a value is produced. */
 @Service
 class NamedValueResolver(
     private val assetValues: AssetValueEntryRepository,
@@ -24,10 +21,8 @@ class NamedValueResolver(
     fun assetValueAt(assetId: UUID, date: LocalDate): BigDecimal? =
         assetValues.findFirstByAssetIdAndValueDateLessThanEqualOrderByValueDateDescCreatedAtDesc(assetId, date)?.value
 
-    /**
-     * The liability's balance as of [date]: the schedule-computed balance for an amortizable
-     * liability, else the latest manual series entry on or before [date] (null if none).
-     */
+    /** The liability's balance as of [date]: schedule-computed when amortizable, else the latest manual series
+     *  entry on or before [date] (null if none). */
     fun liabilityBalanceAt(liabilityId: UUID, date: LocalDate): BigDecimal? {
         amortization.balanceAt(liabilityId, date)?.let { return it }
         return liabilityBalances

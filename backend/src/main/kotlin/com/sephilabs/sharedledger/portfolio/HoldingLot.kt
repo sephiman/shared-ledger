@@ -14,10 +14,8 @@ import java.util.UUID
 
 enum class LotType { BUY, SELL }
 
-/**
- * One BUY/SELL movement of the holding's ledger. Net quantity, remaining cost basis
- * and realized P&L are computed by replaying the ledger — never stored.
- */
+/** One BUY/SELL movement of the holding's ledger. Net quantity, remaining cost basis and realized P&L
+ *  are computed by replaying the ledger — never stored. */
 @Entity
 @Table(name = "holding_lots")
 @SQLRestriction("deleted_at IS NULL")

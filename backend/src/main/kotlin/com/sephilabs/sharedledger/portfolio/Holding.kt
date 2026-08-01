@@ -13,7 +13,6 @@ import java.util.UUID
 enum class HoldingAssetClass { crypto, etf, stock, fund }
 enum class HoldingProvider { coingecko, yahoo, eodhd, twelvedata }
 
-/** Snapshot asset-class code each holding class rolls up into. */
 val ASSET_CLASS_TO_SNAPSHOT_CODE: Map<HoldingAssetClass, String> = mapOf(
     HoldingAssetClass.crypto to "crypto",
     HoldingAssetClass.etf to "etfs",

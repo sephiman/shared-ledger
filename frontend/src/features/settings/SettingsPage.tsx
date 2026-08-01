@@ -718,11 +718,8 @@ export function SettingsPage() {
   );
 }
 
-/**
- * Promote/demote control shown to owners on each member row. Demoting the only owner is disabled
- * here and refused by the server (`LAST_HOUSEHOLD_OWNER`) — an owner may demote themselves as long
- * as somebody else keeps the role.
- */
+/** Promote/demote control on each member row. Demoting the only owner is disabled here and refused by the
+ *  server (`LAST_HOUSEHOLD_OWNER`); an owner may demote themselves if somebody else keeps the role. */
 function RoleAction({
   member,
   lastOwner,

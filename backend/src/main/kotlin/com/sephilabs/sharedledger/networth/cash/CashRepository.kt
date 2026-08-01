@@ -12,10 +12,8 @@ interface CashAdjustmentRepository : JpaRepository<CashAdjustment, UUID> {
     /** Adjustment series newest-first for the Cash sub-tab. */
     fun findAllByHouseholdIdOrderByAdjustmentDateDescCreatedAtDesc(householdId: UUID): List<CashAdjustment>
 
-    /**
-     * The anchor as of [date]: the latest adjustment with adjustmentDate on or before [date].
-     * Same-day adjustments tie-break by createdAt (last created wins). Null if none exists yet.
-     */
+    /** The anchor as of [date]: the latest adjustment on or before it, same-day ties broken by createdAt
+     *  (last created wins). Null if none exists yet. */
     fun findFirstByHouseholdIdAndAdjustmentDateLessThanEqualOrderByAdjustmentDateDescCreatedAtDesc(
         householdId: UUID,
         date: LocalDate,

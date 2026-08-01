@@ -25,12 +25,9 @@ import java.time.format.DateTimeParseException
 import java.util.Currency
 import java.util.UUID
 
-/**
- * CSV import of holdings as purchase lots: one row per lot; rows sharing
- * (asset_class, symbol) belong to one holding, created on demand. Lot-level dedupe
- * against both the database and the file itself (lots have no free-text identity,
- * so duplicates are skipped rather than renamed like transactions).
- */
+/** CSV import of holdings as purchase lots: one row per lot, rows sharing (asset_class, symbol) belong to
+ *  one holding created on demand. Lots have no free-text identity, so duplicates are skipped rather than
+ *  renamed like transactions — deduped against both the database and the file itself. */
 @Service
 class PortfolioImportService(
     private val holdings: HoldingRepository,
@@ -320,10 +317,8 @@ class PortfolioImportService(
         return ParsedFile(parsed.rows.size, errors, validRows, existingKeys, Money.normalize(sumCostBasis), minDate, maxDate)
     }
 
-    /**
-     * Simulates the post-import ledger per holding (existing movements plus the file's
-     * non-duplicate rows) so an oversell is a row error at preview, not a mid-import failure.
-     */
+    /** Simulates the post-import ledger per holding so an oversell is a row error at preview, not a mid-import
+     *  failure. */
     private fun validateSells(
         householdId: UUID,
         validRows: List<ParsedRow>,

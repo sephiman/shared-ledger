@@ -1,19 +1,10 @@
 import { type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
-/**
- * Small ⓘ affordance that reveals a short explanation. Built on a native <details> — the same
- * disclosure the app uses for "How is this calculated?" lines — so it toggles on tap (mobile,
- * where hover doesn't exist), click and keyboard, with no JS. The panel floats over siblings
- * (cards don't clip), anchored to the icon's right edge so it opens inward and never spills off
- * the right. Re-tap the icon to close.
- *
- * That anchor only works while the icon has a predictable place on its line. For an icon inside
- * flowing prose it doesn't: wrapping moves it, and a translated sentence moves it again, so one
- * width spills off the left and another off the right. `anchor="container"` hands the panel to
- * the nearest positioned ancestor instead — make that the paragraph (add `relative` to it) and
- * the panel opens from the text's own left edge at every width and in every language.
- */
+/** Small ⓘ affordance revealing a short explanation. Built on a native <details>, so it toggles on tap,
+ *  click and keyboard with no JS; the panel floats over siblings, anchored to the icon's right edge.
+ *  That anchor needs the icon to have a predictable place on its line — inside flowing prose it doesn't,
+ *  so `anchor="container"` hands the panel to the nearest positioned ancestor (add `relative` to the <p>). */
 export function InfoTip({
   label,
   children,

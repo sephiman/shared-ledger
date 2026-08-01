@@ -5,53 +5,31 @@ import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
 
-/**
- * Provider-agnostic types exchanged with a [BankConnector]. They deliberately mirror the PSD2 AIS
- * shape (ASPSP catalogue, an authorization redirect, a session yielding accounts, and paginated
- * movements) but carry nothing provider-specific, so a second connector (Yapily, Wise) could
- * implement the same interface. Every adapter throws [BankConnectorException] on failure — callers
- * catch that one type, exactly like the portfolio price providers' `ProviderException`.
- */
+/** Provider-agnostic types exchanged with a [BankConnector], mirroring the PSD2 AIS shape but carrying
+ *  nothing provider-specific. Every adapter throws [BankConnectorException] on failure. */
 open class BankConnectorException(
     message: String,
     cause: Throwable? = null,
-    /**
-     * The provider's machine-readable code when it sent one (`ASPSP_ERROR`,
-     * `WRONG_TRANSACTIONS_PERIOD`, `PSU_HEADER_NOT_PROVIDED`, …). Recorded on the sync run so a
-     * failing connection says *why* in the UI instead of showing a bare HTTP status.
-     */
+    /** The provider's machine-readable code when it sent one (`ASPSP_ERROR`, `WRONG_TRANSACTIONS_PERIOD`, …).
+     *  Recorded on the sync run so a failing connection says *why* instead of showing a bare HTTP status. */
     val providerCode: String? = null,
 ) : RuntimeException(message, cause)
 
-/**
- * The ASPSP rejected an unattended (background) fetch for exceeding its per-consent daily budget
- * (Enable Banking `ASPSP_RATE_LIMIT_EXCEEDED`). The caller backs off for a few hours and retries;
- * interactive fetches (PSU headers present) are not subject to this.
- */
+/** The ASPSP rejected an unattended fetch for exceeding its per-consent daily budget. The caller backs
+ *  off for a few hours; interactive fetches (PSU headers present) are not subject to this. */
 class RateLimitExceededException(message: String, cause: Throwable? = null) : BankConnectorException(message, cause)
 
-/**
- * How to page an account's transactions.
- * - [LONGEST]: find the earliest available transaction and fetch everything forward. `dateFrom` is
- *   only a starting hint and `dateTo` is ignored; no WRONG_TRANSACTIONS_PERIOD. Used for the full
- *   on-link history sync.
- * - [DEFAULT]: bounded by `dateFrom` / `dateTo`, **both inclusive** (the provider documents
- *   "including the date"). Used for incremental syncs.
- */
+/** How to page an account's transactions.
+ *  - [LONGEST]: fetch all available history forward; `dateFrom` is a hint, `dateTo` ignored. On-link sync.
+ *  - [DEFAULT]: bounded by `dateFrom`/`dateTo`, **both inclusive** per the provider. Incremental syncs. */
 enum class FetchStrategy { LONGEST, DEFAULT }
 
-/**
- * Marks a fetch as happening while the account holder is online. When present these headers are
- * sent to the ASPSP so the call is treated as interactive (PSU) rather than a background fetch,
- * which the bank rate-limits to ~4/day. Absent for scheduled/background syncs.
- */
+/** Marks a fetch as happening while the holder is online: these headers make the ASPSP treat the call as
+ *  interactive rather than a background fetch, which banks rate-limit to ~4/day. Absent for scheduled syncs. */
 data class PsuContext(val ipAddress: String, val userAgent: String)
 
-/**
- * The API application a provider call is made under, resolved per household (see
- * `BankCredentialsService`). [privateKeyBase64] is the bare PKCS#8 body — validated before it is
- * stored, so signing can treat it as well-formed.
- */
+/** The API application a provider call is made under, resolved per household. [privateKeyBase64] is the
+ *  bare PKCS#8 body — validated before storage, so signing can treat it as well-formed. */
 data class EbCredentials(val appId: String, val privateKeyBase64: String)
 
 /** One bank in the provider's catalogue, filtered by country. */
@@ -79,7 +57,6 @@ data class AuthStart(
     val authorizationId: String? = null,
 )
 
-/** An account exposed by an authorized session. */
 data class AuthorizedAccount(
     val uid: String,
     val iban: String? = null,
@@ -87,7 +64,6 @@ data class AuthorizedAccount(
     val currency: String? = null,
 )
 
-/** The result of exchanging the redirect `code`: a session plus the accounts it grants. */
 data class AuthorizedSession(
     val sessionId: String,
     val accounts: List<AuthorizedAccount>,

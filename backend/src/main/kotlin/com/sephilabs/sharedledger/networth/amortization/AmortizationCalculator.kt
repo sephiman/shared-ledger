@@ -24,7 +24,6 @@ data class PrepaymentInput(val date: LocalDate, val amount: BigDecimal, val mode
 /** Re-anchor: at [date] the outstanding balance really is [balance]; the schedule reprojects from there. */
 data class AnchorInput(val date: LocalDate, val balance: BigDecimal)
 
-/** One charged period in the projected schedule. */
 data class ScheduleRow(
     val date: LocalDate,
     val interest: BigDecimal,
@@ -39,16 +38,10 @@ data class Projection(
     val payoffDate: LocalDate?,
 )
 
-/**
- * Forward amortization engine. Modelled on the lending [com.sephilabs.sharedledger.lending.LendingBalanceCalculator]
- * (event iteration, interest/principal split, Money rounding) but on clean MONTHLY periods rather than
- * day-prorated accrual, which is what a French/German mortgage schedule needs. It starts from the current
- * state ([PartTerms.principal] at [PartTerms.startDate]) and projects forward; the past is never reconstructed.
- *
- * Rate revisions recompute the instalment on the remaining balance and remaining term (variable-rate,
- * reduce-instalment behaviour). Prepayments reduce the balance at their date, then either keep the
- * instalment (reduce_term) or recompute it (reduce_instalment).
- */
+/** Forward amortization engine. Modelled on [com.sephilabs.sharedledger.lending.LendingBalanceCalculator]
+ *  but on clean MONTHLY periods rather than day-prorated accrual, which is what a French/German mortgage
+ *  needs. Starts from the current state and projects forward; the past is never reconstructed. Rate
+ *  revisions recompute on the remaining balance and term; prepayments reduce term or instalment per mode. */
 object AmortizationCalculator {
 
     private val MC = MathContext.DECIMAL64
@@ -218,11 +211,8 @@ object AmortizationCalculator {
     private fun monthlyRate(annualPercent: BigDecimal): BigDecimal =
         annualPercent.divide(HUNDRED, MC).divide(TWELVE, MC)
 
-    /**
-     * Number of monthly instalments to repay [principal] at [monthly] rate with a constant [instalment]
-     * (French). Used to give an instalment-driven part a concrete term. Double math is fine — the result
-     * is just an integer period count.
-     */
+    /** Monthly instalments to repay [principal] at [monthly] rate with a constant [instalment] (French), to
+     *  give an instalment-driven part a concrete term. Double math is fine — the result is an integer count. */
     private fun frenchPeriods(principal: BigDecimal, monthly: BigDecimal, instalment: BigDecimal): Int {
         if (instalment <= BigDecimal.ZERO) return MAX_PERIODS
         val p = principal.toDouble()
@@ -242,11 +232,8 @@ object AmortizationCalculator {
         return if (exp > 0) positive else BigDecimal.ONE.divide(positive, MC)
     }
 
-    /**
-     * Fraction of the first cycle the loan actually existed: days(startDate → firstCharge) over the
-     * days of the month-long cycle ending at firstCharge. 1.0 when the start sits on the cycle boundary
-     * (a full month), less when the start falls mid-cycle (odd-days / partial first period).
-     */
+    /** Fraction of the first cycle the loan existed: days(startDate → firstCharge) over the month-long cycle
+     *  ending at firstCharge. 1.0 on a cycle boundary, less for a mid-cycle (odd-days) start. */
     private fun firstPeriodFraction(startDate: LocalDate, firstCharge: LocalDate): BigDecimal {
         val cycleStart = firstCharge.minusMonths(1)
         val cycleDays = ChronoUnit.DAYS.between(cycleStart, firstCharge)

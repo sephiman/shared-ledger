@@ -5,15 +5,9 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
 
-/**
- * Unified view of a category, regardless of whether it's a global catalog entry
- * or a per-household custom one. Callers outside the catalog package should
- * depend on this type and CategoryService — never on the underlying entities.
- *
- * - `name`: for customs, the free text the owner typed; for globals, the literal i18n key
- *   string (e.g. "category.home.rent") so callers always have a non-null display value.
- * - `custom`: lets the UI conditionally show edit/delete affordances.
- */
+/** Unified view of a category, global or per-household custom. Callers outside the catalog package depend
+ *  on this and CategoryService, never on the entities. `name` is the owner's text for customs and the
+ *  literal i18n key for globals, so there is always a non-null display value. */
 data class CategoryView(
     val code: String,
     val name: String,
@@ -46,10 +40,8 @@ class CategoryService(
         return customs.findByIdHouseholdIdAndIdCode(householdId, code)?.toView()
     }
 
-    /**
-     * Resolve a category and require its kind to match the given direction.
-     * Replaces the V004 `enforce_transaction_direction` SQL trigger.
-     */
+    /** Resolve a category and require its kind to match the direction. Replaces the V004
+     *  `enforce_transaction_direction` SQL trigger. */
     @Transactional(readOnly = true)
     fun requireForDirection(householdId: UUID, code: String, direction: String): CategoryView {
         val view = find(householdId, code) ?: throw AppException.notFound("CATEGORY_NOT_FOUND")

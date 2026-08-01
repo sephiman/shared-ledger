@@ -9,10 +9,8 @@ import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
-/**
- * Daily FX rate from base_currency into quote_currency (the household base, EUR).
- * Only business-day observations are stored; reads forward-fill from the last row <= date.
- */
+/** Daily FX rate from base_currency into quote_currency. Only business-day observations are stored; reads
+ *  forward-fill from the last row <= date. */
 @Entity
 @Table(name = "fx_rates")
 class FxRate(

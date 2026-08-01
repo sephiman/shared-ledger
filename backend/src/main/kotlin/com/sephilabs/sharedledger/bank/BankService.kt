@@ -19,11 +19,8 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.util.UUID
 
-/**
- * Facade over the split bank storage (connections + accounts + auth sessions + sync runs). Manages
- * the link/re-link lifecycle and the config that drives UI visibility. Usable only by households
- * that configured their own application in Settings → Banks ([BankCredentialsService]).
- */
+/** Facade over the split bank storage (connections + accounts + auth sessions + sync runs). Usable only
+ *  by households that configured their own application in Settings → Banks ([BankCredentialsService]). */
 @Service
 class BankService(
     private val props: AppProperties,
@@ -80,22 +77,17 @@ class BankService(
             .map { it.toDto(canManage(it, by, role), configuredAppId) }
     }
 
-    /**
-     * The status to *show*. The stored one only catches up on the next sync, so a household that
-     * just lost or changed its credentials would keep displaying a stale `active` for hours —
-     * exactly when it needs telling. [BankSyncService] applies the same rule when it persists.
-     */
+    /** The status to *show*. The stored one only catches up on the next sync, so a household that just lost
+     *  or changed its credentials would display a stale `active` for hours. [BankSyncService] persists the
+     *  same rule. */
     private fun effectiveStatus(connection: BankConnection, configuredAppId: String?): ConnectionStatus = when {
         configuredAppId == null -> ConnectionStatus.credentials_required
         configuredAppId != connection.appId -> ConnectionStatus.credentials_mismatch
         else -> connection.status
     }
 
-    /**
-     * True when [by] may sync, re-link, edit or delete [connection]: household owners always, plus
-     * the member who linked it or whose bank account it is. Rows predating per-member linking have
-     * no `createdByUserId`/`holderUserId` and so stay owner-only.
-     */
+    /** True when [by] may sync, re-link, edit or delete [connection]: owners always, plus the member who
+     *  linked it or whose account it is. Rows predating per-member linking have neither and stay owner-only. */
     fun canManage(connection: BankConnection, by: User, role: HouseholdRole): Boolean =
         role == HouseholdRole.owner ||
             connection.createdByUserId == by.id ||

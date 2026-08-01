@@ -37,14 +37,10 @@ function isCredentialState(status: ConnectionStatus): boolean {
   return status === "credentials_required" || status === "credentials_mismatch";
 }
 
-/**
- * Linking is open to every member — each relative passes SCA at their own bank, so credentials are
- * never shared. Managing an existing connection is gated per row by `connection.canManage` (the
- * member who linked it, plus owners), mirroring the server check.
- *
- * Rendered when the household has credentials **or** still has connections: without credentials the
- * link form is hidden but existing connections stay visible, carrying the status that says why.
- */
+/** Linking is open to every member — each relative passes SCA at their own bank, so credentials are never
+ *  shared; managing a row is gated by `connection.canManage`, mirroring the server check. Rendered when the
+ *  household has credentials **or** still has connections, so the ones left behind stay visible with the
+ *  status that says why. */
 export function BanksCard({ householdId, locale }: { householdId: string; locale: string }) {
   const { t } = useTranslation();
   const { data: connections = [] } = useBankConnections(householdId);

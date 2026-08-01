@@ -2,23 +2,17 @@ package com.sephilabs.sharedledger.fire
 
 import java.math.BigDecimal
 
-/**
- * One bracket of a progressive capital-gains scale. The upper bound is implicit:
- * the next bracket's lower bound (the last bracket is open-ended).
- */
+/** One bracket of a progressive capital-gains scale. The upper bound is implicit — the next bracket's
+ *  lower bound, the last being open-ended. */
 data class TaxBracket(
     val lowerBound: BigDecimal,
     val ratePct: BigDecimal,
 )
 
-/**
- * Progressive taxation of realized capital gains, and the closed-form net→gross conversion
- * used to size FIRE targets. The math runs on doubles inside the Monte Carlo hot path
- * (per trial, per year, per tier), so brackets are compiled to flat arrays first.
- *
- * Model notes (deliberate simplifications, surfaced in the UI): only the gain share of a
- * withdrawal is taxable, loss offsetting is ignored, and bracket thresholds stay nominal.
- */
+/** Progressive taxation of realized gains plus the closed-form net→gross conversion that sizes FIRE
+ *  targets. Runs on doubles in the Monte Carlo hot path, so brackets are compiled to flat arrays first.
+ *  Deliberate simplifications (surfaced in the UI): only the gain share is taxable, no loss offsetting,
+ *  nominal thresholds. */
 object CapitalGainsTax {
 
     fun compile(brackets: List<TaxBracket>): Compiled {
@@ -58,16 +52,10 @@ object CapitalGainsTax {
             return tax
         }
 
-        /**
-         * Gross annual withdrawal `W` needed to be left with [net] to spend after taxes, when
-         * [gainFraction] of every euro withdrawn is realized gain: solves
-         * `W − taxOn(W × gainFraction) = net`.
-         *
-         * The equation is piecewise linear in `W`, so within the bracket that `W × gainFraction`
-         * lands in it has the closed-form solution
-         * `W = (net + taxBelow − rate × lowerBound) / (1 − rate × gainFraction)`;
-         * brackets are scanned from the bottom and the first self-consistent solution wins.
-         */
+        /** Gross annual withdrawal `W` leaving [net] after tax when [gainFraction] of each euro is realized gain:
+         *  solves `W − taxOn(W × gainFraction) = net`. Piecewise linear in `W`, so within a bracket
+         *  `W = (net + taxBelow − rate × lowerBound) / (1 − rate × gainFraction)`; brackets are scanned bottom-up
+         *  and the first self-consistent solution wins. */
         fun grossUp(net: Double, gainFraction: Double): Double {
             if (net <= 0.0 || lowers.isEmpty()) return net
             val g = gainFraction.coerceIn(0.0, 1.0)

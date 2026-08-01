@@ -12,13 +12,11 @@ import com.sephilabs.sharedledger.portfolio.price.PricePointRepository
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.context.annotation.Import
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
-@Import(StubPriceProviderConfig::class)
 class PortfolioValuationIntegrationTest @Autowired constructor(
     private val users: UserRepository,
     private val households: HouseholdRepository,

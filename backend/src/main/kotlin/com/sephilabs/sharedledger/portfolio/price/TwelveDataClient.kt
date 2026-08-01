@@ -7,13 +7,9 @@ import org.springframework.web.client.RestClient
 import java.math.BigDecimal
 import java.time.LocalDate
 
-/**
- * Twelve Data adapter — an official, config-selectable equity alternative
- * (app.portfolio.equity-provider: twelve_data). Not the default: its free plan does
- * not serve European UCITS ETFs (e.g. WEBN returns HTTP 404). Twelve Data reports
- * failures as HTTP 200 bodies with status="error", so every response type carries
- * status/code/message and is checked before use.
- */
+/** Twelve Data adapter — config-selectable equity alternative. Not the default: its free plan does not
+ *  serve European UCITS ETFs (WEBN returns 404). It reports failures as HTTP 200 bodies with
+ *  status="error", so every response type carries status/code/message and is checked before use. */
 class TwelveDataClient(
     private val props: AppProperties,
     restClientBuilder: RestClient.Builder,

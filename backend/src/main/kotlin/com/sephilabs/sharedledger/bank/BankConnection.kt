@@ -15,12 +15,8 @@ import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
-/**
- * One linked bank authorization for a household. [sessionIdEnc] holds the AES-GCM ciphertext of the
- * provider session id (see BankCrypto) and is never exposed through the API. Sync state (cursor,
- * status, expiry, call budget) is per-connection so a failing or expired connection never blocks
- * the others.
- */
+/** One linked bank authorization. [sessionIdEnc] is AES-GCM ciphertext, never exposed through the API.
+ *  Sync state is per-connection, so a failing or expired connection never blocks the others. */
 @Entity
 @Table(name = "bank_connections")
 class BankConnection(
@@ -40,11 +36,8 @@ class BankConnection(
     @Column(name = "aspsp_country", nullable = false, length = 2)
     var aspspCountry: String,
 
-    /**
-     * The Enable Banking application this authorization was granted under, stamped at link time. The
-     * bank tied its consent to that application, so a different one means "re-link", not "carry on"
-     * — sync refuses. Null only for rows V030 could not attribute; treated as a mismatch.
-     */
+    /** The Enable Banking application this authorization was granted under. A different one means re-link,
+     *  not carry on — sync refuses. Null (rows V030 could not attribute) counts as a mismatch. */
     @Column(name = "app_id", length = 128)
     var appId: String? = null,
 
@@ -94,8 +87,7 @@ class BankConnection(
 
 interface BankConnectionRepository : JpaRepository<BankConnection, UUID> {
 
-    /** Hard-delete every connection of the household. bank_connection_accounts, bank_sync_runs and any
-     *  remaining pending_movements are removed via ON DELETE CASCADE. */
+    /** Hard-delete every connection; accounts, sync runs and pending movements go via ON DELETE CASCADE. */
     @Modifying
     @Query(value = "DELETE FROM bank_connections WHERE household_id = :hid", nativeQuery = true)
     fun hardDeleteAllByHouseholdId(@Param("hid") householdId: UUID): Int
@@ -104,12 +96,16 @@ interface BankConnectionRepository : JpaRepository<BankConnection, UUID> {
     fun findAllByHouseholdIdOrderByCreatedAtAsc(householdId: UUID): List<BankConnection>
     fun countByHouseholdId(householdId: UUID): Long
 
-    /**
-     * Backs the warning shown before saving credentials that would orphan connections. A null app id
-     * counts: it predates the stamping and cannot be proven to belong to [appId].
-     */
+    /** Backs the warning before saving credentials that would orphan connections. A null app id counts: it
+     *  predates the stamping and cannot be proven to belong to [appId]. */
     @Query("SELECT COUNT(c) FROM BankConnection c WHERE c.householdId = :hid AND (c.appId IS NULL OR c.appId <> :appId)")
     fun countMismatchedAppId(@Param("hid") householdId: UUID, @Param("appId") appId: String): Long
+
+    /** One-time upgrade stamp for connections predating the per-household app id. Parameterized on
+     *  purpose — this used to be interpolated into V030 and any quote in the value broke startup. */
+    @Modifying
+    @Query("UPDATE BankConnection c SET c.appId = :appId WHERE c.appId IS NULL")
+    fun stampMissingAppId(@Param("appId") appId: String): Int
 
     fun findAllByIngestionEnabledTrue(): List<BankConnection>
     fun findAllByStatus(status: ConnectionStatus): List<BankConnection>

@@ -7,11 +7,8 @@ import { Card, CardBody, CardHeader, FieldError, Label, Select } from "@/compone
 
 const OPTIONS = ["OPEN_COST", "NET_INVESTED", "TURNOVER"] as const;
 
-/**
- * Per-user choice of the base for the portfolio Realized % and Total return %, shown on the
- * Home tile and the Portfolio page. Purely visual: it changes only the percentage denominators,
- * never the euro amounts, and only for this account.
- */
+/** Per-user base for the portfolio Realized % and Total return %. Purely visual: it changes only the
+ *  percentage denominators, never the euro amounts, and only for this account. */
 export function PortfolioReturnBasisCard() {
   const { t } = useTranslation();
   const { user } = useAuth();

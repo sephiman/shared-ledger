@@ -5,13 +5,9 @@ import java.time.temporal.ChronoUnit
 import kotlin.math.abs
 import kotlin.math.pow
 
-/**
- * Money-weighted (XIRR) annualized return over an irregular cash-flow series.
- *
- * Sign convention: money put in (initial value, contributions) is negative; money taken
- * out plus the terminal value is positive. The root of the net-present-value function is
- * found by bisection, which is slower than Newton but never diverges.
- */
+/** Money-weighted (XIRR) annualized return over an irregular cash-flow series. Money in (initial value,
+ *  contributions) is negative; money out plus the terminal value is positive. The NPV root is found by
+ *  bisection — slower than Newton but it never diverges. */
 object Xirr {
 
     data class CashFlow(val date: LocalDate, val amount: Double)
@@ -25,10 +21,8 @@ object Xirr {
     const val MAX_ITERATIONS: Int = 200
     const val NPV_EPSILON: Double = 1e-7
 
-    /**
-     * Annualized money-weighted rate for [flows], or null when the series has no sign change
-     * or no root inside [RATE_LOWER_BOUND, RATE_UPPER_BOUND].
-     */
+    /** Annualized rate for [flows], or null when the series has no sign change or no root inside
+     *  [RATE_LOWER_BOUND, RATE_UPPER_BOUND]. */
     fun rate(flows: List<CashFlow>): Double? {
         val live = flows.filter { it.amount != 0.0 }
         if (live.none { it.amount < 0.0 } || live.none { it.amount > 0.0 }) return null

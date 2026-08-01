@@ -7,11 +7,8 @@ import { cn } from "@/lib/cn";
 
 const DEBOUNCE_MS = 350;
 
-/**
- * Debounced provider-backed symbol search. Typing queries the price provider for the
- * asset class; picking a candidate hands it to the parent (which links the holding).
- * Funds have no provider, so the combobox degrades to a plain informative state.
- */
+/** Debounced provider-backed symbol search: typing queries the price provider for the asset class, picking
+ *  hands the candidate to the parent. Funds have no provider, so it degrades to an informative state. */
 export function SymbolSearchCombobox({
   assetClass,
   onSelect,

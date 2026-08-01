@@ -24,12 +24,9 @@ data class BenchmarkSeriesPointDto(
     val twrPct: BigDecimal?,
 )
 
-/**
- * A benchmark normalized to the same window the user's TWR curve covers: 0 % at the
- * anchor, one point per shared sample date, in EUR terms. [partial] is true when the
- * stored data does not cover the whole window (leading/trailing gap), with
- * [availableFrom]/[availableTo] marking the covered sub-range.
- */
+/** A benchmark normalized to the window the user's TWR curve covers: 0 % at the anchor, one point per
+ *  shared sample date, in EUR terms. [partial] marks a leading/trailing data gap, with
+ *  [availableFrom]/[availableTo] bounding the covered sub-range. */
 data class BenchmarkSeriesDto(
     val key: String,
     val currency: String,

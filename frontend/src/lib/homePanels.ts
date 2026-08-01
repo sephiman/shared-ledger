@@ -1,10 +1,6 @@
-/**
- * The six user-configurable Home panels. Ids are the wire/storage format shared with the
- * backend (`HomePanel` enum, `users.hidden_home_panels`); the server stores the ids a user
- * chose to HIDE, so an empty list (the default) means everything is visible.
- *
- * The month/year summary and the expenses chart are always shown and intentionally absent here.
- */
+/** The six user-configurable Home panels. Ids are the wire/storage format shared with the backend
+ *  (`HomePanel` enum, `users.hidden_home_panels`); the server stores the ids a user chose to HIDE, so an
+ *  empty list means everything is visible. The month/year summary and expenses chart are always shown. */
 export type HomePanelId =
   | "savings_rate"
   | "cost_of_living"

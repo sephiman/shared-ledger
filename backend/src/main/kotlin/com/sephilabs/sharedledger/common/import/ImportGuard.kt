@@ -7,10 +7,8 @@ import com.sephilabs.sharedledger.identity.user.User
 import org.springframework.web.multipart.MultipartFile
 import java.io.InputStream
 
-/**
- * Shared guard for every CSV-import endpoint: authenticate, rate-limit, reject empty
- * uploads, then hand the caller the resolved user and the open file stream.
- */
+/** Shared guard for every CSV-import endpoint: authenticate, rate-limit, reject empty uploads, then hand
+ *  the caller the resolved user and the open file stream. */
 fun <T> ImportRateLimiter.guarded(
     currentUser: CurrentUser,
     file: MultipartFile,

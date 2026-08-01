@@ -29,12 +29,9 @@ import java.time.LocalDate
 import java.time.format.DateTimeParseException
 import java.util.UUID
 
-/**
- * Import for amortization inputs (parts / rate revisions / prepayments) AND the generated
- * instalment entries, from the discriminated `record_type` file. The referenced liability must
- * already exist (import liabilities.csv first). Idempotent: parts match by
- * (liability, start_date, principal, method); revisions/prepayments/entries dedup on their natural keys.
- */
+/** Import for amortization inputs (parts / revisions / prepayments) AND generated instalments, from the
+ *  discriminated `record_type` file; the liability must already exist. Idempotent: parts match by
+ *  (liability, start_date, principal, method), the rest dedup on their natural keys. */
 @Service
 class AmortizationImportService(
     private val liabilities: LiabilityRepository,
@@ -199,7 +196,8 @@ class AmortizationImportService(
 }
 
 internal object AmortizationCsvLabels {
-    /** An exported "#N" label matches a null part label positionally is not attempted; only real labels match. */
+    /** Only real labels match; an exported "#N" placeholder is never matched positionally against a null label.
+     *  Only real labels match; an exported "#N" placeholder is never matched positionally against a null label. */
     fun matches(partLabel: String?, exportedLabel: String): Boolean =
         partLabel != null && partLabel == exportedLabel
 }

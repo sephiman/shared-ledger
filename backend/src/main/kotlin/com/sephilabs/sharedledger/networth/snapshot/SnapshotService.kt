@@ -51,11 +51,8 @@ class SnapshotService(
     fun create(householdId: UUID, request: SnapshotRequest, by: User): SnapshotDto =
         createInternal(householdId, request, by.id, NotifyActor.Human(by.email))
 
-    /**
-     * Creates a snapshot on behalf of the scheduled job. Identical to [create] — same
-     * autofill and freeze — except it is attributed to [ownerUserId] (the household owner,
-     * since there is no acting user) and notified as a scheduled action.
-     */
+    /** Creates a snapshot for the scheduled job. Identical to [create] except it is attributed to
+     *  [ownerUserId] (there is no acting user) and notified as a scheduled action. */
     @Transactional
     fun createScheduled(householdId: UUID, request: SnapshotRequest, ownerUserId: UUID): SnapshotDto =
         createInternal(householdId, request, ownerUserId, NotifyActor.Schedule(householdId))
@@ -224,12 +221,9 @@ class SnapshotService(
         return sb.toString()
     }
 
-    /**
-     * Writes a new cash adjustment at [snapshotDate] when the snapshot's cash value was corrected
-     * away from the estimate — the hybrid re-anchor. Only fires when the series is already active
-     * (an estimate existed); with no series, cash still behaves as a plain carried-over class and
-     * the first anchor is created from the Cash sub-tab. Runs on create only.
-     */
+    /** Writes a new cash adjustment at [snapshotDate] when the snapshot's cash was corrected away from the
+     *  estimate — the hybrid re-anchor. Only fires when the series is already active; with no series cash
+     *  still carries over and the first anchor comes from the Cash sub-tab. Create only. */
     private fun reAnchorCashIfCorrected(
         householdId: UUID,
         snapshotDate: LocalDate,
@@ -251,11 +245,9 @@ class SnapshotService(
         )
     }
 
-    /**
-     * Resolves the stored value and source for one asset class. An explicit 'computed'
-     * uses the server-computed portfolio value (rejecting classes without holdings);
-     * a null source is inferred: matching the computed value to the cent means computed.
-     */
+    /** Resolves the stored value and source for one asset class. An explicit 'computed' uses the server-side
+     *  portfolio value (rejecting classes without holdings); a null source is inferred — matching the computed
+     *  value to the cent means computed. */
     private fun toAssetValue(
         snapshotId: UUID,
         input: AssetValueInput,

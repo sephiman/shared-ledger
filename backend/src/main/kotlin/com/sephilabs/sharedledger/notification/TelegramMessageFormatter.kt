@@ -10,11 +10,8 @@ import java.util.Currency
 import java.util.Locale
 import java.util.UUID
 
-/**
- * Renders notification messages as Telegram light Markdown, reusing the mobile-card field set and
- * the frontend i18n keys (mirrored into messages_*.properties). All text resolves in the
- * household's configured [locale], money in the household [currency].
- */
+/** Renders notifications as Telegram light Markdown, reusing the mobile-card field set and the frontend
+ *  i18n keys (mirrored into messages_*.properties). Text in the household [locale], money in its [currency]. */
 @Component
 class TelegramMessageFormatter(
     private val messages: Messages,

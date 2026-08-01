@@ -11,13 +11,9 @@ import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import java.util.UUID
 
-/**
- * Per-household Telegram notification configuration (one row per household).
- *
- * [botTokenEnc] holds AES-GCM ciphertext (see [TelegramCrypto]); it is never exposed
- * through the API. The per-entity toggles each cover create/update/delete for that
- * entity; [notifyRecurringTxn] / [notifyRecurringLending] cover scheduler materialization.
- */
+/** Per-household Telegram configuration. [botTokenEnc] is AES-GCM ciphertext (see [TelegramCrypto]), never
+ *  exposed through the API. Per-entity toggles each cover create/update/delete;
+ *  [notifyRecurringTxn]/[notifyRecurringLending] cover scheduler materialization. */
 @Entity
 @Table(name = "telegram_settings")
 class TelegramSettings(

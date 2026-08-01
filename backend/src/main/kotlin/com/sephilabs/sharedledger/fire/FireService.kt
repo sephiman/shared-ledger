@@ -282,11 +282,9 @@ class FireService(
         return Money.normalize(net.divide(months.toBigDecimal(), Money.SCALE, RoundingMode.HALF_EVEN))
     }
 
-    /**
-     * Share of a hypothetical withdrawal that would be realized gain, derived from real data:
-     * `(qualifying_wealth − cumulative_net_contributions) / qualifying_wealth`. Falls back to
-     * the household's manual estimate while movements are insufficient to derive it.
-     */
+    /** Share of a hypothetical withdrawal that would be realized gain:
+     *  `(qualifying_wealth − cumulative_net_contributions) / qualifying_wealth`. Falls back to the manual
+     *  estimate while movements are insufficient to derive it. */
     private fun deriveGainFraction(
         s: FireSettings,
         startingValue: BigDecimal,
@@ -314,12 +312,9 @@ class FireService(
     // ---------------------------------------------------------------------------------------
     // Real money-weighted return (XIRR) and the historical reference scenario
 
-    /**
-     * Money-weighted annualized return over the full snapshot range: the first snapshot's
-     * qualifying value goes in, every recorded movement flows in or out, and the latest
-     * snapshot's qualifying value comes back. Without movements there is no return figure at
-     * all — net-worth growth is not a return.
-     */
+    /** Money-weighted annualized return over the full snapshot range: first snapshot's qualifying value in,
+     *  every movement in or out, latest qualifying value back. Without movements there is no return figure at
+     *  all — net-worth growth is not a return. */
     private fun computeActualReturn(
         orderedSnapshots: List<Snapshot>,
         allMovements: List<NetWorthMovement>,
@@ -354,11 +349,8 @@ class FireService(
         ) to null
     }
 
-    /**
-     * Mean and standard deviation of per-calendar-year money-weighted returns. A statistically
-     * thin sample by construction — the output is labeled "(historical — reference)" in the UI
-     * and never becomes a default scenario.
-     */
+    /** Mean and stddev of per-calendar-year money-weighted returns. A thin sample by construction — labeled
+     *  "(historical — reference)" in the UI and never a default scenario. */
     private fun computeHistoricalScenario(
         orderedSnapshots: List<Snapshot>,
         allMovements: List<NetWorthMovement>,
@@ -498,12 +490,9 @@ class FireService(
     // ---------------------------------------------------------------------------------------
     // Simulation engine (deterministic path + Monte Carlo + Coast FIRE in one place)
 
-    /**
-     * Runs yearly paths `value_{i} = (value_{i-1} + contribution_i) × (1 + r_i)` and checks each
-     * enabled tier against its inflated target. With capital-gains tax on, each path knows its
-     * own cost basis, so the gain fraction — and with it the gross target — is per path and per
-     * year, exactly as the withdrawal would be taxed.
-     */
+    /** Runs yearly paths `value_i = (value_{i-1} + contribution_i) × (1 + r_i)` against each tier's inflated
+     *  target. With capital-gains tax on, each path tracks its own cost basis, so the gain fraction — and the
+     *  gross target — is per path and per year, exactly as the withdrawal would be taxed. */
     private class SimulationEngine(
         simTiers: List<FireTierOutput>,
         private val years: Int,

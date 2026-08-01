@@ -9,12 +9,9 @@ import org.springframework.session.Session
 import org.springframework.session.SessionRepository
 import org.springframework.session.jdbc.JdbcIndexedSessionRepository
 
-/**
- * Proves Spring Session JDBC is actually engaged (see [SessionConfig]) rather than falling back to
- * in-memory sessions. Injecting [JdbcIndexedSessionRepository] only succeeds if @EnableJdbcHttpSession
- * registered it, and saving a session must write a row to the Postgres SPRING_SESSION table — that
- * persistence is what lets sessions survive a backend restart.
- */
+/** Proves Spring Session JDBC is engaged (see [SessionConfig]) rather than falling back to in-memory.
+ *  Injecting [JdbcIndexedSessionRepository] only succeeds if @EnableJdbcHttpSession registered it, and
+ *  saving must write a row to SPRING_SESSION — that persistence is what survives a restart. */
 class SessionPersistenceTest @Autowired constructor(
     private val sessionRepository: JdbcIndexedSessionRepository,
     private val jdbc: JdbcTemplate,

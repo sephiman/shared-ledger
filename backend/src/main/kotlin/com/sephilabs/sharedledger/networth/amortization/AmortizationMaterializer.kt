@@ -12,15 +12,10 @@ import org.springframework.transaction.support.TransactionTemplate
 import java.time.LocalDate
 import java.time.ZoneId
 
-/**
- * Advances every amortizable liability on its charge day: persists the instalments the schedule
- * has reached (interest/principal/resulting balance) as the exact generated history, and emits
- * the recurring-loan notification. Autonomous from transactions — it neither reads nor creates any.
- *
- * NOT a @Scheduled bean by itself — RecurringMaterializer.runForAll(today) invokes it so there is
- * one daily cron entrypoint. Idempotency comes from the unique (part_id, charge_date) index; each
- * row commits in its own transaction so a mid-run failure never loses earlier rows.
- */
+/** Advances every amortizable liability on its charge day, persisting reached instalments as generated
+ *  history and emitting the recurring-loan notification. Autonomous from transactions. NOT a @Scheduled
+ *  bean — RecurringMaterializer.runForAll(today) invokes it, so there is one daily cron entrypoint. Each
+ *  row commits in its own transaction, so a mid-run failure never loses earlier rows. */
 @Component
 class AmortizationMaterializer(
     private val liabilities: LiabilityRepository,

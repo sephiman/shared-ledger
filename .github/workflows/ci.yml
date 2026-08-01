@@ -6,6 +6,25 @@ on:
   pull_request:
 
 jobs:
+  # A migration already applied somewhere is frozen: Flyway checksums the raw file, so even a
+  # comment edit crash-loops every environment that ran it. Cheap job, runs before anything else.
+  migrations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Applied migrations must not change
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          # First push of a branch (or an initial commit) reports an all-zero base — nothing to diff against.
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            echo "No base revision to compare against; skipping."
+            exit 0
+          fi
+          sh scripts/check-migrations-immutable.sh "$BASE"
+
   backend:
     runs-on: ubuntu-latest
     defaults:

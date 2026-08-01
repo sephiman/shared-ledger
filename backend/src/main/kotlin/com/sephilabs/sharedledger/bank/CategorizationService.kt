@@ -8,12 +8,9 @@ import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 import java.util.UUID
 
-/**
- * Configurable categorisation rules plus learning-from-corrections. Applied during sync to suggest
- * a category; on confirm, a counterparty -> category pairing is remembered as a learned rule so the
- * next movement from the same payee arrives pre-categorised — but only when no existing rule already
- * covers the movement (see [learn]). No ML — just deterministic matching.
- */
+/** Deterministic categorisation rules plus learning-from-corrections: on confirm, a counterparty ->
+ *  category pairing is remembered so the next movement from that payee arrives pre-categorised — but
+ *  only when no existing rule already covers it (see [learn]). No ML. */
 @Service
 class CategorizationService(private val rules: CategorizationRuleRepository) {
 
@@ -27,20 +24,14 @@ class CategorizationService(private val rules: CategorizationRuleRepository) {
     fun orderedRules(householdId: UUID): List<CategorizationRule> =
         rules.findAllByHouseholdIdOrderByPriorityAsc(householdId)
 
-    /**
-     * The first rule in [candidates] (already priority-ordered) that matches the movement, scoped to
-     * the movement's direction. Takes a preloaded list so callers processing many movements load the
-     * rules once instead of once per movement.
-     */
+    /** The first rule in [candidates] (already priority-ordered) that matches, scoped to the movement's
+     *  direction. Takes a preloaded list so bulk callers load the rules once, not once per movement. */
     fun matchRule(candidates: List<CategorizationRule>, movement: PendingMovement): CategorizationRule? =
         candidates.firstOrNull { it.direction == movement.direction && it.matches(movement) }
 
-    /**
-     * Remember counterparty -> category for next time — but only when no existing rule (manual or
-     * learned) already matches the movement. An existing match means the case is covered: a manual
-     * confirmation that differs from the rule's suggestion is a one-off exception for that movement,
-     * not a new norm, so no rule is piled on top of the one that already matches.
-     */
+    /** Remember counterparty -> category, but only when no existing rule already matches. An existing match
+     *  means the case is covered: a confirmation that differs from the suggestion is a one-off exception for
+     *  that movement, not a new norm. */
     @Transactional
     fun learn(householdId: UUID, movement: PendingMovement, categoryCode: String, direction: Direction, by: User) {
         val value = movement.counterparty?.trim().orEmpty()

@@ -1,14 +1,12 @@
 package com.sephilabs.sharedledger.portfolio.benchmark
 
 import com.sephilabs.sharedledger.IntegrationTestBase
-import com.sephilabs.sharedledger.portfolio.StubPriceProviderConfig
 import com.sephilabs.sharedledger.portfolio.price.DailyPrice
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
-import org.springframework.context.annotation.Import
 import org.springframework.context.annotation.Primary
 import java.math.BigDecimal
 import java.time.LocalDate
@@ -31,7 +29,6 @@ class StubBenchmarkSourceConfig {
     fun stubBenchmarkSource(): StubBenchmarkSource = StubBenchmarkSource()
 }
 
-@Import(StubPriceProviderConfig::class, StubBenchmarkSourceConfig::class)
 class BenchmarkRefreshIntegrationTest @Autowired constructor(
     private val refresh: BenchmarkRefreshService,
     private val prices: BenchmarkPriceRepository,

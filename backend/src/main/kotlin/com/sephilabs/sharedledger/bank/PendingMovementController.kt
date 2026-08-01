@@ -44,7 +44,6 @@ class PendingMovementController(
         @Valid @RequestBody body: ConfirmMovementRequest,
     ): PendingMovementDto = service.confirm(householdId, id, body, currentUser.requireUser())
 
-    /** Confirm a pending item as a net-worth movement (capital reallocation) instead of a transaction. */
     @PostMapping("/{id}/confirm-as-movement")
     fun confirmAsMovement(
         @PathVariable householdId: UUID,
@@ -85,7 +84,6 @@ class PendingMovementController(
         @Valid @RequestBody body: BatchIdsRequest,
     ): BatchResultDto = service.restoreBatch(householdId, body.ids)
 
-    /** Run categorisation rules over the uncategorized pending movements, filling their suggestions. */
     @PostMapping("/apply-rules")
     fun applyRules(@PathVariable householdId: UUID): ApplyRulesResultDto =
         service.applyRulesToPending(householdId)

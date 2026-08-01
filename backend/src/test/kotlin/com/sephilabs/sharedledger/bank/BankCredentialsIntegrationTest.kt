@@ -15,19 +15,14 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.context.annotation.Import
 import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.web.context.request.RequestContextHolder
 import org.springframework.web.context.request.ServletRequestAttributes
 import tools.jackson.databind.ObjectMapper
 
-/**
- * Per-household credentials: what may be pasted, what the API gives back, and what happens to
- * connections when the configured application changes or disappears. The identity rules matter more
- * than the CRUD — a bank ties its consent to one application, so syncing under a different one is
- * impossible and must be *said*, not silently attempted.
- */
-@Import(FakeBankConnectorConfig::class)
+/** Per-household credentials: what may be pasted, what the API returns, and what happens to connections
+ *  when the configured application changes. A bank ties its consent to one application, so syncing under a
+ *  different one is impossible and must be *said*, not silently attempted. */
 class BankCredentialsIntegrationTest @Autowired constructor(
     private val users: UserRepository,
     private val households: HouseholdRepository,
@@ -42,8 +37,8 @@ class BankCredentialsIntegrationTest @Autowired constructor(
     private val fake: FakeBankConnector,
 ) : IntegrationTestBase() {
 
-    /** `redirect-url` is unset under the test profile, so linking exercises the request-derived
-     *  fallback and needs a bound request. [BankCallbackUrlTest] covers the configured path. */
+    /** `redirect-url` is unset under the test profile, so linking exercises the request-derived fallback and
+     *  needs a bound request. [BankCallbackUrlTest] covers the configured path. */
     @BeforeEach
     fun bindRequest() {
         RequestContextHolder.setRequestAttributes(ServletRequestAttributes(MockHttpServletRequest()))
@@ -135,8 +130,8 @@ class BankCredentialsIntegrationTest @Autowired constructor(
         assertThat(fake.lastRedirectUrl).isEqualTo(callbackUrl.current())
     }
 
-    /** Jackson cannot map an absent field onto a Kotlin primitive — omitting `confirm` used to
-     *  blow up as a bare 500 before the request reached the controller. */
+    /** Jackson cannot map an absent field onto a Kotlin primitive, so an omitted `confirm` fails before the
+     *  request reaches the controller. */
     @Test
     fun `omitting confirm in the request body is accepted`() {
         val body = objectMapper.readValue(
@@ -168,8 +163,8 @@ class BankCredentialsIntegrationTest @Autowired constructor(
         assertThat(credentials.resolve(household.id)!!.appId).isEqualTo(APP_B)
     }
 
-    /** Honest immediately, not after the next scheduled sync — that gap is the post-migration
-     *  window where the user needs telling. */
+    /** Honest immediately, not after the next scheduled sync — that gap is the post-migration window where the
+     *  user needs telling. */
     @Test
     fun `the listed status reports the credential state before any sync has run`() {
         val (user, household) = seed()

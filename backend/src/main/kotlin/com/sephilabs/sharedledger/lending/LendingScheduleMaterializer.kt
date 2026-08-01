@@ -14,13 +14,9 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
 
-/**
- * Materializes expected lending payments from active schedules into the lending_payments table.
- *
- * NOT a @Scheduled bean by itself — the existing RecurringMaterializer.runDaily() invokes
- * runForAll(today) so there is one cron entrypoint for daily materialization.
- * Idempotency comes from the unique partial index (schedule_id, payment_date).
- */
+/** Materializes expected lending payments from active schedules. NOT a @Scheduled bean itself —
+ *  RecurringMaterializer.runDaily() invokes runForAll(today) so there is one daily cron entrypoint.
+ *  Idempotency comes from the unique partial index (schedule_id, payment_date). */
 @Component
 class LendingScheduleMaterializer(
     private val lendings: LendingRepository,

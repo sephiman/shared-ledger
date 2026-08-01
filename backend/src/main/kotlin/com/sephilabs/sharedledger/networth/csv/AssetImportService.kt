@@ -22,11 +22,8 @@ import java.time.LocalDate
 import java.time.format.DateTimeParseException
 import java.util.UUID
 
-/**
- * Import for named assets and their value history. Validate-then-confirm; re-importing an export is
- * idempotent: an asset is matched by name (reused, not duplicated) and a value entry is skipped when
- * one with the same date and value already exists. Never notifies (imports stay silent).
- */
+/** Import for named assets and their value history. Validate-then-confirm and idempotent: an asset matches
+ *  by name, a value entry is skipped when same date and value exist. Never notifies (imports stay silent). */
 @Service
 class AssetImportService(
     private val assets: AssetRepository,
