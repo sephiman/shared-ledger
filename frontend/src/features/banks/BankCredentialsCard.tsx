@@ -7,20 +7,14 @@ import {
 } from "@/api/banks";
 import { asApiError } from "@/api/client";
 import { Button, Card, CardBody, CardHeader, Input, Label, Textarea } from "@/components/ui/primitives";
-
-/** Strips PEM armour and whitespace so a key file and a one-line blob save identically. The server
- *  normalizes again and has the final say. */
-function normalizeKey(raw: string): string {
-  return raw
-    .replace(/\\n/g, "\n")
-    .replace(/-----(BEGIN|END)[^-]*-----/g, "")
-    .replace(/\s/g, "");
-}
-
-/** PKCS#1 is the common wrong paste; flag it while typing rather than on save. */
-function looksLikePkcs1(raw: string): boolean {
-  return /BEGIN\s+RSA\s+PRIVATE\s+KEY/i.test(raw);
-}
+import { FilePicker } from "@/features/settings/FilePicker";
+import {
+  MAX_KEY_FILE_BYTES,
+  keyFileSizeError,
+  keyFileTextError,
+  looksLikePkcs1,
+  normalizeKey,
+} from "./keyFile";
 
 /** Owner-only Enable Banking application for this household — always visible, so the feature can be set up
  *  from scratch. The private key is write-only. */
@@ -32,6 +26,10 @@ export function BankCredentialsCard({ householdId }: { householdId: string }) {
 
   const [appId, setAppId] = useState("");
   const [privateKey, setPrivateKey] = useState("");
+  // Held only for its name and the Clear button; the text lives in privateKey like a paste.
+  const [keyFile, setKeyFile] = useState<File | null>(null);
+  const [keyError, setKeyError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
   const [pkcs1Warning, setPkcs1Warning] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -48,6 +46,39 @@ export function BankCredentialsCard({ householdId }: { householdId: string }) {
   const onKeyChange = (value: string) => {
     setPkcs1Warning(looksLikePkcs1(value));
     setPrivateKey(value);
+  };
+
+  /**
+   * Both entry points end at [onKeyChange]: an uploaded file is just another way of typing the key,
+   * so normalization, the PKCS#1 hint and the request payload are identical either way.
+   */
+  const loadKeyFile = async (file: File | null) => {
+    setKeyError(null);
+    if (!file) {
+      setKeyFile(null);
+      onKeyChange("");
+      return;
+    }
+    if (keyFileSizeError(file.size)) {
+      setKeyFile(null);
+      setKeyError(t("banks.credentials_key_file_too_large", { max: Math.round(MAX_KEY_FILE_BYTES / 1024) }));
+      return;
+    }
+    const text = await file.text();
+    const problem = keyFileTextError(text);
+    if (problem) {
+      setKeyFile(null);
+      setKeyError(t(problem === "binary" ? "banks.credentials_key_file_binary" : "banks.credentials_key_file_empty"));
+      return;
+    }
+    setKeyFile(file);
+    onKeyChange(text);
+  };
+
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    void loadKeyFile(e.dataTransfer.files?.[0] ?? null);
   };
 
   const runValidation = async () => {
@@ -79,6 +110,8 @@ export function BankCredentialsCard({ householdId }: { householdId: string }) {
         confirm,
       });
       setPrivateKey("");
+      setKeyFile(null);
+      setKeyError(null);
       setPkcs1Warning(false);
       setRelinkWarning(null);
       setSaveMsg(t("common.saved"));
@@ -121,22 +154,50 @@ export function BankCredentialsCard({ householdId }: { householdId: string }) {
 
         <div>
           <Label>{t("banks.credentials_private_key")}</Label>
-          <Textarea
-            rows={3}
-            autoComplete="off"
-            spellCheck={false}
-            value={privateKey}
-            onChange={(e) => onKeyChange(e.target.value)}
-            placeholder={
-              credentials?.privateKeyConfigured
-                ? t("banks.credentials_key_configured")
-                : t("banks.credentials_key_not_configured")
-            }
-          />
+          {keyFile ? (
+            // A loaded file replaces the textarea: dumping ~1.7 KB of base64 into it helps nobody.
+            <div className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200">
+              {t("banks.credentials_key_file_loaded", { name: keyFile.name })}
+            </div>
+          ) : (
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={onDrop}
+              className={dragging ? "rounded-md ring-2 ring-primary" : undefined}
+            >
+              <Textarea
+                rows={3}
+                autoComplete="off"
+                spellCheck={false}
+                value={privateKey}
+                onChange={(e) => onKeyChange(e.target.value)}
+                placeholder={
+                  credentials?.privateKeyConfigured
+                    ? t("banks.credentials_key_configured")
+                    : t("banks.credentials_key_not_configured")
+                }
+              />
+            </div>
+          )}
+          <div className="mt-2">
+            <FilePicker
+              file={keyFile}
+              onChange={(f) => void loadKeyFile(f)}
+              accept=".pem,.key,.p8,.txt"
+              chooseLabel={t("banks.credentials_upload_key")}
+              changeLabel={t("banks.credentials_change_key_file")}
+              emptyLabel={t("banks.credentials_no_key_file")}
+            />
+          </div>
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{t("banks.credentials_key_hint")}</p>
+          {!keyFile && (
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{t("banks.credentials_key_drop_hint")}</p>
+          )}
           {pkcs1Warning && (
             <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">{t("banks.credentials_key_pkcs1")}</p>
           )}
+          {keyError && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{keyError}</p>}
         </div>
 
         {credentials?.redirectUrl && (
@@ -202,23 +263,26 @@ export function BankCredentialsCard({ householdId }: { householdId: string }) {
           </button>
           {helpOpen && (
             <div className="mt-2 space-y-3 rounded-md border border-border bg-gray-50 p-3 text-sm dark:border-gray-700 dark:bg-gray-900/40">
-              <div>
-                <p className="font-medium">{t("banks.credentials_help_step1_title")}</p>
-                <p className="mt-1 text-gray-600 dark:text-gray-300">{t("banks.credentials_help_step1_body")}</p>
-                <a className="text-primary" href="https://enablebanking.com" target="_blank" rel="noreferrer">
-                  https://enablebanking.com
-                </a>
-              </div>
-              <div>
-                <p className="font-medium">{t("banks.credentials_help_step2_title")}</p>
-                <p className="mt-1 text-gray-600 dark:text-gray-300">{t("banks.credentials_help_step2_body")}</p>
-              </div>
-              <div>
-                <p className="font-medium">{t("banks.credentials_help_step3_title")}</p>
-                <p className="mt-1 text-gray-600 dark:text-gray-300">
-                  {t("banks.credentials_help_step3_body", { url: credentials?.redirectUrl ?? "" })}
-                </p>
-              </div>
+              <ol className="list-decimal space-y-1.5 pl-5 text-gray-600 dark:text-gray-300">
+                <li>
+                  {t("banks.credentials_help_step1")}{" "}
+                  <a className="text-primary" href="https://enablebanking.com" target="_blank" rel="noreferrer">
+                    enablebanking.com
+                  </a>
+                </li>
+                <li>{t("banks.credentials_help_step2")}</li>
+                <li>{t("banks.credentials_help_step3")}</li>
+                <li>{t("banks.credentials_help_step4")}</li>
+                <li>
+                  {t("banks.credentials_help_step5")}{" "}
+                  <code className="break-all rounded bg-gray-100 px-1 py-0.5 text-xs dark:bg-gray-900/60">
+                    {credentials?.redirectUrl ?? ""}
+                  </code>
+                </li>
+                <li>{t("banks.credentials_help_step6")}</li>
+                <li>{t("banks.credentials_help_step7")}</li>
+                <li>{t("banks.credentials_help_step8")}</li>
+              </ol>
               <div className="rounded-md border border-amber-300 bg-amber-50 p-2 dark:border-amber-800 dark:bg-amber-950/30">
                 <p className="font-medium text-amber-800 dark:text-amber-200">
                   {t("banks.credentials_help_whitelist_title")}

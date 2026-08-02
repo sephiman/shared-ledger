@@ -6,9 +6,20 @@ interface Props {
   file: File | null;
   onChange: (file: File | null) => void;
   accept?: string;
+  // Wording overrides for callers outside the CSV importers (e.g. the bank key file).
+  chooseLabel?: string;
+  changeLabel?: string;
+  emptyLabel?: string;
 }
 
-export function FilePicker({ file, onChange, accept = ".csv,text/csv" }: Props) {
+export function FilePicker({
+  file,
+  onChange,
+  accept = ".csv,text/csv",
+  chooseLabel,
+  changeLabel,
+  emptyLabel,
+}: Props) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -26,10 +37,10 @@ export function FilePicker({ file, onChange, accept = ".csv,text/csv" }: Props) 
         variant="secondary"
         onClick={() => inputRef.current?.click()}
       >
-        {file ? t("import.change_file") : t("import.choose_file")}
+        {file ? (changeLabel ?? t("import.change_file")) : (chooseLabel ?? t("import.choose_file"))}
       </Button>
       <span className="truncate text-sm text-gray-700 dark:text-gray-200">
-        {file ? file.name : <span className="text-gray-400 italic">{t("import.no_file")}</span>}
+        {file ? file.name : <span className="text-gray-400 italic">{emptyLabel ?? t("import.no_file")}</span>}
       </span>
       {file && (
         <Button
