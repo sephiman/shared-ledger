@@ -324,6 +324,59 @@ class AnalyticsServiceTest @Autowired constructor(
     }
 
     @Test
+    fun `cost of living averages over the months of an explicit range`() {
+        val (user, household) = seed()
+        // Six months of history, but only the middle three are asked for.
+        var cursor = YearMonth.of(2025, 1)
+        while (!cursor.isAfter(YearMonth.of(2025, 6))) {
+            addTx(household, user, cursor.atDay(3), Direction.expense, "home.rent", "900.00")
+            cursor = cursor.plusMonths(1)
+        }
+        addTx(household, user, LocalDate.of(2025, 4, 10), Direction.expense, "outings.restaurants", "300.00")
+
+        val window = MonthWindow(YearMonth.of(2025, 3), YearMonth.of(2025, 5))
+        val r = service.costOfLiving(household.id, YearMonth.of(2025, 6), window)
+
+        assertThat(r.fromYear).isEqualTo(2025)
+        assertThat(r.fromMonth).isEqualTo(3)
+        assertThat(r.toYear).isEqualTo(2025)
+        assertThat(r.toMonth).isEqualTo(5)
+        assertThat(r.rangeMonths).isEqualTo(3)
+        assertThat(r.monthsAvailable).isEqualTo(3)
+        assertThat(r.essentialMonthlyAverage).isEqualByComparingTo("900.00")
+        // The single 300 restaurant charge spread across the three months of the window.
+        assertThat(r.nonEssentialMonthlyAverage).isEqualByComparingTo("100.00")
+        assertThat(r.totalMonthlyAverage).isEqualByComparingTo("1000.00")
+    }
+
+    @Test
+    fun `cost of living over a range longer than the history divides by the months with data`() {
+        val (user, household) = seed()
+        addTx(household, user, LocalDate.of(2025, 5, 3), Direction.expense, "home.rent", "800.00")
+        addTx(household, user, LocalDate.of(2025, 6, 3), Direction.expense, "home.rent", "800.00")
+
+        // A two-year window over a household that only started in May 2025.
+        val window = MonthWindow(YearMonth.of(2024, 7), YearMonth.of(2025, 6))
+        val r = service.costOfLiving(household.id, YearMonth.of(2025, 6), window)
+
+        assertThat(r.rangeMonths).isEqualTo(12)
+        assertThat(r.monthsAvailable).isEqualTo(2)
+        assertThat(r.essentialMonthlyAverage).isEqualByComparingTo("800.00")
+    }
+
+    @Test
+    fun `cost of living reports no available months when the range predates all history`() {
+        val (user, household) = seed()
+        addTx(household, user, LocalDate.of(2025, 5, 3), Direction.expense, "home.rent", "800.00")
+
+        val window = MonthWindow(YearMonth.of(2023, 1), YearMonth.of(2023, 12))
+        val r = service.costOfLiving(household.id, YearMonth.of(2025, 6), window)
+
+        assertThat(r.monthsAvailable).isEqualTo(0)
+        assertThat(r.totalMonthlyAverage).isEqualByComparingTo("0.00")
+    }
+
+    @Test
     fun `heatmap returns null for empty months and value for filled months`() {
         val (user, household) = seed()
         val ym = YearMonth.now()
@@ -336,6 +389,110 @@ class AnalyticsServiceTest @Autowired constructor(
         assertThat(last).isNotNull
         assertThat(last!!).isEqualByComparingTo("100.00")
         assertThat(grocRow.values.dropLast(1).all { it == null }).isTrue()
+    }
+
+    @Test
+    fun `heatmap over an explicit window covers exactly that window, ignoring the month count`() {
+        val (user, household) = seed()
+        addTx(household, user, LocalDate.of(2025, 2, 5), Direction.expense, "groceries.groceries", "80.00")
+        addTx(household, user, LocalDate.of(2025, 4, 5), Direction.expense, "groceries.groceries", "120.00")
+        addTx(household, user, LocalDate.of(2025, 9, 5), Direction.expense, "groceries.groceries", "999.00")
+
+        val window = MonthWindow(YearMonth.of(2025, 2), YearMonth.of(2025, 5))
+        val r = service.heatmap(household.id, 24, Direction.expense, window)
+
+        assertThat(r.months).containsExactly(
+            HeatmapMonth(2025, 2),
+            HeatmapMonth(2025, 3),
+            HeatmapMonth(2025, 4),
+            HeatmapMonth(2025, 5),
+        )
+        val groc = r.categories.first { it.categoryCode == "groceries.groceries" }
+        assertThat(groc.values[0]).isEqualByComparingTo("80.00")
+        assertThat(groc.values[1]).isNull()
+        assertThat(groc.values[2]).isEqualByComparingTo("120.00")
+        assertThat(groc.values[3]).isNull()
+    }
+
+    @Test
+    fun `explorer over an explicit window returns exactly the months of that window`() {
+        val (user, household) = seed()
+        addTx(household, user, LocalDate.of(2025, 1, 5), Direction.expense, "groceries.groceries", "100.00")
+        addTx(household, user, LocalDate.of(2025, 3, 5), Direction.expense, "groceries.groceries", "200.00")
+        addTx(household, user, LocalDate.of(2025, 8, 5), Direction.expense, "groceries.groceries", "999.00")
+
+        val window = MonthWindow(YearMonth.of(2025, 1), YearMonth.of(2025, 4))
+        val r = service.explorer(household.id, "category", "groceries.groceries", 12, false, window)
+
+        assertThat(r.months.map { it.year to it.month })
+            .containsExactly(2025 to 1, 2025 to 2, 2025 to 3, 2025 to 4)
+        assertThat(r.months.map { it.amount }).containsExactly(
+            BigDecimal("100.00"), BigDecimal("0.00"), BigDecimal("200.00"), BigDecimal("0.00"),
+        )
+        // 300 over the four months of the window; the August charge is outside it.
+        assertThat(r.averagePerMonth).isEqualByComparingTo("75.00")
+        assertThat(r.highestMonth?.month).isEqualTo(3)
+        assertThat(r.lowestNonZeroMonth?.month).isEqualTo(1)
+    }
+
+    @Test
+    fun `explorer overlays the same span shifted one year earlier`() {
+        val (user, household) = seed()
+        // Prior-year data, deliberately in different months than the current window's.
+        addTx(household, user, LocalDate.of(2024, 2, 5), Direction.expense, "groceries.groceries", "50.00")
+        addTx(household, user, LocalDate.of(2024, 4, 5), Direction.expense, "groceries.groceries", "70.00")
+        addTx(household, user, LocalDate.of(2024, 9, 5), Direction.expense, "groceries.groceries", "999.00")
+        addTx(household, user, LocalDate.of(2025, 1, 5), Direction.expense, "groceries.groceries", "100.00")
+        addTx(household, user, LocalDate.of(2025, 3, 5), Direction.expense, "groceries.groceries", "200.00")
+
+        // A year-to-date shaped window: January through April.
+        val window = MonthWindow(YearMonth.of(2025, 1), YearMonth.of(2025, 4))
+        val r = service.explorer(household.id, "category", "groceries.groceries", 12, true, window)
+
+        assertThat(r.priorYearsAvailable).isGreaterThanOrEqualTo(1)
+        val prior = r.priorMonths!!
+        assertThat(prior.map { it.year to it.month })
+            .containsExactly(2024 to 1, 2024 to 2, 2024 to 3, 2024 to 4)
+        assertThat(prior.map { it.amount }).containsExactly(
+            BigDecimal("0.00"), BigDecimal("50.00"), BigDecimal("0.00"), BigDecimal("70.00"),
+        )
+    }
+
+    @Test
+    fun `explorer offers no overlay when nothing precedes the window`() {
+        val (user, household) = seed()
+        addTx(household, user, LocalDate.of(2025, 1, 5), Direction.expense, "groceries.groceries", "100.00")
+
+        val window = MonthWindow(YearMonth.of(2025, 1), YearMonth.of(2025, 4))
+        val r = service.explorer(household.id, "category", "groceries.groceries", 12, true, window)
+
+        assertThat(r.priorYearsAvailable).isZero()
+    }
+
+    @Test
+    fun `explorer without a window still counts back from the current month`() {
+        val (user, household) = seed()
+        val thisMonth = YearMonth.now()
+        addTx(household, user, thisMonth.atDay(5), Direction.expense, "groceries.groceries", "100.00")
+
+        val r = service.explorer(household.id, "category", "groceries.groceries", 12, false)
+
+        assertThat(r.months).hasSize(12)
+        assertThat(r.months.last().year to r.months.last().month)
+            .isEqualTo(thisMonth.year to thisMonth.monthValue)
+        assertThat(r.months.last().amount).isEqualByComparingTo("100.00")
+    }
+
+    @Test
+    fun `explorer limits top descriptions to the selected window`() {
+        val (user, household) = seed()
+        addTxDescribed(household, user, LocalDate.of(2025, 2, 5), "groceries.groceries", "40.00", "Inside")
+        addTxDescribed(household, user, LocalDate.of(2025, 8, 5), "groceries.groceries", "60.00", "Outside")
+
+        val window = MonthWindow(YearMonth.of(2025, 1), YearMonth.of(2025, 4))
+        val r = service.explorer(household.id, "category", "groceries.groceries", 12, false, window)
+
+        assertThat(r.topDescriptions?.map { it.description }).containsExactly("Inside")
     }
 
     @Test
@@ -482,6 +639,16 @@ class AnalyticsServiceTest @Autowired constructor(
             categoryCode = cat,
             amount = BigDecimal(amount),
             description = null,
+        ), u)
+    }
+
+    private fun addTxDescribed(h: Household, u: User, date: LocalDate, cat: String, amount: String, description: String) {
+        transactions.create(h.id, TransactionRequest(
+            occurrenceDate = date,
+            direction = Direction.expense,
+            categoryCode = cat,
+            amount = BigDecimal(amount),
+            description = description,
         ), u)
     }
 

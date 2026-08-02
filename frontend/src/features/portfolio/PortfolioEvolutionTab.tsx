@@ -9,7 +9,8 @@ import {
   type HoldingAssetClass,
 } from "@/api/portfolio";
 import { Card, CardBody, CardHeader, Label, Select } from "@/components/ui/primitives";
-import { RangeSelector, defaultRange, resolveRange, type RangeValue } from "@/components/ui/RangeSelector";
+import { RangeSelector } from "@/components/ui/RangeSelector";
+import { defaultRange, resolveRange, type RangeValue } from "@/lib/range";
 import {
   Area,
   CartesianGrid,

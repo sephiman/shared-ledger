@@ -5,6 +5,9 @@ import { useActiveHousehold } from "@/auth/AuthContext";
 import { useHeatmap, type HeatmapCategoryRow, type HeatmapMonth } from "@/api/analytics";
 import { useCategories } from "@/api/catalog";
 import { Card, CardBody, CardHeader, Label, Select } from "@/components/ui/primitives";
+import { RangeSelector } from "@/components/ui/RangeSelector";
+import { isRangeComplete, monthRangeParams } from "@/lib/range";
+import { useRangeState } from "@/lib/useRangeState";
 import { formatMoney } from "@/lib/money";
 import { monthName } from "@/lib/dates";
 import { categoryIcon, groupIcon } from "@/lib/categoryGroup";
@@ -12,7 +15,6 @@ import { categoryLabelByCode } from "@/lib/categoryLabel";
 import { hexWithAlpha } from "@/lib/color";
 import type { Category } from "@/api/catalog";
 
-type Range = "12" | "24" | "36" | "48" | "all";
 type Direction = "expense" | "income";
 
 const EXPENSE_HUE = "#0ea5e9";
@@ -31,11 +33,15 @@ export function HeatmapTab() {
   const { t, i18n } = useTranslation();
   const household = useActiveHousehold();
   const navigate = useNavigate();
-  const [range, setRange] = useState<Range>("24");
+  const [range, setRange] = useRangeState("analytics.heatmap", "2y");
   const [direction, setDirection] = useState<Direction>("expense");
 
-  const months = range === "all" ? 9999 : Number(range);
-  const { data, isLoading } = useHeatmap(household.householdId, months, direction);
+  const rangeReady = isRangeComplete(range);
+  const { data, isLoading } = useHeatmap(
+    household.householdId,
+    { ...monthRangeParams(range), direction },
+    rangeReady,
+  );
   const { data: categories = [] } = useCategories(household.householdId);
 
   const baseColor = direction === "expense" ? EXPENSE_HUE : INCOME_HUE;
@@ -53,18 +59,9 @@ export function HeatmapTab() {
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("analytics.heatmap_description")}</p>
         </CardHeader>
         <CardBody className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <div>
-              <Label>{t("analytics.heatmap_range")}</Label>
-              <Select value={range} onChange={(e) => setRange(e.target.value as Range)}>
-                <option value="12">{t("analytics.range_12")}</option>
-                <option value="24">{t("analytics.range_24")}</option>
-                <option value="36">{t("analytics.range_36")}</option>
-                <option value="48">{t("analytics.range_48")}</option>
-                <option value="all">{t("analytics.range_all")}</option>
-              </Select>
-            </div>
-            <div>
+          <div className="flex flex-wrap items-end gap-3">
+            <RangeSelector value={range} onChange={setRange} granularity="month" />
+            <div className="w-40">
               <Label>{t("common.direction")}</Label>
               <Select value={direction} onChange={(e) => setDirection(e.target.value as Direction)}>
                 <option value="expense">{t("analytics.heatmap_direction_expense")}</option>
@@ -73,7 +70,7 @@ export function HeatmapTab() {
             </div>
           </div>
 
-          {isLoading && <p className="text-gray-500 dark:text-gray-400">{t("common.loading")}</p>}
+          {rangeReady && isLoading && <p className="text-gray-500 dark:text-gray-400">{t("common.loading")}</p>}
 
           {!isLoading && data && visibleRows.length > 0 && (
             <HeatmapGrid

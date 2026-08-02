@@ -8,9 +8,7 @@ import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
-import java.time.LocalDate
 import java.time.YearMonth
-import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 @RestController
@@ -103,15 +101,11 @@ class AnalyticsController(
         if (level !in setOf("group", "category")) {
             throw AppException.badRequest("INVALID_PARAMETER", "level")
         }
-        val pFrom = runCatching { LocalDate.parse(from) }
-            .getOrElse { throw AppException.badRequest("INVALID_PARAMETER", "from") }
-        val pTo = runCatching { LocalDate.parse(to) }
-            .getOrElse { throw AppException.badRequest("INVALID_PARAMETER", "to") }
-        if (pFrom.isAfter(pTo)) throw AppException.badRequest("INVALID_PARAMETER", "from")
-        if (ChronoUnit.DAYS.between(pFrom, pTo) > 366L * 20L) {
-            throw AppException.badRequest("INVALID_PARAMETER", "range_too_wide")
-        }
-        service.moneyFlow(householdId, pFrom, pTo, level)
+        val window = AnalyticsRange.of(
+            AnalyticsRange.parseDate(from, "from"),
+            AnalyticsRange.parseDate(to, "to"),
+        )
+        service.moneyFlow(householdId, window.from, window.to, level)
     }!!
 
     @GetMapping("/top-movers")
@@ -147,6 +141,8 @@ class AnalyticsController(
         @PathVariable householdId: UUID,
         @RequestParam(defaultValue = "24") months: Int,
         @RequestParam(defaultValue = "expense") direction: String,
+        @RequestParam(required = false) from: String?,
+        @RequestParam(required = false) to: String?,
     ): HeatmapResponse = metrics.analyticsTimer("heatmap").record<HeatmapResponse> {
         val dir = when (direction) {
             "expense" -> Direction.expense
@@ -158,7 +154,7 @@ class AnalyticsController(
             months > 600 -> 9999 // "full history"
             else -> months
         }
-        service.heatmap(householdId, safeMonths, dir)
+        service.heatmap(householdId, safeMonths, dir, AnalyticsRange.parse(from, to)?.toMonthWindow())
     }!!
 
     @GetMapping("/daily")
@@ -173,15 +169,11 @@ class AnalyticsController(
             "income" -> Direction.income
             else -> throw AppException.badRequest("INVALID_PARAMETER", "direction")
         }
-        val pFrom = runCatching { LocalDate.parse(from) }
-            .getOrElse { throw AppException.badRequest("INVALID_PARAMETER", "from") }
-        val pTo = runCatching { LocalDate.parse(to) }
-            .getOrElse { throw AppException.badRequest("INVALID_PARAMETER", "to") }
-        if (pFrom.isAfter(pTo)) throw AppException.badRequest("INVALID_PARAMETER", "from")
-        if (ChronoUnit.DAYS.between(pFrom, pTo) > 366L * 20L) {
-            throw AppException.badRequest("INVALID_PARAMETER", "range_too_wide")
-        }
-        service.daily(householdId, pFrom, pTo, dir)
+        val window = AnalyticsRange.of(
+            AnalyticsRange.parseDate(from, "from"),
+            AnalyticsRange.parseDate(to, "to"),
+        )
+        service.daily(householdId, window.from, window.to, dir)
     }!!
 
     @GetMapping("/contribution-series")
@@ -200,10 +192,13 @@ class AnalyticsController(
     fun costOfLiving(
         @PathVariable householdId: UUID,
         @RequestParam(required = false) asOf: String?,
+        @RequestParam(required = false) from: String?,
+        @RequestParam(required = false) to: String?,
     ): CostOfLivingResponse {
         val ym = asOf?.let { YearMonth.parse(it) } ?: YearMonth.now()
+        val window = AnalyticsRange.parse(from, to)?.toMonthWindow()
         return metrics.analyticsTimer("cost_of_living").record<CostOfLivingResponse> {
-            service.costOfLiving(householdId, ym)
+            service.costOfLiving(householdId, ym, window)
         }!!
     }
 
@@ -214,6 +209,8 @@ class AnalyticsController(
         @RequestParam(required = false) scopeCode: String?,
         @RequestParam(defaultValue = "12") months: Int,
         @RequestParam(defaultValue = "false") yoyOverlay: Boolean,
+        @RequestParam(required = false) from: String?,
+        @RequestParam(required = false) to: String?,
     ): ExplorerResponse = metrics.analyticsTimer("explorer").record<ExplorerResponse> {
         if (scopeType != null && scopeType !in setOf("group", "category")) {
             throw AppException.badRequest("INVALID_PARAMETER", "scopeType")
@@ -226,6 +223,13 @@ class AnalyticsController(
             months > 600 -> 9999 // "full history"
             else -> months
         }
-        service.explorer(householdId, scopeType, scopeCode, safeMonths, yoyOverlay)
+        service.explorer(
+            householdId,
+            scopeType,
+            scopeCode,
+            safeMonths,
+            yoyOverlay,
+            AnalyticsRange.parse(from, to)?.toMonthWindow(),
+        )
     }!!
 }

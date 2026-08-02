@@ -558,29 +558,30 @@ class AnalyticsService(
         )
     }
 
+    /** The window a month-bucketed endpoint falls back to when the caller sends no explicit from/to:
+     *  `months` trailing months ending this month, or all history when `months` signals "full history". */
+    private fun trailingMonthWindow(householdId: UUID, months: Int): MonthWindow {
+        val today = YearMonth.now()
+        val start = if (months >= 9999) {
+            transactions.dateBounds(householdId).minDate?.let { YearMonth.from(it) } ?: today
+        } else {
+            today.minusMonths((months.coerceAtLeast(1) - 1).toLong())
+        }
+        return MonthWindow(minOf(start, today), today)
+    }
+
     @Transactional(readOnly = true)
     fun heatmap(
         householdId: UUID,
         months: Int,
         direction: Direction,
+        window: MonthWindow? = null,
     ): HeatmapResponse {
-        val today = YearMonth.now()
-        val safeMonths = months.coerceAtLeast(1)
-        val start = if (months >= 9999) {
-            // "full history"
-            val first = transactions.dateBounds(householdId).minDate?.let { YearMonth.from(it) } ?: today
-            first
-        } else {
-            today.minusMonths((safeMonths - 1).toLong())
-        }
-        val from = start.atDay(1)
-        val to = today.atEndOfMonth()
+        val w = window ?: trailingMonthWindow(householdId, months)
+        val from = w.start.atDay(1)
+        val to = w.end.atEndOfMonth()
 
-        val monthList = mutableListOf<YearMonth>()
-        run {
-            var cursor = start
-            while (!cursor.isAfter(today)) { monthList += cursor; cursor = cursor.plusMonths(1) }
-        }
+        val monthList = w.each()
         val monthIndex = monthList.withIndex().associate { (i, ym) -> ym.key() to i }
 
         val allCategories = categoryService.listForHousehold(householdId)
@@ -666,9 +667,11 @@ class AnalyticsService(
     }
 
     @Transactional(readOnly = true)
-    fun costOfLiving(householdId: UUID, asOf: YearMonth): CostOfLivingResponse {
-        val from = asOf.minusMonths(11).atDay(1)
-        val to = asOf.atEndOfMonth()
+    fun costOfLiving(householdId: UUID, asOf: YearMonth, window: MonthWindow? = null): CostOfLivingResponse {
+        // The average generalizes to "per month over the selected range"; trailing 12 is just the default.
+        val w = window ?: MonthWindow(asOf.minusMonths(11), asOf)
+        val from = w.start.atDay(1)
+        val to = w.end.atEndOfMonth()
         val rows = transactions.aggregationRows(householdId, from, to)
 
         val catMeta = categoryService.listForHousehold(householdId).associate { it.code to (it.essential to it.group) }
@@ -690,11 +693,13 @@ class AnalyticsService(
         }
         val allTotal = essentialTotal + nonEssentialTotal
 
+        // Months of the window the household could actually have data for. Shorter history divides by what
+        // exists rather than padding the range with zero months.
         val bounds = transactions.dateBounds(householdId)
         val monthsAvailable = bounds.minDate?.let { firstTx ->
-            val firstYm = YearMonth.from(firstTx)
-            val between = ChronoUnit.MONTHS.between(firstYm, asOf).toInt() + 1
-            between.coerceIn(0, 12)
+            val effectiveStart = maxOf(YearMonth.from(firstTx), w.start)
+            if (effectiveStart.isAfter(w.end)) 0
+            else (ChronoUnit.MONTHS.between(effectiveStart, w.end).toInt() + 1).coerceIn(0, w.months)
         } ?: 0
         val denom = monthsAvailable.coerceAtLeast(1).toBigDecimal()
 
@@ -716,8 +721,13 @@ class AnalyticsService(
             .sortedByDescending { it.monthlyAverage }
 
         return CostOfLivingResponse(
-            asOfYear = asOf.year,
-            asOfMonth = asOf.monthValue,
+            asOfYear = w.end.year,
+            asOfMonth = w.end.monthValue,
+            fromYear = w.start.year,
+            fromMonth = w.start.monthValue,
+            toYear = w.end.year,
+            toMonth = w.end.monthValue,
+            rangeMonths = w.months,
             monthsAvailable = monthsAvailable,
             essentialMonthlyAverage = Money.normalize(essentialMonthly),
             nonEssentialMonthlyAverage = Money.normalize(nonEssentialMonthly),
@@ -738,20 +748,16 @@ class AnalyticsService(
         scopeCode: String?,
         months: Int,
         yoyOverlay: Boolean,
+        window: MonthWindow? = null,
     ): ExplorerResponse {
         val today = YearMonth.now()
         val bounds = transactions.dateBounds(householdId)
         val firstTxYm = bounds.minDate?.let { YearMonth.from(it) }
 
-        val resolvedStart = if (months >= 9999) {
-            firstTxYm ?: today
-        } else {
-            today.minusMonths((months - 1).toLong())
-        }
-        val resolvedMonths = mutableListOf<YearMonth>().also { list ->
-            var cursor = resolvedStart
-            while (!cursor.isAfter(today)) { list += cursor; cursor = cursor.plusMonths(1) }
-        }
+        val w = window ?: trailingMonthWindow(householdId, months)
+        val resolvedStart = w.start
+        val windowEnd = w.end
+        val resolvedMonths = w.each()
 
         // Categories grouped by group code (e.g. "home", "transport", ...). Only expense kind matters for scope.
         val allCategories = categoryService.listForHousehold(householdId).filter { it.kind == Direction.expense.name }
@@ -778,11 +784,12 @@ class AnalyticsService(
                 ?: "home"
         }
 
-        // Pull range we need: current window plus optional prior-year window.
+        // Pull range we need: current window plus the optional overlay window, which is always the very
+        // same span shifted back one year — including when that span is a year-to-date or custom one.
         val priorStart = resolvedStart.minusYears(1)
-        val priorEnd = today.minusYears(1)
+        val priorEnd = windowEnd.minusYears(1)
         val rangeStart = (if (yoyOverlay) priorStart else resolvedStart).atDay(1)
-        val rangeEnd = today.atEndOfMonth()
+        val rangeEnd = windowEnd.atEndOfMonth()
         val rows = transactions.aggregationRows(householdId, rangeStart, rangeEnd)
 
         fun matchesScope(categoryCode: String): Boolean = when (effectiveType) {
@@ -799,7 +806,7 @@ class AnalyticsService(
             val ym = YearMonth.from(r.occurrenceDate)
             val k = ym.key()
             when {
-                !ym.isBefore(resolvedStart) && !ym.isAfter(today) ->
+                !ym.isBefore(resolvedStart) && !ym.isAfter(windowEnd) ->
                     currentTotals.merge(k, r.amount) { a, b -> a + b }
                 priorTotals != null && !ym.isBefore(priorStart) && !ym.isAfter(priorEnd) ->
                     priorTotals.merge(k, r.amount) { a, b -> a + b }
@@ -833,7 +840,7 @@ class AnalyticsService(
             val tx = transactions.findByHouseholdIdAndOccurrenceDateBetween(
                 householdId,
                 resolvedStart.atDay(1),
-                today.atEndOfMonth(),
+                windowEnd.atEndOfMonth(),
             )
             data class Bucket(var occurrences: Int = 0, var total: BigDecimal = BigDecimal.ZERO)
             val grouped = LinkedHashMap<String, Bucket>()
@@ -859,8 +866,11 @@ class AnalyticsService(
                 .sortedByDescending { it.totalAmount }
         } else null
 
+        // Whole years of history behind the window end: how many years the shifted overlay could reach
+        // into. Measured against the window rather than today, so a window sitting entirely in the past
+        // reports what was available *then*.
         val priorYearsAvailable = firstTxYm?.let {
-            ChronoUnit.MONTHS.between(it, today).toInt() / 12
+            ChronoUnit.MONTHS.between(it, windowEnd).toInt() / 12
         } ?: 0
 
         return ExplorerResponse(

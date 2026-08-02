@@ -4,6 +4,9 @@ import { useActiveHousehold } from "@/auth/AuthContext";
 import { useCostOfLiving, type CostOfLivingCategoryRow } from "@/api/analytics";
 import { useCategories, type Category } from "@/api/catalog";
 import { Card, CardBody, CardHeader } from "@/components/ui/primitives";
+import { RangeSelector } from "@/components/ui/RangeSelector";
+import { formatMonthSpan, isRangeComplete, resolveMonthRange } from "@/lib/range";
+import { useRangeState } from "@/lib/useRangeState";
 import { formatMoney, formatNumber } from "@/lib/money";
 import { categoryIcon } from "@/lib/categoryGroup";
 import { categoryLabelByCode } from "@/lib/categoryLabel";
@@ -66,8 +69,19 @@ function CategoryBreakdown({
 export function CostOfLivingTab() {
   const { t, i18n } = useTranslation();
   const household = useActiveHousehold();
-  const { data, isLoading } = useCostOfLiving(household.householdId);
+  const [range, setRange] = useRangeState("analytics.cost_of_living", "1y");
+  const rangeReady = isRangeComplete(range);
+  const { data, isLoading } = useCostOfLiving(household.householdId, resolveMonthRange(range), rangeReady);
   const { data: categories = [] } = useCategories(household.householdId);
+
+  // The window the server actually averaged over — for "All time" that's real data bounds, not a preset.
+  const windowSpan = data
+    ? formatMonthSpan(
+        { year: data.fromYear, month: data.fromMonth },
+        { year: data.toYear, month: data.toMonth },
+        i18n.language,
+      )
+    : "";
 
   return (
     <div className="space-y-4">
@@ -79,7 +93,11 @@ export function CostOfLivingTab() {
           </p>
         </CardHeader>
         <CardBody className="space-y-6">
-          {isLoading && <p className="text-gray-500 dark:text-gray-400">{t("common.loading")}</p>}
+          <div className="flex flex-wrap items-end gap-3">
+            <RangeSelector value={range} onChange={setRange} granularity="month" />
+          </div>
+
+          {rangeReady && isLoading && <p className="text-gray-500 dark:text-gray-400">{t("common.loading")}</p>}
 
           {!isLoading && data && data.monthsAvailable === 0 && (
             <p className="text-gray-500 dark:text-gray-400">{t("analytics.cost_of_living_no_data")}</p>
@@ -108,7 +126,7 @@ export function CostOfLivingTab() {
                   })}
                 </p>
                 <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
-                  {t("analytics.cost_of_living_window", { count: data.monthsAvailable })}
+                  {t("analytics.cost_of_living_window", { span: windowSpan, count: data.monthsAvailable })}
                 </p>
               </div>
 

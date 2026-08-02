@@ -5,7 +5,10 @@ import { useActiveHousehold } from "@/auth/AuthContext";
 import { useDailyTotals, useYearsAvailable, type DailyPoint } from "@/api/analytics";
 import { useCategories, type Category } from "@/api/catalog";
 import { useTransactions, type Transaction } from "@/api/transactions";
-import { Button, Card, CardBody, CardHeader, Label, Select } from "@/components/ui/primitives";
+import { Button, Card, CardBody, CardHeader } from "@/components/ui/primitives";
+import { RangeSelector } from "@/components/ui/RangeSelector";
+import { isRangeComplete, rangeLabel, resolveDayBounds } from "@/lib/range";
+import { useRangeState } from "@/lib/useRangeState";
 import { formatDate, monthName, weekdayName } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { categoryIcon } from "@/lib/categoryGroup";
@@ -14,7 +17,6 @@ import { hexWithAlpha } from "@/lib/color";
 import { cn } from "@/lib/cn";
 
 type YearMonth = { year: number; month: number };
-type DailyRange = "3m" | "12m" | "ytd" | "all";
 
 const EXPENSE_HUE = "#0ea5e9";
 const HIGHLIGHT_HUE = "#0369a1";
@@ -63,26 +65,6 @@ function monthBounds(ym: YearMonth): { from: string; to: string } {
   return { from: isoDate(ym.year, ym.month, 1), to: isoDate(ym.year, ym.month, daysInMonth(ym)) };
 }
 
-function rangeBounds(range: DailyRange, yearsAvail: number[]): { from: string; to: string } {
-  const today = new Date();
-  const to = todayIso();
-  if (range === "3m") {
-    const d = new Date(today);
-    d.setMonth(d.getMonth() - 3);
-    return { from: isoDate(d.getFullYear(), d.getMonth() + 1, d.getDate()), to };
-  }
-  if (range === "12m") {
-    const d = new Date(today);
-    d.setFullYear(d.getFullYear() - 1);
-    return { from: isoDate(d.getFullYear(), d.getMonth() + 1, d.getDate()), to };
-  }
-  if (range === "ytd") {
-    return { from: `${today.getFullYear()}-01-01`, to };
-  }
-  const earliest = yearsAvail.length ? Math.min(...yearsAvail) : today.getFullYear();
-  return { from: `${earliest}-01-01`, to };
-}
-
 function daysBetweenInclusive(fromIso: string, toIso: string): number {
   const [fy, fm, fd] = fromIso.split("-").map(Number);
   const [ty, tm, td] = toIso.split("-").map(Number);
@@ -95,10 +77,6 @@ function shortAmount(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n));
 }
 
-function rangeLabelKey(range: DailyRange): string {
-  return `analytics.daily_range_${range}`;
-}
-
 export function DailyTab() {
   const { t, i18n } = useTranslation();
   const household = useActiveHousehold();
@@ -106,26 +84,29 @@ export function DailyTab() {
 
   const [selectedMonth, setSelectedMonth] = useState<YearMonth>(todayYearMonth());
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const [range, setRange] = useState<DailyRange>("12m");
+  const [range, setRange] = useRangeState("analytics.daily", "1y");
 
   const { data: yearsData } = useYearsAvailable(household.householdId);
-  const yearsAvail = yearsData?.years ?? [];
+  const yearsAvail = useMemo(() => yearsData?.years ?? [], [yearsData]);
 
   const calMonth = useMemo(() => monthBounds(selectedMonth), [selectedMonth]);
   const calendar = useDailyTotals(household.householdId, calMonth.from, calMonth.to, "expense");
 
-  const patternRange = useMemo(() => rangeBounds(range, yearsAvail), [range, yearsAvail]);
+  // Day precision here: the pattern charts bucket by weekday and day-of-month, so a custom range
+  // means exactly the days picked. "All time" needs a real floor, which years-available supplies.
+  const earliestIso = yearsAvail.length ? `${Math.min(...yearsAvail)}-01-01` : undefined;
+  const patternRange = useMemo(() => resolveDayBounds(range, earliestIso), [range, earliestIso]);
   const patterns = useDailyTotals(
     household.householdId,
     patternRange.from,
     patternRange.to,
     "expense",
-    yearsAvail.length > 0 || range !== "all",
+    isRangeComplete(range) && (yearsAvail.length > 0 || range.preset !== "all"),
   );
 
   const { data: categories = [] } = useCategories(household.householdId);
 
-  const rangeLabel = t(rangeLabelKey(range));
+  const activeRangeLabel = rangeLabel(range, t, locale);
 
   return (
     <div className="space-y-4">
@@ -170,7 +151,7 @@ export function DailyTab() {
                 patternPoints={patterns.data?.days ?? []}
                 patternFrom={patternRange.from}
                 patternTo={patternRange.to}
-                rangeLabel={rangeLabel}
+                rangeLabel={activeRangeLabel}
                 categories={categories}
                 householdId={household.householdId}
                 currency={household.currency}
@@ -187,14 +168,8 @@ export function DailyTab() {
           <p className="font-medium">{t("analytics.daily_pattern_range")}</p>
         </CardHeader>
         <CardBody className="space-y-4">
-          <div className="max-w-xs">
-            <Label>{t("analytics.daily_pattern_range")}</Label>
-            <Select value={range} onChange={(e) => setRange(e.target.value as DailyRange)}>
-              <option value="3m">{t("analytics.daily_range_3m")}</option>
-              <option value="12m">{t("analytics.daily_range_12m")}</option>
-              <option value="ytd">{t("analytics.daily_range_ytd")}</option>
-              <option value="all">{t("analytics.daily_range_all")}</option>
-            </Select>
+          <div className="flex flex-wrap items-end gap-3">
+            <RangeSelector value={range} onChange={setRange} />
           </div>
           <DailyPatternCharts
             points={patterns.data?.days ?? []}

@@ -5,7 +5,8 @@ import { useSnapshots } from "@/api/networth";
 import { useContributionSeries } from "@/api/analytics";
 import { useAssetClasses } from "@/api/catalog";
 import { Card, CardBody, CardHeader } from "@/components/ui/primitives";
-import { RangeSelector, defaultRange, type RangeValue } from "@/components/ui/RangeSelector";
+import { RangeSelector } from "@/components/ui/RangeSelector";
+import { defaultRange, type RangeValue } from "@/lib/range";
 import {
   Area,
   AreaChart,

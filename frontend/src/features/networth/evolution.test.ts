@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultRange } from "@/components/ui/RangeSelector";
+import { defaultRange } from "@/lib/range";
 import { buildEvolutionRows, filterSnapshotsByRange, LIABILITIES_KEY, type SnapshotLike } from "./evolution";
 
 const assetClasses = [{ code: "cash" }, { code: "stocks" }, { code: "crypto" }];

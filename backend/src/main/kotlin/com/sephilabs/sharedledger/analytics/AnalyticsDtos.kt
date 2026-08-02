@@ -242,8 +242,16 @@ data class CostOfLivingCategoryRow(
 )
 
 data class CostOfLivingResponse(
+    // asOf* mirrors the window end and predates the range selector; kept so older clients keep working.
     val asOfYear: Int,
     val asOfMonth: Int,
+    // The window actually averaged over. rangeMonths is its length; monthsAvailable is how much of it the
+    // household has data for, and is the divisor behind every average below.
+    val fromYear: Int,
+    val fromMonth: Int,
+    val toYear: Int,
+    val toMonth: Int,
+    val rangeMonths: Int,
     val monthsAvailable: Int,
     @JsonFormat(shape = JsonFormat.Shape.STRING) val essentialMonthlyAverage: BigDecimal,
     @JsonFormat(shape = JsonFormat.Shape.STRING) val nonEssentialMonthlyAverage: BigDecimal,

@@ -327,17 +327,24 @@ export function useRecurringShare(householdId: string, params: RecurringSharePar
   });
 }
 
+/** Month-bucketed endpoints take an explicit `from`/`to` when the range has one, and fall back to
+ *  `months` when it doesn't ("All time" is the only range that leaves the window to the server). */
+export interface MonthRangeParams {
+  months: number;
+  from?: string;
+  to?: string;
+}
+
 export function useHeatmap(
   householdId: string,
-  months: number,
-  direction: "expense" | "income",
+  params: MonthRangeParams & { direction: "expense" | "income" },
   enabled = true,
 ) {
   return useQuery({
-    queryKey: ["analytics", householdId, "heatmap", months, direction],
+    queryKey: ["analytics", householdId, "heatmap", params],
     queryFn: async () =>
       (await apiClient.get<HeatmapResponse>(`/households/${householdId}/analytics/heatmap`, {
-        params: { months, direction },
+        params,
       })).data,
     enabled,
   });
@@ -360,6 +367,11 @@ export interface CostOfLivingCategoryRow {
 export interface CostOfLivingResponse {
   asOfYear: number;
   asOfMonth: number;
+  fromYear: number;
+  fromMonth: number;
+  toYear: number;
+  toMonth: number;
+  rangeMonths: number;
   monthsAvailable: number;
   essentialMonthlyAverage: string;
   nonEssentialMonthlyAverage: string;
@@ -372,11 +384,18 @@ export interface CostOfLivingResponse {
   nonEssentialCategories: CostOfLivingCategoryRow[];
 }
 
-export function useCostOfLiving(householdId: string) {
+export function useCostOfLiving(
+  householdId: string,
+  params: { from?: string; to?: string } = {},
+  enabled = true,
+) {
   return useQuery({
-    queryKey: ["analytics", householdId, "cost-of-living"],
+    queryKey: ["analytics", householdId, "cost-of-living", params],
     queryFn: async () =>
-      (await apiClient.get<CostOfLivingResponse>(`/households/${householdId}/analytics/cost-of-living`)).data,
+      (await apiClient.get<CostOfLivingResponse>(`/households/${householdId}/analytics/cost-of-living`, {
+        params,
+      })).data,
+    enabled,
   });
 }
 
@@ -412,10 +431,9 @@ export interface ExplorerResponse {
   topDescriptions: ExplorerDescriptionRow[] | null;
 }
 
-export interface ExplorerParams {
+export interface ExplorerParams extends MonthRangeParams {
   scopeType?: "group" | "category";
   scopeCode?: string;
-  months: number;
   yoyOverlay: boolean;
 }
 
@@ -431,6 +449,8 @@ export function useExplorer(householdId: string, params: ExplorerParams, enabled
         query.scopeType = params.scopeType;
         query.scopeCode = params.scopeCode;
       }
+      if (params.from) query.from = params.from;
+      if (params.to) query.to = params.to;
       return (await apiClient.get<ExplorerResponse>(`/households/${householdId}/analytics/explorer`, {
         params: query,
       })).data;

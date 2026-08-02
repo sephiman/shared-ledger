@@ -12,21 +12,15 @@ import {
     Label,
     Select
 } from "@/components/ui/primitives";
-import {
-    defaultRange,
-    RangeSelector,
-    rangeToMonths,
-    type RangeValue,
-    resolveRange,
-} from "@/components/ui/RangeSelector";
+import {RangeSelector} from "@/components/ui/RangeSelector";
+import {isRangeComplete, monthRangeParams} from "@/lib/range";
+import {useRangeState} from "@/lib/useRangeState";
 import {Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis,} from "recharts";
 import {formatCompactMoney, formatMoney, formatNumber} from "@/lib/money";
 import {monthName} from "@/lib/dates";
 import {categoryIcon, groupIcon} from "@/lib/categoryGroup";
 import {categoryLabel} from "@/lib/categoryLabel";
 import {ChartTooltip} from "@/components/charts/ChartTooltip";
-
-type Range = "12" | "24" | "all";
 
 const CURRENT_COLOR = "#0ea5e9";
 const PRIOR_COLOR = "#94a3b8";
@@ -56,18 +50,21 @@ export function ExplorerTab() {
   const household = useActiveHousehold();
   const { data: categories = [] } = useCategories(household.householdId);
   const [scope, setScope] = useState<ScopeValue | null>(null);
-  const [range, setRange] = useState<Range>("12");
+  const [range, setRange] = useRangeState("analytics.explorer", "1y");
   const [yoyOverlay, setYoyOverlay] = useState<boolean>(true);
   const [showAllDescriptions, setShowAllDescriptions] = useState<boolean>(false);
 
-  const months = range === "all" ? 9999 : Number(range);
-
-  const { data, isLoading } = useExplorer(household.householdId, {
-    scopeType: scope?.type,
-    scopeCode: scope?.code,
-    months,
-    yoyOverlay,
-  });
+  const rangeReady = isRangeComplete(range);
+  const { data, isLoading } = useExplorer(
+    household.householdId,
+    {
+      scopeType: scope?.type,
+      scopeCode: scope?.code,
+      ...monthRangeParams(range),
+      yoyOverlay,
+    },
+    rangeReady,
+  );
 
   // Adopt the server-resolved scope on first load so the dropdown reflects the default.
   useEffect(() => {
@@ -76,11 +73,13 @@ export function ExplorerTab() {
     }
   }, [data, scope]);
 
-  // Hide the toggle entirely when there's not enough prior data to overlay.
+  // Hide the toggle entirely when there's not enough prior data to overlay. Only once the server has
+  // answered — before that `data` is undefined, and acting on it would switch the overlay off on every
+  // first load rather than only when the range genuinely has no year behind it.
   const yoyAvailable = (data?.priorYearsAvailable ?? 0) >= 1;
   useEffect(() => {
-    if (!yoyAvailable && yoyOverlay) setYoyOverlay(false);
-  }, [yoyAvailable, yoyOverlay]);
+    if (data && !yoyAvailable && yoyOverlay) setYoyOverlay(false);
+  }, [data, yoyAvailable, yoyOverlay]);
 
   const scopeOptions = useMemo(() => buildScopeOptions(categories, t), [categories, t]);
 
@@ -92,8 +91,8 @@ export function ExplorerTab() {
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("analytics.explorer_description")}</p>
         </CardHeader>
         <CardBody className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <div>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="w-full sm:w-64">
               <Label>{t("analytics.explorer_scope")}</Label>
               <Select
                 value={scope ? encodeScope(scope) : ""}
@@ -117,14 +116,7 @@ export function ExplorerTab() {
                 ))}
               </Select>
             </div>
-            <div>
-              <Label>{t("analytics.explorer_range")}</Label>
-              <Select value={range} onChange={(e) => setRange(e.target.value as Range)}>
-                <option value="12">{t("analytics.range_12")}</option>
-                <option value="24">{t("analytics.range_24")}</option>
-                <option value="all">{t("analytics.range_all")}</option>
-              </Select>
-            </div>
+            <RangeSelector value={range} onChange={setRange} granularity="month" />
             {yoyAvailable && (
               <div>
                 <Label>{t("analytics.explorer_yoy")}</Label>
@@ -141,7 +133,7 @@ export function ExplorerTab() {
             )}
           </div>
 
-          {isLoading && <p className="text-gray-500 dark:text-gray-400">{t("common.loading")}</p>}
+          {rangeReady && isLoading && <p className="text-gray-500 dark:text-gray-400">{t("common.loading")}</p>}
 
           {!isLoading && data && (
             <ExplorerBody
@@ -352,14 +344,6 @@ const STACK_TOTAL_COLOR = "#64748b"; // slate
 
 const TOTAL_DATA_KEY = "__total";
 
-function ymKey(year: number, month: number): number {
-  return year * 12 + (month - 1);
-}
-
-function isoMonthKey(iso: string): number {
-  return Number(iso.slice(0, 4)) * 12 + (Number(iso.slice(5, 7)) - 1);
-}
-
 interface StackBand {
   key: string;
   scope: ScopeValue;
@@ -403,11 +387,15 @@ function StackedExplorerPanel({
 }) {
   const { t } = useTranslation();
   const [selection, setSelection] = useState<string[]>([]);
-  const [range, setRange] = useState<RangeValue>(defaultRange("1y"));
+  const [range, setRange] = useRangeState("analytics.explorer.stacked", "1y");
   const [showTotal, setShowTotal] = useState(true);
 
-  const months = rangeToMonths(range);
-  const { data: heatmap, isLoading } = useHeatmap(householdId, months, "expense");
+  const rangeReady = isRangeComplete(range);
+  const { data: heatmap, isLoading } = useHeatmap(
+    householdId,
+    { ...monthRangeParams(range), direction: "expense" },
+    rangeReady,
+  );
 
   const tree = useMemo(() => buildScopeTree(categories, t), [categories, t]);
 
@@ -461,14 +449,6 @@ function StackedExplorerPanel({
     const empty = { chartData: [] as Record<string, number | string>[], bands: [] as StackBand[], total: 0, monthsCount: 0 };
     if (!heatmap) return empty;
 
-    const bounds = resolveRange(range);
-    const fromKey = bounds.from ? isoMonthKey(bounds.from) : -Infinity;
-    const toKey = bounds.to ? isoMonthKey(bounds.to) : Infinity;
-    const keptIdx = heatmap.months
-      .map((m, i) => ({ i, k: ymKey(m.year, m.month) }))
-      .filter(({ k }) => k >= fromKey && k <= toKey)
-      .map(({ i }) => i);
-
     const catValues = new Map<string, (string | null)[]>();
     const catsByGroup = new Map<string, string[]>();
     for (const row of heatmap.categories) {
@@ -503,8 +483,7 @@ function StackedExplorerPanel({
     };
 
     let total = 0;
-    const chartData = keptIdx.map((i) => {
-      const m = heatmap.months[i];
+    const chartData = heatmap.months.map((m, i) => {
       const row: Record<string, number | string> = {
         period: `${monthName(m.month, locale, "short")} ${String(m.year).slice(2)}`,
       };
@@ -519,8 +498,8 @@ function StackedExplorerPanel({
       return row;
     });
 
-    return { chartData, bands, total, monthsCount: keptIdx.length };
-  }, [heatmap, range, selection, categories, locale, t]);
+    return { chartData, bands, total, monthsCount: heatmap.months.length };
+  }, [heatmap, selection, categories, locale, t]);
 
   const avgPerMonth = monthsCount > 0 ? total / monthsCount : 0;
   const hasSelection = bands.length > 0;

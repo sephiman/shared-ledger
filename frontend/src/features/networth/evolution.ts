@@ -1,4 +1,4 @@
-import { resolveRange, type RangeValue } from "@/components/ui/RangeSelector";
+import { resolveRange, type RangeValue } from "@/lib/range";
 
 /** Legend/toggle keys for the non-asset-class series (asset classes use their own `code`). */
 export const NET_WORTH_KEY = "netWorth";
