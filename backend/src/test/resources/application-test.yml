@@ -1,6 +1,8 @@
 spring:
   flyway:
     enabled: true
+    # TestSchemaResetConfig cleans before it migrates, so a container reused across runs starts empty.
+    clean-disabled: false
   jpa:
     hibernate:
       ddl-auto: validate
@@ -41,7 +43,9 @@ app:
     min-request-interval-ms: 0
     backfill-days: 90
   registration:
-    mode: invite-only
+    # Open for the whole profile rather than a @TestPropertySource on the one class that registers:
+    # any property override forks a second Spring context, and booting one is the suite's biggest cost.
+    mode: open
   bootstrap:
     admin-email: "admin@example.com"
     admin-password: "TestAdminPass123!"

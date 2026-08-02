@@ -14,6 +14,7 @@ import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.parallel.ResourceLock
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.web.context.request.RequestContextHolder
@@ -23,6 +24,7 @@ import tools.jackson.databind.ObjectMapper
 /** Per-household credentials: what may be pasted, what the API returns, and what happens to connections
  *  when the configured application changes. A bank ties its consent to one application, so syncing under a
  *  different one is impossible and must be *said*, not silently attempted. */
+@ResourceLock("fake-bank-connector")
 class BankCredentialsIntegrationTest @Autowired constructor(
     private val users: UserRepository,
     private val households: HouseholdRepository,

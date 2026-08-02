@@ -8,11 +8,13 @@ import com.sephilabs.sharedledger.identity.user.UserRepository
 import com.sephilabs.sharedledger.portfolio.price.SymbolCandidate
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.parallel.ResourceLock
 import org.springframework.beans.factory.annotation.Autowired
 import java.io.ByteArrayInputStream
 import java.math.BigDecimal
 import java.nio.charset.StandardCharsets
 
+@ResourceLock("stub-price-providers")
 class PortfolioImportIntegrationTest @Autowired constructor(
     private val users: UserRepository,
     private val households: HouseholdRepository,

@@ -4,11 +4,14 @@ import com.sephilabs.sharedledger.bank.FakeBankConnectorConfig
 import com.sephilabs.sharedledger.notification.RecordingTelegramConfig
 import com.sephilabs.sharedledger.portfolio.StubPriceProviderConfig
 import com.sephilabs.sharedledger.portfolio.benchmark.StubBenchmarkSourceConfig
+import org.springframework.boot.flyway.autoconfigure.FlywayMigrationStrategy
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
+import org.springframework.security.crypto.argon2.Argon2PasswordEncoder
+import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.test.context.ActiveProfiles
 import org.testcontainers.containers.PostgreSQLContainer
 import java.util.concurrent.Executor
@@ -38,6 +41,29 @@ class TestBackfillExecutorConfig {
         val worker = Executors.newSingleThreadExecutor()
         return Executor { task -> worker.submit(task).get() }
     }
+
+    /** Replaces the production `passwordEncoder` (excluded from the test profile). Argon2 at production
+     *  strength is ~50ms a hash by design, and the suite hashes on every register, login and seeded user.
+     *  Same algorithm and the same encode/matches code path — only the work factor drops, so a hash
+     *  written under this encoder still verifies under it. */
+    @Bean("passwordEncoder")
+    fun passwordEncoder(): PasswordEncoder = Argon2PasswordEncoder(16, 32, 1, 1024, 1)
+}
+
+/**
+ * Rebuilds the schema once per run, in place of Flyway's plain migrate. A container reused across runs
+ * (see [IntegrationTestBase.postgres]) still holds the previous run's rows, and the suite writes to
+ * tables keyed globally rather than per household — prices, fx rates, benchmark series — where a
+ * leftover row is a duplicate-key failure. Clean rather than truncate because the migrations seed
+ * reference data the suite reads back. Costs ~0.3s against the several seconds a container start takes.
+ */
+@TestConfiguration
+class TestSchemaResetConfig {
+    @Bean
+    fun flywayMigrationStrategy() = FlywayMigrationStrategy { flyway ->
+        flyway.clean()
+        flyway.migrate()
+    }
 }
 
 /**
@@ -51,6 +77,7 @@ class TestBackfillExecutorConfig {
 @SpringBootTest
 @ActiveProfiles("test")
 @Import(
+    TestSchemaResetConfig::class,
     TestBackfillExecutorConfig::class,
     StubPriceProviderConfig::class,
     FakeBankConnectorConfig::class,
@@ -66,6 +93,10 @@ abstract class IntegrationTestBase {
             .withDatabaseName("sharedledger_test")
             .withUsername("test")
             .withPassword("test")
+            // No-op unless the developer opts in with `testcontainers.reuse.enable=true` in
+            // ~/.testcontainers.properties, so CI keeps getting a throwaway container. When it is on,
+            // [TestSchemaResetConfig] supplies the clean slate a fresh container gave for free.
+            .withReuse(true)
             .also { it.start() }
     }
 }

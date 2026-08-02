@@ -6,6 +6,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.assertj.core.api.Assertions.catchThrowableOfType
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.parallel.ResourceLock
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.test.web.client.MockRestServiceServer
@@ -20,6 +21,7 @@ import java.util.Base64
 /** Covers what [com.sephilabs.sharedledger.bank.FakeBankConnector] bypasses: the JSON → [BankMovement]
  *  mapping and the provider's error bodies. Drives the real connector over a mocked HTTP layer so ASPSP
  *  quirks (ING pending entries, Bankinter's `ASPSP_ERROR`) are exercised end-to-end. */
+@ResourceLock("fake-bank-connector")
 class EnableBankingConnectorMappingTest {
 
     private val props = AppProperties(

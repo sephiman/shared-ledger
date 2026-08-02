@@ -608,6 +608,21 @@ The `.env` file is git-ignored. `docker compose` reads it implicitly and the bac
 docker compose up -d --build
 ```
 
+The backend image builds through BuildKit cache mounts holding Gradle's dependency cache and its
+incremental-compile state, so a rebuild after a code change recompiles only what changed instead of the
+whole module. The first build on a machine has nothing to reuse and takes the full time.
+
+That state surviving between builds is the whole point, and also the thing to distrust when a build
+behaves oddly. To rebuild from nothing — empty caches, no reused layers:
+
+```bash
+docker compose build --no-cache backend
+```
+
+The `backend-image` CI job builds the same way on a runner that has no caches at all, so the
+from-scratch path is exercised on every push. `docker builder prune` also empties the mounts, along with
+everything else.
+
 What happens on first boot:
 
 1. Flyway applies all migrations against the configured database.
@@ -987,6 +1002,21 @@ Tests:
 cd backend && ./gradlew test    # Testcontainers spins up Postgres
 cd frontend && npm test
 ```
+
+The backend suite boots one Spring context and runs its test classes four at a time against it
+(`backend/src/test/resources/junit-platform.properties`). Classes that seed a shared stub bean, or that
+write to a table keyed globally rather than per household — asset prices, fx rates, benchmark series —
+must carry a matching `@ResourceLock`, otherwise they collide with whatever runs alongside them.
+
+To keep the Postgres container alive between runs instead of starting a fresh one each time:
+
+```bash
+echo 'testcontainers.reuse.enable=true' >> ~/.testcontainers.properties
+```
+
+The suite cleans and re-migrates the schema at startup, so a reused container still starts empty. The
+container stays running afterwards; `docker rm -f` it when you want it gone. CI leaves this off and gets
+a throwaway container.
 
 ---
 

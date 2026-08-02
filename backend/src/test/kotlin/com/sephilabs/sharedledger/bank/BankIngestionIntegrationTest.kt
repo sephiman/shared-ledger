@@ -26,6 +26,7 @@ import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.parallel.ResourceLock
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.data.domain.PageRequest
 import org.springframework.mock.web.MockHttpServletRequest
@@ -35,6 +36,7 @@ import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
 
+@ResourceLock("fake-bank-connector")
 class BankIngestionIntegrationTest @Autowired constructor(
     private val users: UserRepository,
     private val households: HouseholdRepository,

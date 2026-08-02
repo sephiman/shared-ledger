@@ -13,11 +13,9 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
-import org.springframework.test.context.TestPropertySource
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import org.springframework.web.context.WebApplicationContext
 
-@TestPropertySource(properties = ["app.registration.mode=open"])
 class AuthRegistrationFlowTest @Autowired constructor(
     private val context: WebApplicationContext,
 ) : IntegrationTestBase() {

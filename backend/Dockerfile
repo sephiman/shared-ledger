@@ -3,10 +3,14 @@ WORKDIR /workspace
 
 COPY settings.gradle.kts build.gradle.kts gradle.properties ./
 COPY gradle ./gradle
-RUN gradle --no-daemon dependencies > /dev/null 2>&1 || true
-
 COPY src ./src
-RUN gradle --no-daemon bootJar -x test
+
+RUN --mount=type=cache,id=shared-ledger-gradle-home,target=/root/.gradle,sharing=locked \
+    --mount=type=cache,id=shared-ledger-gradle-project,target=/workspace/.gradle,sharing=locked \
+    --mount=type=cache,id=shared-ledger-gradle-build,target=/workspace/build,sharing=locked \
+    rm -rf build/libs \
+    && gradle --no-daemon bootJar -x test \
+    && cp build/libs/*.jar /workspace/app.jar
 
 FROM eclipse-temurin:25-jre AS runtime
 # temurin:25-jre's base image no longer ships wget/curl; install curl for the health check.
@@ -15,8 +19,7 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 RUN groupadd -g 10001 app && useradd -u 10001 -g app -m -d /app -s /usr/sbin/nologin app
 WORKDIR /app
-COPY --from=build /workspace/build/libs/*.jar /app/app.jar
-RUN chown -R app:app /app
+COPY --chown=app:app --from=build /workspace/app.jar /app/app.jar
 USER app:app
 
 EXPOSE 8080 9090
