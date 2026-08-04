@@ -10,10 +10,12 @@ import {
   useUpdateConnection,
   type BankConnection,
   type ConnectionStatus,
+  type StartLinkInput,
 } from "@/api/banks";
 import { apiErrorMessage } from "@/api/client";
 import { formatDate } from "@/lib/dates";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select } from "@/components/ui/primitives";
+import { showWhitelistPhase } from "./whitelistInstructionsBus";
 
 // Common SEPA / open-banking countries; the ASPSP catalogue itself comes from the provider.
 const COUNTRIES = ["NL", "ES", "DE", "FR", "BE", "IT", "PT", "IE", "AT", "FI", "GB"];
@@ -41,7 +43,16 @@ function isCredentialState(status: ConnectionStatus): boolean {
  *  shared; managing a row is gated by `connection.canManage`, mirroring the server check. Rendered when the
  *  household has credentials **or** still has connections, so the ones left behind stay visible with the
  *  status that says why. */
-export function BanksCard({ householdId, locale }: { householdId: string; locale: string }) {
+export function BanksCard({
+  householdId,
+  locale,
+  canReviewInstructions = false,
+}: {
+  householdId: string;
+  locale: string;
+  /** Whether the setup instructions are on this page to jump back to — they live in the owner-only card. */
+  canReviewInstructions?: boolean;
+}) {
   const { t } = useTranslation();
   const { data: connections = [] } = useBankConnections(householdId);
   const { data: config } = useBankConfig(householdId);
@@ -66,20 +77,42 @@ export function BanksCard({ householdId, locale }: { householdId: string; locale
   // Without credentials the catalogue call would only ever return BANK_CREDENTIALS_REQUIRED.
   const { data: aspsps = [], isLoading: aspspsLoading } = useAspsps(householdId, country, canLink);
 
-  const beginLink = async (relinkConnectionId?: string, presetAspsp?: string, presetCountry?: string) => {
+  // Linking before whitelisting the account in the Control Panel is invisible afterwards — the connection
+  // shows active and syncs nothing — and the written instructions haven't stopped it, so the household's
+  // very first link asks once. Any existing connection means this household has been through it already;
+  // acknowledging holds for the rest of the visit, so repeat links and re-links never see the dialog.
+  const firstLinkForHousehold = (config?.connectionCount ?? 0) === 0;
+  const [whitelistAcked, setWhitelistAcked] = useState(false);
+  const [checkpointLink, setCheckpointLink] = useState<StartLinkInput | null>(null);
+
+  const runLink = async (input: StartLinkInput) => {
     setLinkError(null);
-    const name = presetAspsp ?? aspspName;
-    const ctry = presetCountry ?? country;
-    if (!name) {
-      setLinkError(t("banks.pick_bank"));
-      return;
-    }
     try {
-      const res = await startLink.mutateAsync({ aspspName: name, country: ctry, label: label || undefined, relinkConnectionId });
+      const res = await startLink.mutateAsync(input);
       window.location.href = res.authUrl;
     } catch (err) {
       setLinkError(apiErrorMessage(err, t));
     }
+  };
+
+  const beginLink = (relinkConnectionId?: string, presetAspsp?: string, presetCountry?: string) => {
+    setLinkError(null);
+    const name = presetAspsp ?? aspspName;
+    if (!name) {
+      setLinkError(t("banks.pick_bank"));
+      return;
+    }
+    const input: StartLinkInput = {
+      aspspName: name,
+      country: presetCountry ?? country,
+      label: label || undefined,
+      relinkConnectionId,
+    };
+    if (firstLinkForHousehold && !whitelistAcked) {
+      setCheckpointLink(input);
+      return;
+    }
+    void runLink(input);
   };
 
   return (
@@ -162,7 +195,62 @@ export function BanksCard({ householdId, locale }: { householdId: string; locale
           </ul>
         )}
       </CardBody>
+
+      {checkpointLink && (
+        <WhitelistCheckpointDialog
+          canReviewInstructions={canReviewInstructions}
+          onContinue={() => {
+            setWhitelistAcked(true);
+            const input = checkpointLink;
+            setCheckpointLink(null);
+            void runLink(input);
+          }}
+          onReview={() => {
+            setCheckpointLink(null);
+            showWhitelistPhase();
+          }}
+          onClose={() => setCheckpointLink(null)}
+        />
+      )}
     </Card>
+  );
+}
+
+/** One-time-per-household reminder shown between "Link bank" and the redirect to the bank. */
+function WhitelistCheckpointDialog({
+  canReviewInstructions,
+  onContinue,
+  onReview,
+  onClose,
+}: {
+  canReviewInstructions: boolean;
+  onContinue: () => void;
+  onReview: () => void;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 px-4 py-8"
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+    >
+      <Card className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+        <CardHeader>
+          <p className="font-medium">{t("banks.whitelist_check_title")}</p>
+        </CardHeader>
+        <CardBody className="space-y-3">
+          <p className="text-sm text-gray-600 dark:text-gray-300">{t("banks.whitelist_check_body")}</p>
+          <div className="flex flex-wrap justify-end gap-2">
+            {canReviewInstructions && (
+              <Button variant="secondary" onClick={onReview}>{t("banks.whitelist_check_review")}</Button>
+            )}
+            <Button onClick={onContinue}>{t("banks.whitelist_check_continue")}</Button>
+          </div>
+        </CardBody>
+      </Card>
+    </div>
   );
 }
 

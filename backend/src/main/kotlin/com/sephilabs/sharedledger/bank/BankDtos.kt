@@ -157,6 +157,31 @@ data class ConfirmAsMovementRequest(
     val note: String? = null,
 )
 
+/** A manual transaction a pending item could *replace* instead of duplicating. [bankLinked] ones already
+ *  resolve another movement, so they can't be replaced — returned anyway so the dialog can say why. */
+data class DuplicateCandidateDto(
+    val transactionId: UUID,
+    val occurrenceDate: LocalDate,
+    val direction: Direction,
+    val categoryCode: String,
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    val amount: BigDecimal,
+    val description: String?,
+    val recurringTemplateId: UUID?,
+    val bankLinked: Boolean,
+)
+
+/** Null [categoryCode]/[direction] keep the transaction's own values; null [description] falls back to the
+ *  bank-derived one. */
+data class ReplaceTransactionRequest(
+    @field:NotNull(message = "validation.required")
+    val transactionId: UUID,
+    val categoryCode: String? = null,
+    val direction: Direction? = null,
+    @field:Size(max = 500)
+    val description: String? = null,
+)
+
 data class EditMovementRequest(
     val suggestedCategoryCode: String? = null,
     val direction: Direction? = null,

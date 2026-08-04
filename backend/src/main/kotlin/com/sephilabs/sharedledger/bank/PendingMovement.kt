@@ -113,6 +113,18 @@ interface PendingMovementRepository : JpaRepository<PendingMovement, UUID> {
 
     fun existsByConnectionIdAndBankMovementId(connectionId: UUID, bankMovementId: String): Boolean
 
+    /** A transaction backs at most one movement, so an already-linked one can't be replaced again. */
+    fun existsByCreatedTransactionIdAndIdNot(createdTransactionId: UUID, id: UUID): Boolean
+
+    /** Which of [ids] are already linked, in one query instead of one per candidate. */
+    @Query(
+        """
+        SELECT m.createdTransactionId FROM PendingMovement m
+        WHERE m.householdId = :hid AND m.createdTransactionId IN :ids
+        """,
+    )
+    fun findLinkedTransactionIds(@Param("hid") householdId: UUID, @Param("ids") ids: Collection<UUID>): List<UUID>
+
     fun countByHouseholdIdAndStatus(householdId: UUID, status: MovementStatus): Long
 
     /** Grouped variant of the pending count, one row per connection (Home-tile breakdown). */

@@ -19,7 +19,11 @@ import com.sephilabs.sharedledger.networth.movement.MovementRepository
 import com.sephilabs.sharedledger.networth.movement.MovementType
 import com.sephilabs.sharedledger.portfolio.price.FxRate
 import com.sephilabs.sharedledger.portfolio.price.FxRateRepository
+import com.sephilabs.sharedledger.recurring.Cadence
+import com.sephilabs.sharedledger.recurring.RecurringTemplate
+import com.sephilabs.sharedledger.recurring.RecurringTemplateRepository
 import com.sephilabs.sharedledger.transaction.Direction
+import com.sephilabs.sharedledger.transaction.Transaction
 import com.sephilabs.sharedledger.transaction.TransactionRepository
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -35,6 +39,7 @@ import org.springframework.web.context.request.ServletRequestAttributes
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
+import java.util.UUID
 
 @ResourceLock("fake-bank-connector")
 class BankIngestionIntegrationTest @Autowired constructor(
@@ -49,6 +54,7 @@ class BankIngestionIntegrationTest @Autowired constructor(
     private val connections: BankConnectionRepository,
     private val syncRuns: BankSyncRunRepository,
     private val transactions: TransactionRepository,
+    private val templates: RecurringTemplateRepository,
     private val movementRepo: MovementRepository,
     private val fxRates: FxRateRepository,
     private val categories: CategoryService,
@@ -173,6 +179,133 @@ class BankIngestionIntegrationTest @Autowired constructor(
         assertThat(pendingService.pendingCount(household.id)).isEqualTo(1)
         assertThat(movementRepo.findInRange(household.id, today.minusDays(30), today)).isEmpty()
         assertThat(transactions.findByHouseholdIdAndOccurrenceDateBetween(household.id, today.minusDays(30), today)).isEmpty()
+    }
+
+    /** The UPDATE notification isn't asserted here: TelegramNotificationIntegrationTest covers
+     *  TransactionService.update, and "same id, no new row" below is what proves replace goes through it. */
+    @Test
+    fun `replacing a possible duplicate updates the existing transaction in place`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val expenseCat = expenseCategory(household)
+        // A recurring template so the assertion below covers "the linkage is preserved, never detached".
+        val template = templates.save(
+            RecurringTemplate(
+                householdId = household.id,
+                direction = Direction.expense,
+                categoryCode = expenseCat,
+                amount = BigDecimal("40.00"),
+                cadence = Cadence.monthly,
+                dayOfMonth = 1,
+                startDate = today.minusMonths(6),
+                createdByUserId = user.id,
+                updatedByUserId = user.id,
+            ),
+        )
+        // Entered by hand two days before the bank booked it — same amount, so inside the duplicate window.
+        val manual = manualTransaction(household, user, today.minusDays(3), expenseCat, "40.00", "Dinner with Ana", template.id)
+        fake.movements.add(movement("dup-1", today.minusDays(1), Direction.expense, "40.00", "RESTAURANT"))
+        link(household, user)
+
+        val item = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content.single()
+        assertThat(pendingService.list(household.id, MovementStatus.pending, null, null, null, false, 0, 50).items.single().possibleDuplicate).isTrue()
+
+        val candidates = pendingService.duplicateCandidates(household.id, item.id)
+        assertThat(candidates).hasSize(1)
+        assertThat(candidates.single().transactionId).isEqualTo(manual.id)
+        assertThat(candidates.single().bankLinked).isFalse()
+
+        val replaced = pendingService.replace(household.id, item.id, ReplaceTransactionRequest(transactionId = manual.id), user)
+
+        assertThat(replaced.status).isEqualTo(MovementStatus.confirmed)
+        assertThat(replaced.createdTransactionId).isEqualTo(manual.id)
+        assertThat(pendingService.pendingCount(household.id)).isZero()
+
+        // Still exactly one transaction, and it is the same row — updated, not deleted and recreated.
+        val all = transactions.findByHouseholdIdAndOccurrenceDateBetween(household.id, today.minusDays(30), today)
+        assertThat(all).hasSize(1)
+        val updated = all.single()
+        assertThat(updated.id).isEqualTo(manual.id)
+        assertThat(updated.occurrenceDate).isEqualTo(today.minusDays(1))
+        assertThat(updated.amount).isEqualByComparingTo("40.00")
+        assertThat(updated.description).isEqualTo("RESTAURANT – Test RESTAURANT")
+        // The human-chosen category and the template link survive; updatedBy is the confirming user.
+        assertThat(updated.categoryCode).isEqualTo(expenseCat)
+        assertThat(updated.recurringTemplateId).isEqualTo(template.id)
+        assertThat(updated.updatedByUserId).isEqualTo(user.id)
+    }
+
+    @Test
+    fun `replace refuses a transaction that is not a match and writes nothing`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val expenseCat = expenseCategory(household)
+        // Same window, different amount — never a duplicate candidate, so never a replace target.
+        val unrelated = manualTransaction(household, user, today.minusDays(1), expenseCat, "99.00", "Unrelated")
+        fake.movements.add(movement("dup-2", today.minusDays(1), Direction.expense, "40.00", "RESTAURANT"))
+        link(household, user)
+        val item = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content.single()
+
+        assertThat(pendingService.duplicateCandidates(household.id, item.id)).isEmpty()
+        assertThatThrownBy {
+            pendingService.replace(household.id, item.id, ReplaceTransactionRequest(transactionId = unrelated.id), user)
+        }.isInstanceOf(AppException::class.java).hasMessageContaining("REPLACE_TARGET_NOT_A_MATCH")
+
+        assertThat(pendingService.pendingCount(household.id)).isEqualTo(1)
+        val untouched = transactions.findById(unrelated.id).orElseThrow()
+        assertThat(untouched.occurrenceDate).isEqualTo(today.minusDays(1))
+        assertThat(untouched.description).isEqualTo("Unrelated")
+    }
+
+    @Test
+    fun `a transaction that already resolves a movement cannot be replaced again`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val expenseCat = expenseCategory(household)
+        val manual = manualTransaction(household, user, today.minusDays(2), expenseCat, "25.00", "Coffee run")
+        // Two bank movements look like the same manual transaction; only the first may claim it.
+        fake.movements.addAll(
+            listOf(
+                movement("dup-3a", today.minusDays(2), Direction.expense, "25.00", "CAFE"),
+                movement("dup-3b", today.minusDays(1), Direction.expense, "25.00", "CAFE"),
+            ),
+        )
+        link(household, user)
+        val items = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content
+        val (first, second) = items.sortedBy { it.bookingDate }.let { it[0] to it[1] }
+
+        pendingService.replace(household.id, first.id, ReplaceTransactionRequest(transactionId = manual.id), user)
+
+        // The candidate is still surfaced for the second item, but flagged so the dialog can explain it.
+        val candidates = pendingService.duplicateCandidates(household.id, second.id)
+        assertThat(candidates).hasSize(1)
+        assertThat(candidates.single().bankLinked).isTrue()
+        assertThatThrownBy {
+            pendingService.replace(household.id, second.id, ReplaceTransactionRequest(transactionId = manual.id), user)
+        }.isInstanceOf(AppException::class.java).hasMessageContaining("TRANSACTION_ALREADY_BANK_LINKED")
+
+        assertThat(pendingService.pendingCount(household.id)).isEqualTo(1)
+        assertThat(transactions.findByHouseholdIdAndOccurrenceDateBetween(household.id, today.minusDays(30), today)).hasSize(1)
+    }
+
+    @Test
+    fun `replace validates a re-picked category against the direction`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val expenseCat = expenseCategory(household)
+        val incomeCat = categories.listForHousehold(household.id).first { it.kind == "income" }.code
+        val manual = manualTransaction(household, user, today.minusDays(1), expenseCat, "30.00", "Bakery")
+        fake.movements.add(movement("dup-4", today.minusDays(1), Direction.expense, "30.00", "BAKERY"))
+        link(household, user)
+        val item = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content.single()
+
+        // An income category on an expense row is refused exactly as it is anywhere else.
+        assertThatThrownBy {
+            pendingService.replace(household.id, item.id, ReplaceTransactionRequest(transactionId = manual.id, categoryCode = incomeCat), user)
+        }.isInstanceOf(AppException::class.java).hasMessageContaining("CATEGORY_DIRECTION_MISMATCH")
+
+        assertThat(pendingService.pendingCount(household.id)).isEqualTo(1)
+        assertThat(transactions.findById(manual.id).orElseThrow().categoryCode).isEqualTo(expenseCat)
     }
 
     @Test
@@ -887,6 +1020,29 @@ class BankIngestionIntegrationTest @Autowired constructor(
 
     private fun expenseCategory(household: Household): String =
         categories.listForHousehold(household.id).first { it.kind == "expense" }.code
+
+    /** The "existing" side of a replace, saved straight through the repository. */
+    private fun manualTransaction(
+        household: Household,
+        user: User,
+        date: LocalDate,
+        categoryCode: String,
+        amount: String,
+        description: String,
+        recurringTemplateId: UUID? = null,
+    ) = transactions.save(
+        Transaction(
+            householdId = household.id,
+            occurrenceDate = date,
+            direction = Direction.expense,
+            categoryCode = categoryCode,
+            amount = BigDecimal(amount),
+            description = description,
+            recurringTemplateId = recurringTemplateId,
+            createdByUserId = user.id,
+            updatedByUserId = user.id,
+        ),
+    )
 
     private fun movement(id: String, date: LocalDate, direction: Direction, amount: String, counterparty: String) =
         BankMovement(

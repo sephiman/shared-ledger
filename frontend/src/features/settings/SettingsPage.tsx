@@ -358,7 +358,7 @@ export function SettingsPage() {
 
       {/* Connections stay visible without credentials, so the gap explains itself. */}
       {(bankConfig?.credentialsConfigured || (bankConfig?.connectionCount ?? 0) > 0) && (
-        <BanksCard householdId={household.householdId} locale={i18n.language} />
+        <BanksCard householdId={household.householdId} locale={i18n.language} canReviewInstructions={isOwner} />
       )}
 
       {bankConfig?.credentialsConfigured && (

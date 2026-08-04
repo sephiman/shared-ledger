@@ -29,6 +29,7 @@ import {
   type GroupBy,
 } from "./pendingFilters";
 import { MarkAsMovementDialog } from "./MarkAsMovementDialog";
+import { ReplaceDuplicateDialog } from "./ReplaceDuplicateDialog";
 
 // Search / categorisation / duplicates are filtered server-side over the full dataset. The API caps
 // a page at 200; we load that (already-filtered) page once and do group/select/paginate client-side.
@@ -444,6 +445,7 @@ function MovementRow({
   const [editing, setEditing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [markMovementOpen, setMarkMovementOpen] = useState(false);
+  const [replaceOpen, setReplaceOpen] = useState(false);
   const [desc, setDesc] = useState(movement.description ?? "");
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -512,6 +514,10 @@ function MovementRow({
           <div className="ml-auto flex items-center gap-2">
             <Button disabled={!categoryValue || busy} onClick={onConfirm}>{t("banks.confirm")}</Button>
             <Button variant="secondary" className={REJECT_BUTTON_CLASS} disabled={busy} onClick={onReject}>{t("banks.reject")}</Button>
+            {/* Only flagged rows have a transaction to reconcile with. Single-item by design. */}
+            {movement.possibleDuplicate && (
+              <Button variant="secondary" disabled={busy} onClick={() => setReplaceOpen(true)}>{t("banks.replace")}</Button>
+            )}
             <div ref={menuRef} className="relative">
               <Button
                 variant="secondary"
@@ -560,6 +566,20 @@ function MovementRow({
           currency={currency}
           locale={locale}
           onClose={() => setMarkMovementOpen(false)}
+        />
+      )}
+
+      {replaceOpen && (
+        <ReplaceDuplicateDialog
+          open={replaceOpen}
+          householdId={householdId}
+          movement={movement}
+          categories={categories}
+          currency={currency}
+          locale={locale}
+          onClose={() => setReplaceOpen(false)}
+          onFallbackConfirm={onConfirm}
+          canFallbackConfirm={!!categoryValue && !busy}
         />
       )}
 

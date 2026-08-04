@@ -8,22 +8,21 @@ import com.sephilabs.sharedledger.networth.movement.MovementService
 import com.sephilabs.sharedledger.notification.NotificationPublisher
 import com.sephilabs.sharedledger.notification.NotifyActor
 import com.sephilabs.sharedledger.observability.AppMetrics
-import com.sephilabs.sharedledger.transaction.Direction
-import com.sephilabs.sharedledger.transaction.TransactionRepository
-import com.sephilabs.sharedledger.transaction.TransactionRequest
-import com.sephilabs.sharedledger.transaction.TransactionService
+import com.sephilabs.sharedledger.transaction.*
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 import java.time.Instant
-import java.time.LocalDate
-import java.util.UUID
+import java.time.temporal.ChronoUnit
+import java.util.*
+import kotlin.math.abs
 
 /** The review inbox. Confirming generates a real transaction (via [TransactionService.createInternal])
  *  and links it back so the item is never re-ingested; single confirm notifies normally, batch confirm
- *  emits one aggregated notification. Reject discards and creates nothing. */
+ *  emits one aggregated notification. Reject discards and creates nothing. Possible-duplicate items also
+ *  offer [replace], which reconciles with the existing transaction instead of adding a second one. */
 @Service
 class PendingMovementService(
     private val pending: PendingMovementRepository,
@@ -108,7 +107,7 @@ class PendingMovementService(
         householdId: UUID,
         items: List<PendingMovement>,
         status: MovementStatus,
-        dupIndex: Map<String, List<LocalDate>>,
+        dupIndex: Map<String, List<Transaction>>,
     ): List<PendingMovementDto> {
         if (items.isEmpty()) return emptyList()
         val connById = connections.findAllByHouseholdIdOrderByCreatedAtAsc(householdId).associateBy { it.id }
@@ -141,6 +140,78 @@ class PendingMovementService(
         val movement = requirePending(householdId, id)
         createMovement(householdId, movement, request, by)
         markConfirmed(movement, categoryCode = null, by)
+        metrics.bankMovementsIngested(1)
+        return movement.toDto(connections.findById(movement.connectionId).orElse(null), account(movement), false)
+    }
+
+    /** Replace targets for an item, closest booking date first. Resolved fresh (not off the inbox page) so a
+     *  since-deleted or since-linked target surfaces in the dialog; already-linked ones come back flagged. */
+    @Transactional(readOnly = true)
+    fun duplicateCandidates(householdId: UUID, id: UUID): List<DuplicateCandidateDto> {
+        val movement = pending.findByIdAndHouseholdId(id, householdId)
+            ?: throw AppException.notFound("PENDING_MOVEMENT_NOT_FOUND")
+        val candidates = candidatesFor(buildDuplicateIndex(householdId, listOf(movement)), movement)
+        if (candidates.isEmpty()) return emptyList()
+        val linked = pending.findLinkedTransactionIds(householdId, candidates.map { it.id }).toSet()
+        return candidates
+            .sortedWith(
+                compareBy<Transaction> { abs(ChronoUnit.DAYS.between(movement.bookingDate, it.occurrenceDate)) }
+                    .thenBy { it.occurrenceDate },
+            )
+            .map {
+                DuplicateCandidateDto(
+                    transactionId = it.id,
+                    occurrenceDate = it.occurrenceDate,
+                    direction = it.direction,
+                    categoryCode = it.categoryCode,
+                    amount = it.amount,
+                    description = it.description,
+                    recurringTemplateId = it.recurringTemplateId,
+                    bankLinked = it.id in linked,
+                )
+            }
+    }
+
+    /** Reconcile a possible duplicate: the existing transaction is updated in place (no delete+create) to the
+     *  bank's date, amount and description and becomes this item's [PendingMovement.createdTransactionId].
+     *  Going through [TransactionService.update] keeps the category validation, `updatedBy` and the UPDATE
+     *  notification identical to a manual edit, and leaves the recurring-template link alone. */
+    @Transactional
+    fun replace(householdId: UUID, id: UUID, request: ReplaceTransactionRequest, by: User): PendingMovementDto {
+        val movement = requirePending(householdId, id)
+        // Soft-deleted rows are invisible here, so a meanwhile-deleted target lands on this branch.
+        val tx = transactions.findById(request.transactionId).orElse(null)?.takeIf { it.householdId == householdId }
+            ?: throw AppException.notFound("REPLACE_TARGET_NOT_FOUND")
+        // Matched on the *movement's* direction, so re-picking the category can't widen the target set.
+        if (!isCandidate(movement, tx)) throw AppException.conflict("REPLACE_TARGET_NOT_A_MATCH")
+        if (pending.existsByCreatedTransactionIdAndIdNot(tx.id, movement.id)) {
+            throw AppException.conflict("TRANSACTION_ALREADY_BANK_LINKED")
+        }
+        // Re-dating a materialized occurrence onto a sibling's date would break the
+        // (recurring_template_id, occurrence_date) unique index; refuse rather than silently detach.
+        val templateId = tx.recurringTemplateId
+        if (templateId != null && tx.occurrenceDate != movement.bookingDate &&
+            transactions.existsByRecurringTemplateIdAndOccurrenceDate(templateId, movement.bookingDate)
+        ) {
+            throw AppException.conflict("REPLACE_TEMPLATE_DATE_CONFLICT")
+        }
+
+        val categoryCode = request.categoryCode?.takeIf { it.isNotBlank() } ?: tx.categoryCode
+        val description = request.description?.takeIf { it.isNotBlank() } ?: movementDescription(movement)
+        transactionService.update(
+            householdId,
+            tx.id,
+            TransactionRequest(
+                occurrenceDate = movement.bookingDate,
+                direction = request.direction ?: tx.direction,
+                categoryCode = categoryCode,
+                amount = movement.amount,
+                description = description?.take(500),
+            ),
+            by,
+        )
+        movement.createdTransactionId = tx.id
+        markConfirmed(movement, categoryCode, by)
         metrics.bankMovementsIngested(1)
         return movement.toDto(connections.findById(movement.connectionId).orElse(null), account(movement), false)
     }
@@ -316,28 +387,29 @@ class PendingMovementService(
 
     /** Possible-duplicate against manual transactions: same direction + amount within a few days (warn only,
      *  never auto-discard). The list path uses [buildDuplicateIndex] to avoid one query per row. */
-    private fun isPossibleDuplicate(m: PendingMovement): Boolean {
-        val window = transactions.findByHouseholdIdAndOccurrenceDateBetween(
-            m.householdId, m.bookingDate.minusDays(DUPLICATE_WINDOW_DAYS), m.bookingDate.plusDays(DUPLICATE_WINDOW_DAYS),
-        )
-        return window.any { it.direction == m.direction && it.amount.compareTo(m.amount) == 0 }
-    }
+    private fun isPossibleDuplicate(m: PendingMovement): Boolean =
+        candidatesFor(buildDuplicateIndex(m.householdId, listOf(m)), m).isNotEmpty()
 
-    /** direction+amount -> the transaction dates in the comparison window, loaded in one query. */
-    private fun buildDuplicateIndex(householdId: UUID, items: List<PendingMovement>): Map<String, List<LocalDate>> {
+    /** The duplicate rule in one place — shared by the list flag, the candidate lookup and [replace]'s guard. */
+    private fun isCandidate(m: PendingMovement, tx: Transaction): Boolean =
+        tx.direction == m.direction &&
+            tx.amount.compareTo(m.amount) == 0 &&
+            abs(ChronoUnit.DAYS.between(m.bookingDate, tx.occurrenceDate)) <= DUPLICATE_WINDOW_DAYS
+
+    /** direction+amount -> the transactions in the comparison window, loaded in one query. */
+    private fun buildDuplicateIndex(householdId: UUID, items: List<PendingMovement>): Map<String, List<Transaction>> {
         val from = items.minOf { it.bookingDate }.minusDays(DUPLICATE_WINDOW_DAYS)
         val to = items.maxOf { it.bookingDate }.plusDays(DUPLICATE_WINDOW_DAYS)
         return transactions.findByHouseholdIdAndOccurrenceDateBetween(householdId, from, to)
             .groupBy { dupKey(it.direction, it.amount) }
-            .mapValues { entry -> entry.value.map { it.occurrenceDate } }
     }
 
-    private fun matchesDuplicate(index: Map<String, List<LocalDate>>, m: PendingMovement): Boolean {
-        val dates = index[dupKey(m.direction, m.amount)] ?: return false
-        val lo = m.bookingDate.minusDays(DUPLICATE_WINDOW_DAYS)
-        val hi = m.bookingDate.plusDays(DUPLICATE_WINDOW_DAYS)
-        return dates.any { !it.isBefore(lo) && !it.isAfter(hi) }
-    }
+    /** The bucket already pins direction+amount; this narrows it to the movement's date window. */
+    private fun candidatesFor(index: Map<String, List<Transaction>>, m: PendingMovement): List<Transaction> =
+        index[dupKey(m.direction, m.amount)]?.filter { isCandidate(m, it) } ?: emptyList()
+
+    private fun matchesDuplicate(index: Map<String, List<Transaction>>, m: PendingMovement): Boolean =
+        candidatesFor(index, m).isNotEmpty()
 
     private fun dupKey(direction: Direction, amount: BigDecimal): String =
         "$direction|${amount.stripTrailingZeros().toPlainString()}"

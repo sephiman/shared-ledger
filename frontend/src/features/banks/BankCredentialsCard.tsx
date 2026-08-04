@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useBankCredentials,
@@ -15,6 +15,7 @@ import {
   looksLikePkcs1,
   normalizeKey,
 } from "./keyFile";
+import { onShowWhitelistPhase } from "./whitelistInstructionsBus";
 
 /** Owner-only Enable Banking application for this household — always visible, so the feature can be set up
  *  from scratch. The private key is write-only. */
@@ -38,10 +39,25 @@ export function BankCredentialsCard({ householdId }: { householdId: string }) {
   const [testMsg, setTestMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const phaseBRef = useRef<HTMLElement>(null);
+  // Bumped by the Banks card's pre-link checkpoint. A counter rather than a boolean, so a second
+  // "Review instructions" with the panel already open scrolls again.
+  const [phaseBRequests, setPhaseBRequests] = useState(0);
 
   useEffect(() => {
     if (credentials) setAppId(credentials.appId ?? "");
   }, [credentials]);
+
+  useEffect(() => onShowWhitelistPhase(() => {
+    setHelpOpen(true);
+    setPhaseBRequests((n) => n + 1);
+  }), []);
+
+  // Both updates above land in one render, so Phase B exists by the time this runs.
+  useEffect(() => {
+    if (phaseBRequests === 0) return;
+    phaseBRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  }, [phaseBRequests]);
 
   const onKeyChange = (value: string) => {
     setPkcs1Warning(looksLikePkcs1(value));
@@ -262,41 +278,124 @@ export function BankCredentialsCard({ householdId }: { householdId: string }) {
             {helpOpen ? t("banks.credentials_help_hide") : t("banks.credentials_help_show")}
           </button>
           {helpOpen && (
-            <div className="mt-2 space-y-3 rounded-md border border-border bg-gray-50 p-3 text-sm dark:border-gray-700 dark:bg-gray-900/40">
-              <ol className="list-decimal space-y-1.5 pl-5 text-gray-600 dark:text-gray-300">
-                <li>
-                  {t("banks.credentials_help_step1")}{" "}
-                  <a className="text-primary" href="https://enablebanking.com" target="_blank" rel="noreferrer">
-                    enablebanking.com
-                  </a>
-                </li>
-                <li>{t("banks.credentials_help_step2")}</li>
-                <li>{t("banks.credentials_help_step3")}</li>
-                <li>{t("banks.credentials_help_step4")}</li>
-                <li>
-                  {t("banks.credentials_help_step5")}{" "}
-                  <code className="break-all rounded bg-gray-100 px-1 py-0.5 text-xs dark:bg-gray-900/60">
-                    {credentials?.redirectUrl ?? ""}
-                  </code>
-                </li>
-                <li>{t("banks.credentials_help_step6")}</li>
-                <li>{t("banks.credentials_help_step7")}</li>
-                <li>{t("banks.credentials_help_step8")}</li>
-              </ol>
-              <div className="rounded-md border border-amber-300 bg-amber-50 p-2 dark:border-amber-800 dark:bg-amber-950/30">
-                <p className="font-medium text-amber-800 dark:text-amber-200">
-                  {t("banks.credentials_help_whitelist_title")}
+            // Three phases in a fixed order, because doing C before B fails silently: the connection looks
+            // active and syncs nothing. Hence the gate at the end of B and the checkpoint in the Banks card.
+            <div className="mt-2 space-y-4 rounded-md border border-border bg-gray-50 p-3 text-sm dark:border-gray-700 dark:bg-gray-900/40">
+              <PhaseSection letter="A" title={t("banks.credentials_help_phase_a_title")} note={t("banks.credentials_help_phase_a_note")}>
+                <ol className="list-decimal space-y-1.5 pl-5 text-gray-600 dark:text-gray-300">
+                  <li>
+                    {t("banks.credentials_help_step1")}{" "}
+                    <a className="text-primary" href="https://enablebanking.com" target="_blank" rel="noreferrer">
+                      enablebanking.com
+                    </a>
+                  </li>
+                  <li>{t("banks.credentials_help_step2")}</li>
+                  <li>{t("banks.credentials_help_step3")}</li>
+                  <li>{t("banks.credentials_help_step4")}</li>
+                  <li>
+                    {t("banks.credentials_help_step5")}{" "}
+                    <code className="break-all rounded bg-gray-100 px-1 py-0.5 text-xs dark:bg-gray-900/60">
+                      {credentials?.redirectUrl ?? ""}
+                    </code>
+                  </li>
+                  <li>{t("banks.credentials_help_step6")}</li>
+                  <li>{t("banks.credentials_help_step7")}</li>
+                  <li>
+                    {t("banks.credentials_help_step8_save")}{" "}
+                    <strong className="font-semibold text-gray-700 dark:text-gray-200">
+                      {t("banks.credentials_help_step8_gate")}
+                    </strong>
+                  </li>
+                </ol>
+              </PhaseSection>
+
+              <PhaseSection
+                letter="B"
+                title={t("banks.credentials_help_phase_b_title")}
+                note={t("banks.credentials_help_phase_b_note")}
+                sectionRef={phaseBRef}
+                className="border-t border-border pt-4 dark:border-gray-700"
+              >
+                {/* The warning that used to trail the whole list, now sitting where the action happens. */}
+                <div className="rounded-md border border-amber-300 bg-amber-50 p-2 dark:border-amber-800 dark:bg-amber-950/30">
+                  <p className="font-medium text-amber-800 dark:text-amber-200">
+                    {t("banks.credentials_help_whitelist_title")}
+                  </p>
+                  <p className="mt-1 text-amber-800 dark:text-amber-200">
+                    {t("banks.credentials_help_whitelist_body")}
+                  </p>
+                </div>
+                <ol className="list-decimal space-y-1.5 pl-5 text-gray-600 dark:text-gray-300">
+                  <li>{t("banks.credentials_help_b_step1")}</li>
+                  <li>{t("banks.credentials_help_b_step2")}</li>
+                  <li>{t("banks.credentials_help_b_step3")}</li>
+                  <li>{t("banks.credentials_help_b_step4")}</li>
+                </ol>
+                <div className="rounded-md border-2 border-amber-500 bg-amber-100 p-2 dark:border-amber-600 dark:bg-amber-900/40">
+                  <p className="font-semibold uppercase tracking-wide text-amber-900 dark:text-amber-200">
+                    {t("banks.credentials_help_b_gate_label")}
+                  </p>
+                  <p className="mt-1 font-medium text-amber-900 dark:text-amber-100">
+                    {t("banks.credentials_help_b_gate")}
+                  </p>
+                </div>
+              </PhaseSection>
+
+              <PhaseSection
+                letter="C"
+                title={t("banks.credentials_help_phase_c_title")}
+                className="border-t border-border pt-4 dark:border-gray-700"
+              >
+                <ul className="list-disc space-y-1.5 pl-5 text-gray-600 dark:text-gray-300">
+                  <li>{t("banks.credentials_help_c_step1")}</li>
+                  <li>{t("banks.credentials_help_c_step2")}</li>
+                </ul>
+                <p className="rounded-md border border-border bg-white p-2 text-gray-600 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-300">
+                  {t("banks.credentials_help_c_symptom")}
                 </p>
-                <p className="mt-1 text-amber-800 dark:text-amber-200">
-                  {t("banks.credentials_help_whitelist_body")}
-                </p>
+              </PhaseSection>
+
+              <div className="space-y-1 border-t border-border pt-4 dark:border-gray-700">
+                <p className="text-gray-600 dark:text-gray-300">{t("banks.credentials_help_identity")}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{t("banks.credentials_help_encrypted")}</p>
               </div>
-              <p className="text-gray-600 dark:text-gray-300">{t("banks.credentials_help_identity")}</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">{t("banks.credentials_help_encrypted")}</p>
             </div>
           )}
         </div>
       </CardBody>
     </Card>
+  );
+}
+
+/** One numbered phase of the setup instructions: lettered badge, bold title, steps indented under it. */
+function PhaseSection({
+  letter,
+  title,
+  note,
+  sectionRef,
+  className,
+  children,
+}: {
+  letter: string;
+  title: string;
+  /** When the phase happens ("do this first, once") — the ordering hint, kept out of the title. */
+  note?: string;
+  sectionRef?: React.Ref<HTMLElement>;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section ref={sectionRef} className={className}>
+      <div className="flex items-start gap-2">
+        <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+          {letter}
+        </span>
+        <div className="min-w-0">
+          <p className="font-semibold text-gray-900 dark:text-gray-100">{title}</p>
+          {note && <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{note}</p>}
+        </div>
+      </div>
+      <div className="mt-2 space-y-2 sm:pl-8">{children}</div>
+    </section>
   );
 }

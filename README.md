@@ -375,6 +375,15 @@ Wise could be added via its own API) with the always-available CSV import as the
     different application marks them *credentials changed — re-link needed* rather than silently
     failing or re-routing them. Saving credentials with a different application id warns first
     ("N existing connection(s) … will need re-linking") and needs a confirmation.
+  - **Setup instructions in three ordered phases** (the card's collapsible *How do I get these?*), because
+    the order is what people get wrong: **A** — create the EB application, register the redirect URL, then
+    save the credentials here and press *Validate credentials* (gate: don't continue until validation
+    succeeds); **B** — whitelist every account in the Control Panel, with the *why* stated first, the
+    per-account walkthrough ("Activate by linking accounts", the holder passes their own SCA, repeat for
+    each bank and each holder), and a visually prominent closing gate: *don't link any bank in SharedLedger
+    until every account appears as linked to the application*; **C** — only now link the banks in the Banks
+    section, plus the symptom→fix line for a connection that shows `active` with 0 accounts. The
+    Restricted-Production warning below sits inside phase B, where the action happens.
   > **Restricted Production caveat — whitelist each account.** In this mode Enable Banking only
   > returns accounts you have explicitly linked to the *application* in the Control Panel
   > ("Activate by linking accounts"). A holder can pass SCA at *any* bank, but if that specific
@@ -391,6 +400,12 @@ Wise could be added via its own API) with the always-available CSV import as the
   self-hosted). The bank picker is the provider's ASPSP catalogue filtered by country (not a fixed
   list). Choosing a bank redirects the account holder to authenticate; on return the account is
   associated with the household.
+  - **First-link checkpoint.** Because the whitelist mistake is invisible afterwards, the household's
+    *first* link (no connections yet — once per **household**, not per member) shows a small interstitial
+    before the redirect: "Have you whitelisted this account in your Enable Banking application? Non-
+    whitelisted accounts link fine but sync nothing", with *Yes, continue* and *Review instructions* (jumps
+    to phase B of the credentials card; shown to owners, the only ones who see that card). Dismissible, and
+    never shown for later links or re-links.
 - **Who can manage a connection.** Every member sees every connection in the household (and the
   movements it brings in — bank data is household data). *Managing* one — sync now, re-link, rename,
   disable ingestion, delete — belongs to the member who linked it, plus any owner; for anyone else
@@ -439,7 +454,8 @@ Wise could be added via its own API) with the always-available CSV import as the
   one is chosen) and description — and the bulk bar can assign a category to the whole selection
   at once. Confirming reuses the normal transaction-creation logic; single confirms notify
   normally, batch confirms send one aggregated notification. A **possible-duplicate warning**
-  flags manual transactions that look like an incoming movement (warns only, never auto-discards).
+  flags manual transactions that look like an incoming movement (warns only, never auto-discards);
+  those rows get a third action, **Replace**, described below.
   Rejected items don't reappear in the pending list; they stay visible under a "rejected" filter,
   from which they can be **restored** back to pending (individually or in batch). Confirmed items
   are final — they already produced a transaction or movement. The list also filters by
@@ -455,6 +471,27 @@ Wise could be added via its own API) with the always-available CSV import as the
   validation as the manual Movements tab), records the produced movement via `created_movement_id`,
   and marks the item `confirmed` like any other — no category or learned rule is involved. This is a
   single-item action; batch confirm stays transaction-only.
+- **Replace a possible duplicate** (per item, only on rows carrying the duplicate flag): the third
+  outcome for a movement you already entered by hand. Confirming it would leave two rows in the
+  ledger and rejecting it would throw the bank data away, so Replace instead **reconciles** the two.
+  A dialog compares the **existing transaction** and the **incoming movement** side by side (date,
+  amount, direction, category, description, source; stacked on phones), highlighting exactly what
+  would change. Confirming **updates the existing transaction in place** — no delete-and-recreate: it
+  takes the movement's **date, amount and description**, and becomes the item's
+  `created_transaction_id`, the same linkage a normal confirm produces, so the pair is never flagged
+  again. The **category is kept** (the human-chosen one is usually the right one) but can be re-picked
+  in the dialog, with the same category/direction consistency check as every other write path; the
+  description is prefilled with the bank's and can be reverted to the manual one in one click. Because
+  it *is* a transaction update, it reuses `TransactionService.update` — so `updated_by` is the
+  confirming member, the per-entity Telegram notification fires as an **update** (not a creation), and
+  any **recurring-template link is preserved**, never silently detached or reattached. The item is
+  marked `confirmed` with the usual audit fields and leaves the pending list; cancelling writes
+  nothing. Scope guards: it only ever targets a transaction that actually matches the movement (same
+  direction and amount within the duplicate window), a **candidate must be picked explicitly when more
+  than one matches**, a transaction that already resolves another movement can't be replaced (it's
+  shown with the reason instead), and if nothing replaceable is left — the match was deleted or
+  already linked — the dialog says so and offers a normal Confirm. Single-item only; it is excluded
+  from batch operations, like "Mark as movement".
 - **Categorisation**: configurable rules (counterparty / description / amount → category +
   direction) applied during sync, and learning from corrections — confirming with a category
   remembers "this counterparty → this category" for next time, but **only when no existing rule

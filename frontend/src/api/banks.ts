@@ -152,6 +152,26 @@ export interface ConfirmAsMovementInput {
   note?: string | null;
 }
 
+/** A transaction a possible-duplicate item could replace; `bankLinked` ones are shown but not selectable. */
+export interface DuplicateCandidate {
+  transactionId: string;
+  occurrenceDate: string;
+  direction: Direction;
+  categoryCode: string;
+  amount: string;
+  description: string | null;
+  recurringTemplateId: string | null;
+  bankLinked: boolean;
+}
+
+/** Null category/direction keep the transaction's own values; null description falls back to the bank's. */
+export interface ReplaceTransactionInput {
+  transactionId: string;
+  categoryCode?: string | null;
+  direction?: Direction | null;
+  description?: string | null;
+}
+
 export interface EditMovementInput {
   suggestedCategoryCode?: string | null;
   direction?: Direction | null;
@@ -283,6 +303,19 @@ export function usePendingCount(householdId: string, enabled = true) {
   });
 }
 
+/** Replace targets for one item, refetched on every dialog open so a since-deleted or since-linked
+ *  transaction is reported instead of failing on submit. */
+export function usePendingDuplicateCandidates(householdId: string, movementId: string, enabled = true) {
+  return useQuery({
+    queryKey: ["banks", householdId, "pending", movementId, "duplicate-candidates"],
+    queryFn: async () =>
+      (await apiClient.get<DuplicateCandidate[]>(`${base(householdId)}/pending/${movementId}/duplicate-candidates`)).data,
+    enabled,
+    staleTime: 0,
+    gcTime: 0,
+  });
+}
+
 export function useCategorizationRules(householdId: string) {
   return useQuery({
     queryKey: ["banks", householdId, "rules"],
@@ -367,6 +400,17 @@ export function useConfirmMovement(householdId: string) {
   return useMutation({
     mutationFn: async ({ id, input }: { id: string; input: ConfirmMovementInput }) =>
       (await apiClient.post<PendingMovement>(`${base(householdId)}/pending/${id}/confirm`, input)).data,
+    onSuccess: () => invalidateAll(qc, householdId),
+    meta: { silentSuccess: true },
+  });
+}
+
+/** Updates the matched transaction in place, so the same derived data as a confirm has to be refreshed. */
+export function useReplaceWithTransaction(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, input }: { id: string; input: ReplaceTransactionInput }) =>
+      (await apiClient.post<PendingMovement>(`${base(householdId)}/pending/${id}/replace`, input)).data,
     onSuccess: () => invalidateAll(qc, householdId),
     meta: { silentSuccess: true },
   });

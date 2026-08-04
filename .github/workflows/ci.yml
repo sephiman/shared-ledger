@@ -40,6 +40,12 @@ jobs:
       # build = compile + test (Testcontainers Postgres runs on the runner's Docker) + bootJar
       - run: ./gradlew --no-daemon build
 
+  backend-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker build -t shared-ledger-backend:ci ./backend
+
   frontend:
     runs-on: ubuntu-latest
     defaults:

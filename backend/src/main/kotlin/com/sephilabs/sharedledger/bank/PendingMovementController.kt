@@ -51,6 +51,20 @@ class PendingMovementController(
         @Valid @RequestBody body: ConfirmAsMovementRequest,
     ): PendingMovementDto = service.confirmAsMovement(householdId, id, body, currentUser.requireUser())
 
+    @GetMapping("/{id}/duplicate-candidates")
+    fun duplicateCandidates(
+        @PathVariable householdId: UUID,
+        @PathVariable id: UUID,
+    ): List<DuplicateCandidateDto> = service.duplicateCandidates(householdId, id)
+
+    /** Single-item by design, like confirm-as-movement — there is no batch variant. */
+    @PostMapping("/{id}/replace")
+    fun replace(
+        @PathVariable householdId: UUID,
+        @PathVariable id: UUID,
+        @Valid @RequestBody body: ReplaceTransactionRequest,
+    ): PendingMovementDto = service.replace(householdId, id, body, currentUser.requireUser())
+
     @PostMapping("/{id}/reject")
     fun reject(@PathVariable householdId: UUID, @PathVariable id: UUID): PendingMovementDto =
         service.reject(householdId, id, currentUser.requireUser())
