@@ -14,7 +14,8 @@
     "analytics": "Analytics",
     "fire": "FIRE",
     "settings": "Settings",
-    "logout": "Log out"
+    "logout": "Log out",
+    "go_home": "Go to Home"
   },
   "auth": {
     "login": "Log in",

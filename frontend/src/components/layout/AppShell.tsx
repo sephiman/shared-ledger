@@ -1,7 +1,7 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
-import { useTheme } from "@/lib/theme";
+import { HomeLogoLink } from "@/components/layout/HomeLogoLink";
 import { UserMenu } from "@/components/layout/UserMenu";
 import { useActiveHousehold } from "@/auth/AuthContext";
 import { useBankConfig, usePendingCount } from "@/api/banks";
@@ -19,19 +19,17 @@ const NAV = [
 
 export function AppShell() {
   const { t } = useTranslation();
-  const { resolvedTheme } = useTheme();
   const household = useActiveHousehold();
   // Only query (and poll) the count once the household can actually ingest; otherwise it's 0.
   const { data: bankConfig } = useBankConfig(household.householdId);
   const hasBanks = (bankConfig?.credentialsConfigured ?? false) && (bankConfig?.connectionCount ?? 0) > 0;
   const pendingCount = usePendingCount(household.householdId, hasBanks).data?.count ?? 0;
-  const logoSrc = resolvedTheme === "dark" ? "/SharedLedgerDark.png" : "/SharedLedgerLight.png";
 
   return (
     <div className="flex flex-col h-dvh">
       <header className="border-b border-border bg-white dark:bg-gray-800 dark:border-gray-700">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
-          <img src={logoSrc} alt={t("app.name")} className="h-10 w-auto shrink-0" />
+          <HomeLogoLink />
           <UserMenu />
         </div>
         <nav className="mx-auto max-w-6xl overflow-x-auto px-4">

@@ -14,7 +14,8 @@
     "analytics": "Analítica",
     "fire": "FIRE",
     "settings": "Ajustes",
-    "logout": "Cerrar sesión"
+    "logout": "Cerrar sesión",
+    "go_home": "Ir a Inicio"
   },
   "auth": {
     "login": "Entrar",
