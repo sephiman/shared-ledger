@@ -1,9 +1,13 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
-export type ThemePreference = "light" | "dark" | "system";
-export type ResolvedTheme = "light" | "dark";
+export type ThemePreference = "light" | "dark" | "oled" | "system";
+export type ResolvedTheme = "light" | "dark" | "oled";
 
 const STORAGE_KEY = "theme";
+
+/** OLED keeps the mobile address bar black instead of letting a bright sky bar sit above a #000 app. */
+const BRAND_THEME_COLOR = "#0ea5e9";
+const OLED_THEME_COLOR = "#000000";
 
 interface ThemeContextValue {
   theme: ThemePreference;
@@ -16,7 +20,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 function readStored(): ThemePreference {
   try {
     const v = localStorage.getItem(STORAGE_KEY);
-    if (v === "light" || v === "dark" || v === "system") return v;
+    if (v === "light" || v === "dark" || v === "oled" || v === "system") return v;
   } catch {}
   return "system";
 }
@@ -25,6 +29,8 @@ function systemPrefersDark(): boolean {
   return typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
+/** The OS preference only ever yields light or dark: OLED is reachable by explicit choice alone, and
+ *  once chosen it is fixed, exactly like an explicit light or dark pick. */
 function resolve(theme: ThemePreference): ResolvedTheme {
   if (theme === "system") return systemPrefersDark() ? "dark" : "light";
   return theme;
@@ -32,7 +38,13 @@ function resolve(theme: ThemePreference): ResolvedTheme {
 
 function applyToDocument(resolved: ResolvedTheme) {
   const root = document.documentElement;
-  root.classList.toggle("dark", resolved === "dark");
+  // OLED carries `dark` as well, so every dark: variant (text, accents) still applies and only the
+  // surface and border tokens are re-pointed.
+  root.classList.toggle("dark", resolved === "dark" || resolved === "oled");
+  root.classList.toggle("oled", resolved === "oled");
+  document
+    .querySelector('meta[name="theme-color"]')
+    ?.setAttribute("content", resolved === "oled" ? OLED_THEME_COLOR : BRAND_THEME_COLOR);
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {

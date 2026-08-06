@@ -50,6 +50,7 @@ export function UserMenu() {
   const themes: Array<{ value: ThemePreference; label: string }> = [
     { value: "light", label: t("settings.theme_light") },
     { value: "dark", label: t("settings.theme_dark") },
+    { value: "oled", label: t("settings.theme_oled") },
     { value: "system", label: t("settings.theme_system") },
   ];
 
@@ -68,9 +69,9 @@ export function UserMenu() {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 z-50 mt-2 w-64 rounded-md border border-border bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800"
+          className="absolute right-0 z-50 mt-2 w-64 rounded-md border border-border bg-surface shadow-lg"
         >
-          <div className="border-b border-border px-4 py-3 dark:border-gray-700">
+          <div className="border-b border-border px-4 py-3">
             <p className="text-xs text-gray-500 dark:text-gray-400">{t("user.signed_in_as")}</p>
             <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">{user.email}</p>
             {activeHousehold && (
@@ -80,7 +81,7 @@ export function UserMenu() {
             )}
           </div>
           {showHouseholdSwitcher && (
-            <div className="border-b border-border px-4 py-3 dark:border-gray-700">
+            <div className="border-b border-border px-4 py-3">
               <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">{t("household.switch_aria")}</p>
               <ul className="-mx-2 max-h-48 overflow-y-auto">
                 {user.households.map((h) => {
@@ -99,7 +100,7 @@ export function UserMenu() {
                           "flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm",
                           isActive
                             ? "bg-sky-50 text-primary dark:bg-sky-900/40 dark:text-sky-300"
-                            : "text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700",
+                            : "text-gray-700 hover:bg-item-hover dark:text-gray-200",
                         )}
                       >
                         <span className="truncate">
@@ -113,9 +114,9 @@ export function UserMenu() {
               </ul>
             </div>
           )}
-          <div className="border-b border-border px-4 py-3 dark:border-gray-700">
+          <div className="border-b border-border px-4 py-3">
             <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">{t("common.language")}</p>
-            <div className="inline-flex rounded-md border border-border dark:border-gray-600">
+            <div className="inline-flex rounded-md border border-border-strong">
               {languages.map((lang) => (
                 <button
                   key={lang.code}
@@ -125,7 +126,7 @@ export function UserMenu() {
                     "px-3 py-1 text-sm font-medium transition-colors first:rounded-l-md last:rounded-r-md",
                     activeLang === lang.code
                       ? "bg-sky-50 text-primary dark:bg-sky-900/40 dark:text-sky-300"
-                      : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700",
+                      : "text-gray-600 hover:bg-row-hover dark:text-gray-300",
                   )}
                 >
                   {lang.label}
@@ -133,19 +134,20 @@ export function UserMenu() {
               ))}
             </div>
           </div>
-          <div className="border-b border-border px-4 py-3 dark:border-gray-700">
+          <div className="border-b border-border px-4 py-3">
             <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">{t("settings.theme")}</p>
-            <div className="flex rounded-md border border-border dark:border-gray-600">
+            {/* Two columns: four labels in a 256px menu would squeeze "Sistema" past its own width. */}
+            <div className="grid grid-cols-2 overflow-hidden rounded-md border border-border-strong">
               {themes.map((opt) => (
                 <button
                   key={opt.value}
                   type="button"
                   onClick={() => setTheme(opt.value)}
                   className={cn(
-                    "flex-1 px-2 py-1 text-sm font-medium transition-colors first:rounded-l-md last:rounded-r-md",
+                    "px-2 py-1.5 text-sm font-medium transition-colors",
                     theme === opt.value
                       ? "bg-sky-50 text-primary dark:bg-sky-900/40 dark:text-sky-300"
-                      : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700",
+                      : "text-gray-600 hover:bg-row-hover dark:text-gray-300",
                   )}
                 >
                   {opt.label}
@@ -161,7 +163,7 @@ export function UserMenu() {
               await logout();
               navigate("/login");
             }}
-            className="block w-full px-4 py-3 text-left text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+            className="block w-full px-4 py-3 text-left text-sm font-medium text-gray-700 hover:bg-item-hover dark:text-gray-200"
           >
             {t("nav.logout")}
           </button>

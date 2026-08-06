@@ -205,7 +205,7 @@ export function CategorizationRulesPage() {
             <>
               <ul className="space-y-2">
                 {pageItems.map((r) => (
-                  <li key={r.id} className="rounded-md border border-border p-3 dark:border-gray-700">
+                  <li key={r.id} className="rounded-md border border-border p-3">
                     {editingId === r.id ? (
                       <RuleEditor
                         householdId={householdId}
@@ -225,7 +225,7 @@ export function CategorizationRulesPage() {
                           <div className="min-w-0 break-words text-sm">
                             <span className="font-medium">{t(`banks.field_${r.matchField}`)}</span>{" "}
                             {t(`banks.op_${r.matchOp}`)}{" "}
-                            <code className="rounded bg-gray-100 px-1 dark:bg-gray-700">{r.matchValue}</code>{" "}
+                            <code className="rounded bg-gray-100 px-1 dark:bg-raised">{r.matchValue}</code>{" "}
                             → {categoryLabelByCode(r.categoryCode, categories, t)} ({t(`common.${r.direction}`)})
                             {r.source === "learned" && <Badge className="ml-2">{t("banks.rule_learned")}</Badge>}
                             <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">

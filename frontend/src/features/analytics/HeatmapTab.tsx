@@ -155,7 +155,7 @@ function HeatmapGrid({
     <div className="overflow-x-auto">
       <div className="inline-block min-w-full">
         <div className="grid text-xs" style={{ gridTemplateColumns: gridTemplate }}>
-          <div className="sticky left-0 z-10 bg-white px-2 py-1 font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+          <div className="sticky left-0 z-10 bg-surface px-2 py-1 font-medium text-gray-500 dark:text-gray-400">
             {t("common.category")}
           </div>
           {months.map((m) => (
@@ -214,7 +214,7 @@ function HeatmapGroup({
     <>
       {groupCode && (
         <div
-          className={`sticky left-0 z-10 bg-gray-50 px-2 py-1 font-semibold text-gray-600 dark:bg-gray-900 dark:text-gray-300 ${isFirst ? "" : "border-t border-border"}`}
+          className={`sticky left-0 z-10 bg-canvas px-2 py-1 font-semibold text-gray-600 dark:text-gray-300 ${isFirst ? "" : "border-t border-border"}`}
           style={{ gridColumn: `1 / span ${totalCols}` }}
         >
           <span className="mr-1.5" aria-hidden>{groupIcon(groupCode)}</span>
@@ -264,7 +264,7 @@ function RowCells({
   const rowLabel = categoryLabelByCode(row.categoryCode, categories, t);
   return (
     <>
-      <div className="sticky left-0 z-10 truncate bg-white px-2 py-1 dark:bg-gray-800">
+      <div className="sticky left-0 z-10 truncate bg-surface px-2 py-1">
         <span className="mr-1.5" aria-hidden>{categoryIcon(row.categoryCode)}</span>
         {rowLabel}
       </div>

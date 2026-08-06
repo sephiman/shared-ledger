@@ -282,7 +282,7 @@ function ConnectionRow({
     : t("banks.never_synced");
 
   return (
-    <li className="rounded-md border border-border p-3 dark:border-gray-700">
+    <li className="rounded-md border border-border p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0 break-words">
           <span className="font-medium">{connection.label ?? connection.aspspName}</span>

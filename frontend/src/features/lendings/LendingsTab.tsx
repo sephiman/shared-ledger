@@ -62,7 +62,7 @@ export function LendingsTab() {
                 {lendings.map((l) => (
                   <li
                     key={l.id}
-                    className="cursor-pointer rounded-md border border-border p-3 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-700/40"
+                    className="cursor-pointer rounded-md border border-border p-3 hover:bg-gray-50 dark:hover:bg-row-hover/40"
                     onClick={() => setSelectedId(l.id)}
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -91,7 +91,7 @@ export function LendingsTab() {
                   {lendings.map((l) => (
                     <tr
                       key={l.id}
-                      className="cursor-pointer border-t border-border hover:bg-gray-50 dark:hover:bg-gray-700/40"
+                      className="cursor-pointer border-t border-border hover:bg-gray-50 dark:hover:bg-row-hover/40"
                       onClick={() => setSelectedId(l.id)}
                     >
                       <td className="py-2 font-medium">{l.borrowerName}</td>

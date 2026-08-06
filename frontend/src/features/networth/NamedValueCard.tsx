@@ -89,7 +89,7 @@ export function NamedValueCard({
   const addsHint = kind === "asset" ? t("networth.adds_to_net_worth") : t("networth.subtracts_from_net_worth");
 
   return (
-    <li className="rounded-md border border-border p-3 dark:border-gray-700">
+    <li className="rounded-md border border-border p-3">
       {editingDetails ? (
         <DetailsForm kind={kind} item={item} onCancel={() => setMode("view")} onSave={async (d) => { await onSaveDetails(d); setMode("view"); }} />
       ) : (
@@ -101,7 +101,7 @@ export function NamedValueCard({
                 <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">{t(`networth.asset_type_${item.type}`)}</span>
               )}
               {!item.active && (
-                <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] uppercase tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] uppercase tracking-wide text-gray-500 dark:bg-surface dark:text-gray-400">
                   {t("common.inactive")}
                 </span>
               )}
@@ -133,7 +133,7 @@ export function NamedValueCard({
         </div>
 
         {editingValue && (
-          <div className="mb-2 flex flex-wrap items-end gap-2 rounded border border-border p-2 dark:border-gray-700">
+          <div className="mb-2 flex flex-wrap items-end gap-2 rounded border border-border p-2">
             <div>
               <Label>{t("networth.value_date")}</Label>
               <Input type="date" value={valueEditor!.date} onChange={(e) => setValueEditor({ ...valueEditor!, date: e.target.value })} />
@@ -152,7 +152,7 @@ export function NamedValueCard({
         ) : (
           <ul className="space-y-1 text-sm">
             {entries.map((e) => (
-              <li key={e.id} className="flex items-center justify-between gap-3 border-t border-border py-1 first:border-t-0 dark:border-gray-700">
+              <li key={e.id} className="flex items-center justify-between gap-3 border-t border-border py-1 first:border-t-0">
                 <span className="text-gray-600 dark:text-gray-300">{formatDate(e.date, i18n.language)}</span>
                 <span className="font-mono tabular-nums">{money(e.value)}</span>
                 <span className="flex gap-1">

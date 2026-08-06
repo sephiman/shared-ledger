@@ -129,7 +129,7 @@ export function NotificationsCard({ householdId }: { householdId: string }) {
           </div>
         </div>
 
-        <div className="rounded-md border border-border p-3 dark:border-gray-700">
+        <div className="rounded-md border border-border p-3">
           <Toggle
             checked={form.active}
             onChange={(v) => set("active", v)}
@@ -140,7 +140,7 @@ export function NotificationsCard({ householdId }: { householdId: string }) {
 
         <div>
           <p className="mb-1 text-sm font-medium">{t("notifications.entities_title")}</p>
-          <div className="rounded-md border border-border px-3 dark:border-gray-700 divide-y divide-border dark:divide-gray-700">
+          <div className="rounded-md border border-border px-3 divide-y divide-border">
             {ENTITY_TOGGLES.map(({ key, labelKey }) => (
               <Toggle
                 key={key}
@@ -181,7 +181,7 @@ export function NotificationsCard({ householdId }: { householdId: string }) {
             {helpOpen ? t("notifications.help_hide") : t("notifications.help_show")}
           </button>
           {helpOpen && (
-            <div className="mt-2 space-y-3 rounded-md border border-border bg-gray-50 p-3 text-sm dark:border-gray-700 dark:bg-gray-900/40">
+            <div className="mt-2 space-y-3 rounded-md border border-border bg-gray-50 p-3 text-sm dark:bg-sunken/40">
               <div>
                 <p className="font-medium">{t("notifications.help_step1_title")}</p>
                 <p className="mt-1 text-gray-600 dark:text-gray-300">{t("notifications.help_step1_body")}</p>

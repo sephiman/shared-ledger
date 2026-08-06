@@ -7,18 +7,24 @@
     <link rel="icon" type="image/png" href="/SharedLedgerTabIcon.png" />
     <meta name="theme-color" content="#0ea5e9" />
     <script>
-      // Apply persisted theme before React mounts to avoid a flash of the wrong theme.
+      // Apply persisted theme before React mounts to avoid a flash of the wrong theme. "system" never
+      // resolves to OLED, so only an explicit choice adds the class.
       (function () {
         try {
           var stored = localStorage.getItem("theme");
           var prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-          var dark = stored === "dark" || ((!stored || stored === "system") && prefersDark);
+          var oled = stored === "oled";
+          var dark = oled || stored === "dark" || ((!stored || stored === "system") && prefersDark);
           if (dark) document.documentElement.classList.add("dark");
+          if (oled) {
+            document.documentElement.classList.add("oled");
+            document.querySelector('meta[name="theme-color"]').setAttribute("content", "#000000");
+          }
         } catch (e) {}
       })();
     </script>
   </head>
-  <body class="bg-gray-50 text-gray-900 antialiased dark:bg-gray-900 dark:text-gray-100">
+  <body class="bg-canvas text-gray-900 antialiased dark:text-gray-100">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

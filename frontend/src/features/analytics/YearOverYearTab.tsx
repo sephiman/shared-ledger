@@ -72,7 +72,7 @@ export function YearOverYearTab() {
               {data.categories.map((c) => (
                 <tr
                   key={c.categoryCode}
-                  className="cursor-pointer border-t border-border hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                  className="cursor-pointer border-t border-border hover:bg-gray-50 dark:hover:bg-row-hover/50"
                   onClick={() => navigate(`/transactions?categoryCode=${encodeURIComponent(c.categoryCode)}`)}
                 >
                   <td className="py-2">

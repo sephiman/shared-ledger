@@ -81,7 +81,7 @@ export function LendingPaymentForm({ householdId, detail, editing, currency, loc
   };
 
   return (
-    <form noValidate onSubmit={submit} className="space-y-3 rounded-md border border-border p-3 dark:border-gray-700">
+    <form noValidate onSubmit={submit} className="space-y-3 rounded-md border border-border p-3">
       <p className="font-medium">{editing ? t("lendings.edit_payment") : t("lendings.register_payment")}</p>
       <div className="grid grid-cols-2 gap-3">
         <div>
@@ -98,7 +98,7 @@ export function LendingPaymentForm({ householdId, detail, editing, currency, loc
         <Input value={description} maxLength={500} onChange={(e) => setDescription(e.target.value)} />
       </div>
       {split && (
-        <div className="rounded-md bg-gray-50 p-2 text-sm dark:bg-gray-700/40">
+        <div className="rounded-md bg-gray-50 p-2 text-sm dark:bg-raised/40">
           <p className="text-gray-600 dark:text-gray-300">{t("lendings.split_preview")}</p>
           <div className="mt-1 flex justify-between">
             <span>{t("lendings.interest_paid")}</span>

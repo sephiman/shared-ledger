@@ -217,11 +217,11 @@ export function BankCredentialsCard({ householdId }: { householdId: string }) {
         </div>
 
         {credentials?.redirectUrl && (
-          <div className="rounded-md border border-border p-3 dark:border-gray-700">
+          <div className="rounded-md border border-border p-3">
             <p className="text-sm font-medium">{t("banks.credentials_redirect_title")}</p>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{t("banks.credentials_redirect_hint")}</p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <code className="min-w-0 break-all rounded bg-gray-100 px-2 py-1 text-xs dark:bg-gray-900/60">
+              <code className="min-w-0 break-all rounded bg-gray-100 px-2 py-1 text-xs dark:bg-sunken/60">
                 {credentials.redirectUrl}
               </code>
               <Button variant="secondary" onClick={copyRedirect}>
@@ -280,7 +280,7 @@ export function BankCredentialsCard({ householdId }: { householdId: string }) {
           {helpOpen && (
             // Three phases in a fixed order, because doing C before B fails silently: the connection looks
             // active and syncs nothing. Hence the gate at the end of B and the checkpoint in the Banks card.
-            <div className="mt-2 space-y-4 rounded-md border border-border bg-gray-50 p-3 text-sm dark:border-gray-700 dark:bg-gray-900/40">
+            <div className="mt-2 space-y-4 rounded-md border border-border bg-gray-50 p-3 text-sm dark:bg-sunken/40">
               <PhaseSection letter="A" title={t("banks.credentials_help_phase_a_title")} note={t("banks.credentials_help_phase_a_note")}>
                 <ol className="list-decimal space-y-1.5 pl-5 text-gray-600 dark:text-gray-300">
                   <li>
@@ -294,7 +294,7 @@ export function BankCredentialsCard({ householdId }: { householdId: string }) {
                   <li>{t("banks.credentials_help_step4")}</li>
                   <li>
                     {t("banks.credentials_help_step5")}{" "}
-                    <code className="break-all rounded bg-gray-100 px-1 py-0.5 text-xs dark:bg-gray-900/60">
+                    <code className="break-all rounded bg-gray-100 px-1 py-0.5 text-xs dark:bg-sunken/60">
                       {credentials?.redirectUrl ?? ""}
                     </code>
                   </li>
@@ -314,7 +314,7 @@ export function BankCredentialsCard({ householdId }: { householdId: string }) {
                 title={t("banks.credentials_help_phase_b_title")}
                 note={t("banks.credentials_help_phase_b_note")}
                 sectionRef={phaseBRef}
-                className="border-t border-border pt-4 dark:border-gray-700"
+                className="border-t border-border pt-4"
               >
                 {/* The warning that used to trail the whole list, now sitting where the action happens. */}
                 <div className="rounded-md border border-amber-300 bg-amber-50 p-2 dark:border-amber-800 dark:bg-amber-950/30">
@@ -344,18 +344,18 @@ export function BankCredentialsCard({ householdId }: { householdId: string }) {
               <PhaseSection
                 letter="C"
                 title={t("banks.credentials_help_phase_c_title")}
-                className="border-t border-border pt-4 dark:border-gray-700"
+                className="border-t border-border pt-4"
               >
                 <ul className="list-disc space-y-1.5 pl-5 text-gray-600 dark:text-gray-300">
                   <li>{t("banks.credentials_help_c_step1")}</li>
                   <li>{t("banks.credentials_help_c_step2")}</li>
                 </ul>
-                <p className="rounded-md border border-border bg-white p-2 text-gray-600 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-300">
+                <p className="rounded-md border border-border bg-white p-2 text-gray-600 dark:bg-sunken/60 dark:text-gray-300">
                   {t("banks.credentials_help_c_symptom")}
                 </p>
               </PhaseSection>
 
-              <div className="space-y-1 border-t border-border pt-4 dark:border-gray-700">
+              <div className="space-y-1 border-t border-border pt-4">
                 <p className="text-gray-600 dark:text-gray-300">{t("banks.credentials_help_identity")}</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">{t("banks.credentials_help_encrypted")}</p>
               </div>

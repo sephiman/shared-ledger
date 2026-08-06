@@ -27,7 +27,7 @@ export function InfoTip({
       <div
         role="tooltip"
         className={cn(
-          "absolute z-20 mt-1 w-64 max-w-[min(16rem,80vw)] rounded-md border border-border bg-white p-2 text-left text-xs font-normal leading-snug text-gray-600 shadow-lg dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300",
+          "absolute z-20 mt-1 w-64 max-w-[min(16rem,80vw)] rounded-md border border-border-strong bg-surface p-2 text-left text-xs font-normal leading-snug text-gray-600 shadow-lg dark:text-gray-300",
           anchor === "container" ? "left-0" : "right-0",
         )}
       >

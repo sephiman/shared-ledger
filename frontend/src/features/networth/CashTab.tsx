@@ -87,7 +87,7 @@ export function CashTab() {
             </div>
 
             {editor && (
-              <div className="mb-2 space-y-2 rounded border border-border p-2 dark:border-gray-700">
+              <div className="mb-2 space-y-2 rounded border border-border p-2">
                 <div className="flex flex-wrap items-end gap-2">
                   <div>
                     <Label>{t("networth.cash_adjustment_date")}</Label>
@@ -109,7 +109,7 @@ export function CashTab() {
             ) : (
               <ul className="space-y-1 text-sm">
                 {entries.map((e) => (
-                  <li key={e.id} className="flex items-center justify-between gap-3 border-t border-border py-1 first:border-t-0 dark:border-gray-700">
+                  <li key={e.id} className="flex items-center justify-between gap-3 border-t border-border py-1 first:border-t-0">
                     <span className="text-gray-600 dark:text-gray-300">{formatDate(e.date, i18n.language)}</span>
                     <span className="font-mono tabular-nums">{money(e.value)}</span>
                     <span className="flex gap-1">
@@ -134,7 +134,7 @@ export function CashTab() {
             <Toggle label={t("networth.cash_flow_movements")} checked={settings?.includeMovements ?? true} onChange={() => toggle("includeMovements")} />
           </div>
 
-          <div className="border-t border-border pt-3 dark:border-gray-700">
+          <div className="border-t border-border pt-3">
             <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
               {t("networth.cash_breakdown_title")}
             </p>

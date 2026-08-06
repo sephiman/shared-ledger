@@ -490,7 +490,7 @@ function MovementRow({
   const splitCount = movement.createdTransactionIds.length;
 
   return (
-    <li className="rounded-md border border-border p-3 dark:border-gray-700">
+    <li className="rounded-md border border-border p-3">
       <div className="flex items-start gap-3">
         {selectable && (
           <input type="checkbox" className="mt-1" checked={selected} onChange={onToggle} aria-label={t("banks.select_movement")} />
@@ -564,7 +564,7 @@ function MovementRow({
               {menuOpen && (
                 <div
                   role="menu"
-                  className="absolute right-0 z-20 mt-1 w-48 rounded-md border border-border bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800"
+                  className="absolute right-0 z-20 mt-1 w-48 rounded-md border border-border bg-surface py-1 shadow-lg"
                 >
                   {/* Single-item dialogs, both excluded from the batch actions. */}
                   <button
@@ -572,7 +572,7 @@ function MovementRow({
                     role="menuitem"
                     disabled={busy}
                     onClick={() => { setMenuOpen(false); setSplitOpen(true); }}
-                    className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50 dark:text-gray-200 dark:hover:bg-gray-700"
+                    className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-item-hover disabled:opacity-50 dark:text-gray-200"
                   >
                     {t("banks.split")}
                   </button>
@@ -581,7 +581,7 @@ function MovementRow({
                     role="menuitem"
                     disabled={busy}
                     onClick={() => { setMenuOpen(false); setMarkMovementOpen(true); }}
-                    className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50 dark:text-gray-200 dark:hover:bg-gray-700"
+                    className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-item-hover disabled:opacity-50 dark:text-gray-200"
                   >
                     {t("banks.mark_as_movement")}
                   </button>

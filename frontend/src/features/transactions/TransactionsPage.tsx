@@ -130,7 +130,7 @@ export function TransactionsPage() {
             <a
               href={`/api/households/${household.householdId}/transactions/export.csv${buildExportQuery(filters)}`}
               download
-              className="inline-flex items-center justify-center rounded-md border border-border bg-white px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 dark:hover:bg-gray-600"
+              className="inline-flex items-center justify-center rounded-md border border-border-strong bg-raised px-4 py-2 text-sm font-medium text-gray-900 hover:bg-raised-hover dark:text-gray-100"
             >
               {t("common.export_csv")}
             </a>
@@ -234,7 +234,7 @@ export function TransactionsPage() {
             <>
               <ul className="space-y-2 md:hidden">
                 {page.items.map((tx) => (
-                  <li key={tx.id} className="rounded-md border border-border p-3 dark:border-gray-700">
+                  <li key={tx.id} className="rounded-md border border-border p-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <p className="font-medium">

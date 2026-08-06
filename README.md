@@ -297,7 +297,7 @@ Long-term wealth projection toward financial independence, derived from the hous
 - Locale resolution order: `Accept-Language` header → authenticated user's preferred locale → English.
 - Currency, date and number formatting reflect the active locale and the household currency.
 - Language toggle in the header persists per user.
-- **Theme**: light / dark / system toggle in the header menu (`system` follows the OS preference and updates live). Stored per browser, not per user.
+- **Theme**: light / dark / OLED / system toggle in the header menu. `system` follows the OS preference and updates live, resolving to light or dark only — never OLED. OLED is a pure-black variant for OLED phone screens (black pixels switch off, so it saves battery and maximizes contrast); like light and dark, choosing it explicitly fixes the theme and stops it following the OS. Stored per browser, not per user.
 
 ### Settings
 

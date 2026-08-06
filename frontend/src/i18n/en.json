@@ -1018,6 +1018,7 @@
     "theme": "Theme",
     "theme_light": "Light",
     "theme_dark": "Dark",
+    "theme_oled": "OLED",
     "theme_system": "System",
     "danger_zone": "Danger zone",
     "wipe_description": "Permanently delete all of this household's financial data — transactions, budgets and recurring templates, Wealth snapshots and movements, assets, liabilities and lendings, the investment portfolio, bank connections and their pending items, and notification/automation settings. This cannot be undone.",

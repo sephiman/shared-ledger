@@ -86,7 +86,7 @@ export function MarkAsMovementDialog({ open, householdId, movement, currency, lo
         <CardBody>
           <form noValidate onSubmit={submit} className="space-y-3">
             {/* Read-only summary of the pending item — date and amount carry over unchanged. */}
-            <div className="rounded-md border border-border p-3 text-sm dark:border-gray-700">
+            <div className="rounded-md border border-border p-3 text-sm">
               <div className="flex items-center justify-between">
                 <span className="font-medium">{movement.counterparty ?? t("banks.no_counterparty")}</span>
                 <span className="font-semibold">{formatMoney(movement.amount, currency, locale)}</span>

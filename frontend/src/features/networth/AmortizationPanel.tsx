@@ -126,7 +126,7 @@ export function AmortizationPanel({ liability, onEditorOpen }: { liability: Liab
       </div>
 
       {parts.length > 0 && schedule && (
-        <div className="mb-3 rounded-md border border-border bg-white p-2 dark:border-gray-700 dark:bg-gray-800">
+        <div className="mb-3 rounded-md border border-border bg-surface p-2">
           <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
             <Stat label={t("networth.current_balance")} value={money(schedule.currentBalance)} />
             <Stat label={t("networth.monthly_instalment")} value={money(schedule.monthlyInstalment)} />
@@ -136,7 +136,7 @@ export function AmortizationPanel({ liability, onEditorOpen }: { liability: Liab
             <Stat label={t("networth.interest_remaining")} value={money(schedule.interestRemaining)} />
             <Stat label={t("networth.total_interest")} value={money(schedule.totalInterest)} />
           </div>
-          <div className="mt-2 h-1.5 w-full overflow-hidden rounded bg-gray-200 dark:bg-gray-700">
+          <div className="mt-2 h-1.5 w-full overflow-hidden rounded bg-gray-200 dark:bg-raised">
             <div className="h-full bg-primary" style={{ width: `${Math.min(100, Math.max(0, Number(schedule.progress) * 100))}%` }} />
           </div>
         </div>
@@ -191,8 +191,8 @@ function SidePanel({ title, onClose, children }: { title: string; onClose: () =>
   return (
     <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative z-10 h-full w-full max-w-md overflow-y-auto bg-white shadow-xl dark:bg-gray-900">
-        <div className="flex items-center justify-between border-b border-border p-3 dark:border-gray-700">
+      <div className="relative z-10 h-full w-full max-w-md overflow-y-auto bg-white shadow-xl dark:bg-panel">
+        <div className="flex items-center justify-between border-b border-border p-3">
           <p className="font-medium">{title}</p>
           <button type="button" aria-label="close" className="px-2 text-gray-500" onClick={onClose}>✕</button>
         </div>
@@ -206,8 +206,8 @@ function Dialog({ title, onClose, children }: { title: string; onClose: () => vo
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-lg overflow-y-auto rounded-lg bg-white shadow-xl dark:bg-gray-900">
-        <div className="flex items-center justify-between border-b border-border p-3 dark:border-gray-700">
+      <div className="relative z-10 w-full max-w-lg overflow-y-auto rounded-lg bg-white shadow-xl dark:bg-panel">
+        <div className="flex items-center justify-between border-b border-border p-3">
           <p className="font-medium">{title}</p>
           <button type="button" aria-label="close" className="px-2 text-gray-500" onClick={onClose}>✕</button>
         </div>
@@ -231,7 +231,7 @@ function PartRow({
   const [show, setShow] = useState<null | "revisions" | "schedule" | "anchor">(null);
   const isOrigin = part.startMode === "origin";
   return (
-    <div className="mb-2 rounded-md border border-border bg-white p-2 text-sm dark:border-gray-700 dark:bg-gray-800">
+    <div className="mb-2 rounded-md border border-border bg-surface p-2 text-sm">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="font-medium">
@@ -274,7 +274,7 @@ function AnchorSection({ liabilityId, part, money }: { liabilityId: string; part
   const reAnchor = useReAnchor(household.householdId, liabilityId);
   const [form, setForm] = useState({ anchorDate: isoToday(), anchorBalance: "" });
   return (
-    <div className="mt-2 rounded border border-border p-2 dark:border-gray-700">
+    <div className="mt-2 rounded border border-border p-2">
       <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{t("networth.re_anchor")}</p>
       <p className="text-xs text-gray-500 dark:text-gray-400">{t("networth.re_anchor_help")}</p>
       {part.anchorDate && (
@@ -304,7 +304,7 @@ function RevisionsSection({ liabilityId, part }: { liabilityId: string; part: Pa
   const delRevision = useDeleteRevision(household.householdId, liabilityId);
   const [rev, setRev] = useState({ effectiveDate: isoToday(), annualRate: "" });
   return (
-    <div className="mt-2 rounded border border-border p-2 dark:border-gray-700">
+    <div className="mt-2 rounded border border-border p-2">
       <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{t("networth.rate_revisions")}</p>
       <p className="text-xs text-gray-500 dark:text-gray-400">{t("networth.rate_revisions_help")}</p>
       <ul className="text-xs">
@@ -546,7 +546,7 @@ function PartForm({
           </p>
         </div>
 
-        <div className="rounded border border-border p-2 dark:border-gray-700">
+        <div className="rounded border border-border p-2">
           <div className="flex flex-wrap items-center gap-2">
             <Label className="mb-0">{t("networth.provided_value")}</Label>
             <Select className="w-auto" value={value.driver} onChange={(e) => onChange({ ...value, driver: e.target.value as Driver })}>
@@ -593,7 +593,7 @@ function DriverField({
       {editable ? (
         <Input type={type} step={type === "number" ? "0.01" : undefined} value={editValue} onChange={(e) => onEdit(e.target.value)} />
       ) : (
-        <div className="flex h-9 items-center rounded-md border border-dashed border-border px-3 text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
+        <div className="flex h-9 items-center rounded-md border border-dashed border-border px-3 text-sm text-gray-500 dark:text-gray-400">
           <span className="font-mono tabular-nums">{computed ?? "—"}</span>
           <span className="ml-2 text-[10px] uppercase tracking-wide">{t("networth.computed")}</span>
         </div>

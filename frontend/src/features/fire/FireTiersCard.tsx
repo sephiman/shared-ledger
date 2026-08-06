@@ -126,7 +126,7 @@ function TierBox({ tier, projection, currency }: { tier: FireTierOutput; project
   })();
 
   return (
-    <div className="rounded-md border border-border p-3 dark:border-gray-700">
+    <div className="rounded-md border border-border p-3">
       <div className="flex items-center gap-2">
         <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: TIER_COLORS[tier.key] }} />
         <p className="font-medium">{t(`fire.tier_${tier.key}`)}</p>
@@ -159,7 +159,7 @@ function TierBox({ tier, projection, currency }: { tier: FireTierOutput; project
                 <span>{t("fire.coverage")}</span>
                 <span className="font-medium">{formatPercent(tier.coveragePercent, locale, 0)}</span>
               </div>
-              <div className="mt-1 h-1.5 w-full overflow-hidden rounded bg-gray-100 dark:bg-gray-700">
+              <div className="mt-1 h-1.5 w-full overflow-hidden rounded bg-gray-100 dark:bg-raised">
                 <div
                   className="h-full rounded"
                   style={{ width: `${Math.min(100, Math.max(0, tier.coveragePercent))}%`, backgroundColor: TIER_COLORS[tier.key] }}

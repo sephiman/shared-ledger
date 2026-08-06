@@ -16,7 +16,7 @@ export function TabBar({
   ariaLabel?: string;
 }) {
   return (
-    <div className="sticky top-0 z-20 -mx-4 border-b border-border bg-gray-50 px-4 dark:bg-gray-900">
+    <div className="sticky top-0 z-20 -mx-4 border-b border-border bg-canvas px-4">
       <div className="py-2 md:hidden">
         <Select value={value} onChange={(e) => onChange(e.target.value)} aria-label={ariaLabel}>
           {items.map((it) => (

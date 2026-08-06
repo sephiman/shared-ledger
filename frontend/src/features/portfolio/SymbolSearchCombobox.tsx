@@ -63,7 +63,7 @@ export function SymbolSearchCombobox({
         aria-autocomplete="list"
       />
       {open && query.trim().length >= 2 && (
-        <div className="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-border bg-white shadow-lg dark:bg-gray-800 dark:border-gray-600">
+        <div className="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-border-strong bg-surface shadow-lg">
           {isFetching && (
             <p className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">{t("common.loading")}</p>
           )}
@@ -78,7 +78,7 @@ export function SymbolSearchCombobox({
               key={`${c.provider}:${c.providerSymbol}:${c.exchange ?? ""}`}
               type="button"
               className={cn(
-                "block w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700",
+                "block w-full px-3 py-2 text-left text-sm hover:bg-row-hover",
               )}
               onClick={() => {
                 onSelect(c);

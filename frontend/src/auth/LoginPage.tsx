@@ -10,7 +10,7 @@ export function LoginPage() {
   const { login } = useAuth();
   const { t } = useTranslation();
   const { resolvedTheme } = useTheme();
-  const logoSrc = resolvedTheme === "dark" ? "/SharedLedgerDark.png" : "/SharedLedgerLight.png";
+  const logoSrc = resolvedTheme === "light" ? "/SharedLedgerLight.png" : "/SharedLedgerDark.png";
   const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState("");
@@ -21,7 +21,7 @@ export function LoginPage() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 dark:bg-gray-900">
+    <div className="flex min-h-screen items-center justify-center bg-canvas px-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="flex flex-col items-center gap-3">
           <img src={logoSrc} alt={t("app.name")} className="h-12 w-auto" />

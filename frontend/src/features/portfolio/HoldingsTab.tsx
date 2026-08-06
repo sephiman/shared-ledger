@@ -222,7 +222,7 @@ export function HoldingsTab() {
           <a
             href={`/api/households/${household.householdId}/portfolio/export.csv`}
             download
-            className="inline-flex items-center justify-center rounded-md border border-border bg-white px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 dark:hover:bg-gray-600"
+            className="inline-flex items-center justify-center rounded-md border border-border-strong bg-raised px-4 py-2 text-sm font-medium text-gray-900 hover:bg-raised-hover dark:text-gray-100"
           >
             {t("common.export_csv")}
           </a>
@@ -348,7 +348,7 @@ export function HoldingsTab() {
                   const isOpen = expanded.has(row.holding.id);
                   const age = priceAge(row, now);
                   return (
-                    <li key={row.holding.id} className="rounded-md border border-border dark:border-gray-700">
+                    <li key={row.holding.id} className="rounded-md border border-border">
                       <button
                         type="button"
                         onClick={() => expanded.toggle(row.holding.id)}
@@ -364,7 +364,7 @@ export function HoldingsTab() {
                                 {t(`portfolio.class.${row.holding.assetClass}`)}
                               </span>
                               {row.holding.closed && (
-                                <span className="ml-2 rounded-full bg-gray-200 px-2 py-0.5 text-xs font-normal text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                                <span className="ml-2 rounded-full bg-gray-200 px-2 py-0.5 text-xs font-normal text-gray-600 dark:bg-raised dark:text-gray-300">
                                   {t("portfolio.closed")}
                                 </span>
                               )}
@@ -397,7 +397,7 @@ export function HoldingsTab() {
                         </div>
                       </button>
                       {isOpen && (
-                        <div className="border-t border-border px-3 py-2 dark:border-gray-700">
+                        <div className="border-t border-border px-3 py-2">
                           <HoldingDetail
                             row={row}
                             onEdit={() => setPanel({ kind: "edit", holding: row.holding })}
@@ -435,7 +435,7 @@ export function HoldingsTab() {
                     return (
                       <Fragment key={row.holding.id}>
                         <tr
-                          className="cursor-pointer border-t border-border hover:bg-gray-50 dark:hover:bg-gray-700/40"
+                          className="cursor-pointer border-t border-border hover:bg-gray-50 dark:hover:bg-row-hover/40"
                           onClick={() => expanded.toggle(row.holding.id)}
                           aria-expanded={isOpen}
                         >
@@ -447,7 +447,7 @@ export function HoldingsTab() {
                             )}
                             <span className="ml-2 text-xs text-gray-400">{t(`portfolio.class.${row.holding.assetClass}`)}</span>
                             {row.holding.closed && (
-                              <span className="ml-2 rounded-full bg-gray-200 px-2 py-0.5 text-xs text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                              <span className="ml-2 rounded-full bg-gray-200 px-2 py-0.5 text-xs text-gray-600 dark:bg-raised dark:text-gray-300">
                                 {t("portfolio.closed")}
                               </span>
                             )}
@@ -504,7 +504,7 @@ export function HoldingsTab() {
                           </td>
                         </tr>
                         {isOpen && (
-                          <tr className="border-t border-border bg-gray-50/50 dark:bg-gray-900/30">
+                          <tr className="border-t border-border bg-gray-50/50 dark:bg-sunken/30">
                             <td></td>
                             <td colSpan={8} className="px-2 py-3">
                               <HoldingDetail
@@ -748,7 +748,7 @@ function LotsEditor({ holding, currency, locale }: { holding: Holding; currency:
       </div>
 
       {formType && (
-        <div className="space-y-2 rounded-md border border-border p-3 dark:border-gray-700">
+        <div className="space-y-2 rounded-md border border-border p-3">
           <p className="text-xs font-medium">
             {formType === "BUY" ? t("portfolio.add_lot") : t("portfolio.register_sale")}
           </p>
@@ -798,7 +798,7 @@ function LotsEditor({ holding, currency, locale }: { holding: Holding; currency:
               lot.type === "BUY" && remaining != null && new Decimal(remaining).gt(0) && lot.unrealizedPnl != null;
             const showRealized = lot.realizedPnl != null && pnlTone(lot.realizedPnl) !== "neutral";
             return (
-              <li key={lot.id} className="flex items-start justify-between gap-2 rounded border border-border px-2 py-1 dark:border-gray-700">
+              <li key={lot.id} className="flex items-start justify-between gap-2 rounded border border-border px-2 py-1">
                 <span className="text-xs text-gray-600 dark:text-gray-300">
                   <span
                     className={cnBadge(lot.type)}

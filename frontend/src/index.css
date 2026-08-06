@@ -2,12 +2,79 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Surfaces, borders and chart chrome are tokens so a theme is a set of variable values rather than a
+ * parallel set of component styles. Plain `@theme` (never `@theme inline`) is required: inlining would
+ * bake the light values into the utilities and the per-theme overrides below would stop applying. */
 @theme {
   --color-primary: #0ea5e9;
   --color-primary-foreground: #ffffff;
   --color-muted: #f3f4f6;
-  --color-border: #e5e7eb;
   --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+
+  /* Elevation, low to high. In light, surface and raised both land on white; they only diverge in the
+   * dark themes, which is why call sites can use one token for both. */
+  --color-canvas: #f9fafb;
+  --color-sunken: #f9fafb;
+  --color-surface: #ffffff;
+  --color-raised: #ffffff;
+  /* Borderless drawer/dialog shells, which the dark theme happens to flatten onto the canvas. That
+   * reads fine there thanks to the shadow, but a shadow is invisible on #000 — so OLED lifts them. */
+  --color-panel: #ffffff;
+
+  /* Hover fills, named after what is being hovered: a menu/nav item, a table row, a raised control. */
+  --color-item-hover: #f3f4f6;
+  --color-row-hover: #f9fafb;
+  --color-raised-hover: #f9fafb;
+
+  --color-border: #e5e7eb;
+  --color-border-strong: #e5e7eb;
+
+  --color-chart-grid: #e5e7eb;
+  --color-chart-axis: #9ca3af;
+  --color-chart-axis-text: #6b7280;
+}
+
+.dark {
+  --color-canvas: #111827;
+  --color-sunken: #111827;
+  --color-surface: #1f2937;
+  --color-raised: #374151;
+  --color-panel: #111827;
+
+  --color-item-hover: #374151;
+  --color-row-hover: #374151;
+  --color-raised-hover: #4b5563;
+
+  --color-border: #374151;
+  --color-border-strong: #4b5563;
+
+  --color-chart-grid: #374151;
+  --color-chart-axis: #6b7280;
+  --color-chart-axis-text: #9ca3af;
+}
+
+/* OLED: pure black canvas so those pixels switch off, with elevation compressed toward black rather
+ * than flattened onto it. Neutral greys, not Tailwind's blue-tinted ones, which read as washed next to
+ * true black. Borders are pushed up a step because tonal elevation barely registers on #000, so the
+ * separation has to come from the line instead. Text, accents and chart series inherit from dark —
+ * OLED carries the `dark` class too. Must stay after `.dark`: equal specificity, source order decides. */
+.oled {
+  --color-canvas: #000000;
+  --color-sunken: #000000;
+  --color-surface: #0f0f0f;
+  --color-raised: #1c1c1c;
+  --color-panel: #0f0f0f;
+
+  --color-item-hover: #1c1c1c;
+  --color-row-hover: #1c1c1c;
+  --color-raised-hover: #2a2a2a;
+
+  --color-border: #303030;
+  --color-border-strong: #454545;
+
+  --color-chart-grid: #262626;
+  --color-chart-axis: #6b7280;
+  --color-chart-axis-text: #9ca3af;
 }
 
 html, body, #root { height: 100%; }
@@ -17,4 +84,12 @@ html, body, #root { height: 100%; }
   input, button, select, textarea { font: inherit; }
   /* Comfortable column separation for the in-app data tables. */
   th, td { @apply px-2; }
+
+  /* Recharts hardcodes its grid and axis colours (#ccc, #666) and offers no theming hook, so its own
+   * class names are the single place to bind them to tokens — otherwise every chart would need props
+   * threaded through. Presentation attributes lose to author CSS, which is what lets this win. */
+  .recharts-cartesian-grid line { stroke: var(--color-chart-grid); }
+  .recharts-cartesian-axis-line,
+  .recharts-cartesian-axis-tick-line { stroke: var(--color-chart-axis); }
+  .recharts-cartesian-axis-tick-value { fill: var(--color-chart-axis-text); }
 }

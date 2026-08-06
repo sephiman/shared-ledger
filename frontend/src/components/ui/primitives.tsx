@@ -3,7 +3,7 @@ import { cn } from "@/lib/cn";
 
 export function Badge({ children, tone = "neutral", className }: { children: ReactNode; tone?: "neutral" | "amber" | "sky" | "green" | "red"; className?: string }) {
   const tones = {
-    neutral: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300",
+    neutral: "bg-gray-100 text-gray-600 dark:bg-surface dark:text-gray-300",
     amber: "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200",
     sky: "bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-200",
     green: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200",
@@ -16,9 +16,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLBut
   ({ className, variant = "primary", type = "button", ...props }, ref) => {
     const variants = {
       primary: "bg-primary text-primary-foreground hover:bg-sky-600",
-      secondary: "bg-white border border-border text-gray-900 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 dark:hover:bg-gray-600",
+      secondary: "bg-raised border border-border-strong text-gray-900 hover:bg-raised-hover dark:text-gray-100",
       danger: "bg-red-600 text-white hover:bg-red-700",
-      ghost: "bg-transparent text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700",
+      ghost: "bg-transparent text-gray-700 hover:bg-item-hover dark:text-gray-200",
     };
     return (
       <button
@@ -44,7 +44,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
       ref={ref}
       aria-invalid={invalid || undefined}
       className={cn(
-        "block w-full rounded-md border border-border bg-white px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:bg-gray-100 dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600 dark:placeholder:text-gray-500 dark:disabled:bg-gray-700",
+        "block w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:bg-gray-100 dark:text-gray-100 dark:placeholder:text-gray-500 dark:disabled:bg-raised",
         invalid && invalidRing,
         className,
       )}
@@ -60,7 +60,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
       ref={ref}
       aria-invalid={invalid || undefined}
       className={cn(
-        "block w-full rounded-md border border-border bg-white px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600",
+        "block w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:text-gray-100",
         invalid && invalidRing,
         className,
       )}
@@ -76,7 +76,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
       ref={ref}
       aria-invalid={invalid || undefined}
       className={cn(
-        "block w-full rounded-md border border-border bg-white px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600",
+        "block w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:text-gray-100",
         invalid && invalidRing,
         className,
       )}
@@ -87,11 +87,11 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
 Select.displayName = "Select";
 
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("rounded-lg border border-border bg-white shadow-sm dark:bg-gray-800 dark:border-gray-700", className)} {...props} />;
+  return <div className={cn("rounded-lg border border-border bg-surface shadow-sm", className)} {...props} />;
 }
 
 export function CardHeader({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("border-b border-border p-4 dark:border-gray-700", className)} {...props} />;
+  return <div className={cn("border-b border-border p-4", className)} {...props} />;
 }
 
 export function CardBody({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
@@ -118,7 +118,7 @@ export function Checkbox({ indeterminate, className, ...props }: InputHTMLAttrib
       ref={ref}
       type="checkbox"
       className={cn(
-        "h-4 w-4 shrink-0 rounded border-border text-primary focus:ring-2 focus:ring-primary focus:ring-offset-0 dark:border-gray-600 dark:bg-gray-700",
+        "h-4 w-4 shrink-0 rounded border-border-strong text-primary focus:ring-2 focus:ring-primary focus:ring-offset-0 dark:bg-raised",
         className,
       )}
       {...props}
@@ -167,7 +167,7 @@ export function CheckboxTree({
   return (
     <div
       className={cn(
-        "max-h-[28rem] divide-y divide-border overflow-auto rounded-md border border-border bg-white dark:divide-gray-700 dark:bg-gray-800 dark:border-gray-600",
+        "max-h-[28rem] divide-y divide-border overflow-auto rounded-md border border-border-strong bg-surface",
         className,
       )}
     >
@@ -177,7 +177,7 @@ export function CheckboxTree({
         return (
           <div key={g.value}>
             {/* Group header */}
-            <div className="flex items-center gap-1 bg-gray-50 px-1.5 py-1.5 dark:bg-gray-800/60">
+            <div className="flex items-center gap-1 bg-gray-50 px-1.5 py-1.5 dark:bg-surface/60">
               {hasChildren ? (
                 <button
                   type="button"
@@ -205,16 +205,16 @@ export function CheckboxTree({
                   return (
                     <label
                       key={c.value}
-                      className="flex cursor-pointer items-stretch rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
+                      className="flex cursor-pointer items-stretch rounded text-sm hover:bg-item-hover"
                     >
                       <span className="relative w-4 shrink-0" aria-hidden>
                         <span
                           className={cn(
-                            "absolute left-1/2 top-0 border-l border-border dark:border-gray-600",
+                            "absolute left-1/2 top-0 border-l border-border-strong",
                             isLast ? "h-1/2" : "h-full",
                           )}
                         />
-                        <span className="absolute left-1/2 right-0 top-1/2 border-t border-border dark:border-gray-600" />
+                        <span className="absolute left-1/2 right-0 top-1/2 border-t border-border-strong" />
                       </span>
                       <span className="flex flex-1 items-center gap-2 py-1 pr-1.5">
                         <Checkbox checked={c.checked} onChange={() => onToggleLeaf(g.value, c.value)} />
@@ -257,7 +257,7 @@ export function Chip({ children, onClick, active }: { children: React.ReactNode;
         "inline-flex items-center rounded-full border px-3 py-1 text-sm transition-colors",
         active
           ? "border-primary bg-sky-50 text-primary dark:bg-sky-900/40 dark:text-sky-300"
-          : "border-border bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-600",
+          : "border-border-strong bg-raised text-gray-700 hover:bg-raised-hover dark:text-gray-200",
       )}
     >
       {children}

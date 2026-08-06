@@ -117,7 +117,7 @@ export function BudgetsPage() {
               const isEditingHere = editing?.code === c.code && editing.mode === "monthly";
               const monthlyAmount = monthlyByCat.get(c.code)?.amount;
               return (
-                <li key={c.code} className="rounded-md border border-border p-3 dark:border-gray-700">
+                <li key={c.code} className="rounded-md border border-border p-3">
                   <div className="flex items-start justify-between gap-2">
                     <p className="font-medium">
                       <span className="mr-1.5" aria-hidden>{categoryIcon(c.code)}</span>
@@ -247,7 +247,7 @@ export function BudgetsPage() {
               const isEditingHere = editing?.code === c.code && editing.mode === "annual";
               const annualAmount = annualByCat.get(c.code)?.amount;
               return (
-                <li key={c.code} className="rounded-md border border-border p-3 dark:border-gray-700">
+                <li key={c.code} className="rounded-md border border-border p-3">
                   <div className="flex items-center justify-between gap-2">
                     <p className="font-medium">
                       <span className="mr-1.5" aria-hidden>{categoryIcon(c.code)}</span>

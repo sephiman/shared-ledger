@@ -256,7 +256,7 @@ export function FireSettingsCard({
               <div key={base} className="mb-3">
                 <Label>{t(`fire.spending_${base}`)}</Label>
                 <div className="space-y-2">
-                  <div className="rounded-md border border-border p-2 dark:border-gray-700">
+                  <div className="rounded-md border border-border p-2">
                     <label className="flex items-center gap-2 text-sm">
                       <input
                         type="radio"
@@ -275,7 +275,7 @@ export function FireSettingsCard({
                       {t(`fire.spending_${base}_derived_explain`)}
                     </p>
                   </div>
-                  <div className="rounded-md border border-border p-2 dark:border-gray-700">
+                  <div className="rounded-md border border-border p-2">
                     <label className="flex items-center gap-2 text-sm">
                       <input
                         type="radio"
@@ -335,7 +335,7 @@ export function FireSettingsCard({
                 : mode === "savings" ? derived?.savingsMonthly ?? null
                 : derived?.movementsMonthly ?? null;
               return (
-                <div key={mode} className="rounded-md border border-border p-2 dark:border-gray-700">
+                <div key={mode} className="rounded-md border border-border p-2">
                   <label className="flex items-center gap-2 text-sm">
                     <input
                       type="radio"
@@ -481,7 +481,7 @@ export function FireSettingsCard({
                       : [...form.qualifyingAssetClasses, cls.code];
                     patch({ qualifyingAssetClasses: next }, ["qualifying"]);
                   }}
-                  className={`rounded-full border px-3 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-60 ${active ? "border-primary bg-sky-50 text-primary dark:bg-sky-900/40 dark:text-sky-300" : "border-border bg-white text-gray-700 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600"}`}
+                  className={`rounded-full border px-3 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-60 ${active ? "border-primary bg-sky-50 text-primary dark:bg-sky-900/40 dark:text-sky-300" : "border-border-strong bg-raised text-gray-700 dark:text-gray-200"}`}
                 >
                   {t(`asset.${cls.code}`)}
                 </button>

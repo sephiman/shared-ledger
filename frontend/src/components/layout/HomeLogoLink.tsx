@@ -8,7 +8,7 @@ import { useTheme } from "@/lib/theme";
 export function HomeLogoLink() {
   const { t } = useTranslation();
   const { resolvedTheme } = useTheme();
-  const logoSrc = resolvedTheme === "dark" ? "/SharedLedgerDark.png" : "/SharedLedgerLight.png";
+  const logoSrc = resolvedTheme === "light" ? "/SharedLedgerLight.png" : "/SharedLedgerDark.png";
 
   return (
     <Link

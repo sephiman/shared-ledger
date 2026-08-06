@@ -65,7 +65,7 @@ export function ScheduleEditor({ householdId, lendingId, schedule, disabled }: P
 
   if (schedule && !open) {
     return (
-      <div className="space-y-2 rounded-md border border-border p-3 dark:border-gray-700">
+      <div className="space-y-2 rounded-md border border-border p-3">
         <div className="flex items-center justify-between">
           <p className="font-medium">{t("lendings.schedule")}</p>
           <span className={schedule.active ? "text-emerald-600" : "text-gray-500"}>
@@ -107,7 +107,7 @@ export function ScheduleEditor({ householdId, lendingId, schedule, disabled }: P
   }
 
   return (
-    <div className="space-y-3 rounded-md border border-border p-3 dark:border-gray-700">
+    <div className="space-y-3 rounded-md border border-border p-3">
       <p className="font-medium">{t("lendings.schedule")}</p>
       <div>
         <Label>{t("lendings.frequency")}</Label>

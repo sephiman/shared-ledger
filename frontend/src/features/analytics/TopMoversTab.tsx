@@ -194,7 +194,7 @@ function MoverTable({
           {rows.map((r) => (
             <tr
               key={r.categoryCode}
-              className="cursor-pointer border-t border-border hover:bg-gray-50 dark:hover:bg-gray-700/50"
+              className="cursor-pointer border-t border-border hover:bg-gray-50 dark:hover:bg-row-hover/50"
               onClick={() => open(r.categoryCode)}
             >
               <td className="py-2">

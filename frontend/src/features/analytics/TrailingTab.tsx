@@ -83,7 +83,7 @@ export function TrailingTab() {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md border border-border p-3 dark:border-gray-700">
+    <div className="rounded-md border border-border p-3">
       <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">{label}</p>
       <p className="mt-1 text-lg font-semibold">{value}</p>
     </div>

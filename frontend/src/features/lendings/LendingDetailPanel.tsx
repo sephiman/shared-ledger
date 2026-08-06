@@ -40,7 +40,7 @@ export function LendingDetailPanel({ householdId, lendingId, currency, locale, o
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-black/40" role="dialog" aria-modal="true" onClick={onClose}>
       <div
-        className="h-full w-full max-w-lg overflow-y-auto bg-gray-50 p-4 shadow-xl dark:bg-gray-900"
+        className="h-full w-full max-w-lg overflow-y-auto bg-gray-50 p-4 shadow-xl dark:bg-panel"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-center justify-between">
@@ -128,7 +128,7 @@ export function LendingDetailPanel({ householdId, lendingId, currency, locale, o
                   <>
                     <ul className="space-y-2 md:hidden">
                       {detail.payments.map((p) => (
-                        <li key={p.id} className="rounded-md border border-border p-3 dark:border-gray-700">
+                        <li key={p.id} className="rounded-md border border-border p-3">
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1 break-words">
                               <p className="text-sm font-medium">

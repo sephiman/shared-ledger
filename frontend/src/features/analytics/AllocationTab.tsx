@@ -157,7 +157,7 @@ export function AllocationTab() {
                           key={row.key}
                           className={
                             linkable
-                              ? "cursor-pointer border-t border-border hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                              ? "cursor-pointer border-t border-border hover:bg-gray-50 dark:hover:bg-row-hover/50"
                               : "border-t border-border"
                           }
                           onClick={linkable ? () => navigateToCategoryGroup(row.key) : undefined}

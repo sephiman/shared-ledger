@@ -339,7 +339,7 @@ function DailyCalendar({
                 c.inMonth
                   ? "text-gray-900 dark:text-gray-100"
                   : "text-gray-300 dark:text-gray-600",
-                !bg && c.inMonth && "bg-gray-50 dark:bg-gray-900/40",
+                !bg && c.inMonth && "bg-gray-50 dark:bg-sunken/40",
                 clickable && "hover:border-primary cursor-pointer",
                 !clickable && "cursor-default",
                 isSelected && "ring-2 ring-primary",
@@ -435,7 +435,7 @@ function DayDetailPanel({
   };
 
   return (
-    <div className="rounded-md border border-border p-3 space-y-3 dark:border-gray-700">
+    <div className="rounded-md border border-border p-3 space-y-3">
       <div className="flex items-start gap-2">
         <div className="flex-1">
           <p className="font-medium">{formatDate(day, locale, "EEEE, d MMMM yyyy")}</p>
@@ -628,7 +628,7 @@ function PatternTooltip({ active, label, payload, currency, locale }: PatternToo
   const raw = payload[0]?.value;
   const value = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : 0;
   return (
-    <div className="rounded-md border border-border bg-white p-2 text-xs shadow-sm dark:bg-gray-800">
+    <div className="rounded-md border border-border bg-surface p-2 text-xs shadow-sm">
       <p className="mb-1 font-medium text-gray-900 dark:text-gray-100">{label}</p>
       <p className="font-medium tabular-nums text-gray-900 dark:text-gray-100">{formatMoney(value, currency, locale)}</p>
     </div>

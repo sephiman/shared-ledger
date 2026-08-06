@@ -30,7 +30,7 @@ export function HomePanelsCard() {
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("settings.home_panels_description")}</p>
       </CardHeader>
       <CardBody>
-        <div className="divide-y divide-border dark:divide-gray-700">
+        <div className="divide-y divide-border">
           {HOME_PANELS.map((p) => (
             <Toggle
               key={p.id}

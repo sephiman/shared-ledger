@@ -39,6 +39,8 @@ function Shell({ marker }: { marker: string }) {
 
 afterEach(async () => {
   cleanup();
+  localStorage.clear();
+  document.documentElement.className = "";
   await i18n.changeLanguage("en");
 });
 
@@ -89,6 +91,13 @@ describe("HomeLogoLink", () => {
     renderAt("/analytics/daily");
 
     expect(screen.getByRole("link", { name: "Ir a Inicio" })).toHaveAttribute("href", "/dashboard");
+  });
+
+  it("uses the dark artwork under OLED, which is darker still than dark", () => {
+    localStorage.setItem("theme", "oled");
+    renderAt("/dashboard");
+
+    expect(screen.getByAltText("Shared Ledger")).toHaveAttribute("src", "/SharedLedgerDark.png");
   });
 
   it("leaves the login-page logo inert, so it cannot lead into a protected route", () => {

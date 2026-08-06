@@ -176,7 +176,7 @@ export function SettingsPage() {
                 const isOwnerHere = h.role === "owner";
                 const isDeleting = deleteTargetId === h.householdId;
                 return (
-                  <li key={h.householdId} className="rounded-md border border-border p-3 dark:border-gray-700">
+                  <li key={h.householdId} className="rounded-md border border-border p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="min-w-0 break-words">
                         <span className="font-medium">{h.name}</span>
@@ -398,7 +398,7 @@ export function SettingsPage() {
               {customCategories.map((c) => {
                 const isDeleting = customDeleteTarget === c.code;
                 return (
-                  <li key={c.code} className="rounded-md border border-border p-3 dark:border-gray-700">
+                  <li key={c.code} className="rounded-md border border-border p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="min-w-0 break-words">
                         <span className="mr-1.5" aria-hidden>{categoryIcon(c.code)}</span>
@@ -500,11 +500,11 @@ export function SettingsPage() {
             <>
               <ul className="space-y-2 md:hidden">
                 {members.map((m) => (
-                  <li key={m.userId} className="rounded-md border border-border p-3 dark:border-gray-700">
+                  <li key={m.userId} className="rounded-md border border-border p-3">
                     <p className="break-words font-medium">
                       {m.email}
                       {user?.id === m.userId && (
-                        <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                        <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600 dark:bg-surface dark:text-gray-300">
                           {t("settings.you")}
                         </span>
                       )}
@@ -531,7 +531,7 @@ export function SettingsPage() {
                       <td className="py-2">
                         {m.email}
                         {user?.id === m.userId && (
-                          <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                          <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600 dark:bg-surface dark:text-gray-300">
                             {t("settings.you")}
                           </span>
                         )}
@@ -586,7 +586,7 @@ export function SettingsPage() {
             {issuedToken && (
               <div className="rounded border border-sky-300 bg-sky-50 p-3 text-sm text-gray-800 dark:border-sky-900 dark:bg-sky-950/30 dark:text-gray-200">
                 <p className="font-medium">{t("settings.issued_token")}</p>
-                <code className="block break-all rounded bg-white px-2 py-1 text-gray-900 dark:bg-gray-900 dark:text-gray-100">{issuedToken}</code>
+                <code className="block break-all rounded bg-white px-2 py-1 text-gray-900 dark:bg-sunken dark:text-gray-100">{issuedToken}</code>
                 <p className="mt-2 break-all text-xs text-gray-600 dark:text-gray-300">{window.location.origin}/register?invite={issuedToken}</p>
               </div>
             )}
@@ -596,7 +596,7 @@ export function SettingsPage() {
               <>
                 <ul className="space-y-2 md:hidden">
                   {invitations.map((i) => (
-                    <li key={i.id} className="rounded-md border border-border p-3 dark:border-gray-700">
+                    <li key={i.id} className="rounded-md border border-border p-3">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1 break-words">
                           <p className="font-medium">{i.email ?? "—"}</p>

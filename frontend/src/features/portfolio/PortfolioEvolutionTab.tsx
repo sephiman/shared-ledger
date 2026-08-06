@@ -67,7 +67,7 @@ function StatCard({
   deltaTone: number;
 }) {
   return (
-    <div className="rounded-md border border-border p-2.5 dark:border-gray-700">
+    <div className="rounded-md border border-border p-2.5">
       <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
         <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />
         <span className="truncate">{label}</span>
@@ -330,7 +330,7 @@ export function PortfolioEvolutionTab() {
               </ResponsiveContainer>
             </div>
 
-            <div className="border-t border-border pt-4 dark:border-gray-700">
+            <div className="border-t border-border pt-4">
               <p className="font-medium">{t("portfolio.roi_twr")} %</p>
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("portfolio.roi_twr_description")}</p>
               <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -361,10 +361,10 @@ export function PortfolioEvolutionTab() {
                           className={[
                             "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition-colors",
                             !b.hasData
-                              ? "cursor-not-allowed border-border bg-gray-50 text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-500"
+                              ? "cursor-not-allowed border-border bg-gray-50 text-gray-400 dark:bg-surface dark:text-gray-500"
                               : active
                                 ? "border-primary bg-sky-50 text-primary dark:bg-sky-900/40 dark:text-sky-300"
-                                : "border-border bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600",
+                                : "border-border-strong bg-raised text-gray-700 hover:bg-raised-hover dark:text-gray-200",
                           ].join(" ")}
                         >
                           <span

@@ -607,7 +607,7 @@ function StackedExplorerPanel({
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-md border border-border p-3 dark:border-gray-700">
+    <div className="rounded-md border border-border p-3">
       <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">{label}</p>
       <p className="mt-1 text-lg font-semibold">{value}</p>
       {sub && <p className="text-xs text-gray-500 dark:text-gray-400">{sub}</p>}
@@ -641,7 +641,7 @@ function ExplorerTooltip({
   const deltaAbs = priorVal != null ? currentVal - priorVal : null;
   const deltaPct = priorVal != null && priorVal !== 0 ? ((currentVal - priorVal) / priorVal) * 100 : null;
   return (
-    <div className="rounded-md border border-border bg-white px-3 py-2 text-xs shadow-sm dark:bg-gray-800 dark:border-gray-600">
+    <div className="rounded-md border border-border-strong bg-surface px-3 py-2 text-xs shadow-sm">
       <p className="font-medium">{first.currentMonthLabel}</p>
       <p className="mt-1">
         <span style={{ color: CURRENT_COLOR }}>●</span>{" "}

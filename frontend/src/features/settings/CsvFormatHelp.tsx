@@ -23,7 +23,7 @@ export function CsvFormatHelp({ dataset }: { dataset: Dataset }) {
   return (
     <details className="mt-2 text-sm">
       <summary className="cursor-pointer select-none text-primary">{t("import.format.toggle")}</summary>
-      <div className="mt-2 space-y-3 rounded border border-border bg-gray-50 p-3 dark:bg-gray-900/40">
+      <div className="mt-2 space-y-3 rounded border border-border bg-gray-50 p-3 dark:bg-sunken/40">
         <p className="rounded border border-sky-300 bg-sky-50 p-2 text-xs text-sky-900 dark:border-sky-700 dark:bg-sky-900/30 dark:text-sky-100">
           {t("import.format.ai_hint")}
         </p>
@@ -489,7 +489,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function CodeBlock({ children }: { children: string }) {
   return (
-    <pre className="overflow-x-auto rounded bg-gray-100 p-2 font-mono text-xs text-gray-800 dark:bg-gray-900 dark:text-gray-200">
+    <pre className="overflow-x-auto rounded bg-gray-100 p-2 font-mono text-xs text-gray-800 dark:bg-sunken dark:text-gray-200">
       {children}
     </pre>
   );
@@ -523,7 +523,7 @@ function CategoryCodeList({ items }: { items: Category[] }) {
         <li key={c.code} className="text-xs">
           <code className="font-mono">{c.code}</code> — {categoryLabel(c, t)}
           {c.custom && (
-            <span className="ml-1 rounded bg-gray-200 px-1 text-[10px] uppercase tracking-wide text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+            <span className="ml-1 rounded bg-gray-200 px-1 text-[10px] uppercase tracking-wide text-gray-600 dark:bg-raised dark:text-gray-300">
               {t("import.format.custom_badge")}
             </span>
           )}

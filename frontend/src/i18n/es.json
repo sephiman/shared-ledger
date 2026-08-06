@@ -1018,6 +1018,7 @@
     "theme": "Tema",
     "theme_light": "Claro",
     "theme_dark": "Oscuro",
+    "theme_oled": "OLED",
     "theme_system": "Sistema",
     "danger_zone": "Zona de peligro",
     "wipe_description": "Borra permanentemente todos los datos financieros de esta unidad familiar: transacciones, presupuestos y plantillas recurrentes, instantáneas y movimientos de patrimonio, activos, pasivos e importes prestados, la cartera de inversión, las conexiones bancarias y sus elementos pendientes, y los ajustes de notificaciones/automatización. Esta acción no se puede deshacer.",

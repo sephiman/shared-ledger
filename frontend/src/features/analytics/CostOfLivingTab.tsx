@@ -46,7 +46,7 @@ function CategoryBreakdown({
               {rows.map((row) => (
                 <tr
                   key={row.categoryCode}
-                  className="cursor-pointer border-t border-border hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                  className="cursor-pointer border-t border-border hover:bg-gray-50 dark:hover:bg-row-hover/50"
                   onClick={() => navigate(`/transactions?categoryCode=${encodeURIComponent(row.categoryCode)}`)}
                 >
                   <td className="py-2">

@@ -326,7 +326,7 @@ export function SnapshotsTab() {
           <a
             href={`/api/households/${household.householdId}/snapshots/export.csv`}
             download
-            className="inline-flex items-center justify-center rounded-md border border-border bg-white px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 dark:hover:bg-gray-600"
+            className="inline-flex items-center justify-center rounded-md border border-border-strong bg-raised px-4 py-2 text-sm font-medium text-gray-900 hover:bg-raised-hover dark:text-gray-100"
           >
             {t("common.export_csv")}
           </a>
@@ -393,7 +393,7 @@ export function SnapshotsTab() {
               </div>
               {namedIdsInForm.length > 0 && (
                 <>
-                  <p className="mt-1 border-t border-border pt-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:border-gray-700 dark:text-gray-500">{t("networth.named_assets")}</p>
+                  <p className="mt-1 border-t border-border pt-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">{t("networth.named_assets")}</p>
                   <div className="space-y-2">
                     {namedIdsInForm.map((id) => {
                       const d = panel.kind === "create" ? delta(previousNamedAssets[id], named[id] ?? "0") : null;
@@ -482,7 +482,7 @@ export function SnapshotsTab() {
                 {snapshots.slice().reverse().map((s) => {
                   const isOpen = expanded.has(s.id);
                   return (
-                    <li key={s.id} className="rounded-md border border-border dark:border-gray-700">
+                    <li key={s.id} className="rounded-md border border-border">
                       <button
                         type="button"
                         onClick={() => expanded.toggle(s.id)}
@@ -532,7 +532,7 @@ export function SnapshotsTab() {
                         </div>
                       </button>
                       {isOpen && (
-                        <div className="border-t border-border px-3 py-2 dark:border-gray-700">
+                        <div className="border-t border-border px-3 py-2">
                           <SnapshotComposition snapshot={s} />
                         </div>
                       )}
@@ -558,7 +558,7 @@ export function SnapshotsTab() {
                     return (
                       <Fragment key={s.id}>
                         <tr
-                          className="cursor-pointer border-t border-border hover:bg-gray-50 dark:hover:bg-gray-700/40"
+                          className="cursor-pointer border-t border-border hover:bg-gray-50 dark:hover:bg-row-hover/40"
                           onClick={() => expanded.toggle(s.id)}
                           aria-expanded={isOpen}
                         >
@@ -594,7 +594,7 @@ export function SnapshotsTab() {
                           </td>
                         </tr>
                         {isOpen && (
-                          <tr className="border-t border-border bg-gray-50/50 dark:bg-gray-900/30">
+                          <tr className="border-t border-border bg-gray-50/50 dark:bg-sunken/30">
                             <td></td>
                             <td colSpan={6} className="px-2 py-3">
                               <SnapshotComposition snapshot={s} />
@@ -651,7 +651,7 @@ function SnapshotComposition({ snapshot }: { snapshot: Snapshot }) {
                   {t(`asset.${a.assetClassCode}`, a.assetClassCode)}
                   {a.valueSource === "carried_over" && (
                     <span
-                      className="ml-2 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+                      className="ml-2 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-gray-500 dark:bg-surface dark:text-gray-400"
                       title={t("networth.value_source_carried_over_hint")}
                     >
                       {t("networth.value_source_carried_over")}
@@ -662,7 +662,7 @@ function SnapshotComposition({ snapshot }: { snapshot: Snapshot }) {
               </li>
             ))}
             {snapshot.namedAssets.length > 0 && (
-              <li className="mt-1 border-t border-border pt-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:border-gray-700 dark:text-gray-500">
+              <li className="mt-1 border-t border-border pt-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
                 {t("networth.named_assets")}
               </li>
             )}

@@ -27,7 +27,7 @@ export function AppShell() {
 
   return (
     <div className="flex flex-col h-dvh">
-      <header className="border-b border-border bg-white dark:bg-gray-800 dark:border-gray-700">
+      <header className="border-b border-border bg-surface">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
           <HomeLogoLink />
           <UserMenu />
@@ -43,7 +43,7 @@ export function AppShell() {
                       "inline-flex whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium",
                       isActive
                         ? "bg-sky-50 text-primary dark:bg-sky-900/40 dark:text-sky-300"
-                        : "text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700",
+                        : "text-gray-600 hover:bg-item-hover dark:text-gray-300",
                     )
                   }
                 >
@@ -59,7 +59,7 @@ export function AppShell() {
           </ul>
         </nav>
       </header>
-      <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900">
+      <main className="flex-1 overflow-y-auto bg-canvas">
         <div className="mx-auto max-w-6xl px-4 pt-6 pb-[calc(env(safe-area-inset-bottom)+5rem)]">
           <Outlet />
         </div>

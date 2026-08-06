@@ -163,7 +163,7 @@ export function FireChart({ projection, currency }: { projection: FireProjection
           </div>
 
           {/* Assumptions block: the projection must be auditable at a glance. */}
-          <aside className="rounded-md border border-border p-3 text-sm dark:border-gray-700">
+          <aside className="rounded-md border border-border p-3 text-sm">
             <p className="mb-2 font-medium">{t("fire.assumptions")}</p>
             <ul className="space-y-1 text-gray-600 dark:text-gray-300">
               <li>{t("fire.assumptions_swr", { value: s.safeWithdrawalRatePct })}</li>

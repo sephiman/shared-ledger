@@ -191,8 +191,8 @@ export function ReplaceDuplicateDialog({
                     <label
                       key={c.transactionId}
                       className={cn(
-                        "flex items-start gap-2 rounded-md border border-border p-2 text-sm dark:border-gray-700",
-                        c.bankLinked ? "opacity-60" : "cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/40",
+                        "flex items-start gap-2 rounded-md border border-border p-2 text-sm",
+                        c.bankLinked ? "opacity-60" : "cursor-pointer hover:bg-gray-50 dark:hover:bg-row-hover/40",
                         c.transactionId === transactionId && "border-primary/60 bg-sky-50 dark:bg-sky-900/20",
                       )}
                     >
@@ -228,13 +228,13 @@ export function ReplaceDuplicateDialog({
                 // A fragment, so the form's space-y-4 still applies to these as DOM children.
                 <>
                   {/* Side-by-side on tablet+, stacked labelled lines on phones. */}
-                  <div className="overflow-hidden rounded-md border border-border dark:border-gray-700">
-                    <div className="hidden border-b border-border bg-gray-50 text-xs font-medium text-gray-500 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-400 sm:grid sm:grid-cols-[7rem_1fr_1fr]">
+                  <div className="overflow-hidden rounded-md border border-border">
+                    <div className="hidden border-b border-border bg-gray-50 text-xs font-medium text-gray-500 dark:bg-surface/60 dark:text-gray-400 sm:grid sm:grid-cols-[7rem_1fr_1fr]">
                       <span className="px-3 py-2" />
                       <span className="px-3 py-2">{t("banks.existing_transaction")}</span>
                       <span className="px-3 py-2">{t("banks.incoming_movement")}</span>
                     </div>
-                    <dl className="divide-y divide-border dark:divide-gray-700">
+                    <dl className="divide-y divide-border">
                       {rows.map((r) => (
                         <div
                           key={r.field}

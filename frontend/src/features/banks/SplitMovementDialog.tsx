@@ -105,7 +105,7 @@ export function SplitMovementDialog({
         <CardBody>
           <form noValidate onSubmit={submit} className="space-y-3">
             {/* Read-only: the date and total carry over unchanged, the direction to every part. */}
-            <div className="rounded-md border border-border p-3 text-sm dark:border-gray-700">
+            <div className="rounded-md border border-border p-3 text-sm">
               <div className="flex items-start justify-between gap-2">
                 <span className="min-w-0 font-medium">{movement.counterparty ?? t("banks.no_counterparty")}</span>
                 <span className={cn("shrink-0 font-semibold", income ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400")}>
@@ -123,7 +123,7 @@ export function SplitMovementDialog({
                 const error = v.rowErrors[index];
                 const amountInvalid = error === "amount_invalid" || error === "amount_nothing_left";
                 return (
-                  <li key={row.key} className="rounded-md border border-border p-3 dark:border-gray-700">
+                  <li key={row.key} className="rounded-md border border-border p-3">
                     <div className="mb-2 flex items-center justify-between gap-2">
                       <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
                         {t("banks.split_part", { n: index + 1 })}
