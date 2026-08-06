@@ -101,7 +101,7 @@ export function NamedValueCard({
                 <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">{t(`networth.asset_type_${item.type}`)}</span>
               )}
               {!item.active && (
-                <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] uppercase tracking-wide text-gray-500 dark:bg-surface dark:text-gray-400">
+                <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] uppercase tracking-wide text-gray-500 dark:bg-chip dark:text-gray-400">
                   {t("common.inactive")}
                 </span>
               )}

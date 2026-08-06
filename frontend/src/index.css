@@ -11,11 +11,19 @@
   --color-muted: #f3f4f6;
   --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
 
-  /* Elevation, low to high. In light, surface and raised both land on white; they only diverge in the
-   * dark themes, which is why call sites can use one token for both. */
+  /* Elevation, low to high. In light these mostly land on white, and in dark several share gray-800;
+   * they exist as separate tokens because OLED needs them to diverge — a flat card can go to black
+   * while a field, a floating menu and a chip each need their own answer. */
   --color-canvas: #f9fafb;
   --color-sunken: #f9fafb;
   --color-surface: #ffffff;
+  /* Form controls: inputs, selects, textareas. Their border, not their fill, marks them as editable. */
+  --color-field: #ffffff;
+  /* Floating layers over other content: dialogs, dropdown menus, popovers, chart tooltips. Distinct
+   * from the scrim behind them (a plain black alpha), which is not tokenised. */
+  --color-overlay: #ffffff;
+  /* Unbordered badges and pills, which have only their fill to read against the surface underneath. */
+  --color-chip: #ffffff;
   --color-raised: #ffffff;
   /* Borderless drawer/dialog shells, which the dark theme happens to flatten onto the canvas. That
    * reads fine there thanks to the shadow, but a shadow is invisible on #000 — so OLED lifts them. */
@@ -37,7 +45,11 @@
 .dark {
   --color-canvas: #111827;
   --color-sunken: #111827;
+  /* field, overlay and chip deliberately match surface here: splitting them must not move the dark theme. */
   --color-surface: #1f2937;
+  --color-field: #1f2937;
+  --color-overlay: #1f2937;
+  --color-chip: #1f2937;
   --color-raised: #374151;
   --color-panel: #111827;
 
@@ -53,25 +65,34 @@
   --color-chart-axis-text: #9ca3af;
 }
 
-/* OLED: pure black canvas so those pixels switch off, with elevation compressed toward black rather
- * than flattened onto it. Neutral greys, not Tailwind's blue-tinted ones, which read as washed next to
- * true black. Borders are pushed up a step because tonal elevation barely registers on #000, so the
- * separation has to come from the line instead. Text, accents and chart series inherit from dark —
- * OLED carries the `dark` class too. Must stay after `.dark`: equal specificity, source order decides. */
+/* OLED: elevation carried by hairline borders over near-black fills, not by lighter fills. Cards sit at
+ * 1.03:1 against the page — effectively off — and it is the border at 1.74:1 that separates them, which
+ * is why every bordered container reads without its fill doing any work. Neutral greys, not Tailwind's
+ * blue-tinted ones, which read as washed next to true black. Text, accents and chart series inherit from
+ * dark, since OLED carries the `dark` class too. Must stay after `.dark`: source order decides. */
 .oled {
   --color-canvas: #000000;
   --color-sunken: #000000;
-  --color-surface: #0f0f0f;
-  --color-raised: #1c1c1c;
-  --color-panel: #0f0f0f;
+  --color-surface: #050505;
+  --color-field: #0a0a0a;
+  /* Floating layers keep a real fill step: they stack over other black surfaces, where a border alone
+   * cannot say which of the two is in front. */
+  --color-overlay: #0d1117;
+  --color-panel: #0d1117;
+  /* chip and raised are the unbordered fills, so their values are tuned to stay perceptible on a black
+   * card rather than to look black themselves. raised stays a step above chip, as gray-700 is above
+   * gray-800 in dark. */
+  --color-chip: #161616;
+  --color-raised: #191919;
 
-  --color-item-hover: #1c1c1c;
-  --color-row-hover: #1c1c1c;
-  --color-raised-hover: #2a2a2a;
+  --color-item-hover: #1e1e1e;
+  --color-row-hover: #1e1e1e;
+  --color-raised-hover: #2b2b2b;
 
-  --color-border: #303030;
-  --color-border-strong: #454545;
+  --color-border: #383838;
+  --color-border-strong: #4a4a4a;
 
+  /* Unchanged: these were tuned for OLED already and only improve against the now-blacker card. */
   --color-chart-grid: #262626;
   --color-chart-axis: #6b7280;
   --color-chart-axis-text: #9ca3af;

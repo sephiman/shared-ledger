@@ -564,7 +564,7 @@ function MovementRow({
               {menuOpen && (
                 <div
                   role="menu"
-                  className="absolute right-0 z-20 mt-1 w-48 rounded-md border border-border bg-surface py-1 shadow-lg"
+                  className="absolute right-0 z-20 mt-1 w-48 rounded-md border border-border bg-overlay py-1 shadow-lg"
                 >
                   {/* Single-item dialogs, both excluded from the batch actions. */}
                   <button

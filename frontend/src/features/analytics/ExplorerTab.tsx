@@ -641,7 +641,7 @@ function ExplorerTooltip({
   const deltaAbs = priorVal != null ? currentVal - priorVal : null;
   const deltaPct = priorVal != null && priorVal !== 0 ? ((currentVal - priorVal) / priorVal) * 100 : null;
   return (
-    <div className="rounded-md border border-border-strong bg-surface px-3 py-2 text-xs shadow-sm">
+    <div className="rounded-md border border-border-strong bg-overlay px-3 py-2 text-xs shadow-sm">
       <p className="font-medium">{first.currentMonthLabel}</p>
       <p className="mt-1">
         <span style={{ color: CURRENT_COLOR }}>●</span>{" "}

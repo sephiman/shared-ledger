@@ -361,7 +361,7 @@ export function PortfolioEvolutionTab() {
                           className={[
                             "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition-colors",
                             !b.hasData
-                              ? "cursor-not-allowed border-border bg-gray-50 text-gray-400 dark:bg-surface dark:text-gray-500"
+                              ? "cursor-not-allowed border-border bg-gray-50 text-gray-400 dark:bg-chip dark:text-gray-500"
                               : active
                                 ? "border-primary bg-sky-50 text-primary dark:bg-sky-900/40 dark:text-sky-300"
                                 : "border-border-strong bg-raised text-gray-700 hover:bg-raised-hover dark:text-gray-200",

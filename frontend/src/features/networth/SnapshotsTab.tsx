@@ -651,7 +651,7 @@ function SnapshotComposition({ snapshot }: { snapshot: Snapshot }) {
                   {t(`asset.${a.assetClassCode}`, a.assetClassCode)}
                   {a.valueSource === "carried_over" && (
                     <span
-                      className="ml-2 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-gray-500 dark:bg-surface dark:text-gray-400"
+                      className="ml-2 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-gray-500 dark:bg-chip dark:text-gray-400"
                       title={t("networth.value_source_carried_over_hint")}
                     >
                       {t("networth.value_source_carried_over")}

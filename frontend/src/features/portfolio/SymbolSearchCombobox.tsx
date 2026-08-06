@@ -63,7 +63,7 @@ export function SymbolSearchCombobox({
         aria-autocomplete="list"
       />
       {open && query.trim().length >= 2 && (
-        <div className="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-border-strong bg-surface shadow-lg">
+        <div className="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-border-strong bg-overlay shadow-lg">
           {isFetching && (
             <p className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">{t("common.loading")}</p>
           )}

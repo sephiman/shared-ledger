@@ -145,7 +145,7 @@ export function ReplaceDuplicateDialog({
       aria-modal="true"
       onClick={onClose}
     >
-      <Card className="w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
+      <Card className="w-full max-w-2xl bg-overlay" onClick={(e) => e.stopPropagation()}>
         <CardHeader>
           <p className="font-medium">{t("banks.replace_title")}</p>
           {/* The hint describes the comparison — out of place in the loading and fallback states. */}
@@ -229,7 +229,7 @@ export function ReplaceDuplicateDialog({
                 <>
                   {/* Side-by-side on tablet+, stacked labelled lines on phones. */}
                   <div className="overflow-hidden rounded-md border border-border">
-                    <div className="hidden border-b border-border bg-gray-50 text-xs font-medium text-gray-500 dark:bg-surface/60 dark:text-gray-400 sm:grid sm:grid-cols-[7rem_1fr_1fr]">
+                    <div className="hidden border-b border-border bg-gray-50 text-xs font-medium text-gray-500 dark:bg-chip dark:text-gray-400 sm:grid sm:grid-cols-[7rem_1fr_1fr]">
                       <span className="px-3 py-2" />
                       <span className="px-3 py-2">{t("banks.existing_transaction")}</span>
                       <span className="px-3 py-2">{t("banks.incoming_movement")}</span>

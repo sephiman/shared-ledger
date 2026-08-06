@@ -115,7 +115,7 @@ function MoneyFlowTooltip({
   const members = node?.members ?? null;
 
   return (
-    <div className="rounded-md border border-border-strong bg-surface p-2 text-xs shadow-sm">
+    <div className="rounded-md border border-border-strong bg-overlay p-2 text-xs shadow-sm">
       <p className="mb-1 font-medium text-gray-900 dark:text-gray-100">{title}</p>
       <p className="font-medium tabular-nums text-gray-900 dark:text-gray-100">{formatMoney(amount, currency, locale)}</p>
       {share && <p className="text-gray-600 dark:text-gray-400">{share}</p>}

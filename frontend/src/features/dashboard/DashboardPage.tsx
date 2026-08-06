@@ -242,7 +242,7 @@ function GroupBarTooltip({ active, label, payload, currency, locale }: GroupBarT
   const raw = payload[0]?.value;
   const value = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : 0;
   return (
-    <div className="rounded-md border border-border bg-surface p-2 text-xs shadow-sm">
+    <div className="rounded-md border border-border bg-overlay p-2 text-xs shadow-sm">
       <p className="mb-1 font-medium text-gray-900 dark:text-gray-100">{label}</p>
       <p className="font-medium tabular-nums text-gray-900 dark:text-gray-100">{formatMoney(value, currency, locale)}</p>
     </div>

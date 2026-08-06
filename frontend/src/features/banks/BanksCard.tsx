@@ -236,7 +236,7 @@ function WhitelistCheckpointDialog({
       aria-modal="true"
       onClick={onClose}
     >
-      <Card className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+      <Card className="w-full max-w-md bg-overlay" onClick={(e) => e.stopPropagation()}>
         <CardHeader>
           <p className="font-medium">{t("banks.whitelist_check_title")}</p>
         </CardHeader>

@@ -86,7 +86,7 @@ export function CustomCategoryDialog({ open, householdId, editing, onClose, onSa
       aria-modal="true"
       onClick={onClose}
     >
-      <Card className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+      <Card className="w-full max-w-md bg-overlay" onClick={(e) => e.stopPropagation()}>
         <CardHeader>
           <p className="font-medium">
             {editing ? t("settings.edit_custom_category") : t("settings.add_custom_category")}

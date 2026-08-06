@@ -3,7 +3,7 @@ import { cn } from "@/lib/cn";
 
 export function Badge({ children, tone = "neutral", className }: { children: ReactNode; tone?: "neutral" | "amber" | "sky" | "green" | "red"; className?: string }) {
   const tones = {
-    neutral: "bg-gray-100 text-gray-600 dark:bg-surface dark:text-gray-300",
+    neutral: "bg-gray-100 text-gray-600 dark:bg-chip dark:text-gray-300",
     amber: "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200",
     sky: "bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-200",
     green: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200",
@@ -44,7 +44,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
       ref={ref}
       aria-invalid={invalid || undefined}
       className={cn(
-        "block w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:bg-gray-100 dark:text-gray-100 dark:placeholder:text-gray-500 dark:disabled:bg-raised",
+        "block w-full rounded-md border border-border-strong bg-field px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:bg-gray-100 dark:text-gray-100 dark:placeholder:text-gray-500 dark:disabled:bg-raised",
         invalid && invalidRing,
         className,
       )}
@@ -60,7 +60,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
       ref={ref}
       aria-invalid={invalid || undefined}
       className={cn(
-        "block w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:text-gray-100",
+        "block w-full rounded-md border border-border-strong bg-field px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:text-gray-100",
         invalid && invalidRing,
         className,
       )}
@@ -76,7 +76,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
       ref={ref}
       aria-invalid={invalid || undefined}
       className={cn(
-        "block w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:text-gray-100",
+        "block w-full rounded-md border border-border-strong bg-field px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:text-gray-100",
         invalid && invalidRing,
         className,
       )}
@@ -167,7 +167,7 @@ export function CheckboxTree({
   return (
     <div
       className={cn(
-        "max-h-[28rem] divide-y divide-border overflow-auto rounded-md border border-border-strong bg-surface",
+        "max-h-[28rem] divide-y divide-border overflow-auto rounded-md border border-border-strong bg-field",
         className,
       )}
     >
@@ -177,7 +177,7 @@ export function CheckboxTree({
         return (
           <div key={g.value}>
             {/* Group header */}
-            <div className="flex items-center gap-1 bg-gray-50 px-1.5 py-1.5 dark:bg-surface/60">
+            <div className="flex items-center gap-1 bg-gray-50 px-1.5 py-1.5 dark:bg-chip">
               {hasChildren ? (
                 <button
                   type="button"

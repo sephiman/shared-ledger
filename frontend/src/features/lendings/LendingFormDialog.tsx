@@ -96,7 +96,7 @@ export function LendingFormDialog({ open, householdId, editing, onClose, onSaved
       aria-modal="true"
       onClick={onClose}
     >
-      <Card className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+      <Card className="w-full max-w-md bg-overlay" onClick={(e) => e.stopPropagation()}>
         <CardHeader>
           <p className="font-medium">{editing ? t("lendings.edit_lending") : t("lendings.new_lending")}</p>
         </CardHeader>

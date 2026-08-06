@@ -26,7 +26,7 @@ export function ChartTooltip({ active, label, payload, formatValue, showName = t
   if (isSingleNamed) {
     const it = items[0];
     return (
-      <div className="rounded-md border border-border-strong bg-surface p-2 text-xs shadow-sm">
+      <div className="rounded-md border border-border-strong bg-overlay p-2 text-xs shadow-sm">
         <p className="mb-1 font-medium text-gray-900 dark:text-gray-100">
           {it.color && <span style={{ color: it.color }} className="mr-1">●</span>}
           {it.name}
@@ -37,7 +37,7 @@ export function ChartTooltip({ active, label, payload, formatValue, showName = t
   }
 
   return (
-    <div className="rounded-md border border-border-strong bg-surface p-2 text-xs shadow-sm">
+    <div className="rounded-md border border-border-strong bg-overlay p-2 text-xs shadow-sm">
       {hasLabel && (
         <p className="mb-1 font-medium text-gray-900 dark:text-gray-100">{label}</p>
       )}

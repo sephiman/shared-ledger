@@ -44,7 +44,7 @@ export function CreateHouseholdDialog({ open, onClose, onCreated }: Props) {
       aria-modal="true"
       onClick={close}
     >
-      <Card className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+      <Card className="w-full max-w-md bg-overlay" onClick={(e) => e.stopPropagation()}>
         <CardHeader>
           <p className="font-medium">{t("household.create_title")}</p>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("settings.create_household_description")}</p>

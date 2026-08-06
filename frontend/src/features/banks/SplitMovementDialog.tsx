@@ -97,7 +97,7 @@ export function SplitMovementDialog({
       aria-modal="true"
       onClick={onClose}
     >
-      <Card className="w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
+      <Card className="w-full max-w-2xl bg-overlay" onClick={(e) => e.stopPropagation()}>
         <CardHeader>
           <p className="font-medium">{t("banks.split_title")}</p>
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{t("banks.split_hint")}</p>

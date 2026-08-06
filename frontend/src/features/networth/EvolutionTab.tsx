@@ -260,7 +260,7 @@ function EvolutionTooltip({
     : null;
 
   return (
-    <div className="rounded-md border border-border bg-surface p-3 text-xs shadow-sm">
+    <div className="rounded-md border border-border bg-overlay p-3 text-xs shadow-sm">
       <p className="mb-2 font-medium">{label}</p>
       {!hidden.has(NET_WORTH_KEY) && (
         <p>

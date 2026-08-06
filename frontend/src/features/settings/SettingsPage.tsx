@@ -504,7 +504,7 @@ export function SettingsPage() {
                     <p className="break-words font-medium">
                       {m.email}
                       {user?.id === m.userId && (
-                        <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600 dark:bg-surface dark:text-gray-300">
+                        <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600 dark:bg-chip dark:text-gray-300">
                           {t("settings.you")}
                         </span>
                       )}
@@ -531,7 +531,7 @@ export function SettingsPage() {
                       <td className="py-2">
                         {m.email}
                         {user?.id === m.userId && (
-                          <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600 dark:bg-surface dark:text-gray-300">
+                          <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600 dark:bg-chip dark:text-gray-300">
                             {t("settings.you")}
                           </span>
                         )}
