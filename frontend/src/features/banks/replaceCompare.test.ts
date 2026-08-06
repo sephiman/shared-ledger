@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { DuplicateCandidate, PendingMovement } from "@/api/banks";
+import { bankDescription } from "./bankDescription";
 import {
-  bankDescription,
   buildComparison,
   categoryAfterDirectionChange,
   effectiveDescription,
@@ -39,6 +39,7 @@ const movement = (patch: Partial<PendingMovement> = {}): PendingMovement => ({
   status: "pending",
   suggestedCategoryCode: "groceries",
   createdTransactionId: null,
+  createdTransactionIds: [],
   createdMovementId: null,
   possibleDuplicate: true,
   ...patch,

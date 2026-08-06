@@ -102,6 +102,7 @@ class TelegramMessageFormatter(
         NotifyEntity.RECURRING_TXN -> "recurring_txn"
         NotifyEntity.RECURRING_LENDING -> "recurring_lending"
         NotifyEntity.BANK_MOVEMENT -> "bank_movement"
+        NotifyEntity.BANK_MOVEMENT_SPLIT -> "bank_movement_split"
         NotifyEntity.BANK_CONNECTION -> "bank_connection"
     }
 
@@ -117,6 +118,7 @@ class TelegramMessageFormatter(
             NotifyEntity.HOLDING -> "📈"
             NotifyEntity.RECURRING_LENDING -> "📅"
             NotifyEntity.BANK_MOVEMENT -> "🏦"
+            NotifyEntity.BANK_MOVEMENT_SPLIT -> "✂️"
             NotifyEntity.BANK_CONNECTION -> "⏰"
             else -> "🔔"
         }

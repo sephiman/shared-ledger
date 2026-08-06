@@ -51,6 +51,14 @@ class PendingMovementController(
         @Valid @RequestBody body: ConfirmAsMovementRequest,
     ): PendingMovementDto = service.confirmAsMovement(householdId, id, body, currentUser.requireUser())
 
+    /** Single-item by design, like confirm-as-movement and replace — there is no batch variant. */
+    @PostMapping("/{id}/split")
+    fun split(
+        @PathVariable householdId: UUID,
+        @PathVariable id: UUID,
+        @Valid @RequestBody body: SplitMovementRequest,
+    ): PendingMovementDto = service.split(householdId, id, body, currentUser.requireUser())
+
     @GetMapping("/{id}/duplicate-candidates")
     fun duplicateCandidates(
         @PathVariable householdId: UUID,

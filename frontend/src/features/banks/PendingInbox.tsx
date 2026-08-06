@@ -6,7 +6,6 @@ import {
   useBankConnections,
   useConfirmBatch,
   useConfirmMovement,
-  useEditMovement,
   usePendingMovements,
   useRejectBatch,
   useRejectMovement,
@@ -28,8 +27,10 @@ import {
   type CategorisationState,
   type GroupBy,
 } from "./pendingFilters";
+import { bankDescription } from "./bankDescription";
 import { MarkAsMovementDialog } from "./MarkAsMovementDialog";
 import { ReplaceDuplicateDialog } from "./ReplaceDuplicateDialog";
+import { SplitMovementDialog } from "./SplitMovementDialog";
 
 // Search / categorisation / duplicates are filtered server-side over the full dataset. The API caps
 // a page at 200; we load that (already-filtered) page once and do group/select/paginate client-side.
@@ -59,6 +60,8 @@ export function PendingInbox({ householdId, currency, locale }: { householdId: s
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [categoryById, setCategoryById] = useState<Record<string, string>>({});
   const [directionById, setDirectionById] = useState<Record<string, Direction>>({});
+  // Like category and direction: local until the row is confirmed, replaced or split — never per keystroke.
+  const [descriptionById, setDescriptionById] = useState<Record<string, string>>({});
 
   // Debounced mirror of `search`; the input updates instantly, the server query follows on a delay.
   const [debouncedSearch, setDebouncedSearch] = useState(search);
@@ -86,7 +89,6 @@ export function PendingInbox({ householdId, currency, locale }: { householdId: s
   const rejectBatch = useRejectBatch(householdId);
   const restoreOne = useRestoreMovement(householdId);
   const restoreBatch = useRestoreBatch(householdId);
-  const editMovement = useEditMovement(householdId);
   const applyRules = useApplyRules(householdId);
 
   const editable = status === "pending";
@@ -99,6 +101,8 @@ export function PendingInbox({ householdId, currency, locale }: { householdId: s
 
   const resolveCategory = (m: PendingMovement) => categoryById[m.id] ?? m.suggestedCategoryCode ?? "";
   const resolveDirection = (m: PendingMovement): Direction => directionById[m.id] ?? m.direction;
+  // Untouched rows fall back to what the backend would store anyway, so confirming as-is changes nothing.
+  const resolveDescription = (m: PendingMovement) => descriptionById[m.id] ?? bankDescription(m);
 
   // Search / categorisation / duplicates are already applied server-side, so the loaded page is the
   // filtered set; grouping, selection and client pagination run over it.
@@ -172,9 +176,15 @@ export function PendingInbox({ householdId, currency, locale }: { householdId: s
   };
 
   const confirmSelected = () => {
+    // Each row contributes whatever its inputs hold right now.
     const items = selectedIds.map((id) => {
       const m = filtered.find((x) => x.id === id)!;
-      return { id, categoryCode: resolveCategory(m) || null, direction: resolveDirection(m) };
+      return {
+        id,
+        categoryCode: resolveCategory(m) || null,
+        direction: resolveDirection(m),
+        note: resolveDescription(m) || null,
+      };
     });
     confirmBatch.mutate(items, {
       onSuccess: (res) => {
@@ -193,7 +203,15 @@ export function PendingInbox({ householdId, currency, locale }: { householdId: s
 
   const confirmRow = (m: PendingMovement) =>
     confirmOne.mutate(
-      { id: m.id, input: { categoryCode: resolveCategory(m), direction: resolveDirection(m), saveRule: true } },
+      {
+        id: m.id,
+        input: {
+          categoryCode: resolveCategory(m),
+          direction: resolveDirection(m),
+          note: resolveDescription(m) || null,
+          saveRule: true,
+        },
+      },
       { onSuccess: () => showToast(t("banks.confirmed_toast", { count: 1 }), "success") },
     );
 
@@ -230,10 +248,11 @@ export function PendingInbox({ householdId, currency, locale }: { householdId: s
       onCategoryChange={(v) => setCategoryById((prev) => ({ ...prev, [m.id]: v }))}
       direction={resolveDirection(m)}
       onDirectionChange={(d) => setDirection(m, d)}
+      descriptionValue={resolveDescription(m)}
+      onDescriptionChange={(v) => setDescriptionById((prev) => ({ ...prev, [m.id]: v }))}
       onConfirm={() => confirmRow(m)}
       onReject={() => rejectRow(m)}
       onRestore={() => restoreRow(m)}
-      onSaveDescription={(desc) => editMovement.mutate({ id: m.id, input: { description: desc } })}
       busy={confirmOne.isPending || rejectOne.isPending || restoreOne.isPending}
     />
   );
@@ -419,7 +438,8 @@ function buildGroups(
 
 function MovementRow({
   householdId, movement, currency, locale, categories, editable, selectable, restorable, selected, onToggle,
-  categoryValue, onCategoryChange, direction, onDirectionChange, onConfirm, onReject, onRestore, onSaveDescription, busy,
+  categoryValue, onCategoryChange, direction, onDirectionChange, descriptionValue, onDescriptionChange,
+  onConfirm, onReject, onRestore, busy,
 }: {
   householdId: string;
   movement: PendingMovement;
@@ -435,18 +455,18 @@ function MovementRow({
   onCategoryChange: (value: string) => void;
   direction: Direction;
   onDirectionChange: (d: Direction) => void;
+  descriptionValue: string;
+  onDescriptionChange: (value: string) => void;
   onConfirm: () => void;
   onReject: () => void;
   onRestore: () => void;
-  onSaveDescription: (description: string) => void;
   busy: boolean;
 }) {
   const { t, i18n } = useTranslation();
-  const [editing, setEditing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [markMovementOpen, setMarkMovementOpen] = useState(false);
   const [replaceOpen, setReplaceOpen] = useState(false);
-  const [desc, setDesc] = useState(movement.description ?? "");
+  const [splitOpen, setSplitOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Dismiss the ⋯ overflow menu on outside click or Escape (mirrors UserMenu).
@@ -465,7 +485,9 @@ function MovementRow({
   const options = categories.filter((c) => c.kind === direction);
   const income = direction === "income";
   const source = [movement.connectionLabel ?? movement.aspspName, movement.accountName].filter(Boolean).join(" · ");
-  const secondary = movement.description ?? movement.reference;
+  // Editable rows show the description in an input instead, so only the reference is left to surface here.
+  const secondary = editable ? null : movement.description ?? movement.reference;
+  const splitCount = movement.createdTransactionIds.length;
 
   return (
     <li className="rounded-md border border-border p-3 dark:border-gray-700">
@@ -489,6 +511,8 @@ function MovementRow({
             <span>{formatDate(movement.bookingDate, i18n.language)}</span>
             {source && <Badge tone="sky">{source}</Badge>}
             {movement.originalCurrency && <span>{movement.originalAmount} {movement.originalCurrency}</span>}
+            {/* Homeless once the description moves into an input, and sometimes all a transfer has. */}
+            {editable && movement.reference && <span className="break-all">{movement.reference}</span>}
           </p>
           {secondary && <p className="mt-0.5 break-words text-sm text-gray-600 dark:text-gray-300">{secondary}</p>}
         </div>
@@ -510,6 +534,14 @@ function MovementRow({
               <option key={c.code} value={c.code}>{categoryLabel(c, t)}</option>
             ))}
           </Select>
+          {/* Full width on phones so the whole description is readable; inline from `sm` up. */}
+          <Input
+            value={descriptionValue}
+            placeholder={t("common.description")}
+            aria-label={t("common.description")}
+            className="w-full sm:w-auto sm:max-w-[18rem] sm:flex-1"
+            onChange={(e) => onDescriptionChange(e.target.value)}
+          />
           {/* Actions — Confirm primary, Reject a quieter bordered button, the rest under ⋯. */}
           <div className="ml-auto flex items-center gap-2">
             <Button disabled={!categoryValue || busy} onClick={onConfirm}>{t("banks.confirm")}</Button>
@@ -534,13 +566,15 @@ function MovementRow({
                   role="menu"
                   className="absolute right-0 z-20 mt-1 w-48 rounded-md border border-border bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800"
                 >
+                  {/* Single-item dialogs, both excluded from the batch actions. */}
                   <button
                     type="button"
                     role="menuitem"
-                    onClick={() => { setMenuOpen(false); setEditing((v) => !v); }}
-                    className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+                    disabled={busy}
+                    onClick={() => { setMenuOpen(false); setSplitOpen(true); }}
+                    className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50 dark:text-gray-200 dark:hover:bg-gray-700"
                   >
-                    {t("common.edit")}
+                    {t("banks.split")}
                   </button>
                   <button
                     type="button"
@@ -577,24 +611,37 @@ function MovementRow({
           categories={categories}
           currency={currency}
           locale={locale}
+          description={descriptionValue}
           onClose={() => setReplaceOpen(false)}
           onFallbackConfirm={onConfirm}
           canFallbackConfirm={!!categoryValue && !busy}
         />
       )}
 
-      {editable && editing && (
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder={t("common.description")} className="max-w-[24rem]" />
-          <Button onClick={() => { onSaveDescription(desc); setEditing(false); }}>{t("common.save")}</Button>
-          <Button variant="ghost" onClick={() => { setDesc(movement.description ?? ""); setEditing(false); }}>{t("common.cancel")}</Button>
-        </div>
+      {splitOpen && (
+        <SplitMovementDialog
+          open={splitOpen}
+          householdId={householdId}
+          movement={movement}
+          categories={categories}
+          currency={currency}
+          locale={locale}
+          direction={direction}
+          categoryCode={categoryValue}
+          description={descriptionValue}
+          onClose={() => setSplitOpen(false)}
+        />
       )}
 
       {!editable && movement.suggestedCategoryCode && (
         <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
           {t("common.category")}: {categoryLabelByCode(movement.suggestedCategoryCode, categories, t)}
         </p>
+      )}
+
+      {/* Otherwise a confirmed split looks just like an ordinary confirm. */}
+      {!editable && splitCount > 1 && (
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{t("banks.split_into_n", { count: splitCount })}</p>
       )}
 
       {restorable && (

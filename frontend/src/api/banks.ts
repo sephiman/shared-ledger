@@ -113,6 +113,8 @@ export interface PendingMovement {
   status: MovementStatus;
   suggestedCategoryCode: string | null;
   createdTransactionId: string | null;
+  /** One for a confirm or Replace, N for a split (where `createdTransactionId` is null), none while pending. */
+  createdTransactionIds: string[];
   createdMovementId: string | null;
   possibleDuplicate: boolean;
 }
@@ -152,6 +154,20 @@ export interface ConfirmAsMovementInput {
   note?: string | null;
 }
 
+/** A blank description falls back to the bank-derived one, server-side. */
+export interface SplitPartInput {
+  amount: string;
+  categoryCode: string;
+  description?: string | null;
+}
+
+/** Parts must sum to the movement's amount to the cent. `direction` applies to every part (null keeps the
+ *  item's own): a single movement can't be part income and part expense. */
+export interface SplitMovementInput {
+  parts: SplitPartInput[];
+  direction?: Direction | null;
+}
+
 /** A transaction a possible-duplicate item could replace; `bankLinked` ones are shown but not selectable. */
 export interface DuplicateCandidate {
   transactionId: string;
@@ -168,12 +184,6 @@ export interface DuplicateCandidate {
 export interface ReplaceTransactionInput {
   transactionId: string;
   categoryCode?: string | null;
-  direction?: Direction | null;
-  description?: string | null;
-}
-
-export interface EditMovementInput {
-  suggestedCategoryCode?: string | null;
   direction?: Direction | null;
   description?: string | null;
 }
@@ -198,6 +208,8 @@ export interface ConfirmBatchItem {
   id: string;
   categoryCode?: string | null;
   direction?: Direction | null;
+  /** The row's description input; blank falls back to the bank's. */
+  note?: string | null;
 }
 
 export interface ApplyRulesResult {
@@ -416,6 +428,17 @@ export function useReplaceWithTransaction(householdId: string) {
   });
 }
 
+/** Same derived data to refresh as a confirm. */
+export function useSplitMovement(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, input }: { id: string; input: SplitMovementInput }) =>
+      (await apiClient.post<PendingMovement>(`${base(householdId)}/pending/${id}/split`, input)).data,
+    onSuccess: () => invalidateAll(qc, householdId),
+    meta: { silentSuccess: true },
+  });
+}
+
 /** Confirm a pending item as a net-worth movement; also refresh movement/networth-derived data. */
 export function useConfirmAsMovement(householdId: string) {
   const qc = useQueryClient();
@@ -489,16 +512,6 @@ export function useApplyRules(householdId: string) {
     mutationFn: async () =>
       (await apiClient.post<ApplyRulesResult>(`${base(householdId)}/pending/apply-rules`)).data,
     onSuccess: () => invalidateAll(qc, householdId),
-    meta: { silentSuccess: true },
-  });
-}
-
-export function useEditMovement(householdId: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, input }: { id: string; input: EditMovementInput }) =>
-      (await apiClient.patch<PendingMovement>(`${base(householdId)}/pending/${id}`, input)).data,
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["banks", householdId] }),
     meta: { silentSuccess: true },
   });
 }

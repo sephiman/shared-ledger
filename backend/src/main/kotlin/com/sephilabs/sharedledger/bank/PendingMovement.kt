@@ -23,7 +23,8 @@ import java.util.UUID
 
 /** A raw bank movement awaiting review — its own entity, so the transaction tables are never touched.
  *  Confirming generates either a transaction ([createdTransactionId]) or a net-worth movement
- *  ([createdMovementId]) and flips status=confirmed. Exactly one of the two links is set. */
+ *  ([createdMovementId]) and flips status=confirmed. Exactly one of the two links is set, or neither for a
+ *  split — see [PendingMovementTransaction], which records every produced transaction. */
 @Entity
 @Table(name = "pending_movements")
 class PendingMovement(
@@ -78,6 +79,7 @@ class PendingMovement(
     @Column(name = "suggested_category_code", length = 64)
     var suggestedCategoryCode: String? = null,
 
+    /** The single transaction a confirm or Replace produced; null for a split, which has no single one. */
     @Column(name = "created_transaction_id")
     var createdTransactionId: UUID? = null,
 
@@ -112,18 +114,6 @@ interface PendingMovementRepository : JpaRepository<PendingMovement, UUID> {
     fun findAllByIdInAndHouseholdIdForUpdate(@Param("ids") ids: Collection<UUID>, @Param("hid") householdId: UUID): List<PendingMovement>
 
     fun existsByConnectionIdAndBankMovementId(connectionId: UUID, bankMovementId: String): Boolean
-
-    /** A transaction backs at most one movement, so an already-linked one can't be replaced again. */
-    fun existsByCreatedTransactionIdAndIdNot(createdTransactionId: UUID, id: UUID): Boolean
-
-    /** Which of [ids] are already linked, in one query instead of one per candidate. */
-    @Query(
-        """
-        SELECT m.createdTransactionId FROM PendingMovement m
-        WHERE m.householdId = :hid AND m.createdTransactionId IN :ids
-        """,
-    )
-    fun findLinkedTransactionIds(@Param("hid") householdId: UUID, @Param("ids") ids: Collection<UUID>): List<UUID>
 
     fun countByHouseholdIdAndStatus(householdId: UUID, status: MovementStatus): Long
 

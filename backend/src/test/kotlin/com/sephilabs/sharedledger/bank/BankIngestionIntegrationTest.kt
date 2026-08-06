@@ -17,6 +17,10 @@ import com.sephilabs.sharedledger.identity.user.User
 import com.sephilabs.sharedledger.identity.user.UserRepository
 import com.sephilabs.sharedledger.networth.movement.MovementRepository
 import com.sephilabs.sharedledger.networth.movement.MovementType
+import com.sephilabs.sharedledger.notification.RecordingTelegramClient
+import com.sephilabs.sharedledger.notification.TelegramCrypto
+import com.sephilabs.sharedledger.notification.TelegramSettings
+import com.sephilabs.sharedledger.notification.TelegramSettingsRepository
 import com.sephilabs.sharedledger.portfolio.price.FxRate
 import com.sephilabs.sharedledger.portfolio.price.FxRateRepository
 import com.sephilabs.sharedledger.recurring.Cadence
@@ -51,6 +55,7 @@ class BankIngestionIntegrationTest @Autowired constructor(
     private val rules: CategorizationRuleRepository,
     private val categorization: CategorizationService,
     private val pending: PendingMovementRepository,
+    private val links: PendingMovementTransactionRepository,
     private val connections: BankConnectionRepository,
     private val syncRuns: BankSyncRunRepository,
     private val transactions: TransactionRepository,
@@ -61,7 +66,16 @@ class BankIngestionIntegrationTest @Autowired constructor(
     private val props: AppProperties,
     private val credentialsService: BankCredentialsService,
     private val fake: FakeBankConnector,
+    // For the one assertion that a split notifies once, not once per created transaction.
+    private val telegram: RecordingTelegramClient,
+    private val telegramSettings: TelegramSettingsRepository,
+    private val telegramCrypto: TelegramCrypto,
 ) : IntegrationTestBase() {
+
+    @BeforeEach
+    fun resetTelegram() {
+        telegram.sent.clear()
+    }
 
     /** Linking resolves its redirect URL from the current request (see BankCallbackUrl), so bind one. */
     @BeforeEach
@@ -306,6 +320,191 @@ class BankIngestionIntegrationTest @Autowired constructor(
 
         assertThat(pendingService.pendingCount(household.id)).isEqualTo(1)
         assertThat(transactions.findById(manual.id).orElseThrow().categoryCode).isEqualTo(expenseCat)
+    }
+
+    @Test
+    fun `splitting an item creates one transaction per part, links them all, and learns no rule`() {
+        val (user, household) = seed()
+        seedTelegram(household.id, user.id)
+        val today = LocalDate.now()
+        val expenseCat = expenseCategory(household)
+        val otherExpenseCat = categories.listForHousehold(household.id)
+            .first { it.kind == "expense" && it.code != expenseCat }.code
+        fake.movements.add(movement("sp-1", today.minusDays(1), Direction.expense, "120.00", "SUPERMARKET"))
+        link(household, user)
+        val item = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content.single()
+        // The ingest announces itself ("new movements to review"); what follows is only about the split.
+        telegram.sent.clear()
+
+        val split = pendingService.split(
+            household.id,
+            item.id,
+            SplitMovementRequest(
+                parts = listOf(
+                    SplitPartRequest(amount = BigDecimal("90.00"), categoryCode = expenseCat, description = "Weekly food"),
+                    // A blank description falls back to the bank's, like a confirm with no note.
+                    SplitPartRequest(amount = BigDecimal("30.00"), categoryCode = otherExpenseCat),
+                ),
+            ),
+            user,
+        )
+
+        // The item is terminal and leaves the inbox; no single transaction represents it.
+        assertThat(split.status).isEqualTo(MovementStatus.confirmed)
+        assertThat(split.createdTransactionId).isNull()
+        assertThat(split.createdTransactionIds).hasSize(2)
+        assertThat(pendingService.pendingCount(household.id)).isZero()
+
+        // Two transactions, both on the movement's booking date, adding up to its amount exactly.
+        val created = transactions.findByHouseholdIdAndOccurrenceDateBetween(household.id, today.minusDays(30), today)
+        assertThat(created).hasSize(2)
+        assertThat(created.map { it.id }).containsExactlyInAnyOrderElementsOf(split.createdTransactionIds)
+        assertThat(created).allMatch { it.occurrenceDate == today.minusDays(1) }
+        assertThat(created).allMatch { it.direction == Direction.expense }
+        assertThat(created.sumOf { it.amount }).isEqualByComparingTo("120.00")
+        val food = created.first { it.categoryCode == expenseCat }
+        val other = created.first { it.categoryCode == otherExpenseCat }
+        assertThat(food.amount).isEqualByComparingTo("90.00")
+        assertThat(food.description).isEqualTo("Weekly food")
+        assertThat(other.amount).isEqualByComparingTo("30.00")
+        assertThat(other.description).isEqualTo("SUPERMARKET – Test SUPERMARKET")
+
+        // Every part is linked back, which is what protects them from a later Replace.
+        assertThat(links.findAllByPendingMovementId(item.id).map { it.transactionId })
+            .containsExactlyInAnyOrderElementsOf(created.map { it.id })
+
+        // One counterparty mapping to two categories is exactly what a learned rule can't express.
+        assertThat(rules.findAllByHouseholdIdOrderByPriorityAsc(household.id)).isEmpty()
+
+        // One aggregated notification for the whole split, not one per created transaction.
+        assertThat(telegram.sent).hasSize(1)
+        assertThat(telegram.sent.single().text).contains("1 movement split into 2 transactions")
+    }
+
+    @Test
+    fun `split refuses parts that do not add up to the movement total and writes nothing`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val expenseCat = expenseCategory(household)
+        fake.movements.add(movement("sp-2", today.minusDays(1), Direction.expense, "10.00", "SHOP"))
+        link(household, user)
+        val item = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content.single()
+
+        // A cent short — the kind of leftover a percentage split produces (3 × 33.33 % of €10).
+        val oneCentShort = listOf("3.33", "3.33", "3.33").map { SplitPartRequest(BigDecimal(it), expenseCat) }
+        assertThatThrownBy { pendingService.split(household.id, item.id, SplitMovementRequest(oneCentShort), user) }
+            .isInstanceOf(AppException::class.java).hasMessageContaining("BANK_SPLIT_TOTAL_MISMATCH")
+
+        // And a cent over.
+        val oneCentOver = listOf("3.34", "3.34", "3.34").map { SplitPartRequest(BigDecimal(it), expenseCat) }
+        assertThatThrownBy { pendingService.split(household.id, item.id, SplitMovementRequest(oneCentOver), user) }
+            .isInstanceOf(AppException::class.java).hasMessageContaining("BANK_SPLIT_TOTAL_MISMATCH")
+
+        assertThat(pendingService.pendingCount(household.id)).isEqualTo(1)
+        assertThat(transactions.findByHouseholdIdAndOccurrenceDateBetween(household.id, today.minusDays(30), today)).isEmpty()
+        assertThat(links.findAllByPendingMovementId(item.id)).isEmpty()
+    }
+
+    @Test
+    fun `split refuses a single part, a non-positive amount, a missing category and a processed item`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val expenseCat = expenseCategory(household)
+        val incomeCat = categories.listForHousehold(household.id).first { it.kind == "income" }.code
+        fake.movements.add(movement("sp-3", today.minusDays(1), Direction.expense, "10.00", "SHOP"))
+        link(household, user)
+        val item = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content.single()
+
+        // One part is an ordinary confirm, not a split.
+        assertThatThrownBy {
+            pendingService.split(household.id, item.id, SplitMovementRequest(listOf(SplitPartRequest(BigDecimal("10.00"), expenseCat))), user)
+        }.isInstanceOf(AppException::class.java).hasMessageContaining("BANK_SPLIT_TOO_FEW_PARTS")
+
+        // Amounts must be positive, even when the pair still sums to the total.
+        assertThatThrownBy {
+            pendingService.split(
+                household.id,
+                item.id,
+                SplitMovementRequest(listOf(SplitPartRequest(BigDecimal("15.00"), expenseCat), SplitPartRequest(BigDecimal("-5.00"), expenseCat))),
+                user,
+            )
+        }.isInstanceOf(AppException::class.java).hasMessageContaining("BANK_SPLIT_AMOUNT_INVALID")
+
+        // Same category rule as Confirm: every part needs one.
+        assertThatThrownBy {
+            pendingService.split(
+                household.id,
+                item.id,
+                SplitMovementRequest(listOf(SplitPartRequest(BigDecimal("5.00"), expenseCat), SplitPartRequest(BigDecimal("5.00"), " "))),
+                user,
+            )
+        }.isInstanceOf(AppException::class.java).hasMessageContaining("BANK_CATEGORY_REQUIRED")
+
+        // The parts' categories are validated against the split's direction like any other write path.
+        assertThatThrownBy {
+            pendingService.split(
+                household.id,
+                item.id,
+                SplitMovementRequest(listOf(SplitPartRequest(BigDecimal("5.00"), expenseCat), SplitPartRequest(BigDecimal("5.00"), incomeCat))),
+                user,
+            )
+        }.isInstanceOf(AppException::class.java).hasMessageContaining("CATEGORY_DIRECTION_MISMATCH")
+
+        assertThat(pendingService.pendingCount(household.id)).isEqualTo(1)
+        assertThat(transactions.findByHouseholdIdAndOccurrenceDateBetween(household.id, today.minusDays(30), today)).isEmpty()
+
+        // Once confirmed the item is terminal — it can't be split afterwards.
+        pendingService.confirm(household.id, item.id, ConfirmMovementRequest(categoryCode = expenseCat), user)
+        assertThatThrownBy {
+            pendingService.split(
+                household.id,
+                item.id,
+                SplitMovementRequest(listOf(SplitPartRequest(BigDecimal("5.00"), expenseCat), SplitPartRequest(BigDecimal("5.00"), expenseCat))),
+                user,
+            )
+        }.isInstanceOf(AppException::class.java).hasMessageContaining("PENDING_MOVEMENT_ALREADY_PROCESSED")
+    }
+
+    @Test
+    fun `a transaction created by a split cannot be claimed by another movement`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val expenseCat = expenseCategory(household)
+        // The €30 part below looks exactly like this second movement, so it becomes a replace candidate.
+        fake.movements.addAll(
+            listOf(
+                movement("sp-4a", today.minusDays(1), Direction.expense, "120.00", "SUPERMARKET"),
+                movement("sp-4b", today.minusDays(1), Direction.expense, "30.00", "SUPERMARKET"),
+            ),
+        )
+        link(household, user)
+        val items = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content
+        val big = items.first { it.amount.compareTo(BigDecimal("120.00")) == 0 }
+        val small = items.first { it.amount.compareTo(BigDecimal("30.00")) == 0 }
+
+        val split = pendingService.split(
+            household.id,
+            big.id,
+            SplitMovementRequest(
+                listOf(
+                    SplitPartRequest(BigDecimal("90.00"), expenseCat),
+                    SplitPartRequest(BigDecimal("30.00"), expenseCat),
+                ),
+            ),
+            user,
+        )
+        val thirtyPart = transactions.findByHouseholdIdAndOccurrenceDateBetween(household.id, today.minusDays(30), today)
+            .first { it.amount.compareTo(BigDecimal("30.00")) == 0 }
+        assertThat(split.createdTransactionIds).contains(thirtyPart.id)
+
+        // The candidate surfaces for the other movement but is flagged, and claiming it is refused —
+        // the single created_transaction_id is null here, so only the link table can know this.
+        val candidates = pendingService.duplicateCandidates(household.id, small.id)
+        assertThat(candidates.map { it.transactionId }).contains(thirtyPart.id)
+        assertThat(candidates.first { it.transactionId == thirtyPart.id }.bankLinked).isTrue()
+        assertThatThrownBy {
+            pendingService.replace(household.id, small.id, ReplaceTransactionRequest(transactionId = thirtyPart.id), user)
+        }.isInstanceOf(AppException::class.java).hasMessageContaining("TRANSACTION_ALREADY_BANK_LINKED")
     }
 
     @Test
@@ -1016,6 +1215,19 @@ class BankIngestionIntegrationTest @Autowired constructor(
     private fun link(household: Household, user: User) {
         bankService.startLink(household.id, StartLinkRequest(aspspName = "ING", country = "NL", label = "Test"), user, HouseholdRole.owner)
         bankService.completeLink(household.id, CompleteLinkRequest(code = "code", state = fake.lastState!!), user, HouseholdRole.owner)
+    }
+
+    /** Without settings the notification listener bails out before formatting anything. */
+    private fun seedTelegram(householdId: UUID, userId: UUID) {
+        telegramSettings.save(
+            TelegramSettings(
+                householdId = householdId,
+                chatId = "chat-123",
+                botTokenEnc = telegramCrypto.encrypt("bot-token-xyz"),
+                createdByUserId = userId,
+                updatedByUserId = userId,
+            ),
+        )
     }
 
     private fun expenseCategory(household: Household): String =

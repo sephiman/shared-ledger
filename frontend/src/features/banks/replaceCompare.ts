@@ -1,4 +1,5 @@
 import type { Direction, DuplicateCandidate, PendingMovement } from "@/api/banks";
+import { bankDescription } from "./bankDescription";
 
 /** The fields the Replace dialog compares, in display order. */
 export type CompareField = "date" | "amount" | "direction" | "category" | "description" | "source";
@@ -26,14 +27,6 @@ export interface CompareFormatters {
   /** The existing transaction's source: it has no bank link yet (a linked one can't be replaced). */
   manualSource: string;
   empty: string;
-}
-
-/** Mirrors the backend's `movementDescription` — the value a replace with no override would store. */
-export function bankDescription(movement: PendingMovement): string {
-  const parts = [movement.counterparty, movement.description]
-    .map((p) => p?.trim() ?? "")
-    .filter((p) => p.length > 0);
-  return [...new Set(parts)].join(" – ");
 }
 
 /** What would actually be stored: blanking the field falls back to the bank's value, as the backend does. */

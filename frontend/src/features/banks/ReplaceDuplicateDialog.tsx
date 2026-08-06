@@ -16,7 +16,6 @@ import { formatMoney } from "@/lib/money";
 import { showToast } from "@/lib/toastBus";
 import { Badge, Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select } from "@/components/ui/primitives";
 import {
-  bankDescription,
   buildComparison,
   categoryAfterDirectionChange,
   selectableCandidates,
@@ -31,6 +30,8 @@ interface Props {
   categories: Category[];
   currency: string;
   locale: string;
+  /** The description as edited in the inbox row. */
+  description: string;
   onClose: () => void;
   /** The row's normal confirm, offered when there's no longer anything to replace. */
   onFallbackConfirm: () => void;
@@ -50,7 +51,7 @@ const FIELD_LABEL_KEY: Record<CompareField, string> = {
 /** Compares the two records field by field and, on confirm, updates the existing transaction in place
  *  instead of creating a second one. Category, direction and description stay editable. */
 export function ReplaceDuplicateDialog({
-  open, householdId, movement, categories, currency, locale, onClose, onFallbackConfirm, canFallbackConfirm,
+  open, householdId, movement, categories, currency, locale, description, onClose, onFallbackConfirm, canFallbackConfirm,
 }: Props) {
   const { t, i18n } = useTranslation();
   const { data: candidates, isLoading } = usePendingDuplicateCandidates(householdId, movement.id, open);
@@ -63,13 +64,13 @@ export function ReplaceDuplicateDialog({
   const selectable = selectableCandidates(candidates ?? []);
   const selected = selectable.find((c) => c.transactionId === transactionId) ?? null;
 
-  // The draft mirrors the targeted transaction: its category and direction, the bank's description.
+  // The draft mirrors the targeted transaction: its category and direction, plus the inbox row's description.
   const seedFrom = (candidate: DuplicateCandidate) => {
     setTransactionId(candidate.transactionId);
     setDraft({
       categoryCode: candidate.categoryCode,
       direction: candidate.direction,
-      description: bankDescription(movement),
+      description,
     });
   };
 

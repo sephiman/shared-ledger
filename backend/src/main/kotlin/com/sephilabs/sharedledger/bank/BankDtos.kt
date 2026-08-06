@@ -3,6 +3,9 @@ package com.sephilabs.sharedledger.bank
 import com.fasterxml.jackson.annotation.JsonFormat
 import com.sephilabs.sharedledger.networth.movement.MovementType
 import com.sephilabs.sharedledger.transaction.Direction
+import jakarta.validation.Valid
+import jakarta.validation.constraints.DecimalMin
+import jakarta.validation.constraints.Digits
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Size
@@ -129,6 +132,8 @@ data class PendingMovementDto(
     val status: MovementStatus,
     val suggestedCategoryCode: String?,
     val createdTransactionId: UUID?,
+    // Every transaction this item produced: one for a confirm or Replace, N for a split, empty while pending.
+    val createdTransactionIds: List<UUID> = emptyList(),
     // Set instead of createdTransactionId when the item was confirmed as a net-worth movement.
     val createdMovementId: UUID?,
     // Warning only: a manual transaction looks like this movement (same date+amount, close desc).
@@ -155,6 +160,29 @@ data class ConfirmAsMovementRequest(
     val liabilityId: UUID? = null,
     @field:Size(max = 500)
     val note: String? = null,
+)
+
+/** Split one movement into several transactions summing *exactly* to its total. One [direction] for every
+ *  part: a single bank movement cannot be part income and part expense. */
+data class SplitMovementRequest(
+    @field:Valid
+    @field:Size(min = 2, message = "validation.invalid")
+    val parts: List<SplitPartRequest> = emptyList(),
+    // One value for every part; null keeps the item's own direction.
+    val direction: Direction? = null,
+)
+
+/** [description] falls back to the bank-derived one when blank, like a confirm's note. */
+data class SplitPartRequest(
+    @field:NotNull(message = "validation.required")
+    @field:DecimalMin(value = "0.01", message = "validation.amount.positive")
+    @field:Digits(integer = 13, fraction = 2, message = "validation.invalid")
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    val amount: BigDecimal,
+    @field:NotBlank(message = "validation.required")
+    val categoryCode: String,
+    @field:Size(max = 500)
+    val description: String? = null,
 )
 
 /** A manual transaction a pending item could *replace* instead of duplicating. [bankLinked] ones already
@@ -194,12 +222,15 @@ data class BatchIdsRequest(
     val ids: List<UUID> = emptyList(),
 )
 
-/** One item in a batch confirm: its category (falls back to the movement's suggestion if null). */
+/** One item in a batch confirm: its category (falls back to the movement's suggestion if null) and the
+ *  row's description input as [note]. */
 data class ConfirmBatchItem(
     @field:NotNull(message = "validation.required")
     val id: UUID,
     val categoryCode: String? = null,
     val direction: Direction? = null,
+    @field:Size(max = 500)
+    val note: String? = null,
 )
 
 data class ConfirmBatchRequest(

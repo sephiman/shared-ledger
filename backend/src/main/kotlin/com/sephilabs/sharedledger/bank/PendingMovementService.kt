@@ -1,5 +1,6 @@
 package com.sephilabs.sharedledger.bank
 
+import com.sephilabs.sharedledger.common.Money
 import com.sephilabs.sharedledger.common.PageResponse
 import com.sephilabs.sharedledger.common.errors.AppException
 import com.sephilabs.sharedledger.identity.user.User
@@ -22,10 +23,12 @@ import kotlin.math.abs
 /** The review inbox. Confirming generates a real transaction (via [TransactionService.createInternal])
  *  and links it back so the item is never re-ingested; single confirm notifies normally, batch confirm
  *  emits one aggregated notification. Reject discards and creates nothing. Possible-duplicate items also
- *  offer [replace], which reconciles with the existing transaction instead of adding a second one. */
+ *  offer [replace], which reconciles with the existing transaction instead of adding a second one, and any
+ *  item can be [split] into several transactions. */
 @Service
 class PendingMovementService(
     private val pending: PendingMovementRepository,
+    private val links: PendingMovementTransactionRepository,
     private val connections: BankConnectionRepository,
     private val accounts: BankConnectionAccountRepository,
     private val transactionService: TransactionService,
@@ -113,9 +116,16 @@ class PendingMovementService(
         val connById = connections.findAllByHouseholdIdOrderByCreatedAtAsc(householdId).associateBy { it.id }
         val acctById = items.map { it.accountId }.toSet()
             .mapNotNull { accounts.findById(it).orElse(null) }.associateBy { it.id }
+        // Only confirmed items carry links, so the pending hot path skips this query.
+        val linksById = if (status == MovementStatus.confirmed) {
+            links.findAllByPendingMovementIdIn(items.map { it.id })
+                .groupBy({ it.pendingMovementId }, { it.transactionId })
+        } else {
+            emptyMap()
+        }
         return items.map {
             val dup = status == MovementStatus.pending && matchesDuplicate(dupIndex, it)
-            it.toDto(connById[it.connectionId], acctById[it.accountId], dup)
+            it.toDto(connById[it.connectionId], acctById[it.accountId], dup, linksById[it.id] ?: emptyList())
         }
     }
 
@@ -125,7 +135,8 @@ class PendingMovementService(
         val direction = request.direction ?: movement.direction
         val categoryCode = request.categoryCode ?: movement.suggestedCategoryCode
             ?: throw AppException.badRequest("BANK_CATEGORY_REQUIRED")
-        createTransaction(householdId, movement, categoryCode, direction, request.note, by, notify = true)
+        val tx = createTransaction(householdId, movement, categoryCode, direction, request.note, by, notify = true)
+        movement.createdTransactionId = tx.id
         markConfirmed(movement, categoryCode, by)
         if (request.saveRule) categorization.learn(householdId, movement, categoryCode, direction, by)
         metrics.bankMovementsIngested(1)
@@ -152,7 +163,7 @@ class PendingMovementService(
             ?: throw AppException.notFound("PENDING_MOVEMENT_NOT_FOUND")
         val candidates = candidatesFor(buildDuplicateIndex(householdId, listOf(movement)), movement)
         if (candidates.isEmpty()) return emptyList()
-        val linked = pending.findLinkedTransactionIds(householdId, candidates.map { it.id }).toSet()
+        val linked = links.findLinkedTransactionIds(householdId, candidates.map { it.id }).toSet()
         return candidates
             .sortedWith(
                 compareBy<Transaction> { abs(ChronoUnit.DAYS.between(movement.bookingDate, it.occurrenceDate)) }
@@ -184,7 +195,8 @@ class PendingMovementService(
             ?: throw AppException.notFound("REPLACE_TARGET_NOT_FOUND")
         // Matched on the *movement's* direction, so re-picking the category can't widen the target set.
         if (!isCandidate(movement, tx)) throw AppException.conflict("REPLACE_TARGET_NOT_A_MATCH")
-        if (pending.existsByCreatedTransactionIdAndIdNot(tx.id, movement.id)) {
+        // Covers transactions produced by a split too, which the single created_transaction_id can't record.
+        if (links.existsByTransactionIdAndPendingMovementIdNot(tx.id, movement.id)) {
             throw AppException.conflict("TRANSACTION_ALREADY_BANK_LINKED")
         }
         // Re-dating a materialized occurrence onto a sibling's date would break the
@@ -211,9 +223,53 @@ class PendingMovementService(
             by,
         )
         movement.createdTransactionId = tx.id
+        link(movement, tx.id)
         markConfirmed(movement, categoryCode, by)
         metrics.bankMovementsIngested(1)
         return movement.toDto(connections.findById(movement.connectionId).orElse(null), account(movement), false)
+    }
+
+    /** One transaction per part, all on the movement's booking date and sharing one direction; the parts
+     *  must sum to the movement's amount to the cent. Links every created transaction and leaves
+     *  [PendingMovement.createdTransactionId] null. Deliberately no rule learning — one counterparty
+     *  mapping to several categories is what a learned rule cannot express. */
+    @Transactional
+    fun split(householdId: UUID, id: UUID, request: SplitMovementRequest, by: User): PendingMovementDto {
+        val movement = requirePending(householdId, id)
+        val parts = request.parts
+        // A single part is an ordinary confirm, not a split.
+        if (parts.size < 2) throw AppException.badRequest("BANK_SPLIT_TOO_FEW_PARTS")
+        val direction = request.direction ?: movement.direction
+
+        // Validated up front so a bad part never leaves earlier ones created and counted.
+        val amounts = parts.map { Money.normalize(it.amount) }
+        if (amounts.any { it.signum() <= 0 }) throw AppException.badRequest("BANK_SPLIT_AMOUNT_INVALID")
+        if (parts.any { it.categoryCode.isBlank() }) throw AppException.badRequest("BANK_CATEGORY_REQUIRED")
+        val sum = amounts.reduce(BigDecimal::add)
+        if (sum.compareTo(movement.amount) != 0) throw AppException.badRequest("BANK_SPLIT_TOTAL_MISMATCH")
+
+        // Silent creates; one aggregated notification below instead of N.
+        parts.forEachIndexed { index, part ->
+            createTransaction(
+                householdId = householdId,
+                movement = movement,
+                categoryCode = part.categoryCode,
+                direction = direction,
+                note = part.description,
+                by = by,
+                notify = false,
+                amount = amounts[index],
+            )
+        }
+        markConfirmed(movement, categoryCode = null, by)
+        notifications.bankMovementSplit(householdId, parts.size, movement.amount, NotifyActor.Human(by.email))
+        metrics.bankMovementsIngested(1)
+        return movement.toDto(
+            connections.findById(movement.connectionId).orElse(null),
+            account(movement),
+            false,
+            links.findAllByPendingMovementId(movement.id).map { it.transactionId },
+        )
     }
 
     @Transactional
@@ -233,7 +289,8 @@ class PendingMovementService(
                 continue
             }
             // Silent create; a single aggregated notification is published after the loop.
-            createTransaction(householdId, movement, categoryCode, direction, null, by, notify = false)
+            val tx = createTransaction(householdId, movement, categoryCode, direction, item?.note, by, notify = false)
+            movement.createdTransactionId = tx.id
             markConfirmed(movement, categoryCode, by)
             categorization.learn(householdId, movement, categoryCode, direction, by)
             confirmed++
@@ -320,6 +377,8 @@ class PendingMovementService(
         return movement
     }
 
+    /** Creates one transaction and records the link; single-transaction callers also set
+     *  [PendingMovement.createdTransactionId]. Blank [note] falls back to the bank description. */
     private fun createTransaction(
         householdId: UUID,
         movement: PendingMovement,
@@ -328,16 +387,22 @@ class PendingMovementService(
         note: String?,
         by: User,
         notify: Boolean,
-    ) {
+        amount: BigDecimal = movement.amount,
+    ): Transaction {
         val request = TransactionRequest(
             occurrenceDate = movement.bookingDate,
             direction = direction,
             categoryCode = categoryCode,
-            amount = movement.amount,
-            description = (note ?: movementDescription(movement))?.take(500),
+            amount = amount,
+            description = (note?.takeIf { it.isNotBlank() } ?: movementDescription(movement))?.take(500),
         )
         val tx = transactionService.createInternal(householdId, request, by, notify)
-        movement.createdTransactionId = tx.id
+        link(movement, tx.id)
+        return tx
+    }
+
+    private fun link(movement: PendingMovement, transactionId: UUID) {
+        links.save(PendingMovementTransaction(pendingMovementId = movement.id, transactionId = transactionId))
     }
 
     private fun createMovement(
@@ -418,6 +483,8 @@ class PendingMovementService(
         connection: BankConnection?,
         account: BankConnectionAccount?,
         possibleDuplicate: Boolean,
+        // Defaults to the single link, which is what every path except a split produces.
+        transactionIds: List<UUID> = listOfNotNull(createdTransactionId),
     ): PendingMovementDto = PendingMovementDto(
         id = id,
         connectionId = connectionId,
@@ -437,6 +504,7 @@ class PendingMovementService(
         status = status,
         suggestedCategoryCode = suggestedCategoryCode,
         createdTransactionId = createdTransactionId,
+        createdTransactionIds = transactionIds,
         createdMovementId = createdMovementId,
         possibleDuplicate = possibleDuplicate,
     )

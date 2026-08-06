@@ -175,6 +175,21 @@ class NotificationPublisher(
         )
     }
 
+    /** One aggregated message for a split instead of N creation cards. Its own entity only so the header
+     *  can say what happened; same `notify_bank_movements` toggle as the confirm summary. */
+    fun bankMovementSplit(householdId: UUID, count: Int, total: BigDecimal, actor: NotifyActor) {
+        if (count <= 0) return
+        events.publishEvent(
+            MaterializationEvent(
+                householdId = householdId,
+                entity = NotifyEntity.BANK_MOVEMENT_SPLIT,
+                count = count,
+                actor = actor,
+                fields = listOf(CardField("common.amount", FieldValue.Money(total))),
+            ),
+        )
+    }
+
     /** Heads-up after a sync ingests N new movements, before any confirm. Same `notify_bank_movements` toggle
      *  as the confirm summary; uses a CREATE change event so its header ("new to review") stays distinct. */
     fun bankMovementsToReview(

@@ -449,13 +449,19 @@ Wise could be added via its own API) with the always-available CSV import as the
     background sync stays quiet. Both states are re-checked every run and clear themselves as soon
     as the credentials line up again — no manual nudge needed.
 - **Review inbox** (a **Pending (N)** sub-view inside Transactions, plus a nav badge and a Home
-  card, all at household level): per-movement **confirm / edit / reject** and **batch** actions.
+  card, all at household level): per-movement **confirm / reject** and **batch** actions.
   Each row is edited inline before confirming — direction, category (confirm stays disabled until
-  one is chosen) and description — and the bulk bar can assign a category to the whole selection
-  at once. Confirming reuses the normal transaction-creation logic; single confirms notify
-  normally, batch confirms send one aggregated notification. A **possible-duplicate warning**
+  one is chosen) and description, the last as a plain text input prefilled with the bank's own
+  wording (counterparty – description, exactly what a confirm would store on its own) — and the
+  bulk bar can assign a category to the whole selection at once. All three edits are **local until
+  the row is resolved**: they are saved when you press Confirm (or complete a Replace or Split that
+  inherits them), reject discards them, and navigating away discards them. Nothing is written per
+  keystroke. Batch confirm uses whatever each row's inputs hold at that moment. Confirming reuses
+  the normal transaction-creation logic; single confirms notify normally, batch confirms send one
+  aggregated notification. A **possible-duplicate warning**
   flags manual transactions that look like an incoming movement (warns only, never auto-discards);
-  those rows get a third action, **Replace**, described below.
+  those rows get a third action, **Replace**, described below. Replace and **Split** are alternative
+  resolutions for a flagged row — both stay available on it.
   Rejected items don't reappear in the pending list; they stay visible under a "rejected" filter,
   from which they can be **restored** back to pending (individually or in batch). Confirmed items
   are final — they already produced a transaction or movement. The list also filters by
@@ -492,6 +498,39 @@ Wise could be added via its own API) with the always-available CSV import as the
   shown with the reason instead), and if nothing replaceable is left — the match was deleted or
   already linked — the dialog says so and offers a normal Confirm. Single-item only; it is excluded
   from batch operations, like "Mark as movement".
+- **Split a movement** (per item, under "More"): when one bank charge covers several categories — a
+  €120 supermarket bill that was €90 groceries and €30 household goods — it can be divided into **two
+  or more transactions** instead of landing as one. The dialog starts with two parts, each with an
+  **amount, a percentage, a category and a description**; parts can be added and removed down to a
+  minimum of two (one part is just an ordinary Confirm). Category and description are prefilled from
+  the row (the category it currently has selected, the description as edited in the inbox) and are
+  editable **per part**. **Direction is not** — a single bank movement cannot be part income and part
+  expense, so every part inherits the row's direction, and the category picker is filtered to it.
+  - **Amount and percentage are two views of one value.** Editing either updates the other; the euro
+    amount is authoritative and every percentage shown is derived from `amount / total`, so percent
+    input never compounds its own rounding (a part stored as €3.33 of €10.00 reads back as 33.30 %).
+  - **With exactly two parts the other one auto-balances** to the remainder, so the pair always
+    matches to the cent. With **three or more** there is no non-arbitrary part to absorb a change, so
+    nothing auto-balances: a live remainder line reports "€X left to assign" / "€X over the total"
+    and Save stays disabled until the sum matches exactly. A cent left over by percentage entry
+    (33.33 % three times over €10.00 is €9.99) surfaces there rather than being silently absorbed.
+  - **Validation before saving**: every part needs an amount greater than 0 with at most two decimals
+    and a category (the same rule as Confirm), and the parts must sum to the movement's total exactly.
+    The error is reported on the part that is actually wrong — including the two-part case where
+    entering more than the total leaves the other part with nothing.
+  - Saving creates **one transaction per part**, all on the movement's booking date, and marks the item
+    `confirmed` and associated with **every** created transaction. Cancelling writes nothing.
+  - **No rule is learned from a split**: one counterparty mapping to several categories is exactly the
+    ambiguity a learned rule cannot represent.
+  - Telegram gets **one aggregated notification** ("1 movement split into N transactions" with the
+    movement total), not one creation message per part.
+  - Single-item only; excluded from batch operations, like "Mark as movement".
+  - **Data model**: a `pending_movement_transactions` join table records every transaction a pending
+    item produced — for splits and for ordinary confirms alike — so "does this transaction already
+    resolve a bank movement?" (the Replace guard, and the "already linked" flag on a replace candidate)
+    has one place to look and covers split-created transactions too. `created_transaction_id` keeps its
+    original meaning, the single transaction an ordinary confirm or a Replace produced, and is left null
+    for a split, where no single transaction represents the item.
 - **Categorisation**: configurable rules (counterparty / description / amount → category +
   direction) applied during sync, and learning from corrections — confirming with a category
   remembers "this counterparty → this category" for next time, but **only when no existing rule
