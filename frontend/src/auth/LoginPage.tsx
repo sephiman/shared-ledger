@@ -5,12 +5,14 @@ import { useAuth } from "@/auth/AuthContext";
 import { apiErrorMessage } from "@/api/client";
 import { useTheme } from "@/lib/theme";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label } from "@/components/ui/primitives";
+import logoDark from "@/assets/SharedLedgerDark.png";
+import logoLight from "@/assets/SharedLedgerLight.png";
 
 export function LoginPage() {
   const { login } = useAuth();
   const { t } = useTranslation();
   const { resolvedTheme } = useTheme();
-  const logoSrc = resolvedTheme === "light" ? "/SharedLedgerLight.png" : "/SharedLedgerDark.png";
+  const logoSrc = resolvedTheme === "light" ? logoLight : logoDark;
   const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState("");

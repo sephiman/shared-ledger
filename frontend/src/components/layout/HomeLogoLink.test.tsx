@@ -6,6 +6,8 @@ import { HomeLogoLink } from "@/components/layout/HomeLogoLink";
 import { LoginPage } from "@/auth/LoginPage";
 import { ThemeProvider } from "@/lib/theme";
 import i18n from "@/i18n";
+import logoDark from "@/assets/SharedLedgerDark.png";
+import logoLight from "@/assets/SharedLedgerLight.png";
 
 vi.mock("@/auth/AuthContext", () => ({
   useAuth: () => ({ login: vi.fn() }),
@@ -97,7 +99,8 @@ describe("HomeLogoLink", () => {
     localStorage.setItem("theme", "oled");
     renderAt("/dashboard");
 
-    expect(screen.getByAltText("Shared Ledger")).toHaveAttribute("src", "/SharedLedgerDark.png");
+    expect(screen.getByAltText("Shared Ledger")).toHaveAttribute("src", logoDark);
+    expect(logoDark).not.toBe(logoLight);
   });
 
   it("leaves the login-page logo inert, so it cannot lead into a protected route", () => {
