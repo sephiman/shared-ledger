@@ -8,6 +8,7 @@ import {
 import { asApiError } from "@/api/client";
 import { Button, Card, CardBody, CardHeader, Input, Label, Textarea } from "@/components/ui/primitives";
 import { FilePicker } from "@/features/settings/FilePicker";
+import { cn } from "@/lib/cn";
 import {
   MAX_KEY_FILE_BYTES,
   keyFileSizeError,
@@ -37,7 +38,6 @@ export function BankCredentialsCard({ householdId }: { householdId: string }) {
   // Set when the server refuses a save that would strand connections; holds the count to show.
   const [relinkWarning, setRelinkWarning] = useState<number | null>(null);
   const [testMsg, setTestMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const [copied, setCopied] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const phaseBRef = useRef<HTMLElement>(null);
   // Bumped by the Banks card's pre-link checkpoint. A counter rather than a boolean, so a second
@@ -144,12 +144,16 @@ export function BankCredentialsCard({ householdId }: { householdId: string }) {
     }
   };
 
-  const copyRedirect = async () => {
-    if (!credentials?.redirectUrl) return;
-    await navigator.clipboard.writeText(credentials.redirectUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  // The EB form asks for privacy and terms URLs; the redirect URL is the only place the client knows
+  // this instance's public address, so both fields reuse its origin.
+  const publicBaseUrl = (() => {
+    if (!credentials?.redirectUrl) return "";
+    try {
+      return new URL(credentials.redirectUrl).origin;
+    } catch {
+      return "";
+    }
+  })();
 
   return (
     <Card>
@@ -220,14 +224,7 @@ export function BankCredentialsCard({ householdId }: { householdId: string }) {
           <div className="rounded-md border border-border p-3">
             <p className="text-sm font-medium">{t("banks.credentials_redirect_title")}</p>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{t("banks.credentials_redirect_hint")}</p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <code className="min-w-0 break-all rounded bg-gray-100 px-2 py-1 text-xs dark:bg-sunken/60">
-                {credentials.redirectUrl}
-              </code>
-              <Button variant="secondary" onClick={copyRedirect}>
-                {copied ? t("common.copied") : t("common.copy")}
-              </Button>
-            </div>
+            <CopyableValue className="mt-2" value={credentials.redirectUrl} />
           </div>
         )}
 
@@ -284,12 +281,28 @@ export function BankCredentialsCard({ householdId }: { householdId: string }) {
               <PhaseSection letter="A" title={t("banks.credentials_help_phase_a_title")} note={t("banks.credentials_help_phase_a_note")}>
                 <ol className="list-decimal space-y-1.5 pl-5 text-gray-600 dark:text-gray-300">
                   <li>
-                    {t("banks.credentials_help_step1")}{" "}
+                    {t("banks.credentials_help_step1_signin")}{" "}
                     <a className="text-primary" href="https://enablebanking.com" target="_blank" rel="noreferrer">
                       enablebanking.com
                     </a>
+                    . {t("banks.credentials_help_step1_nav")}{" "}
+                    <a
+                      className="break-all text-primary"
+                      href="https://enablebanking.com/cp/applications"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      enablebanking.com/cp/applications
+                    </a>
+                    . {t("banks.credentials_help_step1_form")}
                   </li>
-                  <li>{t("banks.credentials_help_step2")}</li>
+                  <li>
+                    {t("banks.credentials_help_step2")}{" "}
+                    <strong className="font-semibold text-gray-700 dark:text-gray-200">
+                      {t("banks.credentials_help_step2_restricted")}
+                    </strong>{" "}
+                    {t("banks.credentials_help_step2_restricted_note")}
+                  </li>
                   <li>{t("banks.credentials_help_step3")}</li>
                   <li>{t("banks.credentials_help_step4")}</li>
                   <li>
@@ -298,8 +311,44 @@ export function BankCredentialsCard({ householdId }: { householdId: string }) {
                       {credentials?.redirectUrl ?? ""}
                     </code>
                   </li>
-                  <li>{t("banks.credentials_help_step6")}</li>
-                  <li>{t("banks.credentials_help_step7")}</li>
+                  <li>
+                    {t("banks.credentials_help_step6")}
+                    <ul className="mt-1 list-disc space-y-1 pl-5">
+                      <li>{t("banks.credentials_help_step6_description")}</li>
+                      <li>{t("banks.credentials_help_step6_email")}</li>
+                      <li>
+                        {t("banks.credentials_help_step6_privacy")}
+                        <CopyableValue className="mt-1" value={publicBaseUrl} compact />
+                      </li>
+                      <li>
+                        {t("banks.credentials_help_step6_terms")}
+                        <CopyableValue className="mt-1" value={publicBaseUrl} compact />
+                      </li>
+                    </ul>
+                  </li>
+                  <li>
+                    {t("banks.credentials_help_step7")}
+                    {/* The two things people miss: the key downloads by itself, and the app id is not in it. */}
+                    <ol className="mt-1 list-[lower-alpha] space-y-1 pl-5">
+                      <li>
+                        <strong className="font-semibold text-gray-700 dark:text-gray-200">
+                          {t("banks.credentials_help_step7_key_download")}
+                        </strong>{" "}
+                        {t("banks.credentials_help_step7_key_upload")}
+                      </li>
+                      <li>
+                        {t("banks.credentials_help_step7_app_id")}{" "}
+                        {/* Shaped like the Control Panel's list entry, so the name(uuid) form is unmistakable. */}
+                        <code className="break-all rounded bg-gray-100 px-1 py-0.5 text-xs dark:bg-sunken/60">
+                          SharedLedger(00000000-1111-2222-3333-444444444444)
+                        </code>{" "}
+                        {t("banks.credentials_help_step7_app_id_copy")}{" "}
+                        <strong className="font-semibold text-gray-700 dark:text-gray-200">
+                          {t("banks.credentials_help_step7_app_id_not_in_file")}
+                        </strong>
+                      </li>
+                    </ol>
+                  </li>
                   <li>
                     {t("banks.credentials_help_step8_save")}{" "}
                     <strong className="font-semibold text-gray-700 dark:text-gray-200">
@@ -364,6 +413,27 @@ export function BankCredentialsCard({ householdId }: { householdId: string }) {
         </div>
       </CardBody>
     </Card>
+  );
+}
+
+/** A value to paste into the Enable Banking form, shown verbatim with a copy button. */
+function CopyableValue({ value, compact, className }: { value: string; compact?: boolean; className?: string }) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    await navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className={cn("flex flex-wrap items-center gap-2", className)}>
+      <code className="min-w-0 break-all rounded bg-gray-100 px-2 py-1 text-xs dark:bg-sunken/60">{value}</code>
+      <Button variant="secondary" className={compact ? "px-2 py-0.5 text-xs" : undefined} onClick={copy}>
+        {copied ? t("common.copied") : t("common.copy")}
+      </Button>
+    </div>
   );
 }
 

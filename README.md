@@ -296,6 +296,11 @@ Long-term wealth projection toward financial independence, derived from the hous
 - Server-side messages (validation errors, auth errors, generic API errors) are also localized.
 - Locale resolution order: `Accept-Language` header → authenticated user's preferred locale → English.
 - Currency, date and number formatting reflect the active locale and the household currency.
+- **Third-party UI terms are never translated.** Where instructions send you to an external console —
+  Enable Banking's Control Panel, whose pages are English-only — the prose is localized but every string
+  you have to *find on screen* (tab, button, option, field label: “API applications”, “Add a new
+  application”, “Register”, “Restricted Production”, …) stays verbatim in English and quoted, so it reads
+  as *look for exactly this*. Our own labels are the opposite: always the translated ones.
 - Language toggle in the header persists per user.
 - **Theme**: light / dark / OLED / system toggle in the header menu. `system` follows the OS preference and updates live, resolving to light or dark only — never OLED. OLED is a pure-black variant for OLED phone screens (black pixels switch off, so it saves battery and maximizes contrast); like light and dark, choosing it explicitly fixes the theme and stops it following the OS. Stored per browser, not per user.
 
@@ -376,9 +381,16 @@ Wise could be added via its own API) with the always-available CSV import as the
     failing or re-routing them. Saving credentials with a different application id warns first
     ("N existing connection(s) … will need re-linking") and needs a confirmation.
   - **Setup instructions in three ordered phases** (the card's collapsible *How do I get these?*), because
-    the order is what people get wrong: **A** — create the EB application, register the redirect URL, then
-    save the credentials here and press *Validate credentials* (gate: don't continue until validation
-    succeeds); **B** — whitelist every account in the Control Panel, with the *why* stated first, the
+    the order is what people get wrong: **A** — create the EB application (with the exact navigation path:
+    account menu → *API applications*, plus a direct link to `enablebanking.com/cp/applications`), register
+    the redirect URL, fill
+    the fields the form calls optional but rejects when empty (description, data-protection email, and
+    privacy/terms URLs — the last two offered as copy buttons on this instance's public base URL, taken from
+    the same source as the redirect URL), then save the credentials here and press *Validate credentials*
+    (gate: don't continue until validation succeeds). Pressing *Register* is spelled out as the two things
+    that happen at once, because both are missed in practice: the private key file **downloads by itself**
+    (only copy, never shown again) and the application id is **the UUID in parentheses after the application
+    name in the API Applications list** (shown as a `name(uuid)` example), **not inside that file**; **B** — whitelist every account in the Control Panel, with the *why* stated first, the
     per-account walkthrough ("Activate by linking accounts", the holder passes their own SCA, repeat for
     each bank and each holder), and a visually prominent closing gate: *don't link any bank in SharedLedger
     until every account appears as linked to the application*; **C** — only now link the banks in the Banks
