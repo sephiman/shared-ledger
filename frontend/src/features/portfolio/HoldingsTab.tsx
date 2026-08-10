@@ -19,17 +19,29 @@ import {
   type SymbolCandidate,
 } from "@/api/portfolio";
 import { apiErrorMessage } from "@/api/client";
-import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select } from "@/components/ui/primitives";
+import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select, Toggle } from "@/components/ui/primitives";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { formatMoney, formatNumber, formatPrice } from "@/lib/money";
 import { formatDate, isoToday } from "@/lib/dates";
 import { useToggleSet } from "@/lib/useToggleSet";
 import { SymbolSearchCombobox } from "./SymbolSearchCombobox";
+import { DUST_HOLDING_MAX_VALUE_EUR, isDustHolding, partitionDust } from "./dustHoldings";
 import { fractionToPercent, percentLabel, pnlTone, returnPercents, signedMoney } from "./valuation";
 import { formatPriceAge, oldestStalePriceAge, priceAge, priceAsOfLabel, type PriceAge } from "./priceFreshness";
 import { cn } from "@/lib/cn";
 
 const ASSET_CLASSES: HoldingAssetClass[] = ["crypto", "etf", "stock", "fund"];
+
+/** Per browser, like the theme: a view preference for this table, with no home in Settings. */
+const SHOW_CLOSED_KEY = "sl.portfolio.showClosed";
+
+function readShowClosed(): boolean {
+  try {
+    return localStorage.getItem(SHOW_CLOSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 type PanelMode = { kind: "closed" } | { kind: "create" } | { kind: "edit"; holding: Holding };
 
@@ -135,6 +147,15 @@ export function HoldingsTab() {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const expanded = useToggleSet<string>();
   const [assetFilter, setAssetFilter] = useState<AssetFilter>("all");
+  const [showClosed, setShowClosed] = useState(readShowClosed);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SHOW_CLOSED_KEY, showClosed ? "1" : "0");
+    } catch {
+      // A browser that refuses storage still gets the toggle; it just won't remember it.
+    }
+  }, [showClosed]);
 
   useEffect(() => {
     if (panel.kind === "edit") panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -146,6 +167,13 @@ export function HoldingsTab() {
     assetFilter !== "all" && !availableClasses.includes(assetFilter) ? "all" : assetFilter;
   const filtered =
     effectiveFilter === "all" ? holdings : holdings.filter((h) => h.holding.assetClass === effectiveFilter);
+  // Display-only, and deliberately the last step: `filtered` stays the basis for every card, the
+  // stale notice and the weights, so hiding a row never moves a number.
+  const { visible, hiddenCount } = partitionDust(filtered);
+  const rows = showClosed ? filtered : visible;
+  // Anchored to the whole portfolio rather than the current filter, so the control doesn't blink in
+  // and out while switching asset types.
+  const anyDust = holdings.some(isDustHolding);
   const totals: Totals | null = !summary
     ? null
     : effectiveFilter === "all"
@@ -206,6 +234,11 @@ export function HoldingsTab() {
           to: formatDate(mwr.to, locale),
           terminal: money(mwr.terminalValue),
         });
+  // The count always states what the table leaves out, so hidden never reads as missing.
+  const hidingSome = hiddenCount > 0 && !showClosed;
+  const countLabel =
+    t("portfolio.holdings_count", { count: rows.length }) +
+    (hidingSome ? ` ${t("portfolio.holdings_hidden", { count: hiddenCount })}` : "");
 
   return (
     <div className="space-y-4">
@@ -338,13 +371,28 @@ export function HoldingsTab() {
       )}
 
       <Card>
+        {holdings.length > 0 && (
+          <CardHeader className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2">
+            <p
+              className="text-sm text-gray-500 dark:text-gray-400"
+              title={hidingSome ? t("portfolio.holdings_hidden_tooltip", { threshold: money(DUST_HOLDING_MAX_VALUE_EUR) }) : undefined}
+            >
+              {countLabel}
+            </p>
+            {anyDust && (
+              <Toggle label={t("portfolio.show_closed")} checked={showClosed} onChange={setShowClosed} />
+            )}
+          </CardHeader>
+        )}
         <CardBody>
           {holdings.length === 0 ? (
             <p className="text-gray-500 dark:text-gray-400">{t("portfolio.empty")}</p>
+          ) : rows.length === 0 ? (
+            <p className="text-gray-500 dark:text-gray-400">{t("portfolio.all_closed_hidden", { count: hiddenCount })}</p>
           ) : (
             <>
               <ul className="space-y-2 lg:hidden">
-                {filtered.map((row) => {
+                {rows.map((row) => {
                   const isOpen = expanded.has(row.holding.id);
                   const age = priceAge(row, now);
                   return (
@@ -428,7 +476,7 @@ export function HoldingsTab() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((row) => {
+                  {rows.map((row) => {
                     const isOpen = expanded.has(row.holding.id);
                     const avg = avgCost(row);
                     const age = priceAge(row, now);
