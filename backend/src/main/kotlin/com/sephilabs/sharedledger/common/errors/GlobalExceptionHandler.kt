@@ -17,6 +17,7 @@ data class ApiError(
     val code: String,
     val message: String,
     val fields: Map<String, String>? = null,
+    val args: List<String>? = null,
 )
 
 @RestControllerAdvice
@@ -25,7 +26,8 @@ class GlobalExceptionHandler(private val messages: Messages) {
     @ExceptionHandler(AppException::class)
     fun handleAppException(ex: AppException): ResponseEntity<ApiError> {
         val message = messages.resolve(ex.code, ex.args, ex.fallbackMessage)
-        return ResponseEntity.status(ex.httpStatus).body(ApiError(ex.code, message, ex.fields))
+        val args = ex.args.map { it.toString() }.takeIf { it.isNotEmpty() }
+        return ResponseEntity.status(ex.httpStatus).body(ApiError(ex.code, message, ex.fields, args))
     }
 
     @ExceptionHandler(MethodArgumentNotValidException::class)

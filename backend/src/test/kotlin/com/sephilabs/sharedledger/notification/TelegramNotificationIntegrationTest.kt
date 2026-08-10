@@ -241,7 +241,7 @@ class TelegramNotificationIntegrationTest @Autowired constructor(
     }
 
     @Test
-    fun `portfolio buy and sell dispatch trade notifications`() {
+    fun `portfolio buy, sell and edit dispatch trade notifications`() {
         val (user, household) = seed()
         seedSettings(household.id, user.id)
         // Unlinked holding: no price provider is touched.
@@ -251,7 +251,7 @@ class TelegramNotificationIntegrationTest @Autowired constructor(
             user,
         )
 
-        holdings.addLot(
+        val buy = holdings.addLot(
             household.id, holding.id,
             LotRequest(type = LotType.BUY, tradedOn = LocalDate.of(2025, 3, 1), quantity = BigDecimal("1"), unitPrice = BigDecimal("40000")),
             user,
@@ -268,6 +268,15 @@ class TelegramNotificationIntegrationTest @Autowired constructor(
         )
         assertSent(2)
         assertThat(client.sent.last().text).contains("Trade recorded").contains("Sell").contains("50000 EUR")
+
+        // Editing a trade rides the same toggle, as an update.
+        holdings.updateLot(
+            household.id, holding.id, buy.id,
+            LotRequest(type = LotType.BUY, tradedOn = LocalDate.of(2025, 3, 1), quantity = BigDecimal("2"), unitPrice = BigDecimal("41000")),
+            user,
+        )
+        assertSent(3)
+        assertThat(client.sent.last().text).contains("Trade edited").contains("Buy").contains("41000 EUR")
     }
 
     @Test

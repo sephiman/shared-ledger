@@ -12,9 +12,11 @@ import {
   useRefreshPrices,
   useUnlinkHolding,
   useUpdateHolding,
+  useUpdateLot,
   type Holding,
   type HoldingAssetClass,
   type HoldingSummary,
+  type Lot,
   type LotType,
   type SymbolCandidate,
 } from "@/api/portfolio";
@@ -45,8 +47,9 @@ function readShowClosed(): boolean {
 
 type PanelMode = { kind: "closed" } | { kind: "create" } | { kind: "edit"; holding: Holding };
 
-/** Quantity at full stored precision: trims only pure trailing zeros (10000.000000 -> 10000),
- *  never drops meaningful digits, and avoids exponent notation for tiny holdings. */
+/** A stored decimal at full precision: trims only pure trailing zeros (10000.000000 -> 10000), never drops
+ *  meaningful digits, and avoids exponent notation for tiny holdings. Used for quantities on screen and to
+ *  seed the trade form's number fields, which would otherwise show a stored value's zero tail. */
 function formatQty(value: string): string {
   try {
     return new Decimal(value).toFixed();
@@ -724,59 +727,30 @@ function LinkPanel({ holding }: { holding: Holding }) {
   );
 }
 
+/** Which trade the one open form is about: a new one of a given type, or an existing lot being replaced. */
+type LotFormTarget = { kind: "create"; type: LotType } | { kind: "edit"; lot: Lot };
+
 function LotsEditor({ holding, currency, locale }: { holding: Holding; currency: string; locale: string }) {
   const { t } = useTranslation();
   const household = useActiveHousehold();
-  const addLot = useAddLot(household.householdId);
   const deleteLot = useDeleteLot(household.householdId);
 
-  const [formType, setFormType] = useState<LotType | null>(null);
-  const [tradedOn, setTradedOn] = useState(isoToday());
-  const [quantity, setQuantity] = useState("");
-  const [unitPrice, setUnitPrice] = useState("");
-  const [lotCurrency, setLotCurrency] = useState(holding.nativeCurrency);
-  const [fee, setFee] = useState("");
-  const [note, setNote] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  // One form at a time: opening an edit closes the add form and vice versa, so there is never a
+  // second set of fields competing for the same ledger.
+  const [target, setTarget] = useState<LotFormTarget | null>(null);
+  const creating = target?.kind === "create" ? target.type : null;
 
   const sortedLots = useMemo(
     () => [...holding.lots].sort((a, b) => b.tradedOn.localeCompare(a.tradedOn)),
     [holding.lots]
   );
 
-  function openForm(type: LotType) {
-    setFormType((current) => (current === type ? null : type));
-    setError(null);
+  function toggleCreate(type: LotType) {
+    setTarget((current) => (current?.kind === "create" && current.type === type ? null : { kind: "create", type }));
   }
 
-  async function saveLot() {
-    if (!formType) return;
-    setError(null);
-    if (!quantity || !unitPrice || !tradedOn) {
-      setError(t("errors.field_required"));
-      return;
-    }
-    try {
-      await addLot.mutateAsync({
-        holdingId: holding.id,
-        input: {
-          type: formType,
-          tradedOn,
-          quantity,
-          unitPrice,
-          currency: lotCurrency || null,
-          fee: fee || null,
-          note: note || null,
-        },
-      });
-      setFormType(null);
-      setQuantity("");
-      setUnitPrice("");
-      setFee("");
-      setNote("");
-    } catch (err) {
-      setError(apiErrorMessage(err, t));
-    }
+  function toggleEdit(lot: Lot) {
+    setTarget((current) => (current?.kind === "edit" && current.lot.id === lot.id ? null : { kind: "edit", lot }));
   }
 
   return (
@@ -786,50 +760,23 @@ function LotsEditor({ holding, currency, locale }: { holding: Holding; currency:
           {t("portfolio.lots")}
         </p>
         <div className="flex gap-1">
-          <Button variant="secondary" className="px-2 py-1 text-xs" onClick={() => openForm("BUY")}>
-            {formType === "BUY" ? t("common.cancel") : t("portfolio.add_lot")}
+          <Button variant="secondary" className="px-2 py-1 text-xs" onClick={() => toggleCreate("BUY")}>
+            {creating === "BUY" ? t("common.cancel") : t("portfolio.add_lot")}
           </Button>
-          <Button variant="secondary" className="px-2 py-1 text-xs" onClick={() => openForm("SELL")}>
-            {formType === "SELL" ? t("common.cancel") : t("portfolio.register_sale")}
+          <Button variant="secondary" className="px-2 py-1 text-xs" onClick={() => toggleCreate("SELL")}>
+            {creating === "SELL" ? t("common.cancel") : t("portfolio.register_sale")}
           </Button>
         </div>
       </div>
 
-      {formType && (
-        <div className="space-y-2 rounded-md border border-border p-3">
-          <p className="text-xs font-medium">
-            {formType === "BUY" ? t("portfolio.add_lot") : t("portfolio.register_sale")}
-          </p>
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
-            <div>
-              <Label>{t("portfolio.traded_on")}</Label>
-              <Input type="date" value={tradedOn} onChange={(e) => setTradedOn(e.target.value)} />
-            </div>
-            <div>
-              <Label>{t("portfolio.quantity")}</Label>
-              <Input type="number" step="any" min="0" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
-            </div>
-            <div>
-              <Label>{formType === "BUY" ? t("portfolio.unit_price") : t("portfolio.sale_price")}</Label>
-              <Input type="number" step="any" min="0" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} />
-            </div>
-            <div>
-              <Label>{t("portfolio.lot_currency")}</Label>
-              <Input value={lotCurrency} maxLength={3} onChange={(e) => setLotCurrency(e.target.value.toUpperCase())} />
-            </div>
-            <div>
-              <Label>{t("portfolio.fee")}</Label>
-              <Input type="number" step="any" min="0" value={fee} onChange={(e) => setFee(e.target.value)} />
-            </div>
-            <div>
-              <Label>{t("portfolio.note")}</Label>
-              <Input value={note} onChange={(e) => setNote(e.target.value)} />
-            </div>
-          </div>
-          <FieldError message={error} />
-          <div className="flex justify-end">
-            <Button onClick={() => void saveLot()}>{t("common.save")}</Button>
-          </div>
+      {target?.kind === "create" && (
+        <div className="rounded-md border border-border p-3">
+          <LotForm
+            key={`create-${target.type}`}
+            holding={holding}
+            target={target}
+            onClose={() => setTarget(null)}
+          />
         </div>
       )}
 
@@ -845,59 +792,190 @@ function LotsEditor({ holding, currency, locale }: { holding: Holding; currency:
             const showUnrealized =
               lot.type === "BUY" && remaining != null && new Decimal(remaining).gt(0) && lot.unrealizedPnl != null;
             const showRealized = lot.realizedPnl != null && pnlTone(lot.realizedPnl) !== "neutral";
+            const editing = target?.kind === "edit" && target.lot.id === lot.id;
             return (
-              <li key={lot.id} className="flex items-start justify-between gap-2 rounded border border-border px-2 py-1">
-                <span className="text-xs text-gray-600 dark:text-gray-300">
-                  <span
-                    className={cnBadge(lot.type)}
-                  >
-                    {t(`portfolio.lot_type.${lot.type}`)}
-                  </span>
-                  {" "}
-                  {formatDate(lot.tradedOn, locale)} · {formatQty(lot.quantity)} × {formatPrice(lot.unitPrice, lot.currency, locale)}
-                  {lot.fee && ` · ${t("portfolio.fee")} ${formatMoney(lot.fee, lot.currency, locale)}`}
-                  {partlySold && (
-                    <span className="text-gray-400 dark:text-gray-500"> · {formatQty(remaining!)} {t("portfolio.held_short")}</span>
-                  )}
-                  {lot.note && ` · ${lot.note}`}
-                </span>
-                <span className="flex flex-col items-end gap-0.5">
-                  <span className="flex items-center gap-1">
-                    <span className="font-mono text-xs tabular-nums">{formatMoney(lot.amountBase, currency, locale)}</span>
-                    <Button
-                      variant="ghost"
-                      className="px-1 py-0.5"
-                      aria-label={t("common.delete")}
-                      title={t("common.delete")}
-                      onClick={() => {
-                        if (window.confirm(t("common.delete") + "?")) {
-                          void deleteLot.mutate({ holdingId: holding.id, lotId: lot.id });
-                        }
-                      }}
+              <li key={lot.id} className="rounded border border-border px-2 py-1">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-xs text-gray-600 dark:text-gray-300">
+                    <span
+                      className={cnBadge(lot.type)}
                     >
-                      <span aria-hidden>🗑️</span>
-                    </Button>
-                  </span>
-                  {(showUnrealized || showRealized) && (
-                    <span className="flex flex-wrap items-center justify-end gap-x-2 gap-y-0.5 text-[10px] font-medium">
-                      {showUnrealized && (
-                        <span className={toneClass(pnlTone(lot.unrealizedPnl))}>
-                          {t("portfolio.unrealized_short")}: {signedMoney(lot.unrealizedPnl!, formatMoney(lot.unrealizedPnl!, currency, locale))}
-                        </span>
-                      )}
-                      {showRealized && (
-                        <span className={toneClass(pnlTone(lot.realizedPnl))}>
-                          {t("portfolio.realized_short")}: {signedMoney(lot.realizedPnl!, formatMoney(lot.realizedPnl!, currency, locale))}
-                        </span>
-                      )}
+                      {t(`portfolio.lot_type.${lot.type}`)}
                     </span>
-                  )}
-                </span>
+                    {" "}
+                    {formatDate(lot.tradedOn, locale)} · {formatQty(lot.quantity)} × {formatPrice(lot.unitPrice, lot.currency, locale)}
+                    {lot.fee && ` · ${t("portfolio.fee")} ${formatMoney(lot.fee, lot.currency, locale)}`}
+                    {partlySold && (
+                      <span className="text-gray-400 dark:text-gray-500"> · {formatQty(remaining!)} {t("portfolio.held_short")}</span>
+                    )}
+                    {lot.note && ` · ${lot.note}`}
+                  </span>
+                  <span className="flex flex-col items-end gap-0.5">
+                    <span className="flex items-center gap-1">
+                      <span className="font-mono text-xs tabular-nums">{formatMoney(lot.amountBase, currency, locale)}</span>
+                      <Button
+                        variant="ghost"
+                        className="px-1 py-0.5"
+                        aria-label={t("portfolio.edit_lot")}
+                        title={t("portfolio.edit_lot")}
+                        onClick={() => toggleEdit(lot)}
+                      >
+                        <span aria-hidden>✏️</span>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        className="px-1 py-0.5"
+                        aria-label={t("common.delete")}
+                        title={t("common.delete")}
+                        onClick={() => {
+                          if (window.confirm(t("common.delete") + "?")) {
+                            void deleteLot.mutate({ holdingId: holding.id, lotId: lot.id });
+                          }
+                        }}
+                      >
+                        <span aria-hidden>🗑️</span>
+                      </Button>
+                    </span>
+                    {(showUnrealized || showRealized) && (
+                      <span className="flex flex-wrap items-center justify-end gap-x-2 gap-y-0.5 text-[10px] font-medium">
+                        {showUnrealized && (
+                          <span className={toneClass(pnlTone(lot.unrealizedPnl))}>
+                            {t("portfolio.unrealized_short")}: {signedMoney(lot.unrealizedPnl!, formatMoney(lot.unrealizedPnl!, currency, locale))}
+                          </span>
+                        )}
+                        {showRealized && (
+                          <span className={toneClass(pnlTone(lot.realizedPnl))}>
+                            {t("portfolio.realized_short")}: {signedMoney(lot.realizedPnl!, formatMoney(lot.realizedPnl!, currency, locale))}
+                          </span>
+                        )}
+                      </span>
+                    )}
+                  </span>
+                </div>
+                {/* The form opens inside the row it edits: on a long ledger the fields belong where the
+                    pencil was clicked, not back at the top of the list. */}
+                {editing && (
+                  <div className="mt-2 border-t border-border pt-2">
+                    <LotForm key={`edit-${lot.id}`} holding={holding} target={target} onClose={() => setTarget(null)} />
+                  </div>
+                )}
               </li>
             );
           })}
         </ul>
       )}
+    </div>
+  );
+}
+
+/** The trade form, for a new lot or an existing one. Editing is a wholesale replace validated by the
+ *  server's ledger replay, so every field is editable — including the type. Remounted per target
+ *  (`key`), which is what prefills it. */
+function LotForm({
+  holding,
+  target,
+  onClose,
+}: {
+  holding: Holding;
+  target: LotFormTarget;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const household = useActiveHousehold();
+  const addLot = useAddLot(household.householdId);
+  const updateLot = useUpdateLot(household.householdId);
+  const editing = target.kind === "edit" ? target.lot : null;
+
+  const [type, setType] = useState<LotType>(target.kind === "edit" ? target.lot.type : target.type);
+  const [tradedOn, setTradedOn] = useState(editing?.tradedOn ?? isoToday());
+  const [quantity, setQuantity] = useState(editing ? formatQty(editing.quantity) : "");
+  const [unitPrice, setUnitPrice] = useState(editing ? formatQty(editing.unitPrice) : "");
+  const [lotCurrency, setLotCurrency] = useState(editing?.currency ?? holding.nativeCurrency);
+  const [fee, setFee] = useState(editing?.fee ? formatQty(editing.fee) : "");
+  const [note, setNote] = useState(editing?.note ?? "");
+  const [error, setError] = useState<string | null>(null);
+
+  // A mis-clicked type would otherwise change a buy into a sale in silence. Says so and nothing more:
+  // the save still runs the same validation it would for a fresh trade.
+  const converting = editing != null && type !== editing.type;
+
+  async function save() {
+    setError(null);
+    if (!quantity || !unitPrice || !tradedOn) {
+      setError(t("errors.field_required"));
+      return;
+    }
+    const input = {
+      type,
+      tradedOn,
+      quantity,
+      unitPrice,
+      currency: lotCurrency || null,
+      fee: fee || null,
+      note: note || null,
+    };
+    try {
+      if (editing) await updateLot.mutateAsync({ holdingId: holding.id, lotId: editing.id, input });
+      else await addLot.mutateAsync({ holdingId: holding.id, input });
+      onClose();
+    } catch (err) {
+      // Stays open with the values as typed: a rejected edit is usually one field away from valid.
+      setError(apiErrorMessage(err, t));
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-medium">
+        {editing ? t("portfolio.edit_lot") : type === "BUY" ? t("portfolio.add_lot") : t("portfolio.register_sale")}
+      </p>
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+        {editing && (
+          <div>
+            <Label>{t("portfolio.trade_type")}</Label>
+            <Select value={type} onChange={(e) => setType(e.target.value as LotType)}>
+              <option value="BUY">{t("portfolio.lot_type.BUY")}</option>
+              <option value="SELL">{t("portfolio.lot_type.SELL")}</option>
+            </Select>
+          </div>
+        )}
+        <div>
+          <Label>{t("portfolio.traded_on")}</Label>
+          <Input type="date" value={tradedOn} onChange={(e) => setTradedOn(e.target.value)} />
+        </div>
+        <div>
+          <Label>{t("portfolio.quantity")}</Label>
+          <Input type="number" step="any" min="0" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+        </div>
+        <div>
+          <Label>{type === "BUY" ? t("portfolio.unit_price") : t("portfolio.sale_price")}</Label>
+          <Input type="number" step="any" min="0" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} />
+        </div>
+        <div>
+          <Label>{t("portfolio.lot_currency")}</Label>
+          <Input value={lotCurrency} maxLength={3} onChange={(e) => setLotCurrency(e.target.value.toUpperCase())} />
+        </div>
+        <div>
+          <Label>{t("portfolio.fee")}</Label>
+          <Input type="number" step="any" min="0" value={fee} onChange={(e) => setFee(e.target.value)} />
+        </div>
+        <div>
+          <Label>{t("portfolio.note")}</Label>
+          <Input value={note} onChange={(e) => setNote(e.target.value)} />
+        </div>
+      </div>
+      {converting && (
+        <p className="text-xs text-amber-700 dark:text-amber-300">
+          {t(type === "SELL" ? "portfolio.converting_to_sell" : "portfolio.converting_to_buy")}
+        </p>
+      )}
+      <FieldError message={error} />
+      <div className="flex justify-end gap-2">
+        <Button variant="secondary" className="px-2 py-1 text-xs" onClick={onClose}>
+          {t("common.cancel")}
+        </Button>
+        <Button onClick={() => void save()}>{t("common.save")}</Button>
+      </div>
     </div>
   );
 }

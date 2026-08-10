@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { HoldingAssetClass, HoldingSummary, PortfolioSummary } from "@/api/portfolio";
+import type { HoldingAssetClass, HoldingSummary, Lot, PortfolioSummary } from "@/api/portfolio";
 import i18n from "@/i18n";
 
 const summaryRef: { current: PortfolioSummary } = { current: null as unknown as PortfolioSummary };
+
+/** Stable across renders, so a test can assert what the lot mutations were called with. */
+const lotSpies = vi.hoisted(() => ({ add: vi.fn(), update: vi.fn(), remove: vi.fn() }));
 
 vi.mock("@/auth/AuthContext", () => ({
   useAuth: () => ({ user: { portfolioReturnBasis: "OPEN_COST" } }),
@@ -13,25 +16,51 @@ vi.mock("@/auth/AuthContext", () => ({
 
 vi.mock("@/api/portfolio", async (importOriginal) => {
   const mutation = () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false });
+  const spied = (fn: typeof lotSpies.add) => () => ({ mutate: fn, mutateAsync: fn, isPending: false });
   return {
     ...(await importOriginal<typeof import("@/api/portfolio")>()),
     usePortfolioSummary: () => ({ data: summaryRef.current }),
     useCreateHolding: mutation,
     useUpdateHolding: mutation,
     useDeleteHolding: mutation,
+    useLinkHolding: mutation,
     useUnlinkHolding: mutation,
     useRefreshPrices: mutation,
+    useAddLot: spied(lotSpies.add),
+    useUpdateLot: spied(lotSpies.update),
+    useDeleteLot: spied(lotSpies.remove),
   };
 });
 
 const { HoldingsTab } = await import("./HoldingsTab");
 
+function lot(over: Partial<Lot> = {}): Lot {
+  return {
+    id: "lot1",
+    type: "BUY",
+    tradedOn: "2026-02-01",
+    // Stored at full scale, as the API returns it: the form has to trim the zero tail to be editable.
+    quantity: "2.000000000000",
+    unitPrice: "100.000000000000",
+    currency: "EUR",
+    fee: "1.500000000000",
+    fxRateToBase: "1",
+    note: "first buy",
+    amountBase: "201.50",
+    remainingQty: "2.000000000000",
+    remainingCostBasis: "201.50",
+    realizedPnl: null,
+    unrealizedPnl: null,
+    ...over,
+  };
+}
+
 function holding(
   symbol: string,
   currentValue: string | null,
-  over: { assetClass?: HoldingAssetClass; closed?: boolean; netQuantity?: string } = {},
+  over: { assetClass?: HoldingAssetClass; closed?: boolean; netQuantity?: string; lots?: Lot[] } = {},
 ): HoldingSummary {
-  const { assetClass = "crypto", closed = false, netQuantity = closed ? "0" : "1" } = over;
+  const { assetClass = "crypto", closed = false, netQuantity = closed ? "0" : "1", lots = [] } = over;
   return {
     holding: {
       id: symbol,
@@ -44,7 +73,7 @@ function holding(
       providerSymbol: symbol.toLowerCase(),
       linked: currentValue != null,
       active: true,
-      lots: [],
+      lots,
       netQuantity,
       remainingCostBasis: "100.00",
       realizedPnl: "0.00",
@@ -118,6 +147,7 @@ const CLOSED_ETF = holding("IWDA", "0.00", { assetClass: "etf", closed: true });
 
 beforeEach(() => {
   localStorage.clear();
+  for (const spy of Object.values(lotSpies)) spy.mockReset();
 });
 
 afterEach(async () => {
@@ -210,5 +240,97 @@ describe("hiding closed and dust holdings", () => {
     show([OPEN, CLOSED, DUST]);
     expect(screen.getByText("1 posición (+2 cerradas)")).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "Mostrar cerradas" })).toBeInTheDocument();
+  });
+});
+
+describe("editing a trade", () => {
+  const WITH_LOT = holding("BTC", "1200.00", { lots: [lot()] });
+
+  /** Expands the holding and opens the pencil form. Both layouts (mobile card, desktop table) are in the
+   *  DOM under jsdom with their own editor state, so driving the first pencil leaves exactly one open form
+   *  to query — no index juggling in the assertions. */
+  async function openEditForm(user: ReturnType<typeof userEvent.setup>, editLabel = "Edit trade") {
+    await user.click(screen.getAllByRole("button", { name: /BTC/ })[0]);
+    await user.click(screen.getAllByLabelText(editLabel)[0]);
+  }
+
+  it("prefills every field from the lot, trimmed of its stored zero tail", async () => {
+    const user = show([WITH_LOT]);
+    await openEditForm(user);
+
+    expect(screen.getByRole("combobox")).toHaveValue("BUY");
+    expect(screen.getByDisplayValue("2026-02-01")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("2")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("100")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("EUR")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("1.5")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("first buy")).toBeInTheDocument();
+  });
+
+  it("warns about a type change without blocking the save", async () => {
+    const user = show([WITH_LOT]);
+    await openEditForm(user);
+    expect(screen.queryByText("You are converting a buy into a sale.")).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByRole("combobox"), "SELL");
+    expect(screen.getByText("You are converting a buy into a sale.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+    // The price field follows the new type, as it does for a freshly registered sale.
+    expect(screen.getByText("Sale price")).toBeInTheDocument();
+  });
+
+  it("sends the edited values as a whole replacement, type included", async () => {
+    const user = show([WITH_LOT]);
+    await openEditForm(user);
+
+    const quantity = screen.getByDisplayValue("2");
+    await user.clear(quantity);
+    await user.type(quantity, "3");
+    await user.selectOptions(screen.getByRole("combobox"), "SELL");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(lotSpies.update).toHaveBeenCalledWith({
+      holdingId: "BTC",
+      lotId: "lot1",
+      input: {
+        type: "SELL",
+        tradedOn: "2026-02-01",
+        quantity: "3",
+        unitPrice: "100",
+        currency: "EUR",
+        fee: "1.5",
+        note: "first buy",
+      },
+    });
+  });
+
+  it("keeps the form open and names the conflicting sale when the replay rejects the edit", async () => {
+    lotSpies.update.mockRejectedValue({
+      response: {
+        data: {
+          code: "LOT_SELL_EXCEEDS_HOLDINGS",
+          message: "The sale exceeds the quantity held on 2026-03-01",
+          args: ["2026-03-01"],
+        },
+      },
+    });
+    const user = show([WITH_LOT]);
+    await openEditForm(user);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(
+      screen.getByText("The sale of 2026-03-01 exceeds the quantity held on that date"),
+    ).toBeInTheDocument();
+    // Still open, with the values as typed — a rejected edit is usually one field away from valid.
+    expect(screen.getByRole("combobox")).toBeInTheDocument();
+  });
+
+  it("translates the form and the conversion notice", async () => {
+    await i18n.changeLanguage("es");
+    const user = show([WITH_LOT]);
+    await openEditForm(user, "Editar operación");
+
+    await user.selectOptions(screen.getByRole("combobox"), "SELL");
+    expect(screen.getByText("Estás convirtiendo una compra en una venta.")).toBeInTheDocument();
   });
 });
