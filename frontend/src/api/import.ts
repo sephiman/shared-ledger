@@ -39,8 +39,13 @@ export interface PreviewSummary {
   sumContributions?: string | null;
   sumWithdrawals?: string | null;
   sumDebtPayments?: string | null;
+  sumRefunds?: string | null;
   dateFrom?: string | null;
   dateTo?: string | null;
+  /** Refund rows whose original couldn't be found: they still import, just without the link. */
+  droppedRefundLinks?: SkippedRow[];
+  droppedRefundLinkCount?: number;
+  truncatedDroppedRefundLinks?: boolean;
 }
 
 export interface ExecuteResult {
@@ -53,6 +58,9 @@ export interface ExecuteResult {
   adjustedDescriptions: AdjustedRow[];
   adjustedCount: number;
   truncatedAdjusted: boolean;
+  droppedRefundLinks?: SkippedRow[];
+  droppedRefundLinkCount?: number;
+  truncatedDroppedRefundLinks?: boolean;
 }
 
 export type SnapshotPolicy = "skip" | "replace" | "abort";

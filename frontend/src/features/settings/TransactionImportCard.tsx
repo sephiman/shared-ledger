@@ -106,6 +106,13 @@ function PreviewPanel({ preview, dataset }: { preview: PreviewSummary; dataset: 
       {dataset === "transactions" && (
         <p className="text-gray-600 dark:text-gray-300">
           {t("common.income")}: {preview.sumIncome ?? "0,00"} · {t("common.expense")}: {preview.sumExpense ?? "0,00"}
+          {preview.sumRefunds && ` · ${t("tx.refund_badge")}: ${preview.sumRefunds}`}
+        </p>
+      )}
+      {/* Not an error: the row imports, it just doesn't know which purchase it nets. */}
+      {!!preview.droppedRefundLinkCount && (
+        <p className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-100">
+          {t("import.dropped_refund_links", { count: preview.droppedRefundLinkCount })}
         </p>
       )}
       {dataset === "snapshots" && (

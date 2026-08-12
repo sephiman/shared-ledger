@@ -98,12 +98,16 @@ class BudgetService(
                 ?: annualBudgets[code]?.amount?.divide(BigDecimal.valueOf(12), 2, RoundingMode.HALF_EVEN)
                 ?: BigDecimal.ZERO
             val spentAmount = spent[code] ?: BigDecimal.ZERO
+            // Refunds net the spend, which is the point — but a category that has come out net-negative
+            // has no pace to project or percentage of budget to have used, so the derived figures floor
+            // at zero while `spent` keeps the real (possibly negative) number.
+            val spentForPace = spentAmount.max(BigDecimal.ZERO)
             val pace = if (daysElapsed > 0) {
-                spentAmount.divide(BigDecimal.valueOf(daysElapsed.toLong()), 4, RoundingMode.HALF_EVEN)
+                spentForPace.divide(BigDecimal.valueOf(daysElapsed.toLong()), 4, RoundingMode.HALF_EVEN)
             } else BigDecimal.ZERO
             val projection = pace.multiply(BigDecimal.valueOf(daysInMonth.toLong())).setScale(2, RoundingMode.HALF_EVEN)
             val percent = if (budgetAmount.signum() > 0) {
-                spentAmount.divide(budgetAmount, 4, RoundingMode.HALF_EVEN).toDouble() * 100.0
+                spentForPace.divide(budgetAmount, 4, RoundingMode.HALF_EVEN).toDouble() * 100.0
             } else 0.0
             MonthSummaryRow(
                 categoryCode = code,

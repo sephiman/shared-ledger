@@ -19,6 +19,13 @@ interface TxAggRow {
     val recurringTemplateId: UUID?
 }
 
+/** How much of an original expense has already come back, in one grouped query per page. */
+interface RefundTotalRow {
+    val originalId: UUID
+    val total: BigDecimal
+    val cnt: Long
+}
+
 interface MinMaxDateRow {
     val minDate: LocalDate?
     val maxDate: LocalDate?
@@ -42,6 +49,19 @@ interface TransactionRepository :
         from: LocalDate,
         to: LocalDate,
     ): List<Transaction>
+
+    /** Refunds already linked to each of [ids] — soft-deleted ones drop out with the entity restriction. */
+    @Query(
+        """
+        SELECT t.refundOfTransactionId AS originalId, SUM(t.amount) AS total, COUNT(t) AS cnt
+        FROM Transaction t
+        WHERE t.refundOfTransactionId IN :ids
+        GROUP BY t.refundOfTransactionId
+        """,
+    )
+    fun refundTotalsFor(@Param("ids") ids: Collection<UUID>): List<RefundTotalRow>
+
+    fun existsByRefundOfTransactionId(refundOfTransactionId: UUID): Boolean
 
     /** Row-locked load for Replace: two concurrent replaces of the same target would otherwise both pass
      *  the "already backs a movement" check and link it twice. `SELECT … FOR UPDATE` serialises them. */

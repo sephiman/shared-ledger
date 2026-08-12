@@ -7,6 +7,8 @@ import org.springframework.data.jpa.domain.Specification
 import java.time.LocalDate
 import java.util.UUID
 
+/** [isRefund] null means "both": refunds are expenses, so the direction filter already includes them and
+ *  only the refunds-only chip and the original-expense picker narrow by it. [q] is a description contains. */
 data class TransactionSearchCriteria(
     val householdId: UUID,
     val from: LocalDate?,
@@ -17,6 +19,8 @@ data class TransactionSearchCriteria(
     val page: Int,
     val size: Int,
     val sort: String,
+    val isRefund: Boolean? = null,
+    val q: String? = null,
 )
 
 object TransactionSpecs {
@@ -35,6 +39,16 @@ object TransactionSpecs {
 
     fun categoryCodeIs(code: String): Specification<Transaction> =
         Specification { root, _, cb -> cb.equal(root.get<String>("categoryCode"), code) }
+
+    fun isRefundIs(value: Boolean): Specification<Transaction> =
+        Specification { root, _, cb -> cb.equal(root.get<Boolean>("isRefund"), value) }
+
+    /** Case-insensitive contains; the wildcards a user types are escaped so they match literally. */
+    fun descriptionContains(text: String): Specification<Transaction> =
+        Specification { root, _, cb ->
+            val needle = text.lowercase().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            cb.like(cb.lower(root.get("description")), "%$needle%", '\\')
+        }
 
     fun categoryGroupIs(householdId: UUID, group: String): Specification<Transaction> =
         Specification { root, query, cb ->
@@ -69,6 +83,8 @@ object TransactionSpecs {
         c.direction?.let { spec = spec.and(directionIs(it)) }
         c.categoryCode?.let { spec = spec.and(categoryCodeIs(it)) }
         c.categoryGroup?.let { spec = spec.and(categoryGroupIs(c.householdId, it)) }
+        c.isRefund?.let { spec = spec.and(isRefundIs(it)) }
+        c.q?.trim()?.takeIf { it.isNotEmpty() }?.let { spec = spec.and(descriptionContains(it)) }
         return spec
     }
 }

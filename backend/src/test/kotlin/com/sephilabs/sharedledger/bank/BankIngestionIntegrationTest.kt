@@ -880,6 +880,78 @@ class BankIngestionIntegrationTest @Autowired constructor(
     }
 
     @Test
+    fun `confirming an income item as a refund creates a negative expense linked to the purchase`() {
+        val (user, household) = seed()
+        seedTelegram(household.id, user.id)
+        val today = LocalDate.now()
+        val expenseCat = expenseCategory(household)
+        val original = manualTransaction(household, user, today.minusDays(10), expenseCat, "80.00", "Jacket")
+        fake.movements.add(movement("rf-1", today.minusDays(1), Direction.income, "30.00", "SHOP"))
+        link(household, user)
+        val item = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content.single()
+        telegram.sent.clear()
+
+        val confirmed = pendingService.confirmAsRefund(
+            household.id,
+            item.id,
+            ConfirmAsRefundRequest(categoryCode = expenseCat, refundOfTransactionId = original.id),
+            user,
+        )
+
+        assertThat(confirmed.status).isEqualTo(MovementStatus.confirmed)
+        assertThat(pendingService.pendingCount(household.id)).isZero()
+
+        // The bank called it income; the ledger records money coming back out of the category it left.
+        val refund = transactions.findByHouseholdIdAndOccurrenceDateBetween(household.id, today.minusDays(30), today)
+            .first { it.isRefund }
+        assertThat(refund.direction).isEqualTo(Direction.expense)
+        assertThat(refund.amount).isEqualByComparingTo("-30.00")
+        assertThat(refund.occurrenceDate).isEqualTo(today.minusDays(1))
+        assertThat(refund.categoryCode).isEqualTo(expenseCat)
+        assertThat(refund.refundOfTransactionId).isEqualTo(original.id)
+
+        // Linked like any other confirm, so the transaction can't later be claimed by another movement.
+        assertThat(confirmed.createdTransactionId).isEqualTo(refund.id)
+        assertThat(links.findAllByPendingMovementId(item.id).map { it.transactionId }).containsExactly(refund.id)
+
+        // A refund's counterparty says nothing about what the household usually spends there.
+        assertThat(rules.findAllByHouseholdIdOrderByPriorityAsc(household.id)).isEmpty()
+
+        // It rides the ordinary transaction card, like a single confirm does.
+        assertThat(telegram.sent).hasSize(1)
+        assertThat(telegram.sent.single().text).contains("Transaction created")
+    }
+
+    @Test
+    fun `only an income item can become a refund, and only while it is pending`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val expenseCat = expenseCategory(household)
+        fake.movements.addAll(
+            listOf(
+                movement("rf-2a", today.minusDays(1), Direction.expense, "20.00", "SHOP"),
+                movement("rf-2b", today.minusDays(1), Direction.income, "15.00", "SHOP"),
+            ),
+        )
+        link(household, user)
+        val items = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content
+        val outgoing = items.first { it.direction == Direction.expense }
+        val incoming = items.first { it.direction == Direction.income }
+
+        // Money going back out is an ordinary expense, not a refund.
+        assertThatThrownBy {
+            pendingService.confirmAsRefund(household.id, outgoing.id, ConfirmAsRefundRequest(expenseCat), user)
+        }.isInstanceOf(AppException::class.java).hasMessageContaining("BANK_REFUND_REQUIRES_INCOME")
+
+        pendingService.confirmAsRefund(household.id, incoming.id, ConfirmAsRefundRequest(expenseCat), user)
+        assertThatThrownBy {
+            pendingService.confirmAsRefund(household.id, incoming.id, ConfirmAsRefundRequest(expenseCat), user)
+        }.isInstanceOf(AppException::class.java).hasMessageContaining("PENDING_MOVEMENT_ALREADY_PROCESSED")
+
+        assertThat(pendingService.pendingCount(household.id)).isEqualTo(1)
+    }
+
+    @Test
     fun `a rejected item can be restored to pending, individually and by batch`() {
         val (user, household) = seed()
         val today = LocalDate.now()

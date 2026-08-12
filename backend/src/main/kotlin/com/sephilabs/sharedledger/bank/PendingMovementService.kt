@@ -155,6 +155,37 @@ class PendingMovementService(
         return movement.toDto(connections.findById(movement.connectionId).orElse(null), account(movement), false)
     }
 
+    /** Confirm an income item as a refund instead of income: money coming back for a past purchase becomes
+     *  a negative expense on the item's date, netting the category it came from rather than inflating
+     *  income. Optionally linked to the original expense. Composes its own request because [createTransaction]
+     *  assumes a positive amount and the item's own direction. Deliberately no rule learning — a refund's
+     *  counterparty says nothing about what the household usually spends there. */
+    @Transactional
+    fun confirmAsRefund(householdId: UUID, id: UUID, request: ConfirmAsRefundRequest, by: User): PendingMovementDto {
+        val movement = requirePending(householdId, id)
+        // Money going back out is an ordinary expense, not a refund; only credits can be refunds.
+        if (movement.direction != Direction.income) throw AppException.badRequest("BANK_REFUND_REQUIRES_INCOME")
+        val tx = transactionService.createInternal(
+            householdId,
+            TransactionRequest(
+                occurrenceDate = movement.bookingDate,
+                direction = Direction.expense,
+                categoryCode = request.categoryCode,
+                amount = movement.amount.negate(),
+                description = (request.note?.takeIf { it.isNotBlank() } ?: movementDescription(movement))?.take(500),
+                isRefund = true,
+                refundOfTransactionId = request.refundOfTransactionId,
+            ),
+            by,
+            notify = true,
+        )
+        movement.createdTransactionId = tx.id
+        link(movement, tx.id)
+        markConfirmed(movement, request.categoryCode, by)
+        metrics.bankMovementsIngested(1)
+        return movement.toDto(connections.findById(movement.connectionId).orElse(null), account(movement), false)
+    }
+
     /** Replace targets for an item, closest booking date first. Resolved fresh (not off the inbox page) so a
      *  since-deleted or since-linked target surfaces in the dialog; already-linked ones come back flagged. */
     @Transactional(readOnly = true)

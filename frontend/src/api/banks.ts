@@ -169,6 +169,14 @@ export interface SplitMovementInput {
   direction?: Direction | null;
 }
 
+/** Confirms an income item as a refund. `categoryCode` is the expense category the money goes back into;
+ *  `refundOfTransactionId` links the purchase it nets, when the user picked one. */
+export interface ConfirmAsRefundInput {
+  categoryCode: string;
+  refundOfTransactionId?: string | null;
+  note?: string | null;
+}
+
 /** One item of a merge. Null `direction` keeps the movement's stored one; the inbox sends the row's
  *  (possibly flipped) draft, since it decides this item's sign in the net. */
 export interface MergeItemInput {
@@ -503,6 +511,17 @@ export function useCancelOutMovements(householdId: string) {
   return useMutation({
     mutationFn: async (input: CancelOutInput) =>
       (await apiClient.post<BatchResult>(`${base(householdId)}/pending/cancel-out`, input)).data,
+    onSuccess: () => invalidateAll(qc, householdId),
+    meta: { silentSuccess: true },
+  });
+}
+
+/** A credit that is money coming back: confirms it as a negative expense, netting the category it left. */
+export function useConfirmAsRefund(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, input }: { id: string; input: ConfirmAsRefundInput }) =>
+      (await apiClient.post<PendingMovement>(`${base(householdId)}/pending/${id}/confirm-as-refund`, input)).data,
     onSuccess: () => invalidateAll(qc, householdId),
     meta: { silentSuccess: true },
   });

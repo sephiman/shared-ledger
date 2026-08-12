@@ -1,11 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "./client";
 
+/** Enough of the refunded purchase to name and link it from the refund's row. */
+export interface RefundOfSummary {
+  id: string;
+  occurrenceDate: string;
+  categoryCode: string;
+  amount: string;
+  description: string | null;
+}
+
 export interface Transaction {
   id: string;
   occurrenceDate: string;
   direction: "income" | "expense";
   categoryCode: string;
+  /** Negative on a refund: money coming back is a negative expense. */
   amount: string;
   description: string | null;
   recurringTemplateId: string | null;
@@ -13,6 +23,13 @@ export interface Transaction {
   updatedByUserId: string;
   createdAt: string;
   updatedAt: string;
+  isRefund: boolean;
+  refundOfTransactionId: string | null;
+  /** Null when the refund has no link, or its original was deleted. */
+  refundOf: RefundOfSummary | null;
+  /** On a refunded purchase: the (negative) total that has come back, and how many refunds did it. */
+  refundedTotal: string | null;
+  refundCount: number | null;
 }
 
 export interface TransactionPage {
@@ -28,6 +45,10 @@ export interface TransactionFilters {
   direction?: "income" | "expense";
   categoryCode?: string;
   categoryGroup?: string;
+  /** Undefined means both; refunds are expenses, so the direction filter already includes them. */
+  isRefund?: boolean;
+  /** Description contains — used by the original-expense picker. */
+  q?: string;
   page?: number;
   size?: number;
   sort?: string;
@@ -45,12 +66,25 @@ export function useTransactions(householdId: string, filters: TransactionFilters
   });
 }
 
+/** One transaction by id; used to open the refund picker on an already-linked purchase. */
+export function useTransaction(householdId: string, id: string | null) {
+  return useQuery({
+    queryKey: ["transactions", householdId, "one", id],
+    enabled: !!id,
+    queryFn: async () =>
+      (await apiClient.get<Transaction>(`/households/${householdId}/transactions/${id}`)).data,
+  });
+}
+
 export interface TransactionInput {
   occurrenceDate: string;
   direction: "income" | "expense";
   categoryCode: string;
+  /** Negative when `isRefund` is set, positive otherwise; the server enforces both. */
   amount: string;
   description?: string | null;
+  isRefund?: boolean;
+  refundOfTransactionId?: string | null;
 }
 
 export function useCreateTransaction(householdId: string) {

@@ -30,6 +30,7 @@ import {
 import { bankDescription } from "./bankDescription";
 import { canMerge, type MergeSource } from "./mergeDraft";
 import { MarkAsMovementDialog } from "./MarkAsMovementDialog";
+import { MarkAsRefundDialog } from "./MarkAsRefundDialog";
 import { MergeMovementsDialog } from "./MergeMovementsDialog";
 import { ReplaceDuplicateDialog } from "./ReplaceDuplicateDialog";
 import { SplitMovementDialog } from "./SplitMovementDialog";
@@ -499,6 +500,7 @@ function MovementRow({
   const { t, i18n } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [markMovementOpen, setMarkMovementOpen] = useState(false);
+  const [markRefundOpen, setMarkRefundOpen] = useState(false);
   const [replaceOpen, setReplaceOpen] = useState(false);
   const [splitOpen, setSplitOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -619,11 +621,34 @@ function MovementRow({
                   >
                     {t("banks.mark_as_movement")}
                   </button>
+                  {/* Money coming back reads as income at the bank, so only credits can be refunds. */}
+                  {income && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={busy}
+                      onClick={() => { setMenuOpen(false); setMarkRefundOpen(true); }}
+                      className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-item-hover disabled:opacity-50 dark:text-gray-200"
+                    >
+                      {t("banks.mark_as_refund")}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
           </div>
         </div>
+      )}
+
+      {markRefundOpen && (
+        <MarkAsRefundDialog
+          open={markRefundOpen}
+          householdId={householdId}
+          movement={movement}
+          currency={currency}
+          locale={locale}
+          onClose={() => setMarkRefundOpen(false)}
+        />
       )}
 
       {markMovementOpen && (

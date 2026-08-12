@@ -206,7 +206,8 @@ class AnalyticsService(
             val projection = mutableListOf<ForecastPoint>()
             var cursor = YearMonth.from(today).plusMonths(1)
             for (i in 0 until horizonMonths) {
-                val projected = recurringAmount ?: movingAvg
+                // A category whose history nets negative would otherwise project negative spending.
+                val projected = (recurringAmount ?: movingAvg).max(BigDecimal.ZERO)
                 projection += ForecastPoint(cursor.year, cursor.monthValue, Money.normalize(projected),
                     if (recurringAmount != null) "recurring" else "history")
                 cursor = cursor.plusMonths(1)
@@ -414,7 +415,10 @@ class AnalyticsService(
             }
             nodes += MoneyFlowNode(id = HUB_NODE_ID, side = "hub", groupCode = null, amount = Money.normalize(flows.income + deficit))
             val expenseBuckets = if (level == "category") flows.expensesByCategory else flows.expensesByGroup
-            expenseBuckets.entries.sortedByDescending { it.value }.forEach { (code, amount) ->
+            // A bucket the refunds turned net-negative has no meaning as a flow out of the hub (and a
+            // negative link corrupts the diagram's share maths), so it is left out. The allocation and
+            // dashboard numbers keep the netted value.
+            expenseBuckets.entries.filter { it.value.signum() > 0 }.sortedByDescending { it.value }.forEach { (code, amount) ->
                 val group = if (level == "category") flows.categoryGroups[code] ?: "ungrouped" else code
                 nodes += MoneyFlowNode(id = code, side = "expense", groupCode = group, amount = Money.normalize(amount))
                 links += MoneyFlowLink(source = HUB_NODE_ID, target = code, amount = Money.normalize(amount))
@@ -487,7 +491,9 @@ class AnalyticsService(
             )
             when {
                 b.signum() == 0 && p.signum() > 0 -> newActivity += row
-                p.signum() > 0 && b.signum() > 0 -> rowsForRanking += row
+                // Nonzero on either side: a category that went net-negative (refunds outweighing spend)
+                // is exactly the mover to surface, and it used to fall through both branches.
+                b.signum() != 0 || p.signum() != 0 -> rowsForRanking += row
             }
         }
 
@@ -542,10 +548,14 @@ class AnalyticsService(
             if (r.recurringTemplateId != null) recurring += r.amount else discretionary += r.amount
         }
         val total = recurring + discretionary
-        val recShare = if (total.signum() > 0)
-            recurring.divide(total, 4, RoundingMode.HALF_EVEN).toDouble() * 100.0 else 0.0
-        val discShare = if (total.signum() > 0)
-            discretionary.divide(total, 4, RoundingMode.HALF_EVEN).toDouble() * 100.0 else 0.0
+        // Refunds carry no template, so only discretionary can go negative; clamping it for the split keeps
+        // the two shares between 0 and 100 and summing to 100. The money fields stay netted.
+        val discForShare = discretionary.max(BigDecimal.ZERO)
+        val shareBase = recurring + discForShare
+        val recShare = if (shareBase.signum() > 0)
+            recurring.divide(shareBase, 4, RoundingMode.HALF_EVEN).toDouble() * 100.0 else 0.0
+        val discShare = if (shareBase.signum() > 0)
+            discForShare.divide(shareBase, 4, RoundingMode.HALF_EVEN).toDouble() * 100.0 else 0.0
         return RecurringShareResponse(
             scope = scope,
             year = year,
@@ -625,7 +635,8 @@ class AnalyticsService(
             totals.merge(r.occurrenceDate, r.amount) { a, b -> a + b }
         }
         val days = totals.entries.asSequence()
-            .filter { it.value.signum() > 0 }
+            // Nonzero, not positive: a day whose refunds outweigh its spending is a real day to show.
+            .filter { it.value.signum() != 0 }
             .sortedBy { it.key }
             .map { (d, amt) -> DailyPoint(d, Money.normalize(amt)) }
             .toList()
@@ -829,9 +840,10 @@ class AnalyticsService(
         val averagePerMonth = totalAcrossRange.divide(denom, 2, RoundingMode.HALF_EVEN)
         val medianAmount = median(currentSeries.map { it.amount })
 
-        val highest = currentSeries.maxByOrNull { it.amount }?.takeIf { it.amount.signum() > 0 }
+        // Nonzero rather than positive on both ends: a month the refunds turned negative is a real low.
+        val highest = currentSeries.maxByOrNull { it.amount }?.takeIf { it.amount.signum() != 0 }
             ?.let { ExplorerMonthLabel(it.year, it.month, it.amount) }
-        val lowestNonZero = currentSeries.filter { it.amount.signum() > 0 }
+        val lowestNonZero = currentSeries.filter { it.amount.signum() != 0 }
             .minByOrNull { it.amount }
             ?.let { ExplorerMonthLabel(it.year, it.month, it.amount) }
 
@@ -847,6 +859,8 @@ class AnalyticsService(
             for (t in tx) {
                 if (t.direction != Direction.expense) continue
                 if (t.categoryCode != effectiveCode) continue
+                // Refunds are corrections, not purchases: counting them would halve the average ticket.
+                if (t.isRefund) continue
                 val key = (t.description ?: "").trim().ifEmpty { "" }
                 val b = grouped.getOrPut(key) { Bucket() }
                 b.occurrences += 1

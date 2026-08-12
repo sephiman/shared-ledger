@@ -10,7 +10,7 @@ const ASSET_HEADER = "name;type;active;value_date;value";
 const LIABILITY_HEADER = "name;active;amortizable;charge_day;balance_date;balance";
 const AMORT_HEADER = "liability_name;part_label;record_type;date;method;principal;annual_rate;term_months;instalment;amount;mode;interest;resulting_balance;start_mode;anchor_date;anchor_balance";
 
-const TX_HEADER = "date;direction;category_code;amount;description;created_at;updated_at";
+const TX_HEADER = "date;direction;category_code;amount;description;created_at;updated_at;is_refund;refund_of_key";
 const PORTFOLIO_HEADER = "type;asset_class;symbol;label;native_currency;isin;provider;provider_symbol;traded_on;quantity;unit_price;cost_currency;fee;note";
 const SNAP_HEADER = "date;note;kind;key;value";
 const MOV_HEADER = "date;type;asset_class_code;liability_name;amount;description;created_at";
@@ -220,8 +220,11 @@ function TransactionFormat() {
 
   const example = [
     TX_HEADER,
-    income[0] && `2026-05-01;income;${income[0].code};3200,00;May payroll;;`,
-    expense[0] && `2026-05-03;expense;${expense[0].code};42,30;Sample description;;`,
+    income[0] && `2026-05-01;income;${income[0].code};3200,00;May payroll;;;false;`,
+    expense[0] && `2026-05-03;expense;${expense[0].code};42,30;Sample description;;;false;`,
+    // A refund of the purchase above: negative, and naming it by its key.
+    expense[0] && `2026-05-20;expense;${expense[0].code};-12,00;Partly returned;;;true;` +
+      `2026-05-03|expense|${expense[0].code}|42.30|Sample description`,
   ].filter(Boolean).join("\n");
 
   return (
@@ -240,8 +243,11 @@ function TransactionFormat() {
             { name: "description", req: false, desc: t("import.format.tx.description") },
             { name: "created_at", req: false, desc: t("import.format.tx.created_at") },
             { name: "updated_at", req: false, desc: t("import.format.tx.updated_at") },
+            { name: "is_refund", req: false, desc: t("import.format.tx.is_refund") },
+            { name: "refund_of_key", req: false, desc: t("import.format.tx.refund_of_key") },
           ]}
         />
+        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{t("import.format.tx.legacy_header")}</p>
       </Section>
       <Section title={t("import.format.tx.income_codes_label")}>
         <CategoryCodeList items={income} />

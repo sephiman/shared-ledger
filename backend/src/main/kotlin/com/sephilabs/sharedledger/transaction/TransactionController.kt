@@ -36,6 +36,8 @@ class TransactionController(
         @RequestParam(required = false) direction: Direction?,
         @RequestParam(required = false) categoryCode: String?,
         @RequestParam(required = false) categoryGroup: String?,
+        @RequestParam(required = false) isRefund: Boolean?,
+        @RequestParam(required = false) q: String?,
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "50") size: Int,
         @RequestParam(defaultValue = "date_desc") sort: String,
@@ -51,6 +53,8 @@ class TransactionController(
                 page = page,
                 size = size.coerceIn(1, 200),
                 sort = sort,
+                isRefund = isRefund,
+                q = q,
             )
         )
     }
@@ -93,6 +97,8 @@ class TransactionController(
         @RequestParam(required = false) direction: Direction?,
         @RequestParam(required = false) categoryCode: String?,
         @RequestParam(required = false) categoryGroup: String?,
+        @RequestParam(required = false) isRefund: Boolean?,
+        @RequestParam(required = false) q: String?,
     ): ResponseEntity<String> {
         val csv = service.exportCsv(
             TransactionSearchCriteria(
@@ -105,6 +111,8 @@ class TransactionController(
                 page = 0,
                 size = Int.MAX_VALUE,
                 sort = "date_asc",
+                isRefund = isRefund,
+                q = q,
             )
         )
         return Csv.download(households.getOrThrow(householdId).name, "transactions", csv)

@@ -194,6 +194,18 @@ data class MergeItemRequest(
     val direction: Direction? = null,
 )
 
+/** Confirm an income-direction item as a refund: money coming back for a past purchase, stored as a
+ *  negative expense so it nets the category it came from. [refundOfTransactionId] links the original when
+ *  the user picked one; [categoryCode] is the expense category the refund nets (prefilled from the
+ *  original in the dialog, but the user's choice wins). */
+data class ConfirmAsRefundRequest(
+    @field:NotBlank(message = "validation.required")
+    val categoryCode: String,
+    val refundOfTransactionId: UUID? = null,
+    @field:Size(max = 500)
+    val note: String? = null,
+)
+
 /** Merge N items that are really one purchase (a bill split across cards, a tip charged separately, a
  *  charge and its partial refund) into a single transaction carrying their signed net — incomes add,
  *  expenses subtract — whose direction is the sign of that net. A selection netting to zero can produce no

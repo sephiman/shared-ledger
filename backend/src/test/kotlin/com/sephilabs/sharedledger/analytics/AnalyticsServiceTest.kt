@@ -60,6 +60,102 @@ class AnalyticsServiceTest @Autowired constructor(
     }
 
     @Test
+    fun `a refund nets the category and the month it came back in`() {
+        val (user, household) = seed()
+        val ym = YearMonth.of(2025, 6)
+        addTx(household, user, ym.atDay(3), Direction.income, "income.salary", "1000.00")
+        addTx(household, user, ym.atDay(5), Direction.expense, "groceries.groceries", "100.00")
+        addRefund(household, user, ym.atDay(20), "groceries.groceries", "-30.00")
+
+        // €100 spent, €30 back: the category and the month's expenses both read €70, and the money that
+        // came back counts as saved rather than as income.
+        val allocation = service.allocation(household.id, ym.year, ym.monthValue)
+        assertThat(allocation.income).isEqualByComparingTo("1000.00")
+        assertThat(allocation.expenses).isEqualByComparingTo("70.00")
+        assertThat(allocation.saved).isEqualByComparingTo("930.00")
+        assertThat(allocation.slices.first { it.groupCode == "groceries" }.amount).isEqualByComparingTo("70.00")
+
+        val dashboard = service.monthDashboard(household.id, ym.year, ym.monthValue)
+        assertThat(dashboard.expenses).isEqualByComparingTo("70.00")
+        assertThat(dashboard.savings).isEqualByComparingTo("930.00")
+        assertThat(dashboard.savingsRate).isEqualTo(93.0)
+
+        // The day the money came back is a real day in the series, even though its net is negative.
+        val daily = service.daily(household.id, ym.atDay(1), ym.atEndOfMonth(), Direction.expense)
+        assertThat(daily.days.map { it.date }).contains(ym.atDay(20))
+        assertThat(daily.days.first { it.date == ym.atDay(20) }.amount).isEqualByComparingTo("-30.00")
+        assertThat(daily.days.sumOf { it.amount }).isEqualByComparingTo("70.00")
+    }
+
+    @Test
+    fun `a category the refunds turned negative still surfaces as a mover and stays out of the money flow`() {
+        val (user, household) = seed()
+        val ym = YearMonth.of(2025, 8)
+        val previous = ym.minusMonths(1)
+        addTx(household, user, previous.atDay(10), Direction.expense, "groceries.groceries", "80.00")
+        addTx(household, user, ym.atDay(4), Direction.income, "income.salary", "500.00")
+        addTx(household, user, ym.atDay(6), Direction.expense, "groceries.groceries", "20.00")
+        addRefund(household, user, ym.atDay(12), "groceries.groceries", "-50.00")
+
+        // Net −30 against a positive baseline: the biggest fall of the month, and it used to fall out of
+        // every list because neither branch accepted a non-positive period total.
+        val movers = service.topMovers(household.id, ym.year, ym.monthValue, "trailing6_avg")
+        val groceries = movers.decreases.first { it.categoryCode == "groceries.groceries" }
+        assertThat(groceries.periodAmount).isEqualByComparingTo("-30.00")
+        assertThat(groceries.deltaAbs.signum()).isNegative()
+
+        // A negative flow out of the hub has no meaning, so the bucket is left out of the diagram while
+        // the totals it feeds stay netted.
+        val flow = service.moneyFlow(household.id, ym.atDay(1), ym.atEndOfMonth(), "category")
+        assertThat(flow.nodes.none { it.side == "expense" && it.id == "groceries.groceries" }).isTrue()
+        assertThat(flow.links.none { it.amount.signum() < 0 }).isTrue()
+        assertThat(service.allocation(household.id, ym.year, ym.monthValue).expenses).isEqualByComparingTo("-30.00")
+    }
+
+    @Test
+    fun `refunds net the cost of living basis but never project negative spending`() {
+        val (user, household) = seed()
+        val ym = YearMonth.now().minusMonths(1)
+        addTx(household, user, ym.atDay(5), Direction.expense, "groceries.groceries", "100.00")
+        addRefund(household, user, ym.atDay(9), "groceries.groceries", "-140.00")
+
+        // What the household actually spent on groceries over the window is negative; the basis FIRE reads
+        // follows the money, while the forecast refuses to project a negative bill.
+        val col = service.costOfLiving(household.id, YearMonth.now())
+        val groceriesRow = (col.essentialCategories + col.nonEssentialCategories)
+            .first { it.categoryCode == "groceries.groceries" }
+        assertThat(groceriesRow.monthlyAverage.signum()).isNegative()
+
+        val forecast = service.forecast(household.id, 3, 12)
+        val groceries = forecast.categories.firstOrNull { it.categoryCode == "groceries.groceries" }
+        if (groceries != null) assertThat(groceries.projection).allMatch { it.projectedExpense.signum() >= 0 }
+    }
+
+    @Test
+    fun `recurring shares stay within a hundred percent when refunds outweigh discretionary spending`() {
+        val (user, household) = seed()
+        val ym = YearMonth.of(2025, 9)
+        val template = recurring.create(household.id, RecurringTemplateRequest(
+            direction = Direction.expense,
+            categoryCode = "home.rent",
+            amount = BigDecimal("600.00"),
+            description = null,
+            cadence = Cadence.monthly,
+            dayOfMonth = 1,
+            startDate = ym.atDay(1),
+        ), user)
+        addTxWithTemplate(household, user, ym.atDay(1), "home.rent", "600.00", template.id)
+        addTx(household, user, ym.atDay(6), Direction.expense, "groceries.groceries", "40.00")
+        addRefund(household, user, ym.atDay(18), "groceries.groceries", "-90.00")
+
+        val share = service.recurringShare(household.id, "month", ym.year, ym.monthValue)
+        assertThat(share.recurringShare).isEqualTo(100.0)
+        assertThat(share.discretionaryShare).isEqualTo(0.0)
+        // The money itself is still the netted truth, only the split is clamped.
+        assertThat(share.discretionary).isEqualByComparingTo("-50.00")
+    }
+
+    @Test
     fun `allocation with zero income produces no saved slice`() {
         val (user, household) = seed()
         val ym = YearMonth.of(2025, 4)
@@ -630,6 +726,18 @@ class AnalyticsServiceTest @Autowired constructor(
         assertThat(r.points).hasSize(2)
         assertThat(r.points[0].netContribution).isEqualByComparingTo("0.00")
         assertThat(r.points[1].netContribution).isEqualByComparingTo("500.00")
+    }
+
+    /** A refund: an expense with a negative amount, which is what makes it net its category. */
+    private fun addRefund(h: Household, u: User, date: LocalDate, cat: String, amount: String) {
+        transactions.create(h.id, TransactionRequest(
+            occurrenceDate = date,
+            direction = Direction.expense,
+            categoryCode = cat,
+            amount = BigDecimal(amount),
+            description = null,
+            isRefund = true,
+        ), u)
     }
 
     private fun addTx(h: Household, u: User, date: LocalDate, dir: Direction, cat: String, amount: String) {

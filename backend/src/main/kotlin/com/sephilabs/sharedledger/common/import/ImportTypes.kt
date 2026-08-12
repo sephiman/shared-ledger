@@ -51,8 +51,14 @@ data class PreviewSummary(
     val sumWithdrawals: BigDecimal? = null,
     @JsonFormat(shape = JsonFormat.Shape.STRING)
     val sumDebtPayments: BigDecimal? = null,
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    val sumRefunds: BigDecimal? = null,
     val dateFrom: String? = null,
     val dateTo: String? = null,
+    /** Refund rows whose original couldn't be found: they import, just without the link. */
+    val droppedRefundLinks: List<SkippedRow> = emptyList(),
+    val droppedRefundLinkCount: Int = 0,
+    val truncatedDroppedRefundLinks: Boolean = false,
 )
 
 data class ExecuteResult(
@@ -65,4 +71,8 @@ data class ExecuteResult(
     val adjustedDescriptions: List<AdjustedRow> = emptyList(),
     val adjustedCount: Int = 0,
     val truncatedAdjusted: Boolean = false,
+    /** Refund rows imported without their link because the original couldn't be found. */
+    val droppedRefundLinks: List<SkippedRow> = emptyList(),
+    val droppedRefundLinkCount: Int = 0,
+    val truncatedDroppedRefundLinks: Boolean = false,
 )

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
 import {
@@ -10,20 +10,58 @@ import {
 } from "@/api/transactions";
 import { useCategories } from "@/api/catalog";
 import { useBankConfig, useBankConnections, usePendingCount } from "@/api/banks";
-import { Button, Card, CardBody, CardHeader, Input, Label, Select } from "@/components/ui/primitives";
+import { Badge, Button, Card, CardBody, CardHeader, Chip, Input, Label, Select } from "@/components/ui/primitives";
 import { TabBar } from "@/components/ui/TabBar";
 import { formatMoney } from "@/lib/money";
-import { formatDate } from "@/lib/dates";
+import { formatDate, formatDayMonthYear } from "@/lib/dates";
 import { categoryIcon } from "@/lib/categoryGroup";
 import { categoryLabel, categoryLabelByCode } from "@/lib/categoryLabel";
 import { QuickAddForm } from "./QuickAddForm";
+import { RegisterRefundDialog } from "./RegisterRefundDialog";
+import { displaySign, isPositiveDisplay, signedTxAmount } from "./txDisplay";
 import { hasActiveTransactionFilters } from "./txFilters";
 import { PendingInbox } from "@/features/banks/PendingInbox";
 
 type PanelMode = { kind: "closed" } | { kind: "create" } | { kind: "edit"; tx: Transaction };
 
+/** Only an ordinary expense can be refunded — refunding a refund is not a thing. */
+function canRefund(tx: Transaction): boolean {
+  return tx.direction === "expense" && !tx.isRefund;
+}
+
+/** The line under a row that says what a refund nets, or how much of a purchase has come back. */
+function RefundNote({ tx, currency, locale }: { tx: Transaction; currency: string; locale: string }) {
+  const { t } = useTranslation();
+  if (tx.isRefund) {
+    return (
+      <p className="mt-1 flex flex-wrap items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+        <Badge tone="green">{t("tx.refund_badge")}</Badge>
+        {tx.refundOf ? (
+          <Link
+            to={`/transactions?from=${tx.refundOf.occurrenceDate}&to=${tx.refundOf.occurrenceDate}&categoryCode=${tx.refundOf.categoryCode}`}
+            className="underline"
+          >
+            {t("tx.refund_of", {
+              description: tx.refundOf.description ?? t("tx.no_description"),
+              date: formatDayMonthYear(tx.refundOf.occurrenceDate, locale),
+            })}
+          </Link>
+        ) : (
+          tx.refundOfTransactionId && <span>{t("tx.refund_original_deleted")}</span>
+        )}
+      </p>
+    );
+  }
+  if (!tx.refundedTotal) return null;
+  return (
+    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+      {t("tx.refunded_total", { amount: formatMoney(tx.refundedTotal, currency, locale) })}
+    </p>
+  );
+}
+
 function buildExportQuery(filters: TransactionFilters): string {
-  const keys: (keyof TransactionFilters)[] = ["from", "to", "direction", "categoryCode", "categoryGroup"];
+  const keys: (keyof TransactionFilters)[] = ["from", "to", "direction", "categoryCode", "categoryGroup", "isRefund"];
   const params = new URLSearchParams();
   for (const k of keys) {
     const v = filters[k];
@@ -43,6 +81,7 @@ function initialFiltersFromUrl(searchParams: URLSearchParams): TransactionFilter
     direction: dir === "income" || dir === "expense" ? dir : undefined,
     categoryCode: searchParams.get("categoryCode") ?? undefined,
     categoryGroup: searchParams.get("categoryGroup") ?? undefined,
+    isRefund: searchParams.get("isRefund") === "true" ? true : undefined,
   };
 }
 
@@ -61,6 +100,7 @@ export function TransactionsPage() {
   const urlDirection = searchParams.get("direction") ?? undefined;
   const urlCategoryCode = searchParams.get("categoryCode") ?? undefined;
   const urlCategoryGroup = searchParams.get("categoryGroup") ?? undefined;
+  const urlIsRefund = searchParams.get("isRefund") ?? undefined;
   useEffect(() => {
     setFilters((f) => ({
       ...f,
@@ -70,9 +110,12 @@ export function TransactionsPage() {
       direction: urlDirection === "income" || urlDirection === "expense" ? urlDirection : undefined,
       categoryCode: urlCategoryCode,
       categoryGroup: urlCategoryGroup,
+      isRefund: urlIsRefund === "true" ? true : undefined,
     }));
-  }, [urlFrom, urlTo, urlDirection, urlCategoryCode, urlCategoryGroup]);
+  }, [urlFrom, urlTo, urlDirection, urlCategoryCode, urlCategoryGroup, urlIsRefund]);
   const [panel, setPanel] = useState<PanelMode>({ kind: "closed" });
+  // The purchase a manually-recorded refund is being registered against.
+  const [refundFor, setRefundFor] = useState<Transaction | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const { data: page, isLoading } = useTransactions(household.householdId, filters);
   const { data: categories = [] } = useCategories(household.householdId);
@@ -107,7 +150,7 @@ export function TransactionsPage() {
   const clearFilters = () => {
     setFilters((f) => ({ size: f.size, page: 0 }));
     const next = new URLSearchParams(searchParams);
-    ["from", "to", "direction", "categoryCode", "categoryGroup"].forEach((k) => next.delete(k));
+    ["from", "to", "direction", "categoryCode", "categoryGroup", "isRefund"].forEach((k) => next.delete(k));
     setSearchParams(next, { replace: true });
   };
 
@@ -164,8 +207,11 @@ export function TransactionsPage() {
             <p className="font-medium">{panel.kind === "edit" ? t("tx.edit_title") : t("tx.new")}</p>
           </CardHeader>
           <CardBody>
+            {/* Keyed on the row so switching between edits re-seeds the form's fields. */}
             <QuickAddForm
+              key={panel.kind === "edit" ? panel.tx.id : "create"}
               householdId={household.householdId}
+              currency={household.currency}
               initial={panel.kind === "edit" ? panel.tx : undefined}
               onSaved={closePanel}
               onCancel={closePanel}
@@ -219,11 +265,17 @@ export function TransactionsPage() {
               </Select>
             </div>
           </div>
-          {hasActiveTransactionFilters(filters) && (
-            <div className="mt-3 flex justify-end">
-              <Button variant="ghost" onClick={clearFilters}>{t("tx.clear_filters")}</Button>
-            </div>
-          )}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Chip
+              active={filters.isRefund === true}
+              onClick={() => setFilters({ ...filters, isRefund: filters.isRefund ? undefined : true, page: 0 })}
+            >
+              {t("tx.refunds_only")}
+            </Chip>
+            {hasActiveTransactionFilters(filters) && (
+              <Button variant="ghost" className="ml-auto" onClick={clearFilters}>{t("tx.clear_filters")}</Button>
+            )}
+          </div>
         </CardHeader>
         <CardBody>
           {isLoading || !page ? (
@@ -247,13 +299,25 @@ export function TransactionsPage() {
                         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                           {formatDate(tx.occurrenceDate, i18n.language)}
                         </p>
+                        <RefundNote tx={tx} currency={household.currency} locale={i18n.language} />
                       </div>
                       <div className="flex flex-col items-end gap-1">
-                        <span className={`font-medium ${tx.direction === "income" ? "text-green-600 dark:text-green-400" : "text-gray-900 dark:text-gray-100"}`}>
-                          {tx.direction === "income" ? "+" : "-"}
-                          {formatMoney(tx.amount, household.currency, i18n.language)}
+                        <span className={`font-medium ${isPositiveDisplay(tx) ? "text-green-600 dark:text-green-400" : "text-gray-900 dark:text-gray-100"}`}>
+                          {displaySign(tx)}
+                          {formatMoney(signedTxAmount(tx).toFixed(2), household.currency, i18n.language)}
                         </span>
                         <div className="flex gap-1">
+                          {canRefund(tx) && (
+                            <Button
+                              variant="ghost"
+                              className="px-2"
+                              aria-label={t("tx.register_refund")}
+                              title={t("tx.register_refund")}
+                              onClick={() => setRefundFor(tx)}
+                            >
+                              <span aria-hidden>↩️</span>
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             className="px-2"
@@ -298,13 +362,27 @@ export function TransactionsPage() {
                         <span className="mr-1.5" aria-hidden>{categoryIcon(tx.categoryCode)}</span>
                         {categoryLabelByCode(tx.categoryCode, categories, t)}
                       </td>
-                      <td className="text-gray-600 dark:text-gray-300">{tx.description ?? t("tx.no_description")}</td>
-                      <td className={`text-right font-medium ${tx.direction === "income" ? "text-green-600 dark:text-green-400" : "text-gray-900 dark:text-gray-100"}`}>
-                        {tx.direction === "income" ? "+" : "-"}
-                        {formatMoney(tx.amount, household.currency, i18n.language)}
+                      <td className="text-gray-600 dark:text-gray-300">
+                        {tx.description ?? t("tx.no_description")}
+                        <RefundNote tx={tx} currency={household.currency} locale={i18n.language} />
+                      </td>
+                      <td className={`text-right font-medium ${isPositiveDisplay(tx) ? "text-green-600 dark:text-green-400" : "text-gray-900 dark:text-gray-100"}`}>
+                        {displaySign(tx)}
+                        {formatMoney(signedTxAmount(tx).toFixed(2), household.currency, i18n.language)}
                       </td>
                       <td className="text-right">
                         <div className="inline-flex gap-1">
+                          {canRefund(tx) && (
+                            <Button
+                              variant="ghost"
+                              className="px-2"
+                              aria-label={t("tx.register_refund")}
+                              title={t("tx.register_refund")}
+                              onClick={() => setRefundFor(tx)}
+                            >
+                              <span aria-hidden>↩️</span>
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             className="px-2"
@@ -335,6 +413,17 @@ export function TransactionsPage() {
           )}
         </CardBody>
       </Card>
+      )}
+
+      {refundFor && (
+        <RegisterRefundDialog
+          open
+          householdId={household.householdId}
+          original={refundFor}
+          currency={household.currency}
+          locale={i18n.language}
+          onClose={() => setRefundFor(null)}
+        />
       )}
     </div>
   );

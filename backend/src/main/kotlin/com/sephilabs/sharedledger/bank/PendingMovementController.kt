@@ -51,6 +51,14 @@ class PendingMovementController(
         @Valid @RequestBody body: ConfirmAsMovementRequest,
     ): PendingMovementDto = service.confirmAsMovement(householdId, id, body, currentUser.requireUser())
 
+    /** Income items only: the credit becomes a negative expense netting the category it came back from. */
+    @PostMapping("/{id}/confirm-as-refund")
+    fun confirmAsRefund(
+        @PathVariable householdId: UUID,
+        @PathVariable id: UUID,
+        @Valid @RequestBody body: ConfirmAsRefundRequest,
+    ): PendingMovementDto = service.confirmAsRefund(householdId, id, body, currentUser.requireUser())
+
     /** Single-item by design, like confirm-as-movement and replace — there is no batch variant. */
     @PostMapping("/{id}/split")
     fun split(
