@@ -46,6 +46,9 @@ import java.time.LocalDate
 import java.util.UUID
 
 @ResourceLock("fake-bank-connector")
+// The recording Telegram client is a singleton this class clears per test, which would otherwise wipe
+// another class's messages between its act and assert.
+@ResourceLock("recording-telegram")
 class BankIngestionIntegrationTest @Autowired constructor(
     private val users: UserRepository,
     private val households: HouseholdRepository,
@@ -505,6 +508,375 @@ class BankIngestionIntegrationTest @Autowired constructor(
         assertThatThrownBy {
             pendingService.replace(household.id, small.id, ReplaceTransactionRequest(transactionId = thirtyPart.id), user)
         }.isInstanceOf(AppException::class.java).hasMessageContaining("TRANSACTION_ALREADY_BANK_LINKED")
+    }
+
+    @Test
+    fun `merging two same-way items nets to their sum, links both, and learns no rule`() {
+        val (user, household) = seed()
+        seedTelegram(household.id, user.id)
+        val today = LocalDate.now()
+        val expenseCat = expenseCategory(household)
+        // One dinner billed as a card charge plus a tip taken two days later.
+        fake.movements.addAll(
+            listOf(
+                movement("mg-1a", today.minusDays(3), Direction.expense, "12.50", "TAPAS"),
+                movement("mg-1b", today.minusDays(1), Direction.expense, "7.50", "TIP"),
+            ),
+        )
+        link(household, user)
+        val items = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content
+        // The ingest announces itself ("new movements to review"); what follows is only about the merge.
+        telegram.sent.clear()
+
+        val merged = pendingService.merge(
+            household.id,
+            MergeMovementsRequest(items = mergeItems(items), categoryCode = expenseCat),
+            user,
+        )
+
+        assertThat(merged.mergedCount).isEqualTo(2)
+        assertThat(pendingService.pendingCount(household.id)).isZero()
+
+        // Exactly one transaction, carrying the sum on the earliest item's date.
+        val created = transactions.findByHouseholdIdAndOccurrenceDateBetween(household.id, today.minusDays(30), today)
+        assertThat(created).hasSize(1)
+        val tx = created.single()
+        assertThat(tx.id).isEqualTo(merged.transactionId)
+        assertThat(tx.amount).isEqualByComparingTo("20.00")
+        assertThat(tx.occurrenceDate).isEqualTo(today.minusDays(3))
+        assertThat(tx.direction).isEqualTo(Direction.expense)
+        assertThat(tx.categoryCode).isEqualTo(expenseCat)
+        assertThat(tx.description).isEqualTo("TAPAS – Test TAPAS + TIP – Test TIP")
+
+        // Both items are confirmed and linked to that one transaction; as a split, none owns it alone.
+        val after = pending.findAllByIdInAndHouseholdId(items.map { it.id }, household.id)
+        assertThat(after).allMatch { it.status == MovementStatus.confirmed }
+        assertThat(after).allMatch { it.createdTransactionId == null }
+        assertThat(after).allMatch { it.suggestedCategoryCode == expenseCat }
+        val linked = links.findAllByPendingMovementIdIn(items.map { it.id })
+        assertThat(linked).hasSize(2)
+        assertThat(linked.map { it.transactionId }).containsOnly(tx.id)
+
+        // Two counterparties funding one purchase is not a counterparty -> category mapping.
+        assertThat(rules.findAllByHouseholdIdOrderByPriorityAsc(household.id)).isEmpty()
+
+        // One aggregated notification, not a create card for the transaction the merge produced.
+        assertThat(telegram.sent).hasSize(1)
+        assertThat(telegram.sent.single().text).contains("2 movements merged into 1 transaction")
+    }
+
+    @Test
+    fun `merging three items nets to the cent and honours an explicit date and description`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val expenseCat = expenseCategory(household)
+        fake.movements.addAll(
+            listOf(
+                movement("mg-2a", today.minusDays(2), Direction.expense, "3.33", "BAR"),
+                movement("mg-2b", today.minusDays(1), Direction.expense, "3.33", "BAR"),
+                movement("mg-2c", today.minusDays(1), Direction.expense, "3.34", "BAR"),
+            ),
+        )
+        link(household, user)
+        val items = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content
+
+        val merged = pendingService.merge(
+            household.id,
+            MergeMovementsRequest(
+                items = mergeItems(items),
+                categoryCode = expenseCat,
+                // A date none of the items carries: the picker allows any, not just the ones present.
+                date = today.minusDays(5),
+                description = "Rounds",
+            ),
+            user,
+        )
+
+        assertThat(merged.mergedCount).isEqualTo(3)
+        val created = transactions.findByHouseholdIdAndOccurrenceDateBetween(household.id, today.minusDays(30), today)
+        assertThat(created).hasSize(1)
+        val tx = created.single()
+        assertThat(tx.amount).isEqualByComparingTo("10.00")
+        assertThat(tx.occurrenceDate).isEqualTo(today.minusDays(5))
+        assertThat(tx.description).isEqualTo("Rounds")
+        assertThat(links.findAllByPendingMovementIdIn(items.map { it.id }).map { it.transactionId })
+            .hasSize(3).containsOnly(tx.id)
+    }
+
+    @Test
+    fun `merging a charge and its partial refund nets to the expense that actually left the account`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val expenseCat = expenseCategory(household)
+        fake.movements.addAll(
+            listOf(
+                movement("mg-6a", today.minusDays(2), Direction.expense, "9.03", "PHARMACY"),
+                movement("mg-6b", today.minusDays(1), Direction.income, "7.78", "PHARMACY"),
+            ),
+        )
+        link(household, user)
+        val items = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content
+
+        val merged = pendingService.merge(
+            household.id,
+            MergeMovementsRequest(items = mergeItems(items), categoryCode = expenseCat),
+            user,
+        )
+
+        // −9.03 + 7.78 = −1.25: an expense of 1.25, not a sum of 16.81.
+        val tx = transactions.findByHouseholdIdAndOccurrenceDateBetween(household.id, today.minusDays(30), today).single()
+        assertThat(tx.id).isEqualTo(merged.transactionId)
+        assertThat(tx.direction).isEqualTo(Direction.expense)
+        assertThat(tx.amount).isEqualByComparingTo("1.25")
+        assertThat(tx.occurrenceDate).isEqualTo(today.minusDays(2))
+        assertThat(links.findAllByPendingMovementIdIn(items.map { it.id }).map { it.transactionId })
+            .hasSize(2).containsOnly(tx.id)
+        assertThat(pendingService.pendingCount(household.id)).isZero()
+    }
+
+    @Test
+    fun `a merge where the money coming in wins nets to an income, and the category follows that direction`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val expenseCat = expenseCategory(household)
+        val incomeCat = categories.listForHousehold(household.id).first { it.kind == "income" }.code
+        fake.movements.addAll(
+            listOf(
+                movement("mg-7a", today.minusDays(3), Direction.income, "30.00", "EMPLOYER"),
+                movement("mg-7b", today.minusDays(1), Direction.expense, "12.00", "EMPLOYER"),
+            ),
+        )
+        link(household, user)
+        val items = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content
+
+        // The netted direction is what the category is validated against, even though an expense is in the mix.
+        assertThatThrownBy {
+            pendingService.merge(household.id, MergeMovementsRequest(mergeItems(items), expenseCat), user)
+        }.isInstanceOf(AppException::class.java).hasMessageContaining("CATEGORY_DIRECTION_MISMATCH")
+        assertThat(pendingService.pendingCount(household.id)).isEqualTo(2)
+
+        pendingService.merge(household.id, MergeMovementsRequest(mergeItems(items), incomeCat), user)
+
+        val tx = transactions.findByHouseholdIdAndOccurrenceDateBetween(household.id, today.minusDays(30), today).single()
+        assertThat(tx.direction).isEqualTo(Direction.income)
+        assertThat(tx.amount).isEqualByComparingTo("18.00")
+        assertThat(tx.categoryCode).isEqualTo(incomeCat)
+    }
+
+    @Test
+    fun `a direction sent with an item decides its sign in the net, overriding the ingested one`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val expenseCat = expenseCategory(household)
+        // The bank booked the refund as a charge; the inbox row was flipped to income before merging.
+        fake.movements.addAll(
+            listOf(
+                movement("mg-8a", today.minusDays(2), Direction.expense, "20.00", "SHOP"),
+                movement("mg-8b", today.minusDays(1), Direction.expense, "5.00", "SHOP"),
+            ),
+        )
+        link(household, user)
+        val items = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content
+        val misbooked = items.first { it.amount.compareTo(BigDecimal("5.00")) == 0 }
+        val charge = items.first { it.id != misbooked.id }
+
+        pendingService.merge(
+            household.id,
+            MergeMovementsRequest(
+                items = listOf(MergeItemRequest(charge.id), MergeItemRequest(misbooked.id, Direction.income)),
+                categoryCode = expenseCat,
+            ),
+            user,
+        )
+
+        // −20.00 + 5.00 = −15.00; stored directions alone would have made it an expense of 25.00.
+        val tx = transactions.findByHouseholdIdAndOccurrenceDateBetween(household.id, today.minusDays(30), today).single()
+        assertThat(tx.direction).isEqualTo(Direction.expense)
+        assertThat(tx.amount).isEqualByComparingTo("15.00")
+    }
+
+    @Test
+    fun `merge refuses too few items, a missing category and unknown ids, writing nothing`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val expenseCat = expenseCategory(household)
+        fake.movements.addAll(
+            listOf(
+                movement("mg-3a", today.minusDays(1), Direction.expense, "10.00", "SHOP"),
+                movement("mg-3b", today.minusDays(1), Direction.expense, "5.00", "SHOP"),
+            ),
+        )
+        link(household, user)
+        val items = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content
+
+        // One item is an ordinary confirm, not a merge — and repeating an id doesn't make two.
+        assertThatThrownBy {
+            pendingService.merge(household.id, MergeMovementsRequest(listOf(MergeItemRequest(items[0].id)), expenseCat), user)
+        }.isInstanceOf(AppException::class.java).hasMessageContaining("BANK_MERGE_TOO_FEW_ITEMS")
+        assertThatThrownBy {
+            pendingService.merge(
+                household.id,
+                MergeMovementsRequest(listOf(MergeItemRequest(items[0].id), MergeItemRequest(items[0].id)), expenseCat),
+                user,
+            )
+        }.isInstanceOf(AppException::class.java).hasMessageContaining("BANK_MERGE_TOO_FEW_ITEMS")
+
+        // Same category rule as Confirm: the merged transaction needs one.
+        assertThatThrownBy {
+            pendingService.merge(household.id, MergeMovementsRequest(mergeItems(items), " "), user)
+        }.isInstanceOf(AppException::class.java).hasMessageContaining("BANK_CATEGORY_REQUIRED")
+
+        assertThatThrownBy {
+            pendingService.merge(
+                household.id,
+                MergeMovementsRequest(listOf(MergeItemRequest(items[0].id), MergeItemRequest(UUID.randomUUID())), expenseCat),
+                user,
+            )
+        }.isInstanceOf(AppException::class.java).hasMessageContaining("PENDING_MOVEMENT_NOT_FOUND")
+
+        assertThat(pendingService.pendingCount(household.id)).isEqualTo(2)
+        assertThat(transactions.findByHouseholdIdAndOccurrenceDateBetween(household.id, today.minusDays(30), today)).isEmpty()
+        assertThat(links.findAllByPendingMovementIdIn(items.map { it.id })).isEmpty()
+    }
+
+    @Test
+    fun `merge refuses a selection that cancels out, since there is no transaction to create`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val expenseCat = expenseCategory(household)
+        fake.movements.addAll(
+            listOf(
+                movement("mg-9a", today.minusDays(2), Direction.expense, "25.00", "HOTEL"),
+                movement("mg-9b", today.minusDays(1), Direction.income, "25.00", "HOTEL"),
+            ),
+        )
+        link(household, user)
+        val items = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content
+
+        assertThatThrownBy {
+            pendingService.merge(household.id, MergeMovementsRequest(mergeItems(items), expenseCat), user)
+        }.isInstanceOf(AppException::class.java).hasMessageContaining("BANK_MERGE_NETS_TO_ZERO")
+
+        assertThat(pendingService.pendingCount(household.id)).isEqualTo(2)
+        assertThat(transactions.findByHouseholdIdAndOccurrenceDateBetween(household.id, today.minusDays(30), today)).isEmpty()
+        assertThat(links.findAllByPendingMovementIdIn(items.map { it.id })).isEmpty()
+    }
+
+    @Test
+    fun `cancelling out rejects every item, creates nothing, and leaves them restorable`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        fake.movements.addAll(
+            listOf(
+                movement("mg-10a", today.minusDays(2), Direction.expense, "25.00", "HOTEL"),
+                movement("mg-10b", today.minusDays(1), Direction.income, "25.00", "HOTEL"),
+            ),
+        )
+        link(household, user)
+        val items = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content
+
+        val result = pendingService.cancelOut(household.id, CancelOutRequest(mergeItems(items)), user)
+
+        assertThat(result.rejected).isEqualTo(2)
+        assertThat(pendingService.pendingCount(household.id)).isZero()
+        val after = pending.findAllByIdInAndHouseholdId(items.map { it.id }, household.id)
+        assertThat(after).allMatch { it.status == MovementStatus.rejected }
+        assertThat(after).allMatch { it.createdTransactionId == null }
+        // Nothing was created, so there is nothing to link them to either.
+        assertThat(transactions.findByHouseholdIdAndOccurrenceDateBetween(household.id, today.minusDays(30), today)).isEmpty()
+        assertThat(links.findAllByPendingMovementIdIn(items.map { it.id })).isEmpty()
+
+        // Ordinary rejected items: the rejected filter can send them back to the inbox.
+        assertThat(pendingService.restoreBatch(household.id, items.map { it.id }).restored).isEqualTo(2)
+        assertThat(pendingService.pendingCount(household.id)).isEqualTo(2)
+    }
+
+    @Test
+    fun `cancelling out refuses items that do not cancel out and writes nothing`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        fake.movements.addAll(
+            listOf(
+                movement("mg-11a", today.minusDays(2), Direction.expense, "25.00", "HOTEL"),
+                movement("mg-11b", today.minusDays(1), Direction.income, "24.00", "HOTEL"),
+            ),
+        )
+        link(household, user)
+        val items = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content
+
+        assertThatThrownBy {
+            pendingService.cancelOut(household.id, CancelOutRequest(mergeItems(items)), user)
+        }.isInstanceOf(AppException::class.java).hasMessageContaining("BANK_MERGE_NOT_CANCELLING_OUT")
+
+        assertThat(pendingService.pendingCount(household.id)).isEqualTo(2)
+    }
+
+    @Test
+    fun `a failing merge leaves every item pending and creates nothing`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val expenseCat = expenseCategory(household)
+        val incomeCat = categories.listForHousehold(household.id).first { it.kind == "income" }.code
+        fake.movements.addAll(
+            listOf(
+                movement("mg-4a", today.minusDays(1), Direction.expense, "10.00", "SHOP"),
+                movement("mg-4b", today.minusDays(1), Direction.expense, "5.00", "SHOP"),
+            ),
+        )
+        link(household, user)
+        val items = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content
+
+        // The transaction create is the last thing to fail, well after the items passed validation.
+        assertThatThrownBy {
+            pendingService.merge(household.id, MergeMovementsRequest(mergeItems(items), incomeCat), user)
+        }.isInstanceOf(AppException::class.java).hasMessageContaining("CATEGORY_DIRECTION_MISMATCH")
+
+        assertThat(pendingService.pendingCount(household.id)).isEqualTo(2)
+        assertThat(transactions.findByHouseholdIdAndOccurrenceDateBetween(household.id, today.minusDays(30), today)).isEmpty()
+        assertThat(links.findAllByPendingMovementIdIn(items.map { it.id })).isEmpty()
+
+        // A merge is all-or-nothing: one already-processed item aborts it instead of being skipped.
+        pendingService.confirm(household.id, items[0].id, ConfirmMovementRequest(categoryCode = expenseCat), user)
+        assertThatThrownBy {
+            pendingService.merge(household.id, MergeMovementsRequest(mergeItems(items), expenseCat), user)
+        }.isInstanceOf(AppException::class.java).hasMessageContaining("PENDING_MOVEMENT_ALREADY_PROCESSED")
+
+        assertThat(pendingService.pendingCount(household.id)).isEqualTo(1)
+        // Only the single confirm's transaction exists, and the survivor is still unlinked.
+        assertThat(transactions.findByHouseholdIdAndOccurrenceDateBetween(household.id, today.minusDays(30), today)).hasSize(1)
+        assertThat(links.findAllByPendingMovementId(items[1].id)).isEmpty()
+    }
+
+    @Test
+    fun `a transaction created by a merge cannot be claimed by another movement`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val expenseCat = expenseCategory(household)
+        // The merged total (€120) looks exactly like the third movement, so it becomes a replace candidate.
+        fake.movements.addAll(
+            listOf(
+                movement("mg-5a", today.minusDays(1), Direction.expense, "90.00", "SUPERMARKET"),
+                movement("mg-5b", today.minusDays(1), Direction.expense, "30.00", "SUPERMARKET"),
+                movement("mg-5c", today.minusDays(1), Direction.expense, "120.00", "SUPERMARKET"),
+            ),
+        )
+        link(household, user)
+        val items = pending.search(household.id, MovementStatus.pending, null, null, null, PageRequest.of(0, 100)).content
+        val parts = items.filter { it.amount.compareTo(BigDecimal("120.00")) != 0 }
+        val lookalike = items.first { it.amount.compareTo(BigDecimal("120.00")) == 0 }
+
+        val merged = pendingService.merge(household.id, MergeMovementsRequest(mergeItems(parts), expenseCat), user)
+
+        // Relaxing V032's unique index left this check as the only guard, and it still holds: the
+        // candidate surfaces flagged, and claiming it is refused.
+        val candidates = pendingService.duplicateCandidates(household.id, lookalike.id)
+        assertThat(candidates.map { it.transactionId }).contains(merged.transactionId)
+        assertThat(candidates.first { it.transactionId == merged.transactionId }.bankLinked).isTrue()
+        assertThatThrownBy {
+            pendingService.replace(household.id, lookalike.id, ReplaceTransactionRequest(transactionId = merged.transactionId), user)
+        }.isInstanceOf(AppException::class.java).hasMessageContaining("TRANSACTION_ALREADY_BANK_LINKED")
+
+        assertThat(pendingService.pendingCount(household.id)).isEqualTo(1)
     }
 
     @Test
@@ -1229,6 +1601,10 @@ class BankIngestionIntegrationTest @Autowired constructor(
             ),
         )
     }
+
+    /** Merge and cancel-out take a direction per item; the tests that don't flip one send the stored one. */
+    private fun mergeItems(movements: List<PendingMovement>): List<MergeItemRequest> =
+        movements.map { MergeItemRequest(it.id) }
 
     private fun expenseCategory(household: Household): String =
         categories.listForHousehold(household.id).first { it.kind == "expense" }.code

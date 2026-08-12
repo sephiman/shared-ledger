@@ -88,6 +88,20 @@ class PendingMovementController(
         @Valid @RequestBody body: EditMovementRequest,
     ): PendingMovementDto = service.edit(householdId, id, body)
 
+    /** Collection-level: N items collapse into one transaction, so there is no {id} to hang it off. */
+    @PostMapping("/merge")
+    fun merge(
+        @PathVariable householdId: UUID,
+        @Valid @RequestBody body: MergeMovementsRequest,
+    ): MergeResultDto = service.merge(householdId, body, currentUser.requireUser())
+
+    /** The merge that nets to zero: nothing to create, so the items are rejected as cancelling out. */
+    @PostMapping("/cancel-out")
+    fun cancelOut(
+        @PathVariable householdId: UUID,
+        @Valid @RequestBody body: CancelOutRequest,
+    ): BatchResultDto = service.cancelOut(householdId, body, currentUser.requireUser())
+
     @PostMapping("/confirm-batch")
     fun confirmBatch(
         @PathVariable householdId: UUID,

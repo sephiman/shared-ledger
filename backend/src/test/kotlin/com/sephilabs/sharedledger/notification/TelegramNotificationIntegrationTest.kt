@@ -28,6 +28,7 @@ import com.sephilabs.sharedledger.transaction.TransactionService
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.parallel.ResourceLock
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
@@ -59,6 +60,7 @@ class RecordingTelegramConfig {
     fun recordingTelegramClient(props: AppProperties) = RecordingTelegramClient(props)
 }
 
+@ResourceLock("recording-telegram")
 class TelegramNotificationIntegrationTest @Autowired constructor(
     private val users: UserRepository,
     private val households: HouseholdRepository,

@@ -8,9 +8,9 @@ import java.util.UUID
 enum class NotifyEntity {
     TRANSACTION, SNAPSHOT, MOVEMENT, LENDING_PAYMENT, HOLDING, RECURRING_TXN, RECURRING_LENDING,
     // Bank ingestion: BANK_MOVEMENT covers batch-confirm summaries, BANK_MOVEMENT_SPLIT the one-movement-
-    // into-N-transactions summary (its own header, same user toggle), BANK_CONNECTION consent re-link
-    // reminders.
-    BANK_MOVEMENT, BANK_MOVEMENT_SPLIT, BANK_CONNECTION,
+    // into-N-transactions summary and BANK_MOVEMENT_MERGE its inverse (own headers, same user toggle),
+    // BANK_CONNECTION consent re-link reminders.
+    BANK_MOVEMENT, BANK_MOVEMENT_SPLIT, BANK_MOVEMENT_MERGE, BANK_CONNECTION,
 }
 
 enum class NotifyAction { CREATE, UPDATE, DELETE }

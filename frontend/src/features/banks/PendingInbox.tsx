@@ -28,7 +28,9 @@ import {
   type GroupBy,
 } from "./pendingFilters";
 import { bankDescription } from "./bankDescription";
+import { canMerge, type MergeSource } from "./mergeDraft";
 import { MarkAsMovementDialog } from "./MarkAsMovementDialog";
+import { MergeMovementsDialog } from "./MergeMovementsDialog";
 import { ReplaceDuplicateDialog } from "./ReplaceDuplicateDialog";
 import { SplitMovementDialog } from "./SplitMovementDialog";
 
@@ -62,6 +64,7 @@ export function PendingInbox({ householdId, currency, locale }: { householdId: s
   const [directionById, setDirectionById] = useState<Record<string, Direction>>({});
   // Like category and direction: local until the row is confirmed, replaced or split — never per keystroke.
   const [descriptionById, setDescriptionById] = useState<Record<string, string>>({});
+  const [mergeOpen, setMergeOpen] = useState(false);
 
   // Debounced mirror of `search`; the input updates instantly, the server query follows on a delay.
   const [debouncedSearch, setDebouncedSearch] = useState(search);
@@ -108,7 +111,21 @@ export function PendingInbox({ householdId, currency, locale }: { householdId: s
   // filtered set; grouping, selection and client pagination run over it.
   const filtered = loaded;
 
-  const selectedIds = useMemo(() => filtered.filter((m) => selected.has(m.id)).map((m) => m.id), [filtered, selected]);
+  const selectedMovements = useMemo(() => filtered.filter((m) => selected.has(m.id)), [filtered, selected]);
+  const selectedIds = useMemo(() => selectedMovements.map((m) => m.id), [selectedMovements]);
+  const mergeSources: MergeSource[] = selectedMovements.map((m) => ({
+    id: m.id,
+    bookingDate: m.bookingDate,
+    amount: m.amount,
+    direction: resolveDirection(m),
+    counterparty: m.counterparty,
+    categoryCode: resolveCategory(m),
+    description: resolveDescription(m),
+    sourceLabel: [m.connectionLabel ?? m.aspspName, m.accountName].filter(Boolean).join(" · "),
+    possibleDuplicate: m.possibleDuplicate,
+  }));
+  // Any 2+ pending items can be merged; mixed directions net (and an exact zero nets to a rejection).
+  const mergeable = canMerge(mergeSources);
   const allSelected = filtered.length > 0 && filtered.every((m) => selected.has(m.id));
   const someSelected = filtered.some((m) => selected.has(m.id));
 
@@ -338,6 +355,10 @@ export function PendingInbox({ householdId, currency, locale }: { householdId: s
                 ))}
               </Select>
               <Button disabled={confirmBatch.isPending} onClick={confirmSelected}>{t("banks.confirm")}</Button>
+              {/* Visible from one selection so it's discoverable, but a merge takes two. */}
+              <Button variant="secondary" disabled={!mergeable} onClick={() => setMergeOpen(true)}>
+                {t("banks.merge")}
+              </Button>
               <Button variant="secondary" className={REJECT_BUTTON_CLASS} disabled={rejectBatch.isPending} onClick={rejectSelected}>{t("banks.reject")}</Button>
               <Button variant="ghost" onClick={() => setSelected(new Set())}>{t("banks.clear_selection")}</Button>
             </CardBody>
@@ -406,6 +427,19 @@ export function PendingInbox({ householdId, currency, locale }: { householdId: s
           )}
         </CardBody>
       </Card>
+
+      {mergeOpen && mergeable && (
+        <MergeMovementsDialog
+          open={mergeOpen}
+          householdId={householdId}
+          sources={mergeSources}
+          categories={categories}
+          currency={currency}
+          locale={locale}
+          onClose={() => setMergeOpen(false)}
+          onMerged={() => setSelected(new Set())}
+        />
+      )}
     </div>
   );
 }

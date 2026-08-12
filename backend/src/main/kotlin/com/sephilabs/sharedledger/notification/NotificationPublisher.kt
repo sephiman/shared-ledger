@@ -190,6 +190,21 @@ class NotificationPublisher(
         )
     }
 
+    /** One aggregated message for a merge, whose single transaction would otherwise announce itself as an
+     *  ordinary create and hide that N movements went into it. [total] is the summed amount. */
+    fun bankMovementsMerged(householdId: UUID, count: Int, total: BigDecimal, actor: NotifyActor) {
+        if (count <= 0) return
+        events.publishEvent(
+            MaterializationEvent(
+                householdId = householdId,
+                entity = NotifyEntity.BANK_MOVEMENT_MERGE,
+                count = count,
+                actor = actor,
+                fields = listOf(CardField("common.amount", FieldValue.Money(total))),
+            ),
+        )
+    }
+
     /** Heads-up after a sync ingests N new movements, before any confirm. Same `notify_bank_movements` toggle
      *  as the confirm summary; uses a CREATE change event so its header ("new to review") stays distinct. */
     fun bankMovementsToReview(

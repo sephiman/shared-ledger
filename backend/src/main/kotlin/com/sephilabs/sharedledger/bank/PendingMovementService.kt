@@ -23,8 +23,8 @@ import kotlin.math.abs
 /** The review inbox. Confirming generates a real transaction (via [TransactionService.createInternal])
  *  and links it back so the item is never re-ingested; single confirm notifies normally, batch confirm
  *  emits one aggregated notification. Reject discards and creates nothing. Possible-duplicate items also
- *  offer [replace], which reconciles with the existing transaction instead of adding a second one, and any
- *  item can be [split] into several transactions. */
+ *  offer [replace], which reconciles with the existing transaction instead of adding a second one; any item
+ *  can be [split] into several transactions, and several items [merge]d into one. */
 @Service
 class PendingMovementService(
     private val pending: PendingMovementRepository,
@@ -190,12 +190,14 @@ class PendingMovementService(
     @Transactional
     fun replace(householdId: UUID, id: UUID, request: ReplaceTransactionRequest, by: User): PendingMovementDto {
         val movement = requirePending(householdId, id)
-        // Soft-deleted rows are invisible here, so a meanwhile-deleted target lands on this branch.
-        val tx = transactions.findById(request.transactionId).orElse(null)?.takeIf { it.householdId == householdId }
+        // Soft-deleted rows are invisible here, so a meanwhile-deleted target lands on this branch. Locked
+        // because the link check below is the only thing left guarding the target once V033 relaxed the
+        // unique index: two concurrent replaces would otherwise both find it unlinked.
+        val tx = transactions.findByIdForUpdate(request.transactionId)?.takeIf { it.householdId == householdId }
             ?: throw AppException.notFound("REPLACE_TARGET_NOT_FOUND")
         // Matched on the *movement's* direction, so re-picking the category can't widen the target set.
         if (!isCandidate(movement, tx)) throw AppException.conflict("REPLACE_TARGET_NOT_A_MATCH")
-        // Covers transactions produced by a split too, which the single created_transaction_id can't record.
+        // Covers transactions produced by a split or a merge too, which created_transaction_id can't record.
         if (links.existsByTransactionIdAndPendingMovementIdNot(tx.id, movement.id)) {
             throw AppException.conflict("TRANSACTION_ALREADY_BANK_LINKED")
         }
@@ -272,6 +274,67 @@ class PendingMovementService(
         )
     }
 
+    /** The inverse of [split]: N items that are really one purchase become ONE transaction, each linked to
+     *  it. The amount is their signed net (incomes add, expenses subtract) and the direction is the sign of
+     *  that net, so a charge and its partial refund collapse into what actually left the account — never
+     *  requested, because a merge can't invent or drop money. [PendingMovement.createdTransactionId] stays
+     *  null as in a split — the join table is the record, and it is what stops the merged transaction being
+     *  Replace-claimed later. Deliberately no rule learning: several counterparties funding one purchase is
+     *  not a counterparty -> category mapping. All-or-nothing — unlike [confirmBatch] a bad item aborts the
+     *  whole merge instead of being skipped. */
+    @Transactional
+    fun merge(householdId: UUID, request: MergeMovementsRequest, by: User): MergeResultDto {
+        val categoryCode = request.categoryCode.trim()
+        if (categoryCode.isBlank()) throw AppException.badRequest("BANK_CATEGORY_REQUIRED")
+        val movements = lockForMerge(householdId, request.items)
+        val net = signedNet(movements, request.items)
+        // Nothing left to record. The dialog offers cancelOut instead; this keeps the API honest.
+        if (net.signum() == 0) throw AppException.badRequest("BANK_MERGE_NETS_TO_ZERO")
+        val direction = if (net.signum() > 0) Direction.income else Direction.expense
+
+        val description = (
+            request.description?.takeIf { it.isNotBlank() }
+                ?: movements.mapNotNull { movementDescription(it) }.distinct().joinToString(" + ").ifBlank { null }
+            )?.take(500)
+
+        // Silent create; one aggregated notification below instead of a card for a transaction that is
+        // only half the story. A category/direction mismatch surfaces here — against the *netted*
+        // direction, the only one the transaction will have — before anything is linked.
+        val tx = transactionService.createInternal(
+            householdId,
+            TransactionRequest(
+                occurrenceDate = request.date ?: movements.first().bookingDate,
+                direction = direction,
+                categoryCode = categoryCode,
+                amount = net.abs(),
+                description = description,
+            ),
+            by,
+            notify = false,
+        )
+        movements.forEach {
+            link(it, tx.id)
+            markConfirmed(it, categoryCode, by)
+        }
+        notifications.bankMovementsMerged(householdId, movements.size, tx.amount, NotifyActor.Human(by.email))
+        metrics.bankMovementsIngested(movements.size)
+        return MergeResultDto(transactionId = tx.id, mergedCount = movements.size)
+    }
+
+    /** The other outcome of a merge: the items cancel each other out exactly, so there is no transaction to
+     *  create and they are all rejected instead. Ordinary rejected items — restorable, creating nothing and
+     *  linking nothing. Atomic like [merge]: an item processed meanwhile aborts the lot rather than leaving
+     *  half a cancelling pair resolved. */
+    @Transactional
+    fun cancelOut(householdId: UUID, request: CancelOutRequest, by: User): BatchResultDto {
+        val movements = lockForMerge(householdId, request.items)
+        if (signedNet(movements, request.items).signum() != 0) {
+            throw AppException.badRequest("BANK_MERGE_NOT_CANCELLING_OUT")
+        }
+        movements.forEach { markRejected(it, by) }
+        return BatchResultDto(rejected = movements.size)
+    }
+
     @Transactional
     fun confirmBatch(householdId: UUID, items: List<ConfirmBatchItem>, by: User): BatchResultDto {
         val byId = items.associateBy { it.id }
@@ -303,20 +366,14 @@ class PendingMovementService(
     @Transactional
     fun reject(householdId: UUID, id: UUID, by: User): PendingMovementDto {
         val movement = requirePending(householdId, id)
-        movement.status = MovementStatus.rejected
-        movement.processedAt = Instant.now()
-        movement.processedByUserId = by.id
+        markRejected(movement, by)
         return movement.toDto(connections.findById(movement.connectionId).orElse(null), account(movement), false)
     }
 
     @Transactional
     fun rejectBatch(householdId: UUID, ids: List<UUID>, by: User): BatchResultDto {
         val movements = pending.findAllByIdInAndHouseholdId(ids, householdId).filter { it.status == MovementStatus.pending }
-        movements.forEach {
-            it.status = MovementStatus.rejected
-            it.processedAt = Instant.now()
-            it.processedByUserId = by.id
-        }
+        movements.forEach { markRejected(it, by) }
         return BatchResultDto(rejected = movements.size)
     }
 
@@ -405,6 +462,32 @@ class PendingMovementService(
         links.save(PendingMovementTransaction(pendingMovementId = movement.id, transactionId = transactionId))
     }
 
+    /** The selection both merge outcomes work on, row-locked as a batch confirm so a concurrent confirm or
+     *  reject of any item serialises here. Sorted by booking date then id, which is what makes the date
+     *  default and the joined description deterministic. Refuses anything that isn't a whole mergeable set:
+     *  merging is all-or-nothing, so a missing or already-processed item aborts instead of being skipped. */
+    private fun lockForMerge(householdId: UUID, items: List<MergeItemRequest>): List<PendingMovement> {
+        val ids = items.map { it.id }.distinct()
+        if (ids.size < 2) throw AppException.badRequest("BANK_MERGE_TOO_FEW_ITEMS")
+        val movements = pending.findAllByIdInAndHouseholdIdForUpdate(ids, householdId)
+            .sortedWith(compareBy({ it.bookingDate }, { it.id }))
+        if (movements.size != ids.size) throw AppException.notFound("PENDING_MOVEMENT_NOT_FOUND")
+        if (movements.any { it.status != MovementStatus.pending }) {
+            throw AppException.conflict("PENDING_MOVEMENT_ALREADY_PROCESSED")
+        }
+        return movements
+    }
+
+    /** Incomes add, expenses subtract. The request's per-item direction wins over the stored one so an
+     *  inbox row flipped before merging (a refund the bank booked as a charge) counts the way it reads. */
+    private fun signedNet(movements: List<PendingMovement>, items: List<MergeItemRequest>): BigDecimal {
+        val requested = items.associate { it.id to it.direction }
+        return movements.fold(BigDecimal.ZERO) { net, m ->
+            val direction = requested[m.id] ?: m.direction
+            if (direction == Direction.income) net.add(m.amount) else net.subtract(m.amount)
+        }
+    }
+
     private fun createMovement(
         householdId: UUID,
         movement: PendingMovement,
@@ -425,6 +508,12 @@ class PendingMovementService(
             by,
         )
         movement.createdMovementId = created.id
+    }
+
+    private fun markRejected(movement: PendingMovement, by: User) {
+        movement.status = MovementStatus.rejected
+        movement.processedAt = Instant.now()
+        movement.processedByUserId = by.id
     }
 
     private fun restoreToPending(movement: PendingMovement) {

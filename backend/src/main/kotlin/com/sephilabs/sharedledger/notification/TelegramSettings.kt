@@ -78,8 +78,11 @@ class TelegramSettings(
             NotifyEntity.HOLDING -> notifyHoldings
             NotifyEntity.RECURRING_TXN -> notifyRecurringTxn
             NotifyEntity.RECURRING_LENDING -> notifyRecurringLending
-            // A split is a bank-movement confirmation with a different shape, not a new thing to opt into.
-            NotifyEntity.BANK_MOVEMENT, NotifyEntity.BANK_MOVEMENT_SPLIT -> notifyBankMovements
+            // A split or merge is a bank-movement confirmation with a different shape, not a new opt-in.
+            NotifyEntity.BANK_MOVEMENT,
+            NotifyEntity.BANK_MOVEMENT_SPLIT,
+            NotifyEntity.BANK_MOVEMENT_MERGE,
+            -> notifyBankMovements
             NotifyEntity.BANK_CONNECTION -> notifyBankConnections
         }
     }

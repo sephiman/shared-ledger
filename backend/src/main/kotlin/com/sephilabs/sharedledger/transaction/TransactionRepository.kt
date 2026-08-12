@@ -1,7 +1,9 @@
 package com.sephilabs.sharedledger.transaction
 
+import jakarta.persistence.LockModeType
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor
+import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
@@ -40,6 +42,12 @@ interface TransactionRepository :
         from: LocalDate,
         to: LocalDate,
     ): List<Transaction>
+
+    /** Row-locked load for Replace: two concurrent replaces of the same target would otherwise both pass
+     *  the "already backs a movement" check and link it twice. `SELECT … FOR UPDATE` serialises them. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT t FROM Transaction t WHERE t.id = :id")
+    fun findByIdForUpdate(@Param("id") id: UUID): Transaction?
 
     fun existsByRecurringTemplateIdAndOccurrenceDate(
         recurringTemplateId: UUID,

@@ -467,7 +467,8 @@ Wise could be added via its own API) with the always-available CSV import as the
   Each row is edited inline before confirming — direction, category (confirm stays disabled until
   one is chosen) and description, the last as a plain text input prefilled with the bank's own
   wording (counterparty – description, exactly what a confirm would store on its own) — and the
-  bulk bar can assign a category to the whole selection at once. All three edits are **local until
+  bulk bar can assign a category to the whole selection at once, or **merge** it into a single
+  transaction (described below). All three edits are **local until
   the row is resolved**: they are saved when you press Confirm (or complete a Replace or Split that
   inherits them), reject discards them, and navigating away discards them. Nothing is written per
   keystroke. Batch confirm uses whatever each row's inputs hold at that moment. Confirming reuses
@@ -545,6 +546,52 @@ Wise could be added via its own API) with the always-available CSV import as the
     has one place to look and covers split-created transactions too. `created_transaction_id` keeps its
     original meaning, the single transaction an ordinary confirm or a Replace produced, and is left null
     for a split, where no single transaction represents the item.
+- **Merge movements** (bulk bar, with 2+ items selected): the inverse of Split — when several movements are
+  really **one purchase** (a bill split across two cards, a tip charged separately, a charge and its
+  partial refund), they can be confirmed as a **single transaction** instead of cluttering the ledger with
+  one row each. Enabled for **any 2+ still-pending items**, and movements from **different connections may
+  be merged** — that is precisely the split-across-cards case.
+  - **Income and expense net against each other.** The resulting amount is the **signed net** of the
+    selection (incomes add, expenses subtract) and the resulting **direction is the sign of that net**: a
+    €9.03 charge with a €7.78 refund is an **expense of €1.25**, not a €16.81 sum. Both are read-only and
+    derived — a merge never invents or drops money, and adjusting amounts is Split's job, not Merge's.
+    Each item's own direction decides its sign, so flipping a row's direction in the inbox (a refund the
+    bank booked as a charge) is respected.
+  - The dialog lists the selected items (date, counterparty, description, source) each with its **signed
+    contribution**, and spells the arithmetic out — "−€9.03 + €7.78 = −€1.25" — so the netting is visible
+    rather than asserted.
+  - **Date** defaults to the **earliest** item's date and is editable (any date, via the picker).
+    **Category** is required, picked once, and its options are filtered to the **netted** direction (a net
+    expense offers expense categories), validated server-side like every other write path. It is
+    **prefilled with the one category the selection points at** — items with no category don't count
+    against it, so a categorised charge merged with an unsuggested refund opens ready to save; two
+    *different* categories leave it empty. **Description**
+    is prefilled by joining the items' descriptions ("A + B"), in the same order the items are merged, and
+    is editable with the inbox's conventions.
+  - **When the selection nets to exactly zero** there is nothing to record — a charge and a full refund
+    cancel out. The dialog detects it, drops the transaction fields, and offers to **mark all of them as
+    rejected** instead. They become ordinary rejected items: no transaction, no links, and **restorable**
+    from the rejected filter like any other rejection. The server refuses to merge a zero net and refuses
+    to "cancel out" a selection that doesn't actually cancel, so neither outcome can be reached by mistake.
+  - Confirming creates **one transaction** and marks **all** selected items `confirmed`, each associated
+    with it. It is a **single atomic operation**: an item confirmed by someone else in the meantime or a
+    category that contradicts the netted direction aborts the whole merge and leaves every item pending —
+    unlike batch confirm, nothing is silently skipped. The zero-net rejection is atomic in the same way.
+  - If any selected item carries the **possible-duplicate** flag the dialog says so; the flag is
+    informational and merging is a legitimate way to resolve it. Afterwards the items are confirmed, so
+    they can no longer be duplicate-resolution targets.
+  - **No rule is learned from a merge**, for the same reason as a split: the counterparty → category
+    mapping is ambiguous when several counterparties fund one purchase.
+  - Telegram gets **one aggregated notification** ("N movements merged into 1 transaction" with the netted
+    total), on the same bank-movements toggle as the confirm and split summaries. The zero-net rejection is
+    silent, like every other reject.
+  - **Data model**: a merge is the one case where a transaction backs *several* movements, so `V033`
+    relaxed the unique index `pending_movement_transactions` carried on `transaction_id`; the
+    `(pending_movement_id, transaction_id)` uniqueness stays. Replace's "a transaction that already
+    resolves another movement can't be claimed" guard is unaffected — it was always the explicit
+    join-table check, which the index merely backstopped, and the target transaction is now row-locked so
+    two simultaneous replaces can't both pass it. As with a split, `created_transaction_id` stays null on
+    the merged items; the join table records the shared transaction.
 - **Categorisation**: configurable rules (counterparty / description / amount → category +
   direction) applied during sync, and learning from corrections — confirming with a category
   remembers "this counterparty → this category" for next time, but **only when no existing rule

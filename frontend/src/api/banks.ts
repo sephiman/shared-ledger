@@ -113,7 +113,8 @@ export interface PendingMovement {
   status: MovementStatus;
   suggestedCategoryCode: string | null;
   createdTransactionId: string | null;
-  /** One for a confirm or Replace, N for a split (where `createdTransactionId` is null), none while pending. */
+  /** One for a confirm, Replace or merge (the merged items share it), N for a split — in both of the latter
+   *  `createdTransactionId` is null. None while pending. */
   createdTransactionIds: string[];
   createdMovementId: string | null;
   possibleDuplicate: boolean;
@@ -166,6 +167,35 @@ export interface SplitPartInput {
 export interface SplitMovementInput {
   parts: SplitPartInput[];
   direction?: Direction | null;
+}
+
+/** One item of a merge. Null `direction` keeps the movement's stored one; the inbox sends the row's
+ *  (possibly flipped) draft, since it decides this item's sign in the net. */
+export interface MergeItemInput {
+  id: string;
+  direction?: Direction | null;
+}
+
+/** N items that are really one purchase become ONE transaction carrying their signed net — incomes add,
+ *  expenses subtract — whose direction is the sign of that net. Neither is requested: a merge can't invent
+ *  or drop money. Null date takes the earliest booking date, a blank description the joined bank-derived
+ *  ones. A selection netting to zero is `CancelOutInput`'s job. */
+export interface MergeMovementsInput {
+  items: MergeItemInput[];
+  categoryCode: string;
+  date?: string | null;
+  description?: string | null;
+}
+
+export interface MergeResult {
+  transactionId: string;
+  mergedCount: number;
+}
+
+/** The zero-net outcome: the items cancel each other out, so all of them are rejected and nothing is
+ *  created. The directions travel along so the server can verify they really do cancel out. */
+export interface CancelOutInput {
+  items: MergeItemInput[];
 }
 
 /** A transaction a possible-duplicate item could replace; `bankLinked` ones are shown but not selectable. */
@@ -451,6 +481,29 @@ export function useConfirmAsMovement(householdId: string) {
       void qc.invalidateQueries({ queryKey: ["fire-projection", householdId] });
       void qc.invalidateQueries({ queryKey: ["cash-estimate", householdId] });
     },
+    meta: { silentSuccess: true },
+  });
+}
+
+/** Confirms every merged item at once, so the same derived data as a batch confirm has to be refreshed. */
+export function useMergeMovements(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: MergeMovementsInput) =>
+      (await apiClient.post<MergeResult>(`${base(householdId)}/pending/merge`, input)).data,
+    onSuccess: () => invalidateAll(qc, householdId),
+    meta: { silentSuccess: true },
+  });
+}
+
+/** Rejects a cancelling-out selection; creates nothing, so only the bank views need refreshing — but it
+ *  goes through invalidateAll like its siblings rather than guessing which ones. */
+export function useCancelOutMovements(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CancelOutInput) =>
+      (await apiClient.post<BatchResult>(`${base(householdId)}/pending/cancel-out`, input)).data,
+    onSuccess: () => invalidateAll(qc, householdId),
     meta: { silentSuccess: true },
   });
 }

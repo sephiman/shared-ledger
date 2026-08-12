@@ -132,7 +132,8 @@ data class PendingMovementDto(
     val status: MovementStatus,
     val suggestedCategoryCode: String?,
     val createdTransactionId: UUID?,
-    // Every transaction this item produced: one for a confirm or Replace, N for a split, empty while pending.
+    // Every transaction this item produced: one for a confirm, Replace or merge (where the merged items
+    // share it), N for a split, empty while pending.
     val createdTransactionIds: List<UUID> = emptyList(),
     // Set instead of createdTransactionId when the item was confirmed as a net-worth movement.
     val createdMovementId: UUID?,
@@ -183,6 +184,41 @@ data class SplitPartRequest(
     val categoryCode: String,
     @field:Size(max = 500)
     val description: String? = null,
+)
+
+/** One item of a merge. Null [direction] keeps the movement's stored one; the inbox sends the row's
+ *  (possibly flipped) draft, since it is what decides this item's sign in the net. */
+data class MergeItemRequest(
+    @field:NotNull(message = "validation.required")
+    val id: UUID,
+    val direction: Direction? = null,
+)
+
+/** Merge N items that are really one purchase (a bill split across cards, a tip charged separately, a
+ *  charge and its partial refund) into a single transaction carrying their signed net — incomes add,
+ *  expenses subtract — whose direction is the sign of that net. A selection netting to zero can produce no
+ *  transaction; that is [CancelOutRequest]'s job. Null [date] takes the earliest booking date; blank
+ *  [description] joins the bank-derived ones. */
+data class MergeMovementsRequest(
+    @field:Valid
+    @field:Size(min = 2, message = "validation.invalid")
+    val items: List<MergeItemRequest> = emptyList(),
+    @field:NotBlank(message = "validation.required")
+    val categoryCode: String = "",
+    val date: LocalDate? = null,
+    @field:Size(max = 500)
+    val description: String? = null,
+)
+
+data class MergeResultDto(val transactionId: UUID, val mergedCount: Int)
+
+/** The zero-net outcome of a merge: the items cancel each other out, so all of them are rejected and
+ *  nothing is created. Carries the same items (with their directions) so the server can verify they
+ *  really do cancel out rather than take the caller's word for it. */
+data class CancelOutRequest(
+    @field:Valid
+    @field:Size(min = 2, message = "validation.invalid")
+    val items: List<MergeItemRequest> = emptyList(),
 )
 
 /** A manual transaction a pending item could *replace* instead of duplicating. [bankLinked] ones already

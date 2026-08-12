@@ -11,7 +11,8 @@ import java.time.Instant
 import java.util.UUID
 
 /** One transaction a confirmed pending movement produced: one row for a confirm or Replace, one per part
- *  for a split. The single source for "is this transaction already resolving a movement?". */
+ *  for a split, and one per merged item all pointing at the merge's single transaction. The single source
+ *  for "is this transaction already resolving a movement?". */
 @Entity
 @Table(name = "pending_movement_transactions")
 class PendingMovementTransaction(
@@ -31,7 +32,8 @@ class PendingMovementTransaction(
 
 interface PendingMovementTransactionRepository : JpaRepository<PendingMovementTransaction, UUID> {
 
-    /** Replace guard: a transaction backs at most one movement. */
+    /** Replace guard: a transaction already resolving *another* movement can't be claimed. (A merge's
+     *  transaction backs several movements, so this is the rule — not one row per transaction.) */
     fun existsByTransactionIdAndPendingMovementIdNot(transactionId: UUID, pendingMovementId: UUID): Boolean
 
     fun findAllByPendingMovementId(pendingMovementId: UUID): List<PendingMovementTransaction>
