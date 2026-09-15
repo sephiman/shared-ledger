@@ -1,6 +1,7 @@
 package com.sephilabs.sharedledger
 
 import com.sephilabs.sharedledger.bank.FakeBankConnectorConfig
+import com.sephilabs.sharedledger.identity.passwordreset.PasswordResetTestDoublesConfig
 import com.sephilabs.sharedledger.notification.RecordingTelegramConfig
 import com.sephilabs.sharedledger.portfolio.StubPriceProviderConfig
 import com.sephilabs.sharedledger.portfolio.benchmark.StubBenchmarkSourceConfig
@@ -38,6 +39,13 @@ class TestBackfillExecutorConfig {
     /** Same rationale again: notification dispatch has finished by the time the test asserts on it. */
     @Bean("telegramExecutor")
     fun telegramExecutor(): Executor {
+        val worker = Executors.newSingleThreadExecutor()
+        return Executor { task -> worker.submit(task).get() }
+    }
+
+    /** And once more for password-reset mail: the recorded message exists when the 202 comes back. */
+    @Bean("mailExecutor")
+    fun mailExecutor(): Executor {
         val worker = Executors.newSingleThreadExecutor()
         return Executor { task -> worker.submit(task).get() }
     }
@@ -83,6 +91,7 @@ class TestSchemaResetConfig {
     FakeBankConnectorConfig::class,
     RecordingTelegramConfig::class,
     StubBenchmarkSourceConfig::class,
+    PasswordResetTestDoublesConfig::class,
 )
 abstract class IntegrationTestBase {
 

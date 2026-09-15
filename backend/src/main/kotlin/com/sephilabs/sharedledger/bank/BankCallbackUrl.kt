@@ -10,7 +10,8 @@ import java.net.URI
 
 /** The SCA return URL. Operator-level config (`ENABLE_BANKING_REDIRECT_URL`) because it identifies the
  *  instance, not a household. [BankService.startLink] and the credentials card must show the same value
- *  or every link fails at the provider. Blank falls back to Origin, then Referer, then the request host. */
+ *  or every link fails at the provider. Blank falls back to `APP_PUBLIC_URL`, then Origin, then Referer, then
+ *  the request host. */
 @Component
 class BankCallbackUrl(private val props: AppProperties) {
 
@@ -19,6 +20,7 @@ class BankCallbackUrl(private val props: AppProperties) {
     private fun derived(): String = publicOrigin() + CALLBACK_PATH
 
     private fun publicOrigin(): String {
+        props.publicUrl.trim().trimEnd('/').takeIf { it.isNotBlank() }?.let { return it }
         val request = (RequestContextHolder.getRequestAttributes() as? ServletRequestAttributes)?.request
             ?: return fromRequestHost()
         return browserOrigin(request) ?: fromRequestHost()

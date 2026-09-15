@@ -63,6 +63,17 @@ class AppMetrics(private val registry: MeterRegistry) {
             .increment()
     }
 
+    fun passwordResetRequested(outcome: String) {
+        Counter.builder("sl_password_resets_requested_total")
+            .tag("outcome", outcome)
+            .register(registry)
+            .increment()
+    }
+
+    fun passwordResetCompleted() {
+        Counter.builder("sl_password_resets_completed_total").register(registry).increment()
+    }
+
     fun invitationAccepted(role: String) {
         Counter.builder("sl_invitations_accepted_total")
             .tag("role", role)

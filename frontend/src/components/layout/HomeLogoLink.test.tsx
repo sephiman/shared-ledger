@@ -13,6 +13,11 @@ vi.mock("@/auth/AuthContext", () => ({
   useAuth: () => ({ login: vi.fn() }),
 }));
 
+// The login page asks the server which optional features exist; this test is about the logo, so answer nothing.
+vi.mock("@/api/auth", () => ({
+  useAuthFeatures: () => ({ data: undefined }),
+}));
+
 /** The logo lives in the shell, so every route renders it; the marker text tells us where we landed. */
 function renderAt(path: string) {
   const router = createMemoryRouter(

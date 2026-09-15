@@ -3,6 +3,8 @@ package com.sephilabs.sharedledger.identity.auth
 import com.sephilabs.sharedledger.common.errors.AppException
 import com.sephilabs.sharedledger.household.HouseholdMemberRepository
 import com.sephilabs.sharedledger.household.HouseholdRepository
+import com.sephilabs.sharedledger.identity.passwordreset.AuthFeaturesResponse
+import com.sephilabs.sharedledger.identity.passwordreset.PasswordResetAvailability
 import com.sephilabs.sharedledger.identity.user.HomePanel
 import com.sephilabs.sharedledger.identity.user.PortfolioReturnBasis
 import com.sephilabs.sharedledger.identity.user.User
@@ -31,6 +33,7 @@ class AuthController(
     private val currentUser: CurrentUser,
     private val metrics: AppMetrics,
     private val rateLimiter: LoginRateLimiter,
+    private val passwordReset: PasswordResetAvailability,
 ) {
     private val contextRepo = HttpSessionSecurityContextRepository()
 
@@ -40,6 +43,9 @@ class AuthController(
         // it and write the XSRF-TOKEN cookie — the SPA needs this before any POST.
         return mapOf("headerName" to token.headerName, "parameterName" to token.parameterName)
     }
+
+    @GetMapping("/features")
+    fun features(): AuthFeaturesResponse = AuthFeaturesResponse(passwordReset = passwordReset.enabled)
 
     @PostMapping("/login")
     fun login(

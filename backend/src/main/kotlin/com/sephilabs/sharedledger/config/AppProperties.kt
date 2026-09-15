@@ -14,6 +14,9 @@ data class AppProperties(
     val telegram: Telegram = Telegram(),
     val portfolio: Portfolio = Portfolio(),
     val enableBanking: EnableBanking = EnableBanking(),
+    val publicUrl: String = "",
+    val mail: Mail = Mail(),
+    val passwordReset: PasswordReset = PasswordReset(),
 ) {
     data class Security(
         val loginRate: LoginRate = LoginRate(),
@@ -45,6 +48,24 @@ data class AppProperties(
 
     data class Invitations(
         val ttlDays: Long = 14,
+    )
+
+    /** Optional SMTP group; resolved into a `SmtpSettings` by `MailConfig`. Blank host/username/password/from
+     *  (or a blank [publicUrl]) keeps every mail-backed feature hidden rather than half-enabled. */
+    data class Mail(
+        val host: String = "",
+        val port: Int = 587,
+        val username: String = "",
+        val password: String = "",
+        val startTls: Boolean = true,
+        val from: String = "",
+        val timeoutMs: Long = 10000,
+    )
+
+    data class PasswordReset(
+        val ttlMinutes: Long = 60,
+        val perHourPerEmail: Long = 3,
+        val perHourPerIp: Long = 10,
     )
 
     data class Scheduler(

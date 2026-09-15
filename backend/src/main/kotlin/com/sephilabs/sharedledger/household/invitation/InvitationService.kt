@@ -1,5 +1,6 @@
 package com.sephilabs.sharedledger.household.invitation
 
+import com.sephilabs.sharedledger.common.SecureTokens
 import com.sephilabs.sharedledger.common.errors.AppException
 import com.sephilabs.sharedledger.config.AppProperties
 import com.sephilabs.sharedledger.household.HouseholdMember
@@ -25,8 +26,8 @@ class InvitationService(
 
     @Transactional
     fun issue(householdId: UUID, request: CreateInvitationRequest, issuedBy: User): IssuedInvitationResponse {
-        val token = InvitationTokens.generate()
-        val tokenHash = InvitationTokens.hash(token)
+        val token = SecureTokens.generate()
+        val tokenHash = SecureTokens.hash(token)
         val expiresAt = Instant.now().plus(props.invitations.ttlDays, ChronoUnit.DAYS)
         val invitation = HouseholdInvitation(
             householdId = householdId,
@@ -66,7 +67,7 @@ class InvitationService(
 
     @Transactional(readOnly = true)
     fun lookupPublic(token: String): PublicInvitationView {
-        val invitation = invitations.findByTokenHash(InvitationTokens.hash(token))
+        val invitation = invitations.findByTokenHash(SecureTokens.hash(token))
             ?: throw AppException.notFound("INVITATION_INVALID")
         validateActive(invitation)
         val household = households.findById(invitation.householdId).orElseThrow { AppException.notFound("INVITATION_INVALID") }
@@ -75,7 +76,7 @@ class InvitationService(
 
     @Transactional
     fun accept(token: String, acceptingUser: User) {
-        val invitation = invitations.findByTokenHash(InvitationTokens.hash(token))
+        val invitation = invitations.findByTokenHash(SecureTokens.hash(token))
             ?: throw AppException.notFound("INVITATION_INVALID")
         validateActive(invitation)
         val memberId = HouseholdMemberId(invitation.householdId, acceptingUser.id)
@@ -90,7 +91,7 @@ class InvitationService(
 
     @Transactional
     fun consumeIfPresent(token: String, acceptingUser: User): UUID {
-        val invitation = invitations.findByTokenHash(InvitationTokens.hash(token))
+        val invitation = invitations.findByTokenHash(SecureTokens.hash(token))
             ?: throw AppException.badRequest("INVITATION_INVALID")
         validateActive(invitation)
         val memberId = HouseholdMemberId(invitation.householdId, acceptingUser.id)
@@ -105,7 +106,7 @@ class InvitationService(
     /** Validate a token without consuming it — used during registration before any user lookup. */
     @Transactional(readOnly = true)
     fun validateToken(token: String) {
-        val invitation = invitations.findByTokenHash(InvitationTokens.hash(token))
+        val invitation = invitations.findByTokenHash(SecureTokens.hash(token))
             ?: throw AppException.badRequest("INVITATION_INVALID")
         validateActive(invitation)
     }

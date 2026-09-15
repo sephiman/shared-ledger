@@ -1,5 +1,6 @@
 package com.sephilabs.sharedledger.notification
 
+import com.sephilabs.sharedledger.mail.MdcPropagatingTaskDecorator
 import org.slf4j.LoggerFactory
 import org.springframework.aop.interceptor.AsyncUncaughtExceptionHandler
 import org.springframework.context.annotation.Bean
@@ -52,6 +53,20 @@ class AsyncConfig : AsyncConfigurer {
         maxPoolSize = 2
         queueCapacity = 200
         setThreadNamePrefix("bank-sync-")
+        setRejectedExecutionHandler(ThreadPoolExecutor.CallerRunsPolicy())
+        initialize()
+    }
+
+    /** Password-reset mail: the user lookup and the SMTP round-trip run here so the request answers in constant
+     *  time. Tiny and bounded like the others; the decorator keeps requestId on the worker's log lines. */
+    @Bean("mailExecutor")
+    @Profile("!test")
+    fun mailExecutor(): Executor = ThreadPoolTaskExecutor().apply {
+        corePoolSize = 1
+        maxPoolSize = 2
+        queueCapacity = 100
+        setThreadNamePrefix("mail-")
+        setTaskDecorator(MdcPropagatingTaskDecorator)
         setRejectedExecutionHandler(ThreadPoolExecutor.CallerRunsPolicy())
         initialize()
     }

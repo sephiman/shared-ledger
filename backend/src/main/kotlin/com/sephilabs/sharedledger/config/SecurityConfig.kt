@@ -53,6 +53,9 @@ class SecurityConfig {
                     "/api/auth/csrf",
                     "/api/auth/login",
                     "/api/auth/register",
+                    "/api/auth/features",
+                    "/api/auth/password-reset",
+                    "/api/auth/password-reset/*",
                     "/api/invitations/*"
                 ).permitAll()
                 auth.requestMatchers("/actuator/**").permitAll()

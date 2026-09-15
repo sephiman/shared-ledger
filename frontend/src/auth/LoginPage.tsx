@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/auth/AuthContext";
+import { useAuthFeatures } from "@/api/auth";
 import { apiErrorMessage } from "@/api/client";
 import { useTheme } from "@/lib/theme";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label } from "@/components/ui/primitives";
@@ -15,6 +16,8 @@ export function LoginPage() {
   const logoSrc = resolvedTheme === "light" ? logoLight : logoDark;
   const navigate = useNavigate();
   const location = useLocation();
+  const features = useAuthFeatures();
+  const justReset = new URLSearchParams(location.search).get("reset") === "done";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +58,11 @@ export function LoginPage() {
             }}
             className="space-y-4"
           >
+            {justReset && (
+              <p role="status" className="rounded-md bg-item-hover px-3 py-2 text-sm text-gray-700 dark:text-gray-200">
+                {t("auth.reset_done")}
+              </p>
+            )}
             <div>
               <Label>{t("auth.email")}</Label>
               <Input
@@ -81,6 +89,11 @@ export function LoginPage() {
             <Button type="submit" className="w-full" disabled={submitting}>
               {t("auth.login")}
             </Button>
+            {features.data?.passwordReset && (
+              <p className="text-center text-sm">
+                <Link to="/forgot-password" className="text-primary">{t("auth.forgot_password")}</Link>
+              </p>
+            )}
             <p className="text-center text-sm text-gray-600 dark:text-gray-300">
               {t("auth.no_account")} <Link to="/register" className="text-primary">{t("auth.register_here")}</Link>
             </p>

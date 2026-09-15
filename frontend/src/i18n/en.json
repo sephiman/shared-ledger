@@ -34,7 +34,19 @@
     "household_section": "Your new household",
     "household_name": "Household name",
     "household_currency": "Currency",
-    "household_locale": "Language"
+    "household_locale": "Language",
+    "forgot_password": "Forgot your password?",
+    "forgot_password_intro": "Enter the email of your account and we will send you a link to choose a new password.",
+    "send_reset_link": "Send reset link",
+    "reset_requested": "If an account exists for that address, an email with a reset link is on its way. The link is valid for a limited time.",
+    "reset_unavailable": "Password reset by email is not enabled on this instance. Ask the person who runs it to reset your password.",
+    "reset_password": "Choose a new password",
+    "confirm_new_password": "Confirm new password",
+    "set_new_password": "Set new password",
+    "reset_link_invalid": "This reset link is not valid or has expired.",
+    "request_new_link": "Request a new link",
+    "reset_done": "Your password was updated. Log in with the new one.",
+    "back_to_login": "Back to log in"
   },
   "common": {
     "save": "Save",
@@ -1213,6 +1225,7 @@
     "field_required": "Required",
     "email_invalid": "Enter a valid email address",
     "password_too_short": "Password must be at least 8 characters",
+    "password_confirmation_mismatch": "The two passwords do not match",
     "amount_positive": "Enter an amount greater than 0",
     "amount_negative_refund": "A refund is money coming back — enter a negative amount",
     "TX_AMOUNT_INVALID": "Enter an amount greater than 0",

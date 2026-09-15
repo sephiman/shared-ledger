@@ -18,6 +18,9 @@ Postgres is **not** part of this compose file. It runs externally on a Docker ne
 - Email + password authentication. No social login.
 - 30-day sliding sessions stored server-side (Spring Session JDBC), HttpOnly+SameSite=Lax cookie.
 - Password change requires the current password.
+- **Password reset by email** (self-service, optional): a *Forgot your password?* link on the login page mails a
+  single-use link valid for 60 minutes; completing it signs the user out of every device. Exists only when the
+  operator configured SMTP — see *Password reset by email* below.
 - Per-user preferred locale: English or Spanish.
 - Login is rate-limited per source IP (5/minute, 20/hour by default).
 - **Registration modes** (configurable via `REGISTRATION_MODE`):
@@ -386,6 +389,45 @@ data changes. Configured per household, owner-only, under **Settings → Notific
 Re-link reminders and batch-confirm summaries for bank ingestion (below) flow through this same
 system, gated by two extra per-household toggles (bank movements, bank connections).
 
+### Password reset by email (SMTP, optional)
+
+The only email the app ever sends. Like Telegram and bank ingestion it is an optional integration: with no
+SMTP configured the app behaves exactly as before — **no link on the login page, and the reset endpoints
+answer 404**. Enabled by the env group in §5 (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`,
+`SMTP_STARTTLS`, `MAIL_FROM`) plus `APP_PUBLIC_URL`. A *partial* group counts as not configured: the feature
+stays hidden and the backend logs one structured `smtp_partially_configured` warning at startup naming the
+missing variables, so there is never a state where the link shows but the mail cannot go out.
+
+- **Flow**: *Forgot your password?* → a form asking only for the email → the page always says the same thing
+  ("if an account exists for that address, an email is on its way"), whether or not the address is known.
+  The lookup, the token and the SMTP round-trip all happen off the request thread, so the answer is
+  identical in body and timing either way (no user enumeration). If the account exists, the user receives a
+  localized (EN/ES, per their stored preference) plain-text mail with a link to
+  `<APP_PUBLIC_URL>/reset-password?token=…` on a line of its own. The link is built from `APP_PUBLIC_URL`,
+  never from request headers, so a forged `Origin`/`Host` cannot poison it.
+- **Token**: 256 random bits, sent once, only its SHA-256 hash stored (same pattern as invitations), **valid
+  60 minutes**, **single-use**, and requesting a new link invalidates any previous unused one. The reset
+  page validates the token first; expired, used and unknown all show one neutral "this link is not valid or
+  has expired" page with a *Request a new link* button — never which of the three it was.
+- **Completion**: new password (with confirmation, same 8-character floor as the password change) → stored
+  as Argon2id, token marked used, and **every active session of the user is deleted** (the `SPRING_SESSION`
+  rows), so a session opened by whoever prompted the reset does not survive it. The user logs in fresh.
+- **Rate limits** (Bucket4j, in-memory, both consumed before any lookup so a 429 reveals nothing): 3 requests
+  per target email per hour, 10 per source IP per hour. `app.password-reset.*` in `application.yml`.
+- **Delivery** follows the Telegram philosophy: fire, log one structured `password_reset_mail` line per
+  attempt (outcome, SMTP response on failure, user id, a hash prefix — never the token), no retry queue, and
+  a failed send never fails the request. Counters `sl_password_resets_requested_total{outcome}` and
+  `sl_password_resets_completed_total`.
+- **Out of scope**: email verification on registration, email change, an admin "send reset for another
+  user" action, any other mail. The bootstrap admin path is unchanged.
+
+**Gmail as the SMTP relay.** Google rejects regular account passwords over SMTP; the account needs
+**2-Step Verification** and an **App Password** (Google Account → Security → 2-Step Verification → App
+passwords; the 16-character value is `SMTP_PASSWORD`). Then `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`,
+`SMTP_STARTTLS=true`, `SMTP_USERNAME=<the Gmail address>`, and `MAIL_FROM` **must be that same address**
+(or a *Send mail as* alias verified in Gmail settings) — Google rewrites anything else. Gmail caps sending
+at roughly 500 messages a day, irrelevant for a household reset flow.
+
 ### Bank ingestion (open banking / PSD2)
 
 Connect real bank accounts through **Enable Banking** (a licensed PSD2 aggregator, read-only
@@ -666,6 +708,10 @@ everything appears.
 - All state-changing endpoints require authentication; all household-scoped reads enforce membership.
 - Passwords hashed with **Argon2id** via Spring Security's `Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8()`.
 - Login attempts rate-limited per source IP via Bucket4j (in-memory).
+- Password reset (when SMTP is configured): hashed single-use tokens with a 60-minute life, one previous link
+  invalidated by the next, identical response and timing for known and unknown addresses, mailed link built
+  from `APP_PUBLIC_URL` only, per-email and per-IP rate limits, and all of the user's sessions deleted on
+  completion.
 - CSV/data imports rate-limited per user (10/hour by default, configurable) across all import endpoints.
 - No secrets in source. All credentials, admin bootstrap values, and runtime config come from environment variables.
 
@@ -693,9 +739,14 @@ everything appears.
   - `sl_active_sessions` (gauge)
   - `sl_registrations_total{mode, outcome}`
   - `sl_invitations_issued_total{role}`, `sl_invitations_accepted_total{role}`
+  - `sl_password_resets_requested_total{outcome=accepted|rate_limited}`, `sl_password_resets_completed_total`
   - `sl_analytics_request_seconds{endpoint}` (timers for month, year, year-over-year, year-by-year, forecast, dashboard_extras, allocation, money_flow, top_movers, recurring_share, heatmap, daily, cost_of_living, explorer, contribution_series, portfolio_benchmarks, and FIRE projection)
 - **Health probes**: `/actuator/health/liveness` and `/readiness`.
 - **Telegram dispatch** is logged per attempt as structured `telegram_notify` lines (`household`, `entity`, `action`, `ok`, and the Telegram `description` on failure) — the only place delivery outcomes are observed; there is no in-app failure surfacing or retry.
+- **Password-reset mail** is logged the same way: `password_reset_requested` (whether the address matched,
+  user id when it did), `password_reset_mail` (`ok`, SMTP `description` on failure) and
+  `password_reset_completed`, all carrying `requestId` and a token *hash prefix* — the token itself is never
+  logged. A partially configured SMTP group logs `smtp_partially_configured missing=…` once at startup.
 - Grafana/Prometheus/Loki stack is **not** part of this repo. The app exposes the data; the operator wires up their own monitoring against the endpoints.
 
 ### Operations
@@ -772,6 +823,8 @@ Edit `.env` and set at minimum:
 | `BOOTSTRAP_HOUSEHOLD_*` | First household details. |
 | `REGISTRATION_MODE` | `open`, `invite-only` (recommended), or `closed`. |
 | `APP_COOKIE_SECURE` | `true` in production. Set to `false` only when running on plain HTTP for local dev. |
+| `APP_PUBLIC_URL` | This instance's public frontend origin, e.g. `https://ledger.example.com` (no trailing slash). Required for password-reset mail — the link is built from it, never from request headers — and used as the fallback origin for the Enable Banking redirect URL when `ENABLE_BANKING_REDIRECT_URL` is blank. |
+| Email (SMTP) | All optional, **as a group**: `SMTP_HOST`, `SMTP_PORT` (default `587`), `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_STARTTLS` (default `true`), `MAIL_FROM` (the From address; with Gmail it must be the authenticated account or a verified alias) — plus `APP_PUBLIC_URL`. With none set, nothing changes: no *Forgot your password?* link, reset endpoints 404. With only some set the feature stays hidden too and the backend logs one startup warning naming the missing ones. The only mail the app sends is the password-reset link. See *Password reset by email* in §1 for the Gmail specifics (2-Step Verification + App Password). |
 | `TELEGRAM_TOKEN_KEY` | Base64 AES key (16/24/32 bytes) used to encrypt stored Telegram bot tokens at rest. Generate with `openssl rand -base64 32`. Required only if a household saves a bot token; keep it stable (rotating it makes stored tokens undecryptable). Optional: `TELEGRAM_API_BASE_URL`, `TELEGRAM_TIMEOUT_MS`. |
 | Portfolio pricing | All optional — holdings work unpriced without them. `EQUITY_PRICE_PROVIDER` (`yahoo` default, or `eodhd` / `twelve_data`), `COINGECKO_API_KEY` (Demo key for crypto), `EODHD_API_KEY` / `TWELVEDATA_API_KEY` (only for those providers). FX (Frankfurter) and Yahoo need no key. Base-URL overrides exist for each provider; see `.env.example`. |
 | Bank ingestion | All optional. The application id and private key are **not** env vars — each household pastes its own in Settings → Banks. What stays here: `ENABLE_BANKING_SECRET_KEY` (base64 AES key, `openssl rand -base64 32`; encrypts the stored credentials and bank sessions at rest — keep it stable, rotating it makes them undecryptable) and `ENABLE_BANKING_REDIRECT_URL` (your public frontend URL + `/settings/banks/callback`; it identifies the instance, so every household registers the same value in its own EB application — left blank the app derives it from the request, fine for local dev). `ENABLE_BANKING_APP_ID` is read **once at startup**, on the first boot after `V030`, to stamp connections created before credentials were per household (see §Upgrading below); drop it afterwards — a fresh install never needs it. Optional overrides: `ENABLE_BANKING_BASE_URL`, `ENABLE_BANKING_CONSENT_VALID_DAYS`, `ENABLE_BANKING_BACKFILL_DAYS`, `ENABLE_BANKING_TIMEOUT_MS`, `ENABLE_BANKING_MAX_CALLS_PER_DAY` (keep at 4 in production — the PSD2 unattended-access cap). |
@@ -840,10 +893,11 @@ After step 6:
 8. **Track a lending**: `/networth` → *Prestado* → *Prestar dinero* → a borrower, a principal, simple interest. Open it, register a payment, and confirm the interest/principal split shows. The Dashboard should now display the money-lent tile.
 9. **Configure FIRE**: `/fire` → with the transactions, snapshots and movement from the previous steps, the Lean/FIRE/Fat tiers, coverage and projection derive automatically; tweak SWR, inflation, contribution source, scenarios or the tax brackets in the on-page settings and confirm targets move coherently across chart, tiers and table.
 10. **Invite a partner** (owners only): `/settings` → *Members & invitations* → *Issue invitation*. Copy the link `…/register?invite=<token>` and open it in another browser session.
-11. **Check observability**:
+11. **Reset a password** (only if the SMTP group is configured): log out, click *Forgot your password?* on the login page, enter the admin email, open the mailed link, choose a new password. The old password must be refused and every other signed-in device must be back at the login page. Without SMTP configured the link must be absent.
+12. **Check observability**:
    - `docker compose logs -f backend` shows JSON logs with `requestId`, `userId`, `householdId` populated.
    - From a container on `${SHARED_NETWORK_NAME}`: `curl http://shared-ledger-backend:9090/actuator/prometheus` returns metrics, including `sl_transactions_created_total`, `sl_snapshots_created_total`, `sl_login_attempts_total`, `sl_active_sessions`, `sl_recurring_materialized_total`.
-12. **Switch language**: top-right language picker → ES. Server validation messages localize on subsequent requests via `Accept-Language`.
+13. **Switch language**: top-right language picker → ES. Server validation messages localize on subsequent requests via `Accept-Language`.
 
 ---
 
@@ -851,9 +905,9 @@ After step 6:
 
 - **Daily scheduler.** The recurring materializer runs daily at 02:00 UTC (configurable via `app.scheduler.recurring-cron`). The unique partial index on `transactions(recurring_template_id, occurrence_date)` enforces idempotency; reruns never duplicate. Failures don't crash the app — they're logged with `templateId` MDC and counted in `sl_recurring_materialization_failures_total`.
 - **Portfolio price refresh.** Background jobs keep `price_history` current: crypto intraday, FX just after midnight, and equities early morning; a fourth keeps the `benchmark_price` series (indices/commodities/crypto) current just after equities and tops up its own FX (all cron-configurable under `app.portfolio.*`). Each is gap-filling and idempotent, isolates failures per symbol/benchmark, and self-heals on the next run; the benchmark series also bootstraps its full history on first start. An optional per-household **auto-snapshot** job can also create scheduled net-worth snapshots (off by default; daily/weekly/monthly).
-- **Sessions.** 30-day sliding sessions stored in `SPRING_SESSION`. Cookie `SESSION`, `HttpOnly`, `SameSite=Lax`, `Secure` controlled by `APP_COOKIE_SECURE`. Active session count is exposed as `sl_active_sessions`.
+- **Sessions.** 30-day sliding sessions stored in `SPRING_SESSION`. Cookie `SESSION`, `HttpOnly`, `SameSite=Lax`, `Secure` controlled by `APP_COOKIE_SECURE`. Active session count is exposed as `sl_active_sessions`. A completed password reset deletes all of that user's rows.
 - **CSRF.** The frontend reads the `XSRF-TOKEN` cookie and sends `X-XSRF-TOKEN` on every state-changing request. The frontend hits `/api/auth/csrf` to seed the cookie on app load and on logout.
-- **Rate limiting.** Login attempts are limited per source IP via Bucket4j in-memory (5/min, 20/hour by default). State resets on restart — acceptable for a self-hosted single replica.
+- **Rate limiting.** Login attempts are limited per source IP via Bucket4j in-memory (5/min, 20/hour by default); password-reset requests per target email (3/hour) and per source IP (10/hour). State resets on restart — acceptable for a self-hosted single replica.
 - **Logs.** JSON to stdout, rotated by Docker (`json-file`, 10MB × 5).
 - **Backups.** Postgres is the only durable state; back up the `sharedledger` database with your usual tooling.
 
@@ -1178,6 +1232,9 @@ cd backend
 APP_COOKIE_SECURE=false ADMIN_EMAIL=dev@example.com ADMIN_PASSWORD=devdevdev \
   ./gradlew bootRun
 ```
+
+Password reset by email stays hidden unless the SMTP group **and** `APP_PUBLIC_URL` are set (for the Vite
+dev server that is `APP_PUBLIC_URL=http://localhost:5173`); any local SMTP sink works for `SMTP_HOST`.
 
 Frontend:
 

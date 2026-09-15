@@ -34,7 +34,19 @@
     "household_section": "Tu nueva unidad familiar",
     "household_name": "Nombre",
     "household_currency": "Moneda",
-    "household_locale": "Idioma"
+    "household_locale": "Idioma",
+    "forgot_password": "¿Has olvidado tu contraseña?",
+    "forgot_password_intro": "Escribe el email de tu cuenta y te enviaremos un enlace para elegir una contraseña nueva.",
+    "send_reset_link": "Enviar enlace",
+    "reset_requested": "Si existe una cuenta con esa dirección, te llegará un email con un enlace para restablecer la contraseña. El enlace caduca pronto.",
+    "reset_unavailable": "El restablecimiento de contraseña por email no está activado en esta instancia. Pide a quien la administra que restablezca tu contraseña.",
+    "reset_password": "Elige una contraseña nueva",
+    "confirm_new_password": "Confirmar contraseña nueva",
+    "set_new_password": "Guardar contraseña",
+    "reset_link_invalid": "Este enlace no es válido o ha caducado.",
+    "request_new_link": "Pedir un enlace nuevo",
+    "reset_done": "Tu contraseña se ha actualizado. Entra con la nueva.",
+    "back_to_login": "Volver a entrar"
   },
   "common": {
     "save": "Guardar",
@@ -1213,6 +1225,7 @@
     "field_required": "Obligatorio",
     "email_invalid": "Introduce un email válido",
     "password_too_short": "La contraseña debe tener al menos 8 caracteres",
+    "password_confirmation_mismatch": "Las dos contraseñas no coinciden",
     "amount_positive": "Introduce un importe mayor que 0",
     "amount_negative_refund": "Una devolución es dinero que vuelve — introduce un importe negativo",
     "TX_AMOUNT_INVALID": "Introduce un importe mayor que 0",

@@ -3,6 +3,8 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { LoginPage } from "@/auth/LoginPage";
 import { RegisterPage } from "@/auth/RegisterPage";
+import { ForgotPasswordPage } from "@/auth/ForgotPasswordPage";
+import { ResetPasswordPage } from "@/auth/ResetPasswordPage";
 import { RequireAuth } from "@/auth/RequireAuth";
 import { AppShell } from "@/components/layout/AppShell";
 import { ToastHost } from "@/components/ui/ToastHost";
@@ -34,6 +36,8 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route
           element={
             <RequireAuth>

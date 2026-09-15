@@ -107,6 +107,25 @@ app:
     household-locale: ${BOOTSTRAP_HOUSEHOLD_LOCALE:en}
   invitations:
     ttl-days: 14
+  # Public frontend origin of this deployment, no trailing slash (https://ledger.example.com). Required
+  # for password-reset mail (the link is built from it — never from request headers) and the fallback
+  # origin for the Enable Banking redirect URL when that one is not set explicitly.
+  public-url: ${APP_PUBLIC_URL:}
+  # Outbound mail (optional, configured as a group). Used only for self-service password reset, which
+  # stays hidden — no link on the login page, endpoints 404 — until host, username, password, from and
+  # app.public-url are all set. Partial configuration logs one startup warning naming the missing vars.
+  mail:
+    host: ${SMTP_HOST:}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    start-tls: ${SMTP_STARTTLS:true}
+    from: ${MAIL_FROM:}
+    timeout-ms: 10000
+  password-reset:
+    ttl-minutes: 60
+    per-hour-per-email: 3
+    per-hour-per-ip: 10
   scheduler:
     recurring-cron: "0 0 2 * * *"
     # Zone all @Scheduled jobs fire in. Keep UTC: business dates are stamped with UTC

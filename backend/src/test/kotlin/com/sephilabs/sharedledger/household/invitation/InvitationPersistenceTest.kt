@@ -1,5 +1,6 @@
 package com.sephilabs.sharedledger.household.invitation
 
+import com.sephilabs.sharedledger.common.SecureTokens
 import com.sephilabs.sharedledger.IntegrationTestBase
 import com.sephilabs.sharedledger.household.Household
 import com.sephilabs.sharedledger.household.HouseholdMember
@@ -40,7 +41,7 @@ class InvitationPersistenceTest @Autowired constructor(
         assertThat(reloaded.revokedAt).isNull()
         // Token is stored hashed, never raw.
         assertThat(reloaded.tokenHash).isNotEqualTo(issued.token)
-        assertThat(reloaded.tokenHash).isEqualTo(InvitationTokens.hash(issued.token))
+        assertThat(reloaded.tokenHash).isEqualTo(SecureTokens.hash(issued.token))
     }
 
     @Test
