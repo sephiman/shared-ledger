@@ -20,6 +20,7 @@ data class IssuedInvitationResponse(
     val role: HouseholdRole,
     val email: String?,
     val expiresAt: Instant,
+    val emailSent: Boolean = false,
 )
 
 data class InvitationListItem(

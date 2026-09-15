@@ -22,6 +22,7 @@ class InvitationService(
     private val members: HouseholdMemberRepository,
     private val props: AppProperties,
     private val metrics: AppMetrics,
+    private val mailDispatcher: InvitationMailDispatcher,
 ) {
 
     @Transactional
@@ -40,7 +41,22 @@ class InvitationService(
         )
         invitations.save(invitation)
         metrics.invitationIssued(request.role.name)
-        return IssuedInvitationResponse(invitation.id, token, request.role, invitation.email, expiresAt)
+
+        val emailSent = !invitation.email.isNullOrBlank() && mailDispatcher.isConfigured
+        if (emailSent) {
+            val household = households.findById(householdId).orElse(null)
+            val householdName = household?.name ?: ""
+            val locale = household?.defaultLocale?.ifBlank { "en" } ?: "en"
+            mailDispatcher.dispatch(
+                recipientEmail = invitation.email!!,
+                householdName = householdName,
+                token = token,
+                localeStr = locale,
+                tokenHash = tokenHash,
+            )
+        }
+
+        return IssuedInvitationResponse(invitation.id, token, request.role, invitation.email, expiresAt, emailSent)
     }
 
     @Transactional(readOnly = true)
@@ -63,6 +79,39 @@ class InvitationService(
         if (invitation.acceptedAt != null) throw AppException.conflict("INVITATION_ALREADY_ACCEPTED")
         invitation.revokedAt = Instant.now()
         invitation.updatedByUserId = by.id
+    }
+
+    @Transactional
+    fun resend(householdId: UUID, invitationId: UUID, by: User): IssuedInvitationResponse {
+        val invitation = invitations.findById(invitationId).orElseThrow { AppException.notFound("INVITATION_INVALID") }
+        if (invitation.householdId != householdId) throw AppException.notFound("INVITATION_INVALID")
+        if (invitation.acceptedAt != null) throw AppException.conflict("INVITATION_ALREADY_ACCEPTED")
+        if (invitation.revokedAt != null) throw AppException.badRequest("INVITATION_REVOKED")
+
+        val token = SecureTokens.generate()
+        val tokenHash = SecureTokens.hash(token)
+        val expiresAt = Instant.now().plus(props.invitations.ttlDays, ChronoUnit.DAYS)
+
+        invitation.tokenHash = tokenHash
+        invitation.expiresAt = expiresAt
+        invitation.updatedByUserId = by.id
+        invitations.save(invitation)
+
+        val emailSent = !invitation.email.isNullOrBlank() && mailDispatcher.isConfigured
+        if (emailSent) {
+            val household = households.findById(householdId).orElse(null)
+            val householdName = household?.name ?: ""
+            val locale = household?.defaultLocale?.ifBlank { "en" } ?: "en"
+            mailDispatcher.dispatch(
+                recipientEmail = invitation.email!!,
+                householdName = householdName,
+                token = token,
+                localeStr = locale,
+                tokenHash = tokenHash,
+            )
+        }
+
+        return IssuedInvitationResponse(invitation.id, token, invitation.role, invitation.email, expiresAt, emailSent)
     }
 
     @Transactional(readOnly = true)

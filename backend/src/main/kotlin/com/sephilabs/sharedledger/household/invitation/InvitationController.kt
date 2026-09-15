@@ -42,6 +42,16 @@ class InvitationController(
         return ResponseEntity.noContent().build()
     }
 
+    @RequireHouseholdOwner
+    @PostMapping("/api/households/{householdId}/invitations/{invitationId}/resend")
+    fun resend(
+        @PathVariable householdId: UUID,
+        @PathVariable invitationId: UUID,
+    ): ResponseEntity<IssuedInvitationResponse> {
+        val by = currentUser.requireUser()
+        return ResponseEntity.ok(service.resend(householdId, invitationId, by))
+    }
+
     @GetMapping("/api/invitations/{token}")
     fun publicLookup(@PathVariable token: String): PublicInvitationView = service.lookupPublic(token)
 

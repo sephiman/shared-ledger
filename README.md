@@ -27,7 +27,7 @@ Postgres is **not** part of this compose file. It runs externally on a Docker ne
   - `open` — anyone can register; a new user creates a new household and becomes its owner.
   - `invite-only` — registration requires a valid invitation token from an existing owner. Recommended default.
   - `closed` — bootstrap admin only.
-- **Invitations**: household owners issue one-time tokens (raw token shown once at issue time, hashed in storage). 14-day default expiry. The invited user joins as `owner` or `member` per the invitation.
+- **Invitations**: household owners issue one-time tokens (raw token shown once at issue time, hashed in storage). 14-day default expiry. The invited user joins as `owner` or `member` per the invitation. When SMTP is configured and a recipient email is supplied, the link is sent via email and confirmed in the UI; otherwise, the raw link is displayed for manual copying. Owners can also **resend** active invitations to reset the token and send a new email.
 - **Bootstrap**: on first start with an empty users table, an admin user and initial household are created from `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `BOOTSTRAP_HOUSEHOLD_*`.
 
 ### Households
@@ -354,7 +354,7 @@ Long-term wealth projection toward financial independence, derived from the hous
 - Household name, currency and default locale (owners only).
 - Custom categories: create, rename, change essential flag, move between groups, or hard-delete with cascade (owners only). Members see the list read-only.
 - **Auto-snapshot** (owners only): enable scheduled net-worth snapshot creation and pick the frequency — daily, weekly or monthly. Off by default; a daily background job creates the snapshot when one is due.
-- Members & invitations: every member sees the member list (role, joined date); owners issue and revoke invitations, see pending ones, and change any member's role (see *Households*).
+- Members & invitations: every member sees the member list (role, joined date); owners issue, resend, and revoke invitations, see pending ones, and change any member's role (see *Households*).
 - FIRE settings are edited on the FIRE page itself (saving is owner-only); assets, liabilities and their amortization schedules are managed in the Wealth hub tabs, not in Settings.
 - **Banks** (any member): link your own bank, and manage the connections you linked. See *Bank ingestion* for who can manage what.
 - **Notifications** (owners only): configure the per-household Telegram integration (see below).
@@ -389,9 +389,9 @@ data changes. Configured per household, owner-only, under **Settings → Notific
 Re-link reminders and batch-confirm summaries for bank ingestion (below) flow through this same
 system, gated by two extra per-household toggles (bank movements, bank connections).
 
-### Password reset by email (SMTP, optional)
+### Password reset & invitations by email (SMTP, optional)
 
-The only email the app ever sends. Like Telegram and bank ingestion it is an optional integration: with no
+Used for self-service password reset and optional household invitation delivery. Like Telegram and bank ingestion it is an optional integration: with no
 SMTP configured the app behaves exactly as before — **no link on the login page, and the reset endpoints
 answer 404**. Enabled by the env group in §5 (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`,
 `SMTP_STARTTLS`, `MAIL_FROM`) plus `APP_PUBLIC_URL`. A *partial* group counts as not configured: the feature
@@ -743,10 +743,11 @@ everything appears.
   - `sl_analytics_request_seconds{endpoint}` (timers for month, year, year-over-year, year-by-year, forecast, dashboard_extras, allocation, money_flow, top_movers, recurring_share, heatmap, daily, cost_of_living, explorer, contribution_series, portfolio_benchmarks, and FIRE projection)
 - **Health probes**: `/actuator/health/liveness` and `/readiness`.
 - **Telegram dispatch** is logged per attempt as structured `telegram_notify` lines (`household`, `entity`, `action`, `ok`, and the Telegram `description` on failure) — the only place delivery outcomes are observed; there is no in-app failure surfacing or retry.
-- **Password-reset mail** is logged the same way: `password_reset_requested` (whether the address matched,
-  user id when it did), `password_reset_mail` (`ok`, SMTP `description` on failure) and
-  `password_reset_completed`, all carrying `requestId` and a token *hash prefix* — the token itself is never
-  logged. A partially configured SMTP group logs `smtp_partially_configured missing=…` once at startup.
+- **Outbound mail** (password reset & invitations) is logged the same way: `password_reset_requested`,
+  `password_reset_mail` (`ok`, SMTP `description` on failure), `password_reset_completed`, and
+  `invitation_mail` (`recipient`, `tokenHashPrefix`, `ok`, `description`), all carrying `requestId` and a
+  token *hash prefix* — the token itself is never logged. A partially configured SMTP group logs
+  `smtp_partially_configured missing=…` once at startup.
 - Grafana/Prometheus/Loki stack is **not** part of this repo. The app exposes the data; the operator wires up their own monitoring against the endpoints.
 
 ### Operations
@@ -824,7 +825,7 @@ Edit `.env` and set at minimum:
 | `REGISTRATION_MODE` | `open`, `invite-only` (recommended), or `closed`. |
 | `APP_COOKIE_SECURE` | `true` in production. Set to `false` only when running on plain HTTP for local dev. |
 | `APP_PUBLIC_URL` | This instance's public frontend origin, e.g. `https://ledger.example.com` (no trailing slash). Required for password-reset mail — the link is built from it, never from request headers — and used as the fallback origin for the Enable Banking redirect URL when `ENABLE_BANKING_REDIRECT_URL` is blank. |
-| Email (SMTP) | All optional, **as a group**: `SMTP_HOST`, `SMTP_PORT` (default `587`), `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_STARTTLS` (default `true`), `MAIL_FROM` (the From address; with Gmail it must be the authenticated account or a verified alias) — plus `APP_PUBLIC_URL`. With none set, nothing changes: no *Forgot your password?* link, reset endpoints 404. With only some set the feature stays hidden too and the backend logs one startup warning naming the missing ones. The only mail the app sends is the password-reset link. See *Password reset by email* in §1 for the Gmail specifics (2-Step Verification + App Password). |
+| Email (SMTP) | All optional, **as a group**: `SMTP_HOST`, `SMTP_PORT` (default `587`), `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_STARTTLS` (default `true`), `MAIL_FROM` (the From address; with Gmail it must be the authenticated account or a verified alias) — plus `APP_PUBLIC_URL`. With none set, nothing changes: no *Forgot your password?* link, reset endpoints 404, and invitations fall back to raw links. With only some set the feature stays hidden too and the backend logs one startup warning naming the missing ones. The app uses SMTP for password reset links and invitation emails. See *Password reset by email* in §1 for the Gmail specifics (2-Step Verification + App Password). |
 | `TELEGRAM_TOKEN_KEY` | Base64 AES key (16/24/32 bytes) used to encrypt stored Telegram bot tokens at rest. Generate with `openssl rand -base64 32`. Required only if a household saves a bot token; keep it stable (rotating it makes stored tokens undecryptable). Optional: `TELEGRAM_API_BASE_URL`, `TELEGRAM_TIMEOUT_MS`. |
 | Portfolio pricing | All optional — holdings work unpriced without them. `EQUITY_PRICE_PROVIDER` (`yahoo` default, or `eodhd` / `twelve_data`), `COINGECKO_API_KEY` (Demo key for crypto), `EODHD_API_KEY` / `TWELVEDATA_API_KEY` (only for those providers). FX (Frankfurter) and Yahoo need no key. Base-URL overrides exist for each provider; see `.env.example`. |
 | Bank ingestion | All optional. The application id and private key are **not** env vars — each household pastes its own in Settings → Banks. What stays here: `ENABLE_BANKING_SECRET_KEY` (base64 AES key, `openssl rand -base64 32`; encrypts the stored credentials and bank sessions at rest — keep it stable, rotating it makes them undecryptable) and `ENABLE_BANKING_REDIRECT_URL` (your public frontend URL + `/settings/banks/callback`; it identifies the instance, so every household registers the same value in its own EB application — left blank the app derives it from the request, fine for local dev). `ENABLE_BANKING_APP_ID` is read **once at startup**, on the first boot after `V030`, to stamp connections created before credentials were per household (see §Upgrading below); drop it afterwards — a fresh install never needs it. Optional overrides: `ENABLE_BANKING_BASE_URL`, `ENABLE_BANKING_CONSENT_VALID_DAYS`, `ENABLE_BANKING_BACKFILL_DAYS`, `ENABLE_BANKING_TIMEOUT_MS`, `ENABLE_BANKING_MAX_CALLS_PER_DAY` (keep at 4 in production — the PSD2 unattended-access cap). |
@@ -892,7 +893,7 @@ After step 6:
 7. **Add a portfolio holding**: `/networth` → *Portfolio* → *New holding* → a crypto (e.g. BTC), link it via the search box, add a BUY lot. Prices backfill into `price_history`; confirm the holding shows a current value and P&L. Take a new snapshot and confirm the crypto class is prefilled as *computed*.
 8. **Track a lending**: `/networth` → *Prestado* → *Prestar dinero* → a borrower, a principal, simple interest. Open it, register a payment, and confirm the interest/principal split shows. The Dashboard should now display the money-lent tile.
 9. **Configure FIRE**: `/fire` → with the transactions, snapshots and movement from the previous steps, the Lean/FIRE/Fat tiers, coverage and projection derive automatically; tweak SWR, inflation, contribution source, scenarios or the tax brackets in the on-page settings and confirm targets move coherently across chart, tiers and table.
-10. **Invite a partner** (owners only): `/settings` → *Members & invitations* → *Issue invitation*. Copy the link `…/register?invite=<token>` and open it in another browser session.
+10. **Invite a partner** (owners only): `/settings` → *Members & invitations* → *Issue invitation*. If an email is supplied and SMTP is configured, an invitation email is dispatched (and can be resent via *Resend*); otherwise copy the link `…/register?invite=<token>` and open it in another browser session.
 11. **Reset a password** (only if the SMTP group is configured): log out, click *Forgot your password?* on the login page, enter the admin email, open the mailed link, choose a new password. The old password must be refused and every other signed-in device must be back at the login page. Without SMTP configured the link must be absent.
 12. **Check observability**:
    - `docker compose logs -f backend` shows JSON logs with `requestId`, `userId`, `householdId` populated.

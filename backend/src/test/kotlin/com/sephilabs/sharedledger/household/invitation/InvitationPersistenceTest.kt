@@ -10,6 +10,8 @@ import com.sephilabs.sharedledger.household.HouseholdRepository
 import com.sephilabs.sharedledger.household.HouseholdRole
 import com.sephilabs.sharedledger.identity.user.User
 import com.sephilabs.sharedledger.identity.user.UserRepository
+import com.sephilabs.sharedledger.config.AppProperties
+import com.sephilabs.sharedledger.identity.passwordreset.RecordingEmailSender
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -20,21 +22,24 @@ class InvitationPersistenceTest @Autowired constructor(
     private val members: HouseholdMemberRepository,
     private val invitations: HouseholdInvitationRepository,
     private val service: InvitationService,
+    private val mailer: RecordingEmailSender,
+    private val props: AppProperties,
 ) : IntegrationTestBase() {
 
     @Test
-    fun `issue persists invitation row with hashed token`() {
+    fun `issue persists invitation row with hashed token and dispatches email`() {
         val (owner, household) = seedOwnerAndHousehold()
+        val recipientEmail = "guest-${System.nanoTime()}@example.com"
 
         val issued = service.issue(
             household.id,
-            CreateInvitationRequest(email = "guest@example.com", role = HouseholdRole.member),
+            CreateInvitationRequest(email = recipientEmail, role = HouseholdRole.member),
             owner,
         )
 
         val reloaded = invitations.findById(issued.id).orElseThrow()
         assertThat(reloaded.householdId).isEqualTo(household.id)
-        assertThat(reloaded.email).isEqualTo("guest@example.com")
+        assertThat(reloaded.email).isEqualTo(recipientEmail)
         assertThat(reloaded.role).isEqualTo(HouseholdRole.member)
         assertThat(reloaded.createdByUserId).isEqualTo(owner.id)
         assertThat(reloaded.acceptedAt).isNull()
@@ -42,6 +47,65 @@ class InvitationPersistenceTest @Autowired constructor(
         // Token is stored hashed, never raw.
         assertThat(reloaded.tokenHash).isNotEqualTo(issued.token)
         assertThat(reloaded.tokenHash).isEqualTo(SecureTokens.hash(issued.token))
+
+        val mail = mailer.sent.lastOrNull { it.to == recipientEmail }
+        assertThat(mail).isNotNull
+        assertThat(mail!!.subject).contains(household.name)
+        assertThat(mail.body).contains("${props.publicUrl.trimEnd('/')}/register?invite=${issued.token}")
+    }
+
+    @Test
+    fun `issue uses household default locale for invitation email`() {
+        val owner = users.save(User(email = "o${System.nanoTime()}@example.com", passwordHash = "x", locale = "en"))
+        val household = households.save(Household(name = "Hogar", currency = "EUR", defaultLocale = "es"))
+        members.save(HouseholdMember(HouseholdMemberId(household.id, owner.id), HouseholdRole.owner))
+        val recipientEmail = "spanish-${System.nanoTime()}@example.com"
+
+        service.issue(
+            household.id,
+            CreateInvitationRequest(email = recipientEmail, role = HouseholdRole.member),
+            owner,
+        )
+
+        val mail = mailer.sent.last { it.to == recipientEmail }
+        assertThat(mail.subject).isEqualTo("Te han invitado a unirte a Hogar en Shared Ledger")
+        assertThat(mail.body).contains("Haz clic en el siguiente enlace")
+    }
+
+    @Test
+    fun `issue does not dispatch email when recipient email is omitted`() {
+        val (owner, household) = seedOwnerAndHousehold()
+        val sentCountBefore = mailer.sent.size
+
+        service.issue(
+            household.id,
+            CreateInvitationRequest(role = HouseholdRole.member),
+            owner,
+        )
+
+        assertThat(mailer.sent.size).isEqualTo(sentCountBefore)
+    }
+
+    @Test
+    fun `resend resets token and dispatches fresh email`() {
+        val (owner, household) = seedOwnerAndHousehold()
+        val recipientEmail = "resend-${System.nanoTime()}@example.com"
+        val firstIssued = service.issue(
+            household.id,
+            CreateInvitationRequest(email = recipientEmail, role = HouseholdRole.member),
+            owner,
+        )
+
+        val resent = service.resend(household.id, firstIssued.id, owner)
+
+        assertThat(resent.token).isNotEqualTo(firstIssued.token)
+        assertThat(resent.emailSent).isTrue()
+
+        val reloaded = invitations.findById(firstIssued.id).orElseThrow()
+        assertThat(reloaded.tokenHash).isEqualTo(SecureTokens.hash(resent.token))
+
+        val mail = mailer.sent.last { it.to == recipientEmail }
+        assertThat(mail.body).contains("${props.publicUrl.trimEnd('/')}/register?invite=${resent.token}")
     }
 
     @Test

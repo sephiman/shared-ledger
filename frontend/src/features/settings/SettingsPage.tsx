@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold, useAuth } from "@/auth/AuthContext";
-import { useChangePassword, useDeleteHousehold, useHousehold, useHouseholdMembers, useInvitations, useIssueInvitation, useRevokeInvitation, useSetDefaultHousehold, useUpdateHousehold, useUpdateMemberRole, useWipeHouseholdData, type HouseholdMemberRow } from "@/api/settings";
+import { useChangePassword, useDeleteHousehold, useHousehold, useHouseholdMembers, useInvitations, useIssueInvitation, useResendInvitation, useRevokeInvitation, useSetDefaultHousehold, useUpdateHousehold, useUpdateMemberRole, useWipeHouseholdData, type HouseholdMemberRow, type IssuedInvitation } from "@/api/settings";
 import { useCategories, useDeleteCustomCategory, type Category } from "@/api/catalog";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select } from "@/components/ui/primitives";
 import { apiErrorMessage } from "@/api/client";
@@ -61,10 +61,11 @@ export function SettingsPage() {
   const { data: invitations = [] } = useInvitations(household.householdId, isOwner);
   const issue = useIssueInvitation(household.householdId);
   const revoke = useRevokeInvitation(household.householdId);
+  const resend = useResendInvitation(household.householdId);
   const updateRole = useUpdateMemberRole(household.householdId);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"owner" | "member">("member");
-  const [issuedToken, setIssuedToken] = useState<string | null>(null);
+  const [issuedResult, setIssuedResult] = useState<IssuedInvitation | null>(null);
 
   const changePassword = useChangePassword();
   const [currentPw, setCurrentPw] = useState("");
@@ -575,7 +576,7 @@ export function SettingsPage() {
                 <Button
                   onClick={async () => {
                     const result = await issue.mutateAsync({ email: inviteEmail || undefined, role: inviteRole });
-                    setIssuedToken(result.token);
+                    setIssuedResult(result);
                     setInviteEmail("");
                   }}
                 >
@@ -583,11 +584,19 @@ export function SettingsPage() {
                 </Button>
               </div>
             </div>
-            {issuedToken && (
+            {issuedResult && (
               <div className="rounded border border-sky-300 bg-sky-50 p-3 text-sm text-gray-800 dark:border-sky-900 dark:bg-sky-950/30 dark:text-gray-200">
-                <p className="font-medium">{t("settings.issued_token")}</p>
-                <code className="block break-all rounded bg-white px-2 py-1 text-gray-900 dark:bg-sunken dark:text-gray-100">{issuedToken}</code>
-                <p className="mt-2 break-all text-xs text-gray-600 dark:text-gray-300">{window.location.origin}/register?invite={issuedToken}</p>
+                {issuedResult.emailSent ? (
+                  <p className="font-medium text-emerald-800 dark:text-emerald-300">
+                    {t("settings.invitation_email_sent", { email: issuedResult.email })}
+                  </p>
+                ) : (
+                  <>
+                    <p className="font-medium">{t("settings.issued_token")}</p>
+                    <code className="block break-all rounded bg-white px-2 py-1 text-gray-900 dark:bg-sunken dark:text-gray-100">{issuedResult.token}</code>
+                    <p className="mt-2 break-all text-xs text-gray-600 dark:text-gray-300">{window.location.origin}/register?invite={issuedResult.token}</p>
+                  </>
+                )}
               </div>
             )}
             {invitations.length === 0 ? (
@@ -604,7 +613,10 @@ export function SettingsPage() {
                             {t(`settings.${i.role}`)} · {formatDate(i.expiresAt, i18n.language)}
                           </p>
                         </div>
-                        <Button variant="ghost" onClick={() => revoke.mutate(i.id)}>{t("settings.revoke")}</Button>
+                        <div className="flex gap-2">
+                          <Button variant="secondary" onClick={async () => setIssuedResult(await resend.mutateAsync(i.id))}>{t("settings.resend")}</Button>
+                          <Button variant="ghost" onClick={() => revoke.mutate(i.id)}>{t("settings.revoke")}</Button>
+                        </div>
                       </div>
                     </li>
                   ))}
@@ -624,7 +636,8 @@ export function SettingsPage() {
                         <td className="py-2">{t(`settings.${i.role}`)}</td>
                         <td>{i.email ?? "—"}</td>
                         <td>{formatDate(i.expiresAt, i18n.language)}</td>
-                        <td className="text-right">
+                        <td className="space-x-2 text-right">
+                          <Button variant="secondary" onClick={async () => setIssuedResult(await resend.mutateAsync(i.id))}>{t("settings.resend")}</Button>
                           <Button variant="ghost" onClick={() => revoke.mutate(i.id)}>{t("settings.revoke")}</Button>
                         </td>
                       </tr>

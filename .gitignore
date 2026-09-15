@@ -4,7 +4,7 @@
 *.pem
 
 # Gradle
-backend/.gradle/
+backend/.gradle*/
 backend/build/
 backend/out/
 backend/bin/

@@ -25,6 +25,7 @@ export interface IssuedInvitation {
   role: "owner" | "member";
   email: string | null;
   expiresAt: string;
+  emailSent?: boolean;
 }
 
 export interface HouseholdMemberRow {
@@ -103,6 +104,15 @@ export function useRevokeInvitation(householdId: string) {
     mutationFn: async (id: string) => {
       await apiClient.delete(`/households/${householdId}/invitations/${id}`);
     },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["invitations", householdId] }),
+  });
+}
+
+export function useResendInvitation(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) =>
+      (await apiClient.post<IssuedInvitation>(`/households/${householdId}/invitations/${id}/resend`)).data,
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["invitations", householdId] }),
   });
 }
