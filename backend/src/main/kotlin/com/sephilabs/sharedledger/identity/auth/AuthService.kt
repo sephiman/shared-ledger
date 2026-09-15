@@ -52,7 +52,7 @@ class AuthService(
                 throw AppException.badRequest("REGISTRATION_HOUSEHOLD_REQUIRED")
             }
         } else {
-            invitations.validateToken(token)
+            invitations.validateToken(token, request.email)
         }
 
         if (users.existsByEmailIgnoreCase(request.email)) {

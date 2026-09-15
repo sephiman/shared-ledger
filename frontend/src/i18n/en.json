@@ -1184,6 +1184,7 @@
     "EMAIL_ALREADY_REGISTERED": "Email is already registered",
     "REGISTRATION_DISABLED": "Registration is disabled",
     "REGISTRATION_REQUIRES_INVITATION": "Registration requires a valid invitation",
+    "INVITATION_EMAIL_MISMATCH": "This invitation was issued for a different email address",
     "RATE_LIMITED": "Too many attempts; try again later",
     "VALIDATION_FAILED": "Please fix the highlighted fields",
     "WIPE_CONFIRMATION_REQUIRED": "Type \"delete\" to confirm",

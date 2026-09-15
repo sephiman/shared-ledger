@@ -124,8 +124,9 @@ class InvitationPersistenceTest @Autowired constructor(
     @Test
     fun `accept marks acceptedAt and creates a household membership`() {
         val (owner, household) = seedOwnerAndHousehold()
-        val guest = users.save(User(email = "g${System.nanoTime()}@example.com", passwordHash = "x", locale = "en"))
-        val issued = service.issue(household.id, CreateInvitationRequest(role = HouseholdRole.member), owner)
+        val email = "g${System.nanoTime()}@example.com"
+        val guest = users.save(User(email = email, passwordHash = "x", locale = "en"))
+        val issued = service.issue(household.id, CreateInvitationRequest(email = email, role = HouseholdRole.member), owner)
 
         service.accept(issued.token, guest)
 
@@ -139,10 +140,41 @@ class InvitationPersistenceTest @Autowired constructor(
     }
 
     @Test
+    fun `accept with mismatching email throws INVITATION_EMAIL_MISMATCH`() {
+        val (owner, household) = seedOwnerAndHousehold()
+        val targetEmail = "invited-${System.nanoTime()}@example.com"
+        val otherUser = users.save(User(email = "other-${System.nanoTime()}@example.com", passwordHash = "x", locale = "en"))
+        val issued = service.issue(household.id, CreateInvitationRequest(email = targetEmail, role = HouseholdRole.member), owner)
+
+        org.junit.jupiter.api.assertThrows<com.sephilabs.sharedledger.common.errors.AppException> {
+            service.accept(issued.token, otherUser)
+        }.also {
+            assertThat(it.code).isEqualTo("INVITATION_EMAIL_MISMATCH")
+        }
+    }
+
+    @Test
+    fun `validateToken with mismatching email throws INVITATION_EMAIL_MISMATCH`() {
+        val (owner, household) = seedOwnerAndHousehold()
+        val targetEmail = "invited-${System.nanoTime()}@example.com"
+        val issued = service.issue(household.id, CreateInvitationRequest(email = targetEmail, role = HouseholdRole.member), owner)
+
+        org.junit.jupiter.api.assertThrows<com.sephilabs.sharedledger.common.errors.AppException> {
+            service.validateToken(issued.token, "wrong-${System.nanoTime()}@example.com")
+        }.also {
+            assertThat(it.code).isEqualTo("INVITATION_EMAIL_MISMATCH")
+        }
+
+        // Case-insensitive match succeeds without throwing exception
+        service.validateToken(issued.token, targetEmail.uppercase())
+    }
+
+    @Test
     fun `consumeIfPresent (registration path) marks acceptedAt and creates membership`() {
         val (owner, household) = seedOwnerAndHousehold()
-        val newcomer = users.save(User(email = "n${System.nanoTime()}@example.com", passwordHash = "x", locale = "en"))
-        val issued = service.issue(household.id, CreateInvitationRequest(role = HouseholdRole.owner), owner)
+        val email = "n${System.nanoTime()}@example.com"
+        val newcomer = users.save(User(email = email, passwordHash = "x", locale = "en"))
+        val issued = service.issue(household.id, CreateInvitationRequest(email = email, role = HouseholdRole.owner), owner)
 
         val joinedHouseholdId = service.consumeIfPresent(issued.token, newcomer)
 

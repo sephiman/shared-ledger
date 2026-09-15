@@ -36,4 +36,5 @@ data class PublicInvitationView(
     val householdName: String,
     val role: HouseholdRole,
     val expiresAt: Instant,
+    val email: String? = null,
 )

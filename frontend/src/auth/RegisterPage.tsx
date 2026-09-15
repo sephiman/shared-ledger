@@ -10,6 +10,7 @@ interface PublicInvite {
   householdName: string;
   role: string;
   expiresAt: string;
+  email?: string | null;
 }
 
 export function RegisterPage() {
@@ -38,6 +39,9 @@ export function RegisterPage() {
         try {
           const res = await apiClient.get<PublicInvite>(`/invitations/${invitationToken}`);
           setInvite(res.data);
+          if (res.data.email) {
+            setEmail(res.data.email);
+          }
         } catch (err) {
           setInviteError(apiErrorMessage(err, t));
         }
@@ -102,6 +106,7 @@ export function RegisterPage() {
                 type="email"
                 value={email}
                 invalid={!!fieldErrors.email}
+                disabled={Boolean(invite?.email)}
                 onChange={(e) => { setEmail(e.target.value); if (fieldErrors.email) setFieldErrors({ ...fieldErrors, email: undefined }); }}
               />
               <FieldError message={fieldErrors.email} />

@@ -1184,6 +1184,7 @@
     "EMAIL_ALREADY_REGISTERED": "El email ya está registrado",
     "REGISTRATION_DISABLED": "El registro está deshabilitado",
     "REGISTRATION_REQUIRES_INVITATION": "El registro requiere una invitación",
+    "INVITATION_EMAIL_MISMATCH": "Esta invitación fue emitida para una dirección de email diferente",
     "RATE_LIMITED": "Demasiados intentos; inténtalo más tarde",
     "VALIDATION_FAILED": "Corrige los campos marcados",
     "WIPE_CONFIRMATION_REQUIRED": "Escribe \"delete\" para confirmar",

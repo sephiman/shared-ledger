@@ -120,7 +120,7 @@ class InvitationService(
             ?: throw AppException.notFound("INVITATION_INVALID")
         validateActive(invitation)
         val household = households.findById(invitation.householdId).orElseThrow { AppException.notFound("INVITATION_INVALID") }
-        return PublicInvitationView(household.name, invitation.role, invitation.expiresAt)
+        return PublicInvitationView(household.name, invitation.role, invitation.expiresAt, invitation.email)
     }
 
     @Transactional
@@ -128,6 +128,7 @@ class InvitationService(
         val invitation = invitations.findByTokenHash(SecureTokens.hash(token))
             ?: throw AppException.notFound("INVITATION_INVALID")
         validateActive(invitation)
+        validateEmailMatch(invitation, acceptingUser.email)
         val memberId = HouseholdMemberId(invitation.householdId, acceptingUser.id)
         if (members.findByIdHouseholdIdAndIdUserId(invitation.householdId, acceptingUser.id) == null) {
             members.save(HouseholdMember(memberId, invitation.role))
@@ -143,6 +144,7 @@ class InvitationService(
         val invitation = invitations.findByTokenHash(SecureTokens.hash(token))
             ?: throw AppException.badRequest("INVITATION_INVALID")
         validateActive(invitation)
+        validateEmailMatch(invitation, acceptingUser.email)
         val memberId = HouseholdMemberId(invitation.householdId, acceptingUser.id)
         members.save(HouseholdMember(memberId, invitation.role))
         invitation.acceptedAt = Instant.now()
@@ -154,10 +156,19 @@ class InvitationService(
 
     /** Validate a token without consuming it — used during registration before any user lookup. */
     @Transactional(readOnly = true)
-    fun validateToken(token: String) {
+    fun validateToken(token: String, targetEmail: String? = null) {
         val invitation = invitations.findByTokenHash(SecureTokens.hash(token))
             ?: throw AppException.badRequest("INVITATION_INVALID")
         validateActive(invitation)
+        if (!targetEmail.isNullOrBlank()) {
+            validateEmailMatch(invitation, targetEmail)
+        }
+    }
+
+    private fun validateEmailMatch(invitation: HouseholdInvitation, email: String) {
+        if (!invitation.email.isNullOrBlank() && !invitation.email.equals(email.trim(), ignoreCase = true)) {
+            throw AppException.badRequest("INVITATION_EMAIL_MISMATCH")
+        }
     }
 
     private fun validateActive(invitation: HouseholdInvitation) {
