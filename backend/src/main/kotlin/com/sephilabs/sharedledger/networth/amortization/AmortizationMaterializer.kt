@@ -55,8 +55,8 @@ class AmortizationMaterializer(
                 val due = projection.rows.filter { !it.date.isBefore(from) && !it.date.isAfter(today) }
                 for (row in due) {
                     try {
-                        runInTx {
-                            if (entries.existsByPartIdAndChargeDate(part.id, row.date)) return@runInTx
+                        val saved = runInTx {
+                            if (entries.existsByPartIdAndChargeDate(part.id, row.date)) return@runInTx false
                             entries.save(
                                 AmortizationEntry(
                                     partId = part.id,
@@ -66,9 +66,12 @@ class AmortizationMaterializer(
                                     resultingBalance = row.balance,
                                 ),
                             )
+                            true
                         }
-                        created++
-                        lastInstalment = row.instalment
+                        if (saved) {
+                            created++
+                            lastInstalment = row.instalment
+                        }
                     } catch (_: DataIntegrityViolationException) {
                         log.debug("Skipped duplicate amortization entry {} for part {}", row.date, part.id)
                     }
@@ -86,7 +89,7 @@ class AmortizationMaterializer(
         }
     }
 
-    private fun runInTx(block: () -> Unit) {
-        TransactionTemplate(txManager).execute { block() }
+    private fun <T> runInTx(block: () -> T): T {
+        return TransactionTemplate(txManager).execute { block() }!!
     }
 }
