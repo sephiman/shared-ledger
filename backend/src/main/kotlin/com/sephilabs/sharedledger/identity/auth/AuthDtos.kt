@@ -7,6 +7,13 @@ import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
 import java.util.UUID
 
+/** What the app may offer before anyone is signed in. Both flags follow the optional SMTP group: they
+ *  report false until the operator configures it, and the UI shows nothing for them. */
+data class AuthFeaturesResponse(
+    val passwordReset: Boolean,
+    val emailChangeVerified: Boolean,
+)
+
 data class LoginRequest(
     val email: String,
     val password: String,

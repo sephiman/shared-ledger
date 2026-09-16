@@ -20,8 +20,14 @@ Postgres is **not** part of this compose file. It runs externally on a Docker ne
 - Password change requires the current password.
 - **Password reset by email** (self-service, optional): a *Forgot your password?* link on the login page mails a
   single-use link valid for 60 minutes; completing it signs the user out of every device. Exists only when the
-  operator configured SMTP — see *Password reset by email* below.
-- Per-user preferred locale: English or Spanish.
+  operator configured SMTP — see *Password reset, email change & invitations by email* below.
+- **Change the account email**: `/settings` → *Email address*, always with the current password. With SMTP
+  configured the new address gets a confirmation link (60 minutes, single-use) and the old one a heads-up;
+  nothing moves until the link is opened. Without SMTP the password check alone carries it and the change
+  applies at once. Either way every session of the user is dropped — see *Changing the account email* below.
+- Per-user preferred locale: English or Spanish. The EN/ES picker in the user menu stores the choice on the
+  account (not only in the browser), because every mail the app sends to a user — password reset, email
+  change — is written in that stored language.
 - Login is rate-limited per source IP (5/minute, 20/hour by default).
 - **Registration modes** (configurable via `REGISTRATION_MODE`):
   - `open` — anyone can register; a new user creates a new household and becomes its owner.
@@ -389,11 +395,12 @@ data changes. Configured per household, owner-only, under **Settings → Notific
 Re-link reminders and batch-confirm summaries for bank ingestion (below) flow through this same
 system, gated by two extra per-household toggles (bank movements, bank connections).
 
-### Password reset & invitations by email (SMTP, optional)
+### Password reset, email change & invitations by email (SMTP, optional)
 
-Used for self-service password reset and optional household invitation delivery. Like Telegram and bank ingestion it is an optional integration: with no
-SMTP configured the app behaves exactly as before — **no link on the login page, and the reset endpoints
-answer 404**. Enabled by the env group in §5 (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`,
+Used for self-service password reset, the confirmation half of an email change, and optional household
+invitation delivery. Like Telegram and bank ingestion it is an optional integration: with no
+SMTP configured the app behaves exactly as before — **no link on the login page, the reset endpoints
+answer 404, and an email change applies directly instead of being confirmed**. Enabled by the env group in §5 (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`,
 `SMTP_STARTTLS`, `MAIL_FROM`) plus `APP_PUBLIC_URL`. A *partial* group counts as not configured: the feature
 stays hidden and the backend logs one structured `smtp_partially_configured` warning at startup naming the
 missing variables, so there is never a state where the link shows but the mail cannot go out.
@@ -418,8 +425,31 @@ missing variables, so there is never a state where the link shows but the mail c
   attempt (outcome, SMTP response on failure, user id, a hash prefix — never the token), no retry queue, and
   a failed send never fails the request. Counters `sl_password_resets_requested_total{outcome}` and
   `sl_password_resets_completed_total`.
-- **Out of scope**: email verification on registration, email change, an admin "send reset for another
-  user" action, any other mail. The bootstrap admin path is unchanged.
+- **Out of scope**: email verification on registration, an admin "send reset for another user" action, any
+  other mail. The bootstrap admin path is unchanged.
+
+#### Changing the account email
+
+`/settings` → *Email address* → the new address plus **the current password** (a stolen session cookie must
+not be enough to move the account's recovery channel). The address is normalized to lowercase; a wrong
+password is `400 PASSWORD_MISMATCH`, an address already registered `409 EMAIL_ALREADY_REGISTERED`, and the
+current one `400 EMAIL_UNCHANGED` — the password is checked first, so those two only ever reach someone who
+already holds the credentials. Rate limit: 3 requests per user per hour (`app.email-change.*`).
+
+- **With SMTP** the response is `202 {"status":"pending"}` and *nothing changes yet*. Two mails in the
+  account's stored language go out off the request thread: a link to
+  `<APP_PUBLIC_URL>/confirm-email?token=…` for the address being claimed, and a notice to the address losing
+  the account — deliberately without the link or the new address, since it may no longer be in the right
+  hands. The token is 256 random bits, stored only as a SHA-256 hash, **valid 60 minutes, single-use**;
+  asking again drops the previous unused one, and so does **any password change** (the reset flow
+  included), so a request cannot outlive the credentials that started it. Opening the link needs no
+  session; if someone registered the address in the meantime it is `409`, and unknown/expired/used all
+  answer one neutral `EMAIL_CHANGE_TOKEN_INVALID`.
+- **Without SMTP** there is no channel to verify with — and no reset flow to protect — so the change applies
+  at once (`200 {"status":"applied"}`) and the caller's session is rebuilt under the new address.
+- **Either way** every `SPRING_SESSION` row of the user is deleted (they are indexed by the old login
+  email), so other devices land back on the login page and the account is reachable only through the
+  address just proven. Counter `sl_email_changes_total{outcome=requested|applied|confirmed|rejected}`.
 
 **Gmail as the SMTP relay.** Google rejects regular account passwords over SMTP; the account needs
 **2-Step Verification** and an **App Password** (Google Account → Security → 2-Step Verification → App
@@ -712,6 +742,9 @@ everything appears.
   invalidated by the next, identical response and timing for known and unknown addresses, mailed link built
   from `APP_PUBLIC_URL` only, per-email and per-IP rate limits, and all of the user's sessions deleted on
   completion.
+- Email change: the current password on every request, the same hashed single-use token when SMTP is
+  configured (cancelled by any password change), a notice to the address losing the account, and all of the
+  user's sessions deleted whether it was confirmed or applied directly.
 - CSV/data imports rate-limited per user (10/hour by default, configurable) across all import endpoints.
 - No secrets in source. All credentials, admin bootstrap values, and runtime config come from environment variables.
 
@@ -740,13 +773,16 @@ everything appears.
   - `sl_registrations_total{mode, outcome}`
   - `sl_invitations_issued_total{role}`, `sl_invitations_accepted_total{role}`
   - `sl_password_resets_requested_total{outcome=accepted|rate_limited}`, `sl_password_resets_completed_total`
+  - `sl_email_changes_total{outcome=requested|applied|confirmed|rejected}`
   - `sl_analytics_request_seconds{endpoint}` (timers for month, year, year-over-year, year-by-year, forecast, dashboard_extras, allocation, money_flow, top_movers, recurring_share, heatmap, daily, cost_of_living, explorer, contribution_series, portfolio_benchmarks, and FIRE projection)
 - **Health probes**: `/actuator/health/liveness` and `/readiness`.
 - **Telegram dispatch** is logged per attempt as structured `telegram_notify` lines (`household`, `entity`, `action`, `ok`, and the Telegram `description` on failure) — the only place delivery outcomes are observed; there is no in-app failure surfacing or retry.
-- **Outbound mail** (password reset & invitations) is logged the same way: `password_reset_requested`,
-  `password_reset_mail` (`ok`, SMTP `description` on failure), `password_reset_completed`, and
-  `invitation_mail` (`recipient`, `tokenHashPrefix`, `ok`, `description`), all carrying `requestId` and a
-  token *hash prefix* — the token itself is never logged. A partially configured SMTP group logs
+- **Outbound mail** (password reset, email change & invitations) is logged the same way:
+  `password_reset_requested`, `password_reset_mail` (`ok`, SMTP `description` on failure),
+  `password_reset_completed`, `email_change_requested` / `_confirmed` / `_applied` / `_cancelled`,
+  `email_change_mail` (`kind=confirmation|notice`, `ok`, `description`), and `invitation_mail`
+  (`recipient`, `tokenHashPrefix`, `ok`, `description`), all carrying `requestId` and a token *hash
+  prefix* — the token itself is never logged. A partially configured SMTP group logs
   `smtp_partially_configured missing=…` once at startup.
 - Grafana/Prometheus/Loki stack is **not** part of this repo. The app exposes the data; the operator wires up their own monitoring against the endpoints.
 
@@ -824,8 +860,8 @@ Edit `.env` and set at minimum:
 | `BOOTSTRAP_HOUSEHOLD_*` | First household details. |
 | `REGISTRATION_MODE` | `open`, `invite-only` (recommended), or `closed`. |
 | `APP_COOKIE_SECURE` | `true` in production. Set to `false` only when running on plain HTTP for local dev. |
-| `APP_PUBLIC_URL` | This instance's public frontend origin, e.g. `https://ledger.example.com` (no trailing slash). Required for password-reset mail — the link is built from it, never from request headers — and used as the fallback origin for the Enable Banking redirect URL when `ENABLE_BANKING_REDIRECT_URL` is blank. |
-| Email (SMTP) | All optional, **as a group**: `SMTP_HOST`, `SMTP_PORT` (default `587`), `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_STARTTLS` (default `true`), `MAIL_FROM` (the From address; with Gmail it must be the authenticated account or a verified alias) — plus `APP_PUBLIC_URL`. With none set, nothing changes: no *Forgot your password?* link, reset endpoints 404, and invitations fall back to raw links. With only some set the feature stays hidden too and the backend logs one startup warning naming the missing ones. The app uses SMTP for password reset links and invitation emails. See *Password reset by email* in §1 for the Gmail specifics (2-Step Verification + App Password). |
+| `APP_PUBLIC_URL` | This instance's public frontend origin, e.g. `https://ledger.example.com` (no trailing slash). Required for password-reset and email-change mail — the links are built from it, never from request headers — and used as the fallback origin for the Enable Banking redirect URL when `ENABLE_BANKING_REDIRECT_URL` is blank. |
+| Email (SMTP) | All optional, **as a group**: `SMTP_HOST`, `SMTP_PORT` (default `587`), `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_STARTTLS` (default `true`), `MAIL_FROM` (the From address; with Gmail it must be the authenticated account or a verified alias) — plus `APP_PUBLIC_URL`. With none set, nothing changes: no *Forgot your password?* link, reset endpoints 404, an email change applies directly instead of being confirmed, and invitations fall back to raw links. With only some set the feature stays hidden too and the backend logs one startup warning naming the missing ones. The app uses SMTP for password reset links, email-change confirmations and invitation emails. See *Password reset, email change & invitations by email* in §1 for the Gmail specifics (2-Step Verification + App Password). |
 | `TELEGRAM_TOKEN_KEY` | Base64 AES key (16/24/32 bytes) used to encrypt stored Telegram bot tokens at rest. Generate with `openssl rand -base64 32`. Required only if a household saves a bot token; keep it stable (rotating it makes stored tokens undecryptable). Optional: `TELEGRAM_API_BASE_URL`, `TELEGRAM_TIMEOUT_MS`. |
 | Portfolio pricing | All optional — holdings work unpriced without them. `EQUITY_PRICE_PROVIDER` (`yahoo` default, or `eodhd` / `twelve_data`), `COINGECKO_API_KEY` (Demo key for crypto), `EODHD_API_KEY` / `TWELVEDATA_API_KEY` (only for those providers). FX (Frankfurter) and Yahoo need no key. Base-URL overrides exist for each provider; see `.env.example`. |
 | Bank ingestion | All optional. The application id and private key are **not** env vars — each household pastes its own in Settings → Banks. What stays here: `ENABLE_BANKING_SECRET_KEY` (base64 AES key, `openssl rand -base64 32`; encrypts the stored credentials and bank sessions at rest — keep it stable, rotating it makes them undecryptable) and `ENABLE_BANKING_REDIRECT_URL` (your public frontend URL + `/settings/banks/callback`; it identifies the instance, so every household registers the same value in its own EB application — left blank the app derives it from the request, fine for local dev). `ENABLE_BANKING_APP_ID` is read **once at startup**, on the first boot after `V030`, to stamp connections created before credentials were per household (see §Upgrading below); drop it afterwards — a fresh install never needs it. Optional overrides: `ENABLE_BANKING_BASE_URL`, `ENABLE_BANKING_CONSENT_VALID_DAYS`, `ENABLE_BANKING_BACKFILL_DAYS`, `ENABLE_BANKING_TIMEOUT_MS`, `ENABLE_BANKING_MAX_CALLS_PER_DAY` (keep at 4 in production — the PSD2 unattended-access cap). |
@@ -895,10 +931,11 @@ After step 6:
 9. **Configure FIRE**: `/fire` → with the transactions, snapshots and movement from the previous steps, the Lean/FIRE/Fat tiers, coverage and projection derive automatically; tweak SWR, inflation, contribution source, scenarios or the tax brackets in the on-page settings and confirm targets move coherently across chart, tiers and table.
 10. **Invite a partner** (owners only): `/settings` → *Members & invitations* → *Issue invitation*. If an email is supplied and SMTP is configured, an invitation email is dispatched (and can be resent via *Resend*); otherwise copy the link `…/register?invite=<token>` and open it in another browser session.
 11. **Reset a password** (only if the SMTP group is configured): log out, click *Forgot your password?* on the login page, enter the admin email, open the mailed link, choose a new password. The old password must be refused and every other signed-in device must be back at the login page. Without SMTP configured the link must be absent.
-12. **Check observability**:
+12. **Change the account email**: `/settings` → *Email address* → a new address plus the current password. With SMTP configured the page says a confirmation link is on its way, the old address gets a notice, and nothing changes until the link is opened; without it the change applies immediately and the current tab keeps working. Afterwards only the new address logs in, and every other signed-in device must be back at the login page.
+13. **Check observability**:
    - `docker compose logs -f backend` shows JSON logs with `requestId`, `userId`, `householdId` populated.
    - From a container on `${SHARED_NETWORK_NAME}`: `curl http://shared-ledger-backend:9090/actuator/prometheus` returns metrics, including `sl_transactions_created_total`, `sl_snapshots_created_total`, `sl_login_attempts_total`, `sl_active_sessions`, `sl_recurring_materialized_total`.
-13. **Switch language**: top-right language picker → ES. Server validation messages localize on subsequent requests via `Accept-Language`.
+14. **Switch language**: top-right language picker → ES. Server validation messages localize on subsequent requests via `Accept-Language`.
 
 ---
 
@@ -906,9 +943,9 @@ After step 6:
 
 - **Daily scheduler.** The recurring materializer runs daily at 02:00 UTC (configurable via `app.scheduler.recurring-cron`). The unique partial index on `transactions(recurring_template_id, occurrence_date)` enforces idempotency; reruns never duplicate. Failures don't crash the app — they're logged with `templateId` MDC and counted in `sl_recurring_materialization_failures_total`.
 - **Portfolio price refresh.** Background jobs keep `price_history` current: crypto intraday, FX just after midnight, and equities early morning; a fourth keeps the `benchmark_price` series (indices/commodities/crypto) current just after equities and tops up its own FX (all cron-configurable under `app.portfolio.*`). Each is gap-filling and idempotent, isolates failures per symbol/benchmark, and self-heals on the next run; the benchmark series also bootstraps its full history on first start. An optional per-household **auto-snapshot** job can also create scheduled net-worth snapshots (off by default; daily/weekly/monthly).
-- **Sessions.** 30-day sliding sessions stored in `SPRING_SESSION`. Cookie `SESSION`, `HttpOnly`, `SameSite=Lax`, `Secure` controlled by `APP_COOKIE_SECURE`. Active session count is exposed as `sl_active_sessions`. A completed password reset deletes all of that user's rows.
+- **Sessions.** 30-day sliding sessions stored in `SPRING_SESSION`. Cookie `SESSION`, `HttpOnly`, `SameSite=Lax`, `Secure` controlled by `APP_COOKIE_SECURE`. Active session count is exposed as `sl_active_sessions`. A completed password reset deletes all of that user's rows, and so does an email change (the rows are indexed by the login email).
 - **CSRF.** The frontend reads the `XSRF-TOKEN` cookie and sends `X-XSRF-TOKEN` on every state-changing request. The frontend hits `/api/auth/csrf` to seed the cookie on app load and on logout.
-- **Rate limiting.** Login attempts are limited per source IP via Bucket4j in-memory (5/min, 20/hour by default); password-reset requests per target email (3/hour) and per source IP (10/hour). State resets on restart — acceptable for a self-hosted single replica.
+- **Rate limiting.** Login attempts are limited per source IP via Bucket4j in-memory (5/min, 20/hour by default); password-reset requests per target email (3/hour) and per source IP (10/hour); email-change requests per user (3/hour). State resets on restart — acceptable for a self-hosted single replica.
 - **Logs.** JSON to stdout, rotated by Docker (`json-file`, 10MB × 5).
 - **Backups.** Postgres is the only durable state; back up the `sharedledger` database with your usual tooling.
 
@@ -1235,7 +1272,8 @@ APP_COOKIE_SECURE=false ADMIN_EMAIL=dev@example.com ADMIN_PASSWORD=devdevdev \
 ```
 
 Password reset by email stays hidden unless the SMTP group **and** `APP_PUBLIC_URL` are set (for the Vite
-dev server that is `APP_PUBLIC_URL=http://localhost:5173`); any local SMTP sink works for `SMTP_HOST`.
+dev server that is `APP_PUBLIC_URL=http://localhost:5173`); any local SMTP sink works for `SMTP_HOST`. The
+same group decides whether an email change is confirmed by a mailed link or applied on the spot.
 
 Frontend:
 

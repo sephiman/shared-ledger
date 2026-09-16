@@ -11,11 +11,14 @@ import com.sephilabs.sharedledger.household.HouseholdRole
 import com.sephilabs.sharedledger.identity.user.User
 import com.sephilabs.sharedledger.identity.user.UserRepository
 import com.sephilabs.sharedledger.config.AppProperties
-import com.sephilabs.sharedledger.identity.passwordreset.RecordingEmailSender
+import com.sephilabs.sharedledger.mail.RecordingEmailSender
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.parallel.ResourceLock
 import org.springframework.beans.factory.annotation.Autowired
 
+/** Counts mails on the shared recording sender, so it can't run beside the other mail-backed flows. */
+@ResourceLock("mail-doubles")
 class InvitationPersistenceTest @Autowired constructor(
     private val users: UserRepository,
     private val households: HouseholdRepository,

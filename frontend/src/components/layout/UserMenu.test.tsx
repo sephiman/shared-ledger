@@ -6,6 +6,12 @@ import { UserMenu } from "@/components/layout/UserMenu";
 import { ThemeProvider } from "@/lib/theme";
 import i18n from "@/i18n";
 
+const updateLocale = { mutate: vi.fn() };
+
+vi.mock("@/api/settings", () => ({
+  useUpdateLocale: () => updateLocale,
+}));
+
 vi.mock("@/auth/AuthContext", () => ({
   useAuth: () => ({
     user: { email: "ada@example.com", households: [{ householdId: "h1", name: "Home" }], defaultHouseholdId: "h1" },
@@ -30,6 +36,7 @@ async function openMenu() {
 
 afterEach(async () => {
   cleanup();
+  vi.clearAllMocks();
   localStorage.clear();
   document.documentElement.className = "";
   await i18n.changeLanguage("en");
@@ -75,5 +82,24 @@ describe("theme selector", () => {
     expect(screen.getByRole("button", { name: "Oscuro" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sistema" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "OLED" })).toBeInTheDocument();
+  });
+});
+
+describe("language picker", () => {
+  it("stores the choice on the account, so mail follows the language in use", async () => {
+    const user = await openMenu();
+
+    await user.click(screen.getByRole("button", { name: "ES" }));
+
+    expect(i18n.language).toBe("es");
+    expect(updateLocale.mutate).toHaveBeenCalledWith("es");
+  });
+
+  it("does not re-save the language already in use", async () => {
+    const user = await openMenu();
+
+    await user.click(screen.getByRole("button", { name: "EN" }));
+
+    expect(updateLocale.mutate).not.toHaveBeenCalled();
   });
 });

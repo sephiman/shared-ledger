@@ -4,7 +4,9 @@ import com.sephilabs.sharedledger.common.SecureTokens
 import com.sephilabs.sharedledger.common.errors.AppException
 import com.sephilabs.sharedledger.config.AppProperties
 import com.sephilabs.sharedledger.identity.auth.UserSessions
+import com.sephilabs.sharedledger.identity.emailchange.EmailChangeService
 import com.sephilabs.sharedledger.identity.user.UserRepository
+import com.sephilabs.sharedledger.mail.MailAvailability
 import com.sephilabs.sharedledger.observability.AppMetrics
 import org.slf4j.LoggerFactory
 import org.springframework.security.crypto.password.PasswordEncoder
@@ -30,7 +32,8 @@ class PasswordResetService(
     private val users: UserRepository,
     private val encoder: PasswordEncoder,
     private val sessions: UserSessions,
-    private val availability: PasswordResetAvailability,
+    private val emailChange: EmailChangeService,
+    private val availability: MailAvailability,
     private val metrics: AppMetrics,
     private val props: AppProperties,
 ) {
@@ -69,6 +72,7 @@ class PasswordResetService(
         val user = users.findById(row.userId).orElseThrow { invalidToken() }
         user.passwordHash = encoder.encode(newPassword)!!
         row.usedAt = Instant.now()
+        emailChange.cancelPending(user.id)
         // Whoever prompted the reset may hold a live session; none of them survives the new password.
         sessions.invalidateAll(user.email)
         metrics.passwordResetCompleted()

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
+import { useUpdateLocale } from "@/api/settings";
 import { cn } from "@/lib/cn";
 import { useTheme, type ThemePreference } from "@/lib/theme";
 
@@ -17,6 +18,7 @@ export function UserMenu() {
   const { user, logout, activeHouseholdId, setActiveHouseholdId } = useAuth();
   const { t, i18n } = useTranslation();
   const { theme, setTheme } = useTheme();
+  const updateLocale = useUpdateLocale();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -121,7 +123,11 @@ export function UserMenu() {
                 <button
                   key={lang.code}
                   type="button"
-                  onClick={() => void i18n.changeLanguage(lang.code)}
+                  onClick={() => {
+                    if (lang.code === activeLang) return;
+                    void i18n.changeLanguage(lang.code);
+                    updateLocale.mutate(lang.code);
+                  }}
                   className={cn(
                     "px-3 py-1 text-sm font-medium transition-colors first:rounded-l-md last:rounded-r-md",
                     activeLang === lang.code

@@ -56,6 +56,7 @@ class SecurityConfig {
                     "/api/auth/features",
                     "/api/auth/password-reset",
                     "/api/auth/password-reset/*",
+                    "/api/auth/email/confirm",
                     "/api/invitations/*"
                 ).permitAll()
                 auth.requestMatchers("/actuator/**").permitAll()

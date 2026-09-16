@@ -46,6 +46,9 @@
     "reset_link_invalid": "This reset link is not valid or has expired.",
     "request_new_link": "Request a new link",
     "reset_done": "Your password was updated. Log in with the new one.",
+    "confirm_email": "Confirming your new email",
+    "email_change_link_invalid": "This confirmation link is not valid or has expired.",
+    "email_change_done": "Your email was updated. Log in with the new address.",
     "back_to_login": "Back to log in"
   },
   "common": {
@@ -1067,6 +1070,14 @@
   },
   "settings": {
     "title": "Settings",
+    "change_email": "Email address",
+    "current_email": "Signed in as {{email}}",
+    "new_email": "New email",
+    "change_email_cta": "Change email",
+    "change_email_verified_hint": "We will send a confirmation link to the new address. Nothing changes until you open it, and you will be signed out everywhere once you do.",
+    "change_email_direct_hint": "The address changes as soon as you confirm your password, and you will be signed out on your other devices.",
+    "email_change_pending": "A confirmation link is on its way to {{email}}. Open it to finish the change.",
+    "email_changed": "Email updated",
     "household_settings": "Household settings",
     "household_settings_description": "Shared name, currency, and default language. Only owners can change these.",
     "members_list_title": "Members",
@@ -1181,7 +1192,10 @@
   },
   "errors": {
     "INVALID_CREDENTIALS": "Invalid email or password",
+    "PASSWORD_MISMATCH": "Current password is incorrect",
     "EMAIL_ALREADY_REGISTERED": "Email is already registered",
+    "EMAIL_CHANGE_TOKEN_INVALID": "This confirmation link is not valid or has expired",
+    "EMAIL_UNCHANGED": "That is already the email of this account",
     "REGISTRATION_DISABLED": "Registration is disabled",
     "REGISTRATION_REQUIRES_INVITATION": "Registration requires a valid invitation",
     "INVITATION_EMAIL_MISMATCH": "This invitation was issued for a different email address",

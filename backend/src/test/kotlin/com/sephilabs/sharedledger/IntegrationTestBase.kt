@@ -1,7 +1,7 @@
 package com.sephilabs.sharedledger
 
 import com.sephilabs.sharedledger.bank.FakeBankConnectorConfig
-import com.sephilabs.sharedledger.identity.passwordreset.PasswordResetTestDoublesConfig
+import com.sephilabs.sharedledger.mail.MailTestDoublesConfig
 import com.sephilabs.sharedledger.notification.RecordingTelegramConfig
 import com.sephilabs.sharedledger.portfolio.StubPriceProviderConfig
 import com.sephilabs.sharedledger.portfolio.benchmark.StubBenchmarkSourceConfig
@@ -43,7 +43,7 @@ class TestBackfillExecutorConfig {
         return Executor { task -> worker.submit(task).get() }
     }
 
-    /** And once more for password-reset mail: the recorded message exists when the 202 comes back. */
+    /** And once more for outgoing mail: the recorded message exists when the response comes back. */
     @Bean("mailExecutor")
     fun mailExecutor(): Executor {
         val worker = Executors.newSingleThreadExecutor()
@@ -91,7 +91,7 @@ class TestSchemaResetConfig {
     FakeBankConnectorConfig::class,
     RecordingTelegramConfig::class,
     StubBenchmarkSourceConfig::class,
-    PasswordResetTestDoublesConfig::class,
+    MailTestDoublesConfig::class,
 )
 abstract class IntegrationTestBase {
 

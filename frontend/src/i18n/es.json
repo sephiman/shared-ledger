@@ -46,6 +46,9 @@
     "reset_link_invalid": "Este enlace no es válido o ha caducado.",
     "request_new_link": "Pedir un enlace nuevo",
     "reset_done": "Tu contraseña se ha actualizado. Entra con la nueva.",
+    "confirm_email": "Confirmando tu nuevo email",
+    "email_change_link_invalid": "Este enlace de confirmación no es válido o ha caducado.",
+    "email_change_done": "Tu email se ha actualizado. Inicia sesión con la nueva dirección.",
     "back_to_login": "Volver a entrar"
   },
   "common": {
@@ -1067,6 +1070,14 @@
   },
   "settings": {
     "title": "Ajustes",
+    "change_email": "Dirección de email",
+    "current_email": "Sesión iniciada como {{email}}",
+    "new_email": "Nuevo email",
+    "change_email_cta": "Cambiar email",
+    "change_email_verified_hint": "Enviaremos un enlace de confirmación a la nueva dirección. No cambia nada hasta que lo abras, y al hacerlo se cerrará tu sesión en todos los dispositivos.",
+    "change_email_direct_hint": "La dirección cambia en cuanto confirmes tu contraseña, y se cerrará tu sesión en los demás dispositivos.",
+    "email_change_pending": "Hemos enviado un enlace de confirmación a {{email}}. Ábrelo para terminar el cambio.",
+    "email_changed": "Email actualizado",
     "household_settings": "Ajustes de la unidad",
     "household_settings_description": "Nombre, moneda e idioma predeterminado compartidos. Sólo los propietarios pueden cambiarlos.",
     "members_list_title": "Miembros",
@@ -1181,7 +1192,10 @@
   },
   "errors": {
     "INVALID_CREDENTIALS": "Email o contraseña no válidos",
+    "PASSWORD_MISMATCH": "La contraseña actual no es correcta",
     "EMAIL_ALREADY_REGISTERED": "El email ya está registrado",
+    "EMAIL_CHANGE_TOKEN_INVALID": "Este enlace de confirmación no es válido o ha caducado",
+    "EMAIL_UNCHANGED": "Esa ya es la dirección de email de esta cuenta",
     "REGISTRATION_DISABLED": "El registro está deshabilitado",
     "REGISTRATION_REQUIRES_INVITATION": "El registro requiere una invitación",
     "INVITATION_EMAIL_MISMATCH": "Esta invitación fue emitida para una dirección de email diferente",

@@ -1,6 +1,8 @@
 package com.sephilabs.sharedledger.identity.passwordreset
 
 import com.sephilabs.sharedledger.IntegrationTestBase
+import com.sephilabs.sharedledger.mail.RecordingEmailSender
+import com.sephilabs.sharedledger.mail.TogglableMailAvailability
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -20,11 +22,11 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import org.springframework.web.context.WebApplicationContext
 
 /** The test profile configures SMTP, so "hidden" is simulated through the availability stub. Locked together
- *  with [PasswordResetFlowTest], which needs the feature switched on. */
-@ResourceLock("password-reset-doubles")
+ *  with every other test that shares the mail doubles. */
+@ResourceLock("mail-doubles")
 class PasswordResetHiddenTest @Autowired constructor(
     private val context: WebApplicationContext,
-    private val availability: TogglablePasswordResetAvailability,
+    private val availability: TogglableMailAvailability,
     private val mailer: RecordingEmailSender,
 ) : IntegrationTestBase() {
 

@@ -17,6 +17,7 @@ data class AppProperties(
     val publicUrl: String = "",
     val mail: Mail = Mail(),
     val passwordReset: PasswordReset = PasswordReset(),
+    val emailChange: EmailChange = EmailChange(),
 ) {
     data class Security(
         val loginRate: LoginRate = LoginRate(),
@@ -66,6 +67,11 @@ data class AppProperties(
         val ttlMinutes: Long = 60,
         val perHourPerEmail: Long = 3,
         val perHourPerIp: Long = 10,
+    )
+
+    data class EmailChange(
+        val ttlMinutes: Long = 60,
+        val perHourPerUser: Long = 3,
     )
 
     data class Scheduler(

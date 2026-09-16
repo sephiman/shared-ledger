@@ -5,6 +5,7 @@ import { LoginPage } from "@/auth/LoginPage";
 import { RegisterPage } from "@/auth/RegisterPage";
 import { ForgotPasswordPage } from "@/auth/ForgotPasswordPage";
 import { ResetPasswordPage } from "@/auth/ResetPasswordPage";
+import { ConfirmEmailPage } from "@/auth/ConfirmEmailPage";
 import { RequireAuth } from "@/auth/RequireAuth";
 import { AppShell } from "@/components/layout/AppShell";
 import { ToastHost } from "@/components/ui/ToastHost";
@@ -38,6 +39,7 @@ export default function App() {
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/confirm-email" element={<ConfirmEmailPage />} />
         <Route
           element={
             <RequireAuth>

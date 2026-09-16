@@ -9,6 +9,7 @@ import com.sephilabs.sharedledger.household.HouseholdMemberRepository
 import com.sephilabs.sharedledger.household.HouseholdRepository
 import com.sephilabs.sharedledger.household.HouseholdRole
 import com.sephilabs.sharedledger.household.invitation.InvitationService
+import com.sephilabs.sharedledger.identity.emailchange.EmailChangeService
 import com.sephilabs.sharedledger.identity.user.HomePanel
 import com.sephilabs.sharedledger.identity.user.PortfolioReturnBasis
 import com.sephilabs.sharedledger.identity.user.User
@@ -26,6 +27,7 @@ class AuthService(
     private val households: HouseholdRepository,
     private val members: HouseholdMemberRepository,
     private val invitations: InvitationService,
+    private val emailChange: EmailChangeService,
     private val encoder: PasswordEncoder,
     private val metrics: AppMetrics,
     private val props: AppProperties,
@@ -93,6 +95,7 @@ class AuthService(
             throw AppException.badRequest("PASSWORD_MISMATCH")
         }
         user.passwordHash = encoder.encode(newPassword)!!
+        emailChange.cancelPending(user.id)
     }
 
     @Transactional

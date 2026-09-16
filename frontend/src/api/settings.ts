@@ -139,6 +139,18 @@ export function useSetDefaultHousehold() {
   });
 }
 
+/** The account's language, not just the UI's: mail (password reset, email change) is written in the stored
+ *  locale, so the picker has to persist it or those go out in the language the user registered with. */
+export function useUpdateLocale() {
+  const { setUser } = useAuth();
+  return useMutation({
+    mutationFn: async (locale: "en" | "es") => (await apiClient.patch<Me>("/auth/me", { locale })).data,
+    onSuccess: (me) => setUser(me),
+    // The whole UI re-rendering in the new language is the confirmation; a toast on top is noise.
+    meta: { silentSuccess: true },
+  });
+}
+
 export function useUpdateHomePanels() {
   const { setUser } = useAuth();
   return useMutation({

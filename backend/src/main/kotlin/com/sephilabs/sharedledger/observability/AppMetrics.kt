@@ -70,6 +70,14 @@ class AppMetrics(private val registry: MeterRegistry) {
             .increment()
     }
 
+    /** requested / applied / confirmed / rejected — `applied` is the unverified path (no SMTP). */
+    fun emailChange(outcome: String) {
+        Counter.builder("sl_email_changes_total")
+            .tag("outcome", outcome)
+            .register(registry)
+            .increment()
+    }
+
     fun passwordResetCompleted() {
         Counter.builder("sl_password_resets_completed_total").register(registry).increment()
     }

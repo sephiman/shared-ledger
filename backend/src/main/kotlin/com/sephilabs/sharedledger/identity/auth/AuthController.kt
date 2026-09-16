@@ -3,22 +3,18 @@ package com.sephilabs.sharedledger.identity.auth
 import com.sephilabs.sharedledger.common.errors.AppException
 import com.sephilabs.sharedledger.household.HouseholdMemberRepository
 import com.sephilabs.sharedledger.household.HouseholdRepository
-import com.sephilabs.sharedledger.identity.passwordreset.AuthFeaturesResponse
-import com.sephilabs.sharedledger.identity.passwordreset.PasswordResetAvailability
 import com.sephilabs.sharedledger.identity.user.HomePanel
 import com.sephilabs.sharedledger.identity.user.PortfolioReturnBasis
 import com.sephilabs.sharedledger.identity.user.User
 import com.sephilabs.sharedledger.identity.user.UserRepository
+import com.sephilabs.sharedledger.mail.MailAvailability
 import com.sephilabs.sharedledger.observability.AppMetrics
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import jakarta.validation.Valid
 import org.springframework.http.ResponseEntity
-import org.springframework.security.authentication.AuthenticationManager
 import org.springframework.security.authentication.BadCredentialsException
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.security.core.context.SecurityContextHolder
-import org.springframework.security.web.context.HttpSessionSecurityContextRepository
 import org.springframework.security.web.csrf.CsrfToken
 import org.springframework.web.bind.annotation.*
 
@@ -28,14 +24,13 @@ class AuthController(
     private val users: UserRepository,
     private val households: HouseholdRepository,
     private val members: HouseholdMemberRepository,
-    private val authManager: AuthenticationManager,
+    private val sessions: UserSessions,
     private val authService: AuthService,
     private val currentUser: CurrentUser,
     private val metrics: AppMetrics,
     private val rateLimiter: LoginRateLimiter,
-    private val passwordReset: PasswordResetAvailability,
+    private val mail: MailAvailability,
 ) {
-    private val contextRepo = HttpSessionSecurityContextRepository()
 
     @GetMapping("/csrf")
     fun csrf(token: CsrfToken): Map<String, String> {
@@ -45,7 +40,8 @@ class AuthController(
     }
 
     @GetMapping("/features")
-    fun features(): AuthFeaturesResponse = AuthFeaturesResponse(passwordReset = passwordReset.enabled)
+    fun features(): AuthFeaturesResponse =
+        AuthFeaturesResponse(passwordReset = mail.enabled, emailChangeVerified = mail.enabled)
 
     @PostMapping("/login")
     fun login(
@@ -59,7 +55,7 @@ class AuthController(
             throw AppException.tooManyRequests()
         }
         try {
-            openSession(body.email, body.password, request, response)
+            sessions.establish(body.email, body.password, request, response)
             val user = users.findByEmailIgnoreCase(body.email) ?: throw BadCredentialsException("INVALID_CREDENTIALS")
             authService.recordLogin(user.id)
             metrics.loginAttempt("success")
@@ -68,20 +64,6 @@ class AuthController(
             metrics.loginAttempt("failure")
             throw ex
         }
-    }
-
-    /** Authenticate and persist the SecurityContext into the HTTP session so the SESSION cookie is written.
-     *  Shared by login and register — registering must land in a real authenticated session, not depend on
-     *  the client issuing a follow-up /login. */
-    private fun openSession(email: String, password: String, request: HttpServletRequest, response: HttpServletResponse) {
-        val auth = authManager.authenticate(UsernamePasswordAuthenticationToken(email, password))
-        // Session-fixation defense: if the client already had a session, rotate its id now that
-        // authentication succeeded, so a pre-seeded session id can't be promoted to an authenticated
-        // one. (When there's no prior session, saveContext mints a fresh one below.)
-        if (request.getSession(false) != null) request.changeSessionId()
-        val context = SecurityContextHolder.createEmptyContext().apply { authentication = auth }
-        SecurityContextHolder.setContext(context)
-        contextRepo.saveContext(context, request, response)
     }
 
     @PostMapping("/logout")
@@ -104,7 +86,7 @@ class AuthController(
         val user = authService.register(body)
         // Establish the session immediately so registration is self-contained:
         // the new user is authenticated without depending on a follow-up /login.
-        openSession(user.email, body.password, request, response)
+        sessions.establish(user.email, body.password, request, response)
         authService.recordLogin(user.id)
         return ResponseEntity.status(201).body(buildMe(user))
     }

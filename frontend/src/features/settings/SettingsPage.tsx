@@ -9,6 +9,7 @@ import { apiErrorMessage } from "@/api/client";
 import { categoryIcon } from "@/lib/categoryGroup";
 import { CreateHouseholdDialog } from "@/features/household/CreateHouseholdDialog";
 import { CustomCategoryDialog } from "./CustomCategoryDialog";
+import { EmailChangeCard } from "./EmailChangeCard";
 import { NotificationsCard } from "./NotificationsCard";
 import { HomePanelsCard } from "./HomePanelsCard";
 import { PortfolioReturnBasisCard } from "./PortfolioReturnBasisCard";
@@ -103,6 +104,8 @@ export function SettingsPage() {
           <Link to="/settings/import" className="text-sm text-primary">{t("import.open")}</Link>
         </CardBody>
       </Card>
+
+      <EmailChangeCard />
 
       <Card>
         <CardHeader>

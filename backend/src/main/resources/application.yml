@@ -108,12 +108,13 @@ app:
   invitations:
     ttl-days: 14
   # Public frontend origin of this deployment, no trailing slash (https://ledger.example.com). Required
-  # for password-reset mail (the link is built from it — never from request headers) and the fallback
+  # for password-reset and email-change mail (links are built from it — never from request headers) and the fallback
   # origin for the Enable Banking redirect URL when that one is not set explicitly.
   public-url: ${APP_PUBLIC_URL:}
-  # Outbound mail (optional, configured as a group). Used only for self-service password reset, which
-  # stays hidden — no link on the login page, endpoints 404 — until host, username, password, from and
-  # app.public-url are all set. Partial configuration logs one startup warning naming the missing vars.
+  # Outbound mail (optional, configured as a group). Drives self-service password reset, which stays
+  # hidden — no link on the login page, endpoints 404 — and the verified half of the email change, which
+  # falls back to a direct swap. Both need host, username, password, from and app.public-url set;
+  # partial configuration logs one startup warning naming the missing vars.
   mail:
     host: ${SMTP_HOST:}
     port: ${SMTP_PORT:587}
@@ -126,6 +127,10 @@ app:
     ttl-minutes: 60
     per-hour-per-email: 3
     per-hour-per-ip: 10
+  email-change:
+    ttl-minutes: 60
+    # The request is authenticated, so this only bounds how many addresses one account can mail.
+    per-hour-per-user: 3
   scheduler:
     recurring-cron: "0 0 2 * * *"
     # Zone all @Scheduled jobs fire in. Keep UTC: business dates are stamped with UTC

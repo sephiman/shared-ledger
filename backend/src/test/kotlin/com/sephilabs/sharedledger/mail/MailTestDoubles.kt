@@ -1,9 +1,5 @@
-package com.sephilabs.sharedledger.identity.passwordreset
+package com.sephilabs.sharedledger.mail
 
-import com.sephilabs.sharedledger.mail.EmailSender
-import com.sephilabs.sharedledger.mail.OutgoingEmail
-import com.sephilabs.sharedledger.mail.SendResult
-import com.sephilabs.sharedledger.mail.SmtpSettings
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Primary
@@ -18,22 +14,24 @@ class RecordingEmailSender : EmailSender {
         sent.add(mail)
         return SendResult(nextOk, if (nextOk) null else "535-5.7.8 Username and Password not accepted")
     }
+
+    fun to(email: String): List<OutgoingEmail> = sent.filter { it.to == email }
 }
 
 /** Lets a test pretend SMTP is absent without booting a second Spring context. [forced] null = real value. */
-class TogglablePasswordResetAvailability(smtp: SmtpSettings) : PasswordResetAvailability(smtp) {
+class TogglableMailAvailability(smtp: SmtpSettings) : MailAvailability(smtp) {
     @Volatile var forced: Boolean? = null
 
     override val enabled: Boolean get() = forced ?: super.enabled
 }
 
 @TestConfiguration
-class PasswordResetTestDoublesConfig {
+class MailTestDoublesConfig {
     @Bean
     @Primary
     fun recordingEmailSender() = RecordingEmailSender()
 
     @Bean
     @Primary
-    fun togglablePasswordResetAvailability(smtp: SmtpSettings) = TogglablePasswordResetAvailability(smtp)
+    fun togglableMailAvailability(smtp: SmtpSettings) = TogglableMailAvailability(smtp)
 }

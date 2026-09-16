@@ -18,6 +18,7 @@ export function LoginPage() {
   const location = useLocation();
   const features = useAuthFeatures();
   const justReset = new URLSearchParams(location.search).get("reset") === "done";
+  const emailChanged = new URLSearchParams(location.search).get("email") === "changed";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +62,11 @@ export function LoginPage() {
             {justReset && (
               <p role="status" className="rounded-md bg-item-hover px-3 py-2 text-sm text-gray-700 dark:text-gray-200">
                 {t("auth.reset_done")}
+              </p>
+            )}
+            {emailChanged && (
+              <p role="status" className="rounded-md bg-item-hover px-3 py-2 text-sm text-gray-700 dark:text-gray-200">
+                {t("auth.email_change_done")}
               </p>
             )}
             <div>

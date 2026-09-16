@@ -23,7 +23,3 @@ data class PasswordResetConfirmRequest(
     @field:Size(min = 8, message = "validation.password.length")
     val newPassword: String,
 )
-
-data class AuthFeaturesResponse(
-    val passwordReset: Boolean,
-)
