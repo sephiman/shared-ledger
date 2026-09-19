@@ -63,6 +63,7 @@
     "loading": "Cargando…",
     "empty": "Nada por aquí.",
     "confirm": "Confirmar",
+    "sort_by": "Ordenar por {{column}}",
     "amount": "Importe",
     "date": "Fecha",
     "description": "Descripción",

@@ -28,11 +28,32 @@ import { formatDate, isoToday } from "@/lib/dates";
 import { useToggleSet } from "@/lib/useToggleSet";
 import { SymbolSearchCombobox } from "./SymbolSearchCombobox";
 import { DUST_HOLDING_MAX_VALUE_EUR, isDustHolding, partitionDust } from "./dustHoldings";
+import { weightsWithin } from "./holdingWeights";
+import { nextSort, sortHoldings, type HoldingSort, type HoldingSortKey } from "./holdingsSort";
 import { fractionToPercent, percentLabel, pnlTone, returnPercents, signedMoney } from "./valuation";
 import { formatPriceAge, oldestStalePriceAge, priceAge, priceAsOfLabel, type PriceAge } from "./priceFreshness";
 import { cn } from "@/lib/cn";
 
 const ASSET_CLASSES: HoldingAssetClass[] = ["crypto", "etf", "stock", "fund"];
+
+interface HoldingColumn {
+  key: HoldingSortKey;
+  labelKey: string;
+  align: "left" | "right";
+  className?: string;
+}
+
+/** The desktop table's columns, in order; every one of them sorts on the figure it prints. */
+const COLUMNS: HoldingColumn[] = [
+  { key: "symbol", labelKey: "portfolio.symbol", align: "left" },
+  { key: "quantity", labelKey: "portfolio.quantity", align: "right" },
+  { key: "costBasis", labelKey: "portfolio.cost_basis", align: "right" },
+  { key: "currentPrice", labelKey: "portfolio.current_price", align: "right", className: "min-w-[9.5rem]" },
+  { key: "currentValue", labelKey: "portfolio.current_value", align: "right" },
+  { key: "unrealizedPnl", labelKey: "portfolio.unrealized_pnl", align: "right" },
+  { key: "realizedPnl", labelKey: "portfolio.realized_pnl", align: "right" },
+  { key: "weight", labelKey: "portfolio.weight", align: "right" },
+];
 
 /** Per browser, like the theme: a view preference for this table, with no home in Settings. */
 const SHOW_CLOSED_KEY = "sl.portfolio.showClosed";
@@ -151,6 +172,7 @@ export function HoldingsTab() {
   const expanded = useToggleSet<string>();
   const [assetFilter, setAssetFilter] = useState<AssetFilter>("all");
   const [showClosed, setShowClosed] = useState(readShowClosed);
+  const [sort, setSort] = useState<HoldingSort | null>(null);
 
   useEffect(() => {
     try {
@@ -170,10 +192,13 @@ export function HoldingsTab() {
     assetFilter !== "all" && !availableClasses.includes(assetFilter) ? "all" : assetFilter;
   const filtered =
     effectiveFilter === "all" ? holdings : holdings.filter((h) => h.holding.assetClass === effectiveFilter);
+  // Whatever the filter leaves is what the weight column is a share of, so the percentages on screen always
+  // add up to 100 % — a class filtered out is not 40 % of the table it is no longer in.
+  const weights = weightsWithin(filtered);
   // Display-only, and deliberately the last step: `filtered` stays the basis for every card, the
   // stale notice and the weights, so hiding a row never moves a number.
   const { visible, hiddenCount } = partitionDust(filtered);
-  const rows = showClosed ? filtered : visible;
+  const listed = showClosed ? filtered : visible;
   // Anchored to the whole portfolio rather than the current filter, so the control doesn't blink in
   // and out while switching asset types.
   const anyDust = holdings.some(isDustHolding);
@@ -190,6 +215,7 @@ export function HoldingsTab() {
         }
       : subtotals(filtered);
   const locale = i18n.language;
+  const rows = sortHoldings(listed, sort, weights, locale);
   // One reference instant for the whole render, so every row's age and the "oldest price"
   // line are measured against the same clock.
   const now = new Date();
@@ -468,14 +494,14 @@ export function HoldingsTab() {
                 <thead className="text-left text-gray-500 dark:text-gray-400">
                   <tr>
                     <th className="w-6 py-2"></th>
-                    <th>{t("portfolio.symbol")}</th>
-                    <th className="text-right">{t("portfolio.quantity")}</th>
-                    <th className="text-right">{t("portfolio.cost_basis")}</th>
-                    <th className="min-w-[9.5rem] text-right">{t("portfolio.current_price")}</th>
-                    <th className="text-right">{t("portfolio.current_value")}</th>
-                    <th className="text-right">{t("portfolio.unrealized_pnl")}</th>
-                    <th className="text-right">{t("portfolio.realized_pnl")}</th>
-                    <th className="text-right">{t("portfolio.weight")}</th>
+                    {COLUMNS.map((column) => (
+                      <SortableColumn
+                        key={column.key}
+                        column={column}
+                        sort={sort}
+                        onSort={(key) => setSort((current) => nextSort(current, key))}
+                      />
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
@@ -551,7 +577,7 @@ export function HoldingsTab() {
                             {signedMoney(row.realizedPnl, money(row.realizedPnl))}
                           </td>
                           <td className="whitespace-nowrap text-right font-mono tabular-nums">
-                            {row.weight != null ? `${formatNumber(fractionToPercent(row.weight) ?? 0, locale, 1)}%` : "—"}
+                            {percentLabel(weights.get(row.holding.id), locale)}
                           </td>
                         </tr>
                         {isOpen && (
@@ -580,6 +606,44 @@ export function HoldingsTab() {
         </CardBody>
       </Card>
     </div>
+  );
+}
+
+/** A header that sorts the table by its own column. `aria-sort` carries the state for a screen reader, the
+ *  caret for everyone else; the caret's slot is reserved so a click never nudges the header sideways. */
+function SortableColumn({
+  column,
+  sort,
+  onSort,
+}: {
+  column: HoldingColumn;
+  sort: HoldingSort | null;
+  onSort: (key: HoldingSortKey) => void;
+}) {
+  const { t } = useTranslation();
+  const active = sort?.key === column.key;
+  const label = t(column.labelKey);
+  return (
+    <th
+      scope="col"
+      className={cn("py-2", column.align === "right" && "text-right", column.className)}
+      aria-sort={!active ? "none" : sort.direction === "asc" ? "ascending" : "descending"}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(column.key)}
+        title={t("common.sort_by", { column: label })}
+        className={cn(
+          "inline-flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200",
+          active && "text-gray-700 dark:text-gray-200",
+        )}
+      >
+        {label}
+        <span aria-hidden className="w-2 text-[0.625rem] leading-none">
+          {active ? (sort.direction === "asc" ? "▲" : "▼") : ""}
+        </span>
+      </button>
+    </th>
   );
 }
 

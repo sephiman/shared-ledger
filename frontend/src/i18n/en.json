@@ -63,6 +63,7 @@
     "loading": "Loading…",
     "empty": "Nothing here yet.",
     "confirm": "Confirm",
+    "sort_by": "Sort by {{column}}",
     "amount": "Amount",
     "date": "Date",
     "description": "Description",

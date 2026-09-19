@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { HoldingAssetClass, HoldingSummary, Lot, PortfolioSummary } from "@/api/portfolio";
 import i18n from "@/i18n";
@@ -131,6 +131,23 @@ function rowCount(symbol: string): number {
 
 function isVisible(symbol: string): boolean {
   return rowCount(symbol) > 0;
+}
+
+/** The symbols the desktop table lists, top to bottom. The symbol cell is the first one in the tree (the
+ *  expander caret is `aria-hidden`) and leads with the symbol, ahead of the label and the asset class. */
+function tableOrder(): string[] {
+  const [, ...rows] = within(screen.getByRole("table")).getAllByRole("row");
+  return rows.map((row) => within(row).getAllByRole("cell")[0].firstElementChild?.textContent ?? "");
+}
+
+/** The weight cell (last column) of the row for [symbol]. */
+function weightOf(symbol: string): string {
+  const row = within(screen.getByRole("table"))
+    .getAllByRole("row")
+    .find((candidate) => within(candidate).queryByText(symbol) != null);
+  if (!row) throw new Error(`no table row for ${symbol}`);
+  const cells = within(row).getAllByRole("cell");
+  return cells[cells.length - 1].textContent ?? "";
 }
 
 function show(holdings: HoldingSummary[]) {
@@ -332,5 +349,91 @@ describe("editing a trade", () => {
 
     await user.selectOptions(screen.getByRole("combobox"), "SELL");
     expect(screen.getByText("Estás convirtiendo una compra en una venta.")).toBeInTheDocument();
+  });
+});
+
+describe("sorting by column", () => {
+  const BTC = holding("BTC", "1200.00");
+  const ADA = holding("ADA", "300.00");
+  const ETH = holding("ETH", "600.00");
+
+  it("keeps the order the server sent until a column is picked", () => {
+    show([BTC, ADA, ETH]);
+    expect(tableOrder()).toEqual(["BTC", "ADA", "ETH"]);
+  });
+
+  it("sorts on the biggest value first, and flips on a second click", async () => {
+    const user = show([BTC, ADA, ETH]);
+    await user.click(screen.getByRole("button", { name: "Current value" }));
+    expect(tableOrder()).toEqual(["BTC", "ETH", "ADA"]);
+
+    await user.click(screen.getByRole("button", { name: "Current value" }));
+    expect(tableOrder()).toEqual(["ADA", "ETH", "BTC"]);
+  });
+
+  it("opens the symbol column A→Z instead", async () => {
+    const user = show([BTC, ADA, ETH]);
+    await user.click(screen.getByRole("button", { name: "Symbol" }));
+    expect(tableOrder()).toEqual(["ADA", "BTC", "ETH"]);
+  });
+
+  it("sorts by weight, which the backend never sends as a column of its own", async () => {
+    const user = show([ADA, BTC, ETH]);
+    await user.click(screen.getByRole("button", { name: "Weight" }));
+    expect(tableOrder()).toEqual(["BTC", "ETH", "ADA"]);
+  });
+
+  it("leaves an unpriced holding at the bottom whichever way the column points", async () => {
+    const user = show([BTC, holding("FUND", null), ADA]);
+    await user.click(screen.getByRole("button", { name: "Current value" }));
+    expect(tableOrder().at(-1)).toBe("FUND");
+
+    await user.click(screen.getByRole("button", { name: "Current value" }));
+    expect(tableOrder().at(-1)).toBe("FUND");
+  });
+
+  it("states the sorted column and its direction for assistive tech", async () => {
+    const user = show([BTC, ADA]);
+    expect(screen.getByRole("columnheader", { name: "Current value" })).toHaveAttribute("aria-sort", "none");
+
+    await user.click(screen.getByRole("button", { name: "Current value" }));
+    expect(screen.getByRole("columnheader", { name: "Current value" })).toHaveAttribute("aria-sort", "descending");
+    // Picking another column releases the first one.
+    await user.click(screen.getByRole("button", { name: "Symbol" }));
+    expect(screen.getByRole("columnheader", { name: "Current value" })).toHaveAttribute("aria-sort", "none");
+    expect(screen.getByRole("columnheader", { name: "Symbol" })).toHaveAttribute("aria-sort", "ascending");
+  });
+
+  it("survives the asset-type filter without losing the column", async () => {
+    const user = show([BTC, SECOND_OPEN, ADA]);
+    await user.click(screen.getByRole("button", { name: "Current value" }));
+    await user.selectOptions(screen.getByRole("combobox"), "crypto");
+    expect(tableOrder()).toEqual(["BTC", "ADA"]);
+  });
+
+  it("translates the header tooltips", async () => {
+    await i18n.changeLanguage("es");
+    show([BTC, ADA]);
+    expect(screen.getByRole("button", { name: "Peso" })).toHaveAttribute("title", "Ordenar por Peso");
+  });
+});
+
+describe("the weight column", () => {
+  it("gives each holding its share of the portfolio", () => {
+    show([holding("BTC", "1200.00"), holding("VWCE", "300.00", { assetClass: "etf" })]);
+    expect(weightOf("BTC")).toBe("80.0%");
+    expect(weightOf("VWCE")).toBe("20.0%");
+  });
+
+  it("re-bases on the asset type being filtered, so the column still adds up to 100 %", async () => {
+    const user = show([holding("BTC", "1200.00"), holding("VWCE", "300.00", { assetClass: "etf" })]);
+    await user.selectOptions(screen.getByRole("combobox"), "etf");
+    expect(weightOf("VWCE")).toBe("100.0%");
+  });
+
+  it("leaves an unpriced holding without a weight, and out of everyone else's denominator", () => {
+    show([holding("BTC", "900.00"), holding("ETH", "300.00"), holding("FUND", null)]);
+    expect(weightOf("FUND")).toBe("—");
+    expect(weightOf("BTC")).toBe("75.0%");
   });
 });
