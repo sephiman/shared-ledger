@@ -78,7 +78,7 @@ class BankService(
     }
 
     /** The status to *show*. The stored one only catches up on the next sync, so a household that just lost
-     *  or changed its credentials would display a stale `active` for hours. [BankSyncService] persists the
+     *  or changed its credentials would display a stale `active` for hours. [com.sephilabs.sharedledger.bank.sync.BankSyncService] persists the
      *  same rule. */
     private fun effectiveStatus(connection: BankConnection, configuredAppId: String?): ConnectionStatus = when {
         configuredAppId == null -> ConnectionStatus.credentials_required
@@ -232,6 +232,24 @@ class BankService(
     }
 
     @Transactional
+    fun updateAccount(
+        householdId: UUID,
+        connectionId: UUID,
+        accountId: UUID,
+        request: UpdateAccountRequest,
+        by: User,
+        role: HouseholdRole,
+    ): BankConnectionDto {
+        val connection = manageable(householdId, connectionId, by, role)
+        val account = accounts.findById(accountId).orElse(null)
+            ?.takeIf { it.connectionId == connection.id }
+            ?: throw AppException.notFound("BANK_ACCOUNT_NOT_FOUND")
+        account.ingestionEnabled = request.ingestionEnabled
+        connection.updatedByUserId = by.id
+        return connection.toDto(canManage = true, configuredAppId = credentials.findRow(householdId)?.appId)
+    }
+
+    @Transactional
     fun delete(householdId: UUID, id: UUID, by: User, role: HouseholdRole) {
         val connection = manageable(householdId, id, by, role)
         // Cascades remove accounts, pending movements, and sync runs (FK ON DELETE CASCADE).
@@ -258,7 +276,13 @@ class BankService(
             ingestionEnabled = ingestionEnabled,
             syncFrequency = syncFrequency,
             accounts = accounts.findAllByConnectionId(id).map {
-                BankAccountDto(id = it.id, ibanMasked = it.ibanMasked, name = it.name, currency = it.currency)
+                BankAccountDto(
+                    id = it.id,
+                    ibanMasked = it.ibanMasked,
+                    name = it.name,
+                    currency = it.currency,
+                    ingestionEnabled = it.ingestionEnabled,
+                )
             },
             lastSyncStatus = lastRun?.status,
             lastSyncError = lastRun?.errorMessage,

@@ -7,10 +7,22 @@ import com.sephilabs.sharedledger.identity.user.User
 import com.sephilabs.sharedledger.identity.user.UserRepository
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.parallel.ResourceLock
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 import java.math.BigDecimal
+import java.time.Duration
+import java.time.Instant
 import java.time.LocalDate
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.locks.LockSupport
 
+// runForAll sweeps every active schedule in the database, so it must not run while another class's
+// schedules are mid-test — see LendingLifecycleIntegrationTest.
+@ResourceLock("lending-schedules")
 class LendingScheduleMaterializerIntegrationTest @Autowired constructor(
     private val users: UserRepository,
     private val households: HouseholdRepository,
@@ -18,6 +30,8 @@ class LendingScheduleMaterializerIntegrationTest @Autowired constructor(
     private val schedules: LendingScheduleRepository,
     private val payments: LendingPaymentRepository,
     private val materializer: LendingScheduleMaterializer,
+    private val txManager: PlatformTransactionManager,
+    private val jdbc: JdbcTemplate,
 ) : IntegrationTestBase() {
 
     @Test
@@ -49,15 +63,14 @@ class LendingScheduleMaterializerIntegrationTest @Autowired constructor(
             schedules.save(this)
         }
 
-        val firstRun = materializer.runForAll(LocalDate.of(2025, 4, 15))
+        // runForAll's return sums every household's schedules, so assert on this lending's rows only.
+        materializer.runForAll(LocalDate.of(2025, 4, 15))
         val firstCount = payments.findAllByLendingIdOrderByPaymentDateAsc(lending.id).size
-        val secondRun = materializer.runForAll(LocalDate.of(2025, 4, 15))
+        materializer.runForAll(LocalDate.of(2025, 4, 15))
         val secondCount = payments.findAllByLendingIdOrderByPaymentDateAsc(lending.id).size
 
         // Jan 1, Feb 1, Mar 1, Apr 1 = 4 payments
-        assertThat(firstRun).isEqualTo(4)
         assertThat(firstCount).isEqualTo(4)
-        assertThat(secondRun).isEqualTo(0)
         assertThat(secondCount).isEqualTo(firstCount)
 
         val schedule = schedules.findByLendingId(lending.id)!!
@@ -87,8 +100,7 @@ class LendingScheduleMaterializerIntegrationTest @Autowired constructor(
             ),
             user,
         )
-        val created = materializer.runForAll(LocalDate.of(2025, 6, 1))
-        assertThat(created).isEqualTo(0)
+        materializer.runForAll(LocalDate.of(2025, 6, 1))
         assertThat(payments.findAllByLendingIdOrderByPaymentDateAsc(lending.id)).isEmpty()
     }
 
@@ -119,9 +131,8 @@ class LendingScheduleMaterializerIntegrationTest @Autowired constructor(
             user,
         )
 
-        val created = materializer.runForAll(today)
+        materializer.runForAll(today)
 
-        assertThat(created).isEqualTo(0)
         assertThat(payments.findAllByLendingIdOrderByPaymentDateAsc(lending.id)).isEmpty()
         val schedule = schedules.findByLendingId(lending.id)!!
         assertThat(schedule.lastMaterializedThrough).isEqualTo(today)
@@ -182,6 +193,60 @@ class LendingScheduleMaterializerIntegrationTest @Autowired constructor(
         service.settle(household.id, lending.id, LendingStatusTransitionRequest(), user)
         val schedule = schedules.findByLendingId(lending.id)!!
         assertThat(schedule.active).isFalse
+    }
+
+    @Test
+    fun `a sweep racing a settle never re-activates the settled schedule`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val lending = service.create(
+            household.id,
+            LendingRequest("Ivy ${System.nanoTime()}", BigDecimal("400.00"), today.minusMonths(2), interestType = InterestType.none),
+            user,
+        )
+        val notToday = if (today.dayOfMonth == 1) 2 else 1
+        service.upsertSchedule(
+            household.id, lending.id,
+            LendingScheduleRequest(LendingFrequency.monthly, dayOfMonth = notToday.toShort(), expectedAmount = BigDecimal("100.00")),
+            user,
+        )
+        val sweeper = Executors.newSingleThreadExecutor()
+        try {
+            // The settle side holds the row lock uncommitted while the sweep reads the old `active = true`
+            // and queues its write behind that lock — the exact interleaving of the nightly race.
+            TransactionTemplate(txManager).execute {
+                val schedule = schedules.findByLendingId(lending.id)!!
+                schedule.active = false
+                schedules.saveAndFlush(schedule)
+                val sweep = sweeper.submit<Int> { materializer.runForAll(today) }
+                awaitBlockedScheduleUpdate()
+                check(!sweep.isDone) { "sweep finished without touching the locked schedule" }
+            }
+            sweeper.shutdown()
+            assertThat(sweeper.awaitTermination(30, TimeUnit.SECONDS)).isTrue()
+        } finally {
+            sweeper.shutdownNow()
+        }
+
+        val schedule = schedules.findByLendingId(lending.id)!!
+        assertThat(schedule.active).isFalse()
+        assertThat(schedule.lastMaterializedThrough).isEqualTo(today)
+    }
+
+    /** Waits (bounded) until another session queues behind this transaction's row lock. */
+    private fun awaitBlockedScheduleUpdate() {
+        val deadline = Instant.now().plus(Duration.ofSeconds(15))
+        while (Instant.now().isBefore(deadline)) {
+            // pg_stat_activity is snapshotted once per transaction; this poll runs inside the locking one.
+            jdbc.queryForObject("SELECT pg_stat_clear_snapshot()::text", String::class.java)
+            val blocked = jdbc.queryForObject(
+                "SELECT count(*) FROM pg_stat_activity WHERE pg_backend_pid() = ANY(pg_blocking_pids(pid))",
+                Int::class.java,
+            )
+            if (blocked != null && blocked > 0) return
+            LockSupport.parkNanos(Duration.ofMillis(10).toNanos())
+        }
+        error("the sweep never reached the locked schedule")
     }
 
     private fun seed(): Pair<User, Household> {

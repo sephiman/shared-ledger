@@ -17,6 +17,8 @@ import java.math.BigDecimal
 import java.time.LocalDate
 
 @ResourceLock("stub-price-providers")
+// migrate() relinks or unlinks every off-provider equity holding in the database, not just this class's.
+@ResourceLock("equity-provider-migration")
 class EquityProviderMigrationIntegrationTest @Autowired constructor(
     private val users: UserRepository,
     private val households: HouseholdRepository,

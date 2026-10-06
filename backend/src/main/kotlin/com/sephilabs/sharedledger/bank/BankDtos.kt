@@ -61,6 +61,7 @@ data class BankAccountDto(
     val ibanMasked: String?,
     val name: String?,
     val currency: String?,
+    val ingestionEnabled: Boolean,
 )
 
 data class BankConnectionDto(
@@ -108,6 +109,8 @@ data class UpdateConnectionRequest(
     val ingestionEnabled: Boolean? = null,
     val syncFrequency: SyncFrequency? = null,
 )
+
+data class UpdateAccountRequest(val ingestionEnabled: Boolean)
 
 // --- Pending movements (review inbox) --------------------------------------------------------
 

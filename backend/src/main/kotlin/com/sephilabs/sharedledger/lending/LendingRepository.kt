@@ -37,4 +37,8 @@ interface LendingPaymentRepository : JpaRepository<LendingPayment, UUID> {
 interface LendingScheduleRepository : JpaRepository<LendingSchedule, UUID> {
     fun findByLendingId(lendingId: UUID): LendingSchedule?
     fun findAllByActiveTrue(): List<LendingSchedule>
+
+    @Modifying
+    @Query("UPDATE LendingSchedule s SET s.lastMaterializedThrough = :through WHERE s.id = :id")
+    fun markMaterializedThrough(@Param("id") id: UUID, @Param("through") through: LocalDate): Int
 }

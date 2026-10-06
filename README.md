@@ -531,7 +531,7 @@ Wise could be added via its own API) with the always-available CSV import as the
     never shown for later links or re-links.
 - **Who can manage a connection.** Every member sees every connection in the household (and the
   movements it brings in — bank data is household data). *Managing* one — sync now, re-link, rename,
-  disable ingestion, delete — belongs to the member who linked it, plus any owner; for anyone else
+  pause it or any of its accounts, delete — belongs to the member who linked it, plus any owner; for anyone else
   those actions are hidden in the UI and refused by the API (`NOT_CONNECTION_MANAGER`). Connections
   created before per-member linking have no recorded linker and stay owner-only. The SCA callback
   must be finished by the same member who started it.
@@ -540,6 +540,25 @@ Wise could be added via its own API) with the always-available CSV import as the
   Relatives each link their own account with their own SCA — credentials are never shared.
 - **Multiple connections** per household, including several to the same bank (e.g. two Wise
   accounts), each with its own label, holder, consent, sync cursor, status, and call budget.
+- **Accounts within a connection.** One consent can grant several accounts (Bankinter returns every
+  IBAN the holder whitelisted). The connection card lists each one — name, masked IBAN, currency —
+  with a *Syncing* / *Paused* label, and a manager can **pause or resume a single account**
+  alongside the connection-level *Pause sync*, which still wins over everything below it.
+  - A paused account is **skipped before any call to the bank**, so it costs none of the consent's
+    ~4 daily unattended calls (which the accounts of one consent share). Its incremental window is
+    its own — the latest stored booking date *of that account* — so skipping it never shifts a
+    sibling's.
+  - **Every account paused** behaves like a paused connection: the run stops before even the consent
+    check, with no sync-run record and no calls spent. (A consent that granted *no* accounts is not
+    "paused" and still runs, to surface the whitelist problem above.)
+  - **Resuming fills the gap.** The next sync fetches the account from its latest stored booking
+    date minus the overlap, clamped to the **90-day** unattended window (`ENABLE_BANKING_BACKFILL_DAYS`),
+    and dedup drops what is already stored — so a pause shorter than ~3 months heals completely, and
+    *Sync now* fetches it immediately. Anything older than that window is not fetched again. An account
+    paused **before its first full-history sync** therefore only ever gets those 90 days back, never
+    its full history.
+  - Accounts a later re-link adds start **active**; re-linking keeps existing accounts' pause state.
+    Movements already in the inbox are untouched by a pause.
 - **Sync** follows Enable Banking's fetch rules and comes in two shapes:
   - **Initial (on link)** — a **full-history** sync using `strategy=longest` (the provider finds the
     earliest available transaction and pulls everything forward). It runs asynchronously right after

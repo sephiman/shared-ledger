@@ -67,11 +67,7 @@ class LendingScheduleMaterializer(
             val dates: List<LocalDate> = if (forceFireToday) (cadenceDates + today).toSortedSet().toList()
                 else cadenceDates
             if (dates.isEmpty()) {
-                runInTx {
-                    val refreshed = schedules.findById(schedule.id).orElse(schedule)
-                    refreshed.lastMaterializedThrough = today
-                    schedules.save(refreshed)
-                }
+                runInTx { schedules.markMaterializedThrough(schedule.id, today) }
                 return 0
             }
 
@@ -97,11 +93,7 @@ class LendingScheduleMaterializer(
                     log.debug("Skipped duplicate lending payment on {} for schedule {}", date, scheduleId)
                 }
             }
-            runInTx {
-                val refreshed = schedules.findById(schedule.id).orElse(schedule)
-                refreshed.lastMaterializedThrough = today
-                schedules.save(refreshed)
-            }
+            runInTx { schedules.markMaterializedThrough(schedule.id, today) }
             val actor = firedBy?.let { NotifyActor.Human(it.email) } ?: NotifyActor.Schedule(lending.householdId)
             notifications.recurringLendingPayments(
                 lending.householdId, lending.borrowerName, schedule.expectedAmount, created, actor,

@@ -90,6 +90,15 @@ class BankController(
     ): BankConnectionDto =
         bankService.update(householdId, id, body, currentUser.requireUser(), householdContext.role())
 
+    @PatchMapping("/connections/{id}/accounts/{accountId}")
+    fun updateAccount(
+        @PathVariable householdId: UUID,
+        @PathVariable id: UUID,
+        @PathVariable accountId: UUID,
+        @RequestBody body: UpdateAccountRequest,
+    ): BankConnectionDto =
+        bankService.updateAccount(householdId, id, accountId, body, currentUser.requireUser(), householdContext.role())
+
     @DeleteMapping("/connections/{id}")
     fun delete(@PathVariable householdId: UUID, @PathVariable id: UUID): ResponseEntity<Void> {
         bankService.delete(householdId, id, currentUser.requireUser(), householdContext.role())

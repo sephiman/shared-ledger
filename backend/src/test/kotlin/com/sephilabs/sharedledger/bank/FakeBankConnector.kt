@@ -32,6 +32,10 @@ class FakeBankConnector : BankConnector {
     var status: ConsentStatus = ConsentStatus.ACTIVE
     val movements: MutableList<BankMovement> = mutableListOf()
 
+    /** Per-account movements; an account without an entry is served [movements]. */
+    val movementsByAccount: MutableMap<String, MutableList<BankMovement>> = mutableMapOf()
+    var sessionStatusCalls: Int = 0
+
     /** Every fetchMovements invocation, for asserting account / strategy / window / interactivity / paging. */
     data class FetchCall(
         val accountUid: String,
@@ -82,6 +86,7 @@ class FakeBankConnector : BankConnector {
 
     override fun sessionStatus(creds: EbCredentials, sessionId: String): ConsentStatus {
         lastCreds = creds
+        sessionStatusCalls++
         return status
     }
 
@@ -107,7 +112,7 @@ class FakeBankConnector : BankConnector {
         }
         if (scriptedPages.isNotEmpty()) return scriptedPages.removeFirst()
         // Both bounds inclusive, as the provider documents them.
-        val filtered = movements.filter {
+        val filtered = (movementsByAccount[accountUid] ?: movements).filter {
             (dateFrom == null || !it.bookingDate.isBefore(dateFrom)) &&
                 (dateTo == null || !it.bookingDate.isAfter(dateTo))
         }

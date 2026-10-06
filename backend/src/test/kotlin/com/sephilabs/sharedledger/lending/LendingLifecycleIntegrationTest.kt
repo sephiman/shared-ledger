@@ -8,10 +8,14 @@ import com.sephilabs.sharedledger.identity.user.UserRepository
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.parallel.ResourceLock
 import org.springframework.beans.factory.annotation.Autowired
 import java.math.BigDecimal
 import java.time.LocalDate
 
+// Its schedules are fair game for LendingScheduleMaterializerIntegrationTest's global sweep, which on the
+// 1st of a month would materialize payments into them mid-test.
+@ResourceLock("lending-schedules")
 class LendingLifecycleIntegrationTest @Autowired constructor(
     private val users: UserRepository,
     private val households: HouseholdRepository,

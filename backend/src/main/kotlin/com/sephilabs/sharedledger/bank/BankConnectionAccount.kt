@@ -31,6 +31,10 @@ class BankConnectionAccount(
     @Column(name = "currency", length = 3)
     var currency: String? = null,
 
+    // Paused accounts are skipped by sync before any provider call; resuming backfills via the usual window.
+    @Column(name = "ingestion_enabled", nullable = false)
+    var ingestionEnabled: Boolean = true,
+
     @Column(name = "created_at", nullable = false)
     var createdAt: Instant = Instant.now(),
 )

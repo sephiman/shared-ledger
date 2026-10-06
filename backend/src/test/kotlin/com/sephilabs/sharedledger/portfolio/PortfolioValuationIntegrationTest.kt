@@ -11,12 +11,16 @@ import com.sephilabs.sharedledger.portfolio.price.PricePoint
 import com.sephilabs.sharedledger.portfolio.price.PricePointRepository
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.parallel.ResourceLock
 import org.springframework.beans.factory.annotation.Autowired
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
+// Its eodhd holdings (an inactive provider, so backfill never calls the shared stubs) are exactly what
+// EquityProviderMigrationIntegrationTest's global migrate() would unlink mid-test.
+@ResourceLock("equity-provider-migration")
 class PortfolioValuationIntegrationTest @Autowired constructor(
     private val users: UserRepository,
     private val households: HouseholdRepository,

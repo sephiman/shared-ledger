@@ -15,6 +15,7 @@ import {
 import { apiErrorMessage } from "@/api/client";
 import { formatDate } from "@/lib/dates";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select } from "@/components/ui/primitives";
+import { BankAccountList } from "./BankAccountList";
 import { showWhitelistPhase } from "./whitelistInstructionsBus";
 
 // Common SEPA / open-banking countries; the ASPSP catalogue itself comes from the provider.
@@ -321,8 +322,8 @@ function ConnectionRow({
       )}
       <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
         {t("banks.expires")}: {expires} · {t("banks.last_synced")}: {lastSynced}
-        {connection.accounts.length > 0 && ` · ${connection.accounts.map((a) => a.name ?? a.ibanMasked ?? "").filter(Boolean).join(", ")}`}
       </p>
+      <BankAccountList householdId={householdId} connection={connection} />
       {connection.lastSyncStatus === "error" && connection.lastSyncError && (
         <p className="mt-1 text-xs text-red-600">{connection.lastSyncError}</p>
       )}

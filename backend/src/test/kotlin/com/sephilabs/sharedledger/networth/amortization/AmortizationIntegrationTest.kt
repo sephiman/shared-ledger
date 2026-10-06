@@ -77,12 +77,14 @@ class AmortizationIntegrationTest @Autowired constructor(
         assertThat(balance).isLessThan(BigDecimal("100000.00"))
         assertThat(balance).isGreaterThan(BigDecimal.ZERO)
 
-        // First run persists the instalment(s) due; a second run adds nothing (idempotent).
-        val created = materializer.runForAll(today)
-        assertThat(created).isGreaterThanOrEqualTo(1)
-        val again = materializer.runForAll(today)
-        assertThat(again).isEqualTo(0)
+        // First run persists the instalment(s) due; a second run adds nothing (idempotent). runForAll's
+        // return sums every household's liabilities, so assert on this part's rows only.
         val partId = parts.findAllByLiabilityIdOrderByStartDateAscCreatedAtAsc(liability.id).single().id
+        materializer.runForAll(today)
+        val firstEntries = entries.findAllByPartIdOrderByChargeDateAsc(partId)
+        assertThat(firstEntries).isNotEmpty()
+        materializer.runForAll(today)
+        assertThat(entries.findAllByPartIdOrderByChargeDateAsc(partId)).hasSameSizeAs(firstEntries)
         assertThat(entries.existsByPartIdAndChargeDate(partId, today)).isTrue()
     }
 

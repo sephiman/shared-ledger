@@ -95,6 +95,8 @@ class BankIngestionIntegrationTest @Autowired constructor(
     @BeforeEach
     fun resetConnector() {
         fake.movements.clear()
+        fake.movementsByAccount.clear()
+        fake.sessionStatusCalls = 0
         fake.lastState = null
         fake.fetchCalls.clear()
         fake.scriptedPages.clear()
@@ -1654,6 +1656,138 @@ class BankIngestionIntegrationTest @Autowired constructor(
         }.isInstanceOf(AppException::class.java).hasMessageContaining("BANK_AUTH_STATE_MISMATCH")
 
         assertThat(connections.findAllByHouseholdIdOrderByCreatedAtAsc(household.id)).isEmpty()
+    }
+
+    @Test
+    fun `a paused account is skipped before any provider call while its sibling still syncs`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val connection = linkTwoAccounts(household, user)
+        val wanted = connection.accounts.single { it.name == "Checking" }
+        val unwanted = connection.accounts.single { it.name == "Savings" }
+        pauseAccount(household, user, connection.id, unwanted.id)
+        fake.movementsByAccount.getValue("acc-wanted") += movement("w-1", today, Direction.expense, "4.00", "Shop")
+        fake.movementsByAccount.getValue("acc-unwanted") += movement("u-1", today, Direction.expense, "9.00", "Other")
+        fake.fetchCalls.clear()
+
+        syncService.sync(connection.id, SyncMode.SCHEDULED, null)
+
+        assertThat(fake.fetchCalls.map { it.accountUid }).containsOnly("acc-wanted")
+        val ingested = pending.findAll().filter { it.connectionId == connection.id }.map { it.bankMovementId }
+        assertThat(ingested).contains("w-1").doesNotContain("u-1")
+        assertThat(syncRuns.findFirstByConnectionIdOrderByStartedAtDesc(connection.id)!!.status)
+            .isEqualTo(SyncRunStatus.success)
+        assertThat(bankService.listConnections(household.id, user, HouseholdRole.owner).single().accounts
+            .associate { it.id to it.ingestionEnabled }).isEqualTo(mapOf(wanted.id to true, unwanted.id to false))
+    }
+
+    @Test
+    fun `pausing every account skips the connection without spending a call or recording a run`() {
+        val (user, household) = seed()
+        val connection = linkTwoAccounts(household, user)
+        connection.accounts.forEach { pauseAccount(household, user, connection.id, it.id) }
+        val runsBefore = syncRuns.findAll().count { it.connectionId == connection.id }
+        val lastSyncedBefore = connections.findById(connection.id).get().lastSyncedAt
+        fake.fetchCalls.clear()
+        fake.sessionStatusCalls = 0
+
+        assertThat(syncService.sync(connection.id, SyncMode.SCHEDULED, null)).isZero()
+
+        assertThat(fake.sessionStatusCalls).isZero()
+        assertThat(fake.fetchCalls).isEmpty()
+        assertThat(syncRuns.findAll().count { it.connectionId == connection.id }).isEqualTo(runsBefore)
+        val after = connections.findById(connection.id).get()
+        assertThat(after.lastSyncedAt).isEqualTo(lastSyncedBefore)
+        assertThat(after.callsUsedToday).isZero()
+    }
+
+    @Test
+    fun `a resumed account backfills its gap from its own last booking date`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val lastBeforePause = today.minusDays(20)
+        fake.accounts = twoAccounts()
+        fake.movementsByAccount["acc-wanted"] = mutableListOf()
+        fake.movementsByAccount["acc-unwanted"] = mutableListOf(movement("u-old", lastBeforePause, Direction.expense, "1.00", "Shop"))
+        link(household, user)
+        val connection = bankService.listConnections(household.id, user, HouseholdRole.owner).single()
+        val unwanted = connection.accounts.single { it.name == "Savings" }
+        pauseAccount(household, user, connection.id, unwanted.id)
+        // Booked while paused: a scheduled run must not pick it up.
+        fake.movementsByAccount.getValue("acc-unwanted") += movement("u-gap", today.minusDays(10), Direction.expense, "2.00", "Shop")
+        syncService.sync(connection.id, SyncMode.SCHEDULED, null)
+        assertThat(pending.findAll().filter { it.connectionId == connection.id }.map { it.bankMovementId })
+            .doesNotContain("u-gap")
+
+        bankService.updateAccount(household.id, connection.id, unwanted.id, UpdateAccountRequest(true), user, HouseholdRole.owner)
+        fake.fetchCalls.clear()
+        // "Sync now" after resuming: the scheduled run above already spent most of today's background budget.
+        syncService.sync(connection.id, SyncMode.MANUAL, null)
+
+        val call = fake.fetchCalls.single { it.accountUid == "acc-unwanted" }
+        assertThat(call.strategy).isEqualTo(FetchStrategy.DEFAULT)
+        assertThat(call.dateFrom).isEqualTo(lastBeforePause.minusDays(props.enableBanking.syncOverlapDays))
+        assertThat(pending.findAll().filter { it.connectionId == connection.id }.map { it.bankMovementId })
+            .contains("u-old", "u-gap")
+    }
+
+    @Test
+    fun `re-linking keeps an account's pause and adds a newly granted account as active`() {
+        val (user, household) = seed()
+        val connection = linkTwoAccounts(household, user)
+        val unwanted = connection.accounts.single { it.name == "Savings" }
+        pauseAccount(household, user, connection.id, unwanted.id)
+
+        fake.accounts = twoAccounts() + AuthorizedAccount("acc-new", "ES9900000000000000003333", "Card", "EUR")
+        bankService.startLink(
+            household.id,
+            StartLinkRequest(aspspName = "Bankinter", country = "ES", relinkConnectionId = connection.id),
+            user,
+            HouseholdRole.owner,
+        )
+        val relinked = bankService.completeLink(household.id, CompleteLinkRequest(code = "code", state = fake.lastState!!), user, HouseholdRole.owner)
+
+        assertThat(relinked.accounts.associate { it.name to it.ingestionEnabled })
+            .isEqualTo(mapOf("Checking" to true, "Savings" to false, "Card" to true))
+    }
+
+    @Test
+    fun `only a connection manager pauses its accounts, and only accounts of that connection`() {
+        val (owner, household) = seed()
+        val roommate = users.save(User(email = "mate${System.nanoTime()}@example.com", passwordHash = "x", locale = "en"))
+        val connection = linkTwoAccounts(household, owner)
+        val account = connection.accounts.first()
+
+        assertThatThrownBy {
+            bankService.updateAccount(household.id, connection.id, account.id, UpdateAccountRequest(false), roommate, HouseholdRole.member)
+        }.isInstanceOf(AppException::class.java).hasMessageContaining("NOT_CONNECTION_MANAGER")
+        val (otherUser, otherHousehold) = seed()
+        val foreign = linkTwoAccounts(otherHousehold, otherUser).accounts.first()
+        assertThatThrownBy {
+            bankService.updateAccount(household.id, connection.id, foreign.id, UpdateAccountRequest(false), owner, HouseholdRole.owner)
+        }.isInstanceOf(AppException::class.java).hasMessageContaining("BANK_ACCOUNT_NOT_FOUND")
+        assertThat(bankService.listConnections(household.id, owner, HouseholdRole.owner).single().accounts)
+            .allMatch { it.ingestionEnabled }
+    }
+
+    private fun twoAccounts() = listOf(
+        AuthorizedAccount("acc-wanted", "ES9900000000000000001111", "Checking", "EUR"),
+        AuthorizedAccount("acc-unwanted", "ES9900000000000000002222", "Savings", "EUR"),
+    )
+
+    /** One consent granting two accounts (the Bankinter shape), each with its own movement list. */
+    private fun linkTwoAccounts(household: Household, user: User): BankConnectionDto {
+        fake.accounts = twoAccounts()
+        fake.movementsByAccount["acc-wanted"] = mutableListOf()
+        fake.movementsByAccount["acc-unwanted"] = mutableListOf()
+        link(household, user)
+        return bankService.listConnections(household.id, user, HouseholdRole.owner).single().also {
+            assertThat(it.accounts.map { a -> a.name }).containsExactlyInAnyOrder("Checking", "Savings")
+        }
+    }
+
+    private fun pauseAccount(household: Household, user: User, connectionId: UUID, accountId: UUID) {
+        bankService.updateAccount(household.id, connectionId, accountId, UpdateAccountRequest(false), user, HouseholdRole.owner)
     }
 
     private fun link(household: Household, user: User) {

@@ -86,6 +86,12 @@ class BankSyncService(
     fun sync(connectionId: UUID, mode: SyncMode = SyncMode.SCHEDULED, psu: PsuContext? = null): Int {
         val connection = connections.findById(connectionId).orElse(null) ?: return 0
         if (!connection.ingestionEnabled) return 0
+        val accountList = accounts.findAllByConnectionId(connectionId)
+        val activeAccounts = accountList.filter { it.ingestionEnabled }
+        if (accountList.isNotEmpty() && activeAccounts.isEmpty()) {
+            log.info("bank_sync_skipped connection={} reason=all_accounts_paused", connectionId)
+            return 0
+        }
 
         // Credential gate, before anything is recorded: a household without credentials, or one on a
         // different application, is *parked* rather than retried into a wall of failures — no run, no
@@ -164,8 +170,10 @@ class BankSyncService(
                 return 0
             }
 
-            val accountList = accounts.findAllByConnectionId(connectionId)
-            log.info("bank_sync_accounts connection={} accounts={} strategy={}", connectionId, accountList.size, strategy)
+            log.info(
+                "bank_sync_accounts connection={} accounts={} paused={} strategy={}",
+                connectionId, activeAccounts.size, accountList.size - activeAccounts.size, strategy,
+            )
 
             /** Pages one account into [fetched]. False = the background call budget ran out mid-account. */
             fun fetchAccount(account: BankConnectionAccount, using: FetchStrategy): Boolean {
@@ -210,7 +218,7 @@ class BankSyncService(
             // others their movements. Failures are collected and re-thrown after the loop, where the
             // failure path persists whatever the healthy accounts delivered.
             val failures = mutableListOf<BankConnectorException>()
-            for (account in accountList) {
+            for (account in activeAccounts) {
                 try {
                     if (!fetchAccount(account, strategy)) break
                 } catch (ex: RateLimitExceededException) {
@@ -245,7 +253,7 @@ class BankSyncService(
             }
             log.info(
                 "bank_sync_fetched connection={} totalFetched={} accountFailures={}/{}",
-                connectionId, fetched.size, failures.size, accountList.size,
+                connectionId, fetched.size, failures.size, activeAccounts.size,
             )
             if (failures.isNotEmpty()) throw failures.first()
 

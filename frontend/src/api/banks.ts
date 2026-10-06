@@ -74,6 +74,8 @@ export interface BankAccount {
   ibanMasked: string | null;
   name: string | null;
   currency: string | null;
+  /** False while paused inside its connection: sync skips it, resuming backfills the gap. */
+  ingestionEnabled: boolean;
 }
 
 export interface BankConnection {
@@ -429,6 +431,15 @@ export function useUpdateConnection(householdId: string) {
   return useMutation({
     mutationFn: async ({ id, input }: { id: string; input: Partial<Pick<BankConnection, "label" | "ingestionEnabled" | "syncFrequency">> }) =>
       (await apiClient.patch<BankConnection>(`${base(householdId)}/connections/${id}`, input)).data,
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["banks", householdId] }),
+  });
+}
+
+export function useUpdateAccount(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ connectionId, accountId, ingestionEnabled }: { connectionId: string; accountId: string; ingestionEnabled: boolean }) =>
+      (await apiClient.patch<BankConnection>(`${base(householdId)}/connections/${connectionId}/accounts/${accountId}`, { ingestionEnabled })).data,
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["banks", householdId] }),
   });
 }
