@@ -16,7 +16,9 @@ type EntityToggleKey =
   | "notifyLendingPayments"
   | "notifyHoldings"
   | "notifyRecurringTxn"
-  | "notifyRecurringLending";
+  | "notifyRecurringLending"
+  | "notifyBankMovements"
+  | "notifyBankConnections";
 
 const ENTITY_TOGGLES: { key: EntityToggleKey; labelKey: string }[] = [
   { key: "notifyTransactions", labelKey: "notifications.entity_transactions" },
@@ -26,6 +28,8 @@ const ENTITY_TOGGLES: { key: EntityToggleKey; labelKey: string }[] = [
   { key: "notifyHoldings", labelKey: "notifications.entity_holdings" },
   { key: "notifyRecurringTxn", labelKey: "notifications.entity_recurring_txn" },
   { key: "notifyRecurringLending", labelKey: "notifications.entity_recurring_lending" },
+  { key: "notifyBankMovements", labelKey: "notifications.entity_bank_movements" },
+  { key: "notifyBankConnections", labelKey: "notifications.entity_bank_connections" },
 ];
 
 export function NotificationsCard({ householdId }: { householdId: string }) {
@@ -43,6 +47,8 @@ export function NotificationsCard({ householdId }: { householdId: string }) {
     notifyHoldings: true,
     notifyRecurringTxn: true,
     notifyRecurringLending: true,
+    notifyBankMovements: true,
+    notifyBankConnections: true,
     chatId: "",
   });
   const [token, setToken] = useState("");
@@ -62,6 +68,8 @@ export function NotificationsCard({ householdId }: { householdId: string }) {
         notifyHoldings: settings.notifyHoldings,
         notifyRecurringTxn: settings.notifyRecurringTxn,
         notifyRecurringLending: settings.notifyRecurringLending,
+        notifyBankMovements: settings.notifyBankMovements,
+        notifyBankConnections: settings.notifyBankConnections,
         chatId: settings.chatId ?? "",
       });
       setTokenConfigured(settings.tokenConfigured);

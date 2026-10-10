@@ -225,5 +225,5 @@ app:
     max-calls-per-day: ${ENABLE_BANKING_MAX_CALLS_PER_DAY:4}
     # Twice daily (07:00, 19:00), within the ≤4 calls/consent/day budget.
     sync-cron: "0 0 7,19 * * *"
+    # Daily consent-expiry notice (stored data only, no provider call).
     reminder-cron: "0 0 8 * * *"
-    reminder-days-before: 7

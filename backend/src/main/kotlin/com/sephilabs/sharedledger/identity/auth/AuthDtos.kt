@@ -41,6 +41,11 @@ data class HomePanelsRequest(
     val hiddenPanels: List<String>,
 )
 
+data class DismissedConsentNoticesRequest(
+    @field:Size(max = 100, message = "validation.invalid")
+    val notices: List<String>,
+)
+
 data class PortfolioReturnBasisRequest(
     @field:NotBlank(message = "validation.required")
     val basis: String,
@@ -60,6 +65,7 @@ data class MeResponse(
     val defaultHouseholdId: UUID?,
     val hiddenHomePanels: List<String>,
     val portfolioReturnBasis: String,
+    val dismissedConsentNotices: List<String>,
     val households: List<HouseholdMembershipDto>,
 )
 

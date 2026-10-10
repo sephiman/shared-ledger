@@ -57,6 +57,10 @@ class BankConnection(
     @Column(name = "consent_expires_at")
     var consentExpiresAt: Instant? = null,
 
+    // When this consent cycle's expiry notice went out; null until then. A re-link clears it.
+    @Column(name = "expiry_notified_at")
+    var expiryNotifiedAt: Instant? = null,
+
     @Column(name = "last_synced_at")
     var lastSyncedAt: Instant? = null,
 
@@ -108,5 +112,5 @@ interface BankConnectionRepository : JpaRepository<BankConnection, UUID> {
     fun stampMissingAppId(@Param("appId") appId: String): Int
 
     fun findAllByIngestionEnabledTrue(): List<BankConnection>
-    fun findAllByStatus(status: ConnectionStatus): List<BankConnection>
+    fun findAllByStatusIn(statuses: Collection<ConnectionStatus>): List<BankConnection>
 }

@@ -37,4 +37,8 @@ class User(
     // Which base the portfolio return percentages are shown over; see PortfolioReturnBasis.
     @Column(name = "portfolio_return_basis", nullable = false, length = 16)
     var portfolioReturnBasis: String = PortfolioReturnBasis.DEFAULT.id,
+
+    // CSV of "<connectionId>@<expiry date>" consent-expiry banners this user dismissed.
+    @Column(name = "dismissed_consent_notices", nullable = false)
+    var dismissedConsentNotices: String = "",
 ) : TimestampedEntity()

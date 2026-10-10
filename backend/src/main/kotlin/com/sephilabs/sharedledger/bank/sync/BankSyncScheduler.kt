@@ -1,28 +1,20 @@
 package com.sephilabs.sharedledger.bank.sync
 
-import com.sephilabs.sharedledger.bank.BankConnection
 import com.sephilabs.sharedledger.bank.BankConnectionRepository
-import com.sephilabs.sharedledger.bank.BankCredentialsService
 import com.sephilabs.sharedledger.bank.ConnectionStatus
-import com.sephilabs.sharedledger.config.AppProperties
-import com.sephilabs.sharedledger.notification.NotificationPublisher
-import com.sephilabs.sharedledger.notification.NotifyActor
+import com.sephilabs.sharedledger.bank.consent.ConsentExpiryNotifier
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneOffset
 
-/** Scheduled bank sync (twice daily, within the ≤4 calls/consent/day budget) plus a daily re-link
- *  reminder. Each connection is synced independently and guarded, so one failure never blocks the others. */
+/** Scheduled bank sync (twice daily, within the ≤4 calls/consent/day budget) plus a daily consent-expiry
+ *  notice. Each connection is synced independently and guarded, so one failure never blocks the others. */
 @Component
 class BankSyncScheduler(
-    private val props: AppProperties,
     private val connections: BankConnectionRepository,
-    private val credentials: BankCredentialsService,
     private val syncService: BankSyncService,
-    private val notifications: NotificationPublisher,
+    private val consentExpiry: ConsentExpiryNotifier,
 ) {
     private val log = LoggerFactory.getLogger(BankSyncScheduler::class.java)
 
@@ -48,16 +40,14 @@ class BankSyncScheduler(
         }
     }
 
-    /** Daily re-link reminders for consents nearing expiry (per connection, staggered). */
+    // Delegated to its own bean so the call crosses the transactional proxy: the after-commit Telegram
+    // listener drops events published outside a transaction.
     @Scheduled(cron = "\${app.enable-banking.reminder-cron}", zone = "\${app.scheduler.timezone}")
-    fun remindExpiring() {
-        val threshold = LocalDate.now().plusDays(props.enableBanking.reminderDaysBefore)
-        connections.findAllByStatus(ConnectionStatus.active).forEach { connection ->
-            val expiresOn = connection.consentExpiresAt?.atZone(ZoneOffset.UTC)?.toLocalDate() ?: return@forEach
-            // "Re-link soon" is unactionable for a household that can't link at all right now.
-            if (!expiresOn.isAfter(threshold) && credentials.resolve(connection.householdId) != null) {
-                remind(connection, expiresOn)
-            }
+    fun notifyConsentExpiry() {
+        try {
+            consentExpiry.notifyDue(Instant.now())
+        } catch (ex: Exception) {
+            log.error("bank consent-expiry notice failed", ex)
         }
     }
 
@@ -68,19 +58,5 @@ class BankSyncScheduler(
             ConnectionStatus.credentials_required,
             ConnectionStatus.credentials_mismatch,
         )
-    }
-
-    private fun remind(connection: BankConnection, expiresOn: LocalDate) {
-        try {
-            notifications.bankConnectionExpiring(
-                householdId = connection.householdId,
-                bankName = connection.aspspName,
-                label = connection.label,
-                expiresOn = expiresOn,
-                actor = NotifyActor.Schedule(connection.householdId),
-            )
-        } catch (ex: Exception) {
-            log.error("bank re-link reminder failed for connection {}", connection.id, ex)
-        }
     }
 }

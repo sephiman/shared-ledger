@@ -378,8 +378,9 @@ data changes. Configured per household, owner-only, under **Settings → Notific
   section walks through obtaining the token and chat ID.
 - **Master toggle** pauses all notifications without losing the configuration, plus a **per-entity
   toggle** each (covering create/update/delete) for: transactions, snapshots, movements, lending
-  payments, portfolio trades (buy/sell lots), recurring-transaction execution, and
-  recurring-lending-schedule execution.
+  payments, portfolio trades (buy/sell lots), recurring-transaction execution,
+  recurring-lending-schedule execution, **bank movements** (new movements to review, confirm / split /
+  merge summaries) and **bank connection expiry** (the once-per-cycle consent notice).
 - **What fires**: a member's create/update/delete on those entities, and the daily scheduler
   materializing recurring transactions / lending-schedule payments (sent as one aggregated summary
   per run). Amortizable-liability events reuse the existing toggles (no new subsystem): the **monthly
@@ -393,8 +394,8 @@ data changes. Configured per household, owner-only, under **Settings → Notific
   response) is written to the structured log pipeline; the app does not retry or surface failures
   in the UI. If a household sees nothing, the owner uses the Test button to verify configuration.
 
-Re-link reminders and batch-confirm summaries for bank ingestion (below) flow through this same
-system, gated by two extra per-household toggles (bank movements, bank connections).
+Consent-expiry notices and batch-confirm summaries for bank ingestion (below) flow through this same
+system, gated by the last two toggles above (bank movements, bank connection expiry).
 
 ### Password reset, email change & invitations by email (SMTP, optional)
 
@@ -536,7 +537,8 @@ Wise could be added via its own API) with the always-available CSV import as the
   created before per-member linking have no recorded linker and stay owner-only. The SCA callback
   must be finished by the same member who started it.
 - **Two moments**: the account holder passes SCA at their own bank (a person, never the server);
-  the app then manages the ongoing consent session and prompts for re-link before it expires.
+  the app then manages the ongoing consent session and prompts for re-link before it expires
+  (see *Consent expiry* below).
   Relatives each link their own account with their own SCA — credentials are never shared.
 - **Multiple connections** per household, including several to the same bank (e.g. two Wise
   accounts), each with its own label, holder, consent, sync cursor, status, and call budget.
@@ -590,6 +592,24 @@ Wise could be added via its own API) with the always-available CSV import as the
     Either way the run stops there with no sync-run record, no notification and no error metric, so
     background sync stays quiet. Both states are re-checked every run and clear themselves as soon
     as the credentials line up again — no manual nudge needed.
+- **Consent expiry.** Judged from the stored consent expiry alone (no bank call), so a paused
+  connection is covered too; a connection a sync found *expired* counts as expired even before its
+  stored date (a bank can revoke early). The credential states are left out — re-linking doesn't fix them.
+  - **Telegram — once per consent cycle**: the daily 08:00 job sends one message when a consent expires
+    within **1 day** (`CONSENT_TELEGRAM_NOTICE_DAYS`) or, if that window was missed (instance down), on
+    the first run after it expired — "expires tomorrow" / "has expired, syncing stopped", plus where to
+    re-link. Several connections due in the same run share one message. A per-connection marker
+    (`expiry_notified_at`) stops repeats and is cleared by a re-link, so the next cycle notifies again.
+    Uses the *bank connections* toggle; skipped while the household has no Enable Banking credentials.
+  - **Header banner**: from **7 days** out (`CONSENT_BANNER_WARNING_DAYS`) a slim amber strip under the
+    header on every page, for every member — "Your *label* bank connection expires in N days", or
+    "N bank connections expire soon"; red with "has expired — syncing stopped" once expired. Its
+    *Re-link* link opens Settings → Banks. Dismissing it is **per user** and remembers the exact
+    (connection, expiry date) pairs, so it comes back for a new connection entering the window or a
+    re-linked connection's next cycle.
+  - **Connection card**: the consent line gets the same treatment (amber "expires in N days", red
+    "expired — re-link needed"), and *Re-link* is offered as soon as the consent is in that window,
+    not only once it has stopped working.
 - **Review inbox** (a **Pending (N)** sub-view inside Transactions, plus a nav badge and a Home
   card, all at household level): per-movement **confirm / reject** and **batch** actions.
   Each row is edited inline before confirming — direction, category (confirm stays disabled until
@@ -823,7 +843,7 @@ All scheduled jobs fire in `app.scheduler.timezone` (env `SCHEDULER_TIMEZONE`), 
 | Recurring / lending / amortization materialize | 02:00 | 03:00 | 04:00 |
 | Auto-snapshot due-check | 06:00 | 07:00 | 08:00 |
 | Bank sync (incremental) | 07:00 & 19:00 | 08:00 & 20:00 | 09:00 & 21:00 |
-| Consent-expiry reminder | 08:00 | 09:00 | 10:00 |
+| Consent-expiry notice | 08:00 | 09:00 | 10:00 |
 | Crypto price refresh | hourly at :05 | hourly at :05 | hourly at :05 |
 
 The ordering matters: **FX refresh runs before equity refresh** so non-EUR equity valuations convert with the day's rate. **Leave `SCHEDULER_TIMEZONE` at UTC.** Business dates are stamped in UTC (`LocalDate.now()`), so pointing the scheduler at a non-UTC zone would run the early-morning jobs on the *previous* UTC calendar day and break that FX→equity ordering. If you want the jobs to run at a different wall-clock time, shift the cron expressions rather than the timezone.

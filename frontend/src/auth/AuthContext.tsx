@@ -17,6 +17,8 @@ export interface Me {
   hiddenHomePanels: string[];
   /** Base for the portfolio return percentages (see features/portfolio/valuation.ts). */
   portfolioReturnBasis: "OPEN_COST" | "NET_INVESTED" | "TURNOVER";
+  /** Consent-expiry banners this user dismissed, as "<connectionId>@<expiry date>" (see consentUrgency.ts). */
+  dismissedConsentNotices: string[];
   households: HouseholdMembership[];
 }
 

@@ -129,6 +129,13 @@ class AuthController(
         return buildMe(updated)
     }
 
+    @PutMapping("/me/dismissed-consent-notices")
+    fun setDismissedConsentNotices(@Valid @RequestBody body: DismissedConsentNoticesRequest): MeResponse {
+        val current = currentUser.requireUser()
+        val updated = authService.setDismissedConsentNotices(current.id, body.notices)
+        return buildMe(updated)
+    }
+
     private fun buildMe(user: User): MeResponse {
         val memberships = members.findAllByIdUserId(user.id)
         val byId = households.findAllById(memberships.map { it.id.householdId }).associateBy { it.id }
@@ -142,6 +149,7 @@ class AuthController(
         val hiddenPanels = user.hiddenHomePanels.split(',').filter { it in HomePanel.ids }
         // Fall back to the default if the stored value is ever unknown (e.g. a rolled-back enum).
         val returnBasis = user.portfolioReturnBasis.takeIf { it in PortfolioReturnBasis.ids } ?: PortfolioReturnBasis.DEFAULT.id
-        return MeResponse(user.id, user.email, user.locale, defaultId, hiddenPanels, returnBasis, list)
+        val dismissedNotices = user.dismissedConsentNotices.split(',').filter { it.isNotEmpty() }
+        return MeResponse(user.id, user.email, user.locale, defaultId, hiddenPanels, returnBasis, dismissedNotices, list)
     }
 }

@@ -52,6 +52,15 @@ class TelegramNotificationListener(
         dispatch(ctx, event.entity, "MATERIALIZE", text)
     }
 
+    // fallbackExecution like materialization: a scheduler publishes it, so never lose it to a missing transaction.
+    @Async("telegramExecutor")
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    fun onConsentExpiry(event: ConsentExpiryEvent) {
+        val ctx = resolve(event.householdId, NotifyEntity.BANK_CONNECTION, event.actor) ?: return
+        dispatch(ctx, NotifyEntity.BANK_CONNECTION, "CONSENT_EXPIRY", formatter.formatConsentExpiry(event.notices, ctx.locale))
+    }
+
     private data class DispatchContext(
         val settings: TelegramSettings,
         val locale: Locale,

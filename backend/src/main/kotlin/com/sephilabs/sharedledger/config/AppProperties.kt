@@ -203,7 +203,5 @@ data class AppProperties(
         // The background-sync cron. Also consumed by the @Scheduled placeholder in yaml; mirrored here
         // so the bank config endpoint can surface upcoming run times to the UI.
         val syncCron: String = "0 0 7,19 * * *",
-        // Warn this many days before a consent expires so the holder can re-link in time.
-        val reminderDaysBefore: Long = 7,
     )
 }

@@ -5,6 +5,7 @@ import { HomeLogoLink } from "@/components/layout/HomeLogoLink";
 import { UserMenu } from "@/components/layout/UserMenu";
 import { useActiveHousehold } from "@/auth/AuthContext";
 import { useBankConfig, usePendingCount } from "@/api/banks";
+import { ConsentExpiryBanner } from "@/features/banks/ConsentExpiryBanner";
 
 const NAV = [
   { to: "/dashboard", key: "nav.dashboard" },
@@ -59,6 +60,7 @@ export function AppShell() {
           </ul>
         </nav>
       </header>
+      <ConsentExpiryBanner householdId={household.householdId} />
       <main className="flex-1 overflow-y-auto bg-canvas">
         <div className="mx-auto max-w-6xl px-4 pt-6 pb-[calc(env(safe-area-inset-bottom)+5rem)]">
           <Outlet />

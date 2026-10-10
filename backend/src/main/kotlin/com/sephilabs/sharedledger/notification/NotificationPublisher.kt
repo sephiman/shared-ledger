@@ -231,27 +231,10 @@ class NotificationPublisher(
         )
     }
 
-    /** Re-link reminder for a connection whose consent is about to expire (per connection). */
-    fun bankConnectionExpiring(
-        householdId: UUID,
-        bankName: String,
-        label: String?,
-        expiresOn: java.time.LocalDate,
-        actor: NotifyActor,
-    ) {
-        events.publishEvent(
-            EntityChangeEvent(
-                householdId = householdId,
-                entity = NotifyEntity.BANK_CONNECTION,
-                action = NotifyAction.UPDATE,
-                actor = actor,
-                fields = listOf(
-                    CardField("banks.bank", FieldValue.Text(bankName)),
-                    CardField("banks.connection", FieldValue.Text(label)),
-                    CardField("banks.expires", FieldValue.Day(expiresOn)),
-                ),
-            ),
-        )
+    /** One re-link notice listing every consent of the household that just entered the notice window. */
+    fun bankConsentsExpiring(householdId: UUID, notices: List<ConsentNotice>, actor: NotifyActor) {
+        if (notices.isEmpty()) return
+        events.publishEvent(ConsentExpiryEvent(householdId, notices, actor))
     }
 
     /** A recorded prepayment against an amortizable liability. Reuses the LENDING_PAYMENT event/toggle — the

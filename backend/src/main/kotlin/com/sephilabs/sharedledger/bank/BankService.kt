@@ -185,6 +185,7 @@ class BankService(
         connection.appId = creds.appId
         connection.status = ConnectionStatus.active
         connection.consentExpiresAt = session.consentExpiresAt
+        connection.expiryNotifiedAt = null
         connection.updatedByUserId = by.id
         connection.callsUsedToday = 0
         connection.callsResetOn = null

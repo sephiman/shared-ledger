@@ -173,6 +173,17 @@ export function useUpdatePortfolioReturnBasis() {
   });
 }
 
+export function useUpdateDismissedConsentNotices() {
+  const { setUser } = useAuth();
+  return useMutation({
+    mutationFn: async (notices: string[]) =>
+      (await apiClient.put<Me>("/auth/me/dismissed-consent-notices", { notices })).data,
+    // The banner reads the set from /auth/me, so pushing the response hides it without a refetch.
+    onSuccess: (me) => setUser(me),
+    meta: { silentSuccess: true },
+  });
+}
+
 export function useDeleteHousehold() {
   return useMutation({
     mutationFn: async (householdId: string) => {

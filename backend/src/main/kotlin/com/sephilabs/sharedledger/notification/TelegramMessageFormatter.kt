@@ -49,6 +49,35 @@ class TelegramMessageFormatter(
         return build(header, leadingEmoji(event.entity, event.fields), event.fields, householdId, locale, currency, authorEmail, schedule)
     }
 
+    /** One header, one line per connection, then where to re-link. No author line: nobody acted. */
+    fun formatConsentExpiry(notices: List<ConsentNotice>, locale: Locale): String {
+        val header = if (notices.size == 1) {
+            messages.resolve("notif.consent.header.single", locale = locale)
+        } else {
+            messages.resolve("notif.consent.header.summary", arrayOf(notices.size), locale = locale)
+        }
+        val sb = StringBuilder()
+        sb.append("*⏰ ").append(sanitize(header)).append("*\n")
+        for (notice in notices) {
+            sb.append("• ").append(consentLine(notice, locale)).append("\n")
+        }
+        sb.append(sanitize(messages.resolve("notif.consent.footer", locale = locale)))
+        return sb.toString()
+    }
+
+    private fun consentLine(notice: ConsentNotice, locale: Locale): String {
+        val label = notice.label?.takeIf { it.isNotBlank() } ?: notice.bankName
+        // The label defaults to the bank name; only name the bank when the label doesn't already.
+        val name = if (label == notice.bankName) "*${sanitize(label)}*" else "*${sanitize(label)}* (${sanitize(notice.bankName)})"
+        val date = notice.expiresOn?.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale)) ?: "—"
+        val key = when (notice.state) {
+            ConsentState.EXPIRES_TODAY -> "notif.consent.expires_today"
+            ConsentState.EXPIRES_TOMORROW -> "notif.consent.expires_tomorrow"
+            ConsentState.EXPIRED -> "notif.consent.expired"
+        }
+        return "$name: ${sanitize(messages.resolve(key, arrayOf(date), locale = locale))}"
+    }
+
     fun testMessage(locale: Locale): String = messages.resolve("notif.test", locale = locale)
 
     private fun build(

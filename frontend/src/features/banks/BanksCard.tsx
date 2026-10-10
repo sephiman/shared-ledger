@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   useAspsps,
@@ -17,6 +18,7 @@ import { formatDate } from "@/lib/dates";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select } from "@/components/ui/primitives";
 import { BankAccountList } from "./BankAccountList";
 import { showWhitelistPhase } from "./whitelistInstructionsBus";
+import { consentUrgency, type ConsentUrgency } from "./consentUrgency";
 
 // Common SEPA / open-banking countries; the ASPSP catalogue itself comes from the provider.
 const COUNTRIES = ["NL", "ES", "DE", "FR", "BE", "IT", "PT", "IE", "AT", "FI", "GB"];
@@ -33,6 +35,17 @@ function statusClass(status: ConnectionStatus): string {
     default:
       return "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200";
   }
+}
+
+/** The consent line's urgency suffix, so the card tells the same story as the header banner. */
+function ConsentUrgencyNote({ urgency }: { urgency: ConsentUrgency }) {
+  const { t } = useTranslation();
+  if (urgency.kind === "ok") return null;
+  if (urgency.kind === "expired") {
+    return <span className="font-medium text-red-600 dark:text-red-400"> · {t("banks.consent_card_expired")}</span>;
+  }
+  const text = urgency.days === 0 ? t("banks.consent_card_today") : t("banks.consent_card_days", { count: urgency.days });
+  return <span className="font-medium text-amber-700 dark:text-amber-400"> · {text}</span>;
 }
 
 /** A connection parked by the credential gate: syncing is impossible until an owner acts. */
@@ -58,6 +71,12 @@ export function BanksCard({
   const { data: connections = [] } = useBankConnections(householdId);
   const { data: config } = useBankConfig(householdId);
   const startLink = useStartLink(householdId);
+  const { hash } = useLocation();
+
+  // The consent banner links here; Settings is lazy-loaded, so the browser's own anchor jump misses it.
+  useEffect(() => {
+    if (hash === "#banks") document.getElementById("banks")?.scrollIntoView?.({ block: "start" });
+  }, [hash]);
 
   // Distinct daily background-sync times in the viewer's own timezone, sorted by time of day.
   const syncTimes = useMemo(() => {
@@ -117,7 +136,7 @@ export function BanksCard({
   };
 
   return (
-    <Card>
+    <Card id="banks" className="scroll-mt-4">
       <CardHeader>
         <p className="font-medium">{t("banks.title")}</p>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("banks.settings_description")}</p>
@@ -275,6 +294,7 @@ function ConnectionRow({
   const remove = useDeleteConnection(householdId);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  const urgency = consentUrgency(connection, new Date());
   const expires = connection.consentExpiresAt
     ? formatDate(connection.consentExpiresAt, locale)
     : "—";
@@ -298,7 +318,8 @@ function ConnectionRow({
             <Button variant="ghost" disabled={sync.isPending || !canLink} onClick={() => sync.mutate(connection.id)}>
               {t("banks.sync_now")}
             </Button>
-            {connection.status !== "active" && (
+            {/* An active consent nearing its end can be renewed early, before syncing stops. */}
+            {(connection.status !== "active" || urgency.kind !== "ok") && (
               <Button variant="ghost" disabled={!canLink} onClick={onRelink}>{t("banks.relink")}</Button>
             )}
             <Button
@@ -321,7 +342,8 @@ function ConnectionRow({
         </p>
       )}
       <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-        {t("banks.expires")}: {expires} · {t("banks.last_synced")}: {lastSynced}
+        {t("banks.expires")}: {expires}
+        <ConsentUrgencyNote urgency={urgency} /> · {t("banks.last_synced")}: {lastSynced}
       </p>
       <BankAccountList householdId={householdId} connection={connection} />
       {connection.lastSyncStatus === "error" && connection.lastSyncError && (

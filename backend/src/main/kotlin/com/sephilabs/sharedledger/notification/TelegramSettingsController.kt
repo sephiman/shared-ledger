@@ -29,6 +29,8 @@ data class TelegramSettingsDto(
     val notifyHoldings: Boolean,
     val notifyRecurringTxn: Boolean,
     val notifyRecurringLending: Boolean,
+    val notifyBankMovements: Boolean,
+    val notifyBankConnections: Boolean,
     val chatId: String?,
     val tokenConfigured: Boolean,
 )
@@ -42,6 +44,8 @@ data class TelegramSettingsUpdateRequest(
     val notifyHoldings: Boolean = true,
     val notifyRecurringTxn: Boolean = true,
     val notifyRecurringLending: Boolean = true,
+    val notifyBankMovements: Boolean = true,
+    val notifyBankConnections: Boolean = true,
     @field:Size(max = 64, message = "validation.invalid")
     val chatId: String? = null,
     // When null/blank the stored token is kept; when present it replaces and is re-encrypted.
@@ -84,6 +88,8 @@ class TelegramSettingsController(
         settings.notifyHoldings = body.notifyHoldings
         settings.notifyRecurringTxn = body.notifyRecurringTxn
         settings.notifyRecurringLending = body.notifyRecurringLending
+        settings.notifyBankMovements = body.notifyBankMovements
+        settings.notifyBankConnections = body.notifyBankConnections
         settings.chatId = body.chatId?.takeIf { it.isNotBlank() }
         body.botToken?.takeIf { it.isNotBlank() }?.let { settings.botTokenEnc = crypto.encrypt(it.trim()) }
         settings.updatedByUserId = user.id
@@ -112,6 +118,8 @@ class TelegramSettingsController(
         notifyHoldings = notifyHoldings,
         notifyRecurringTxn = notifyRecurringTxn,
         notifyRecurringLending = notifyRecurringLending,
+        notifyBankMovements = notifyBankMovements,
+        notifyBankConnections = notifyBankConnections,
         chatId = chatId,
         tokenConfigured = !botTokenEnc.isNullOrBlank(),
     )
@@ -125,6 +133,8 @@ class TelegramSettingsController(
         notifyHoldings = true,
         notifyRecurringTxn = true,
         notifyRecurringLending = true,
+        notifyBankMovements = true,
+        notifyBankConnections = true,
         chatId = null,
         tokenConfigured = false,
     )

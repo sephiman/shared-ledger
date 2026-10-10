@@ -127,6 +127,17 @@ class AuthService(
         return user
     }
 
+    /** The client sends the whole set, already pruned to the connections still in the banner window. */
+    @Transactional
+    fun setDismissedConsentNotices(userId: UUID, notices: List<String>): User {
+        if (notices.any { !CONSENT_NOTICE_KEY.matches(it) }) {
+            throw AppException.badRequest("INVALID_CONSENT_NOTICE")
+        }
+        val user = loadManaged(userId)
+        user.dismissedConsentNotices = notices.distinct().sorted().joinToString(",")
+        return user
+    }
+
     @Transactional
     fun setDefaultHousehold(userId: UUID, householdId: UUID): User {
         val user = loadManaged(userId)
@@ -139,3 +150,6 @@ class AuthService(
     private fun loadManaged(userId: UUID): User =
         users.findById(userId).orElseThrow { AppException.unauthorized() }
 }
+
+// Mirrors consentNoticeKey() in the frontend: a connection id and its consent expiry date ("none" if unknown).
+private val CONSENT_NOTICE_KEY = Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}@(\\d{4}-\\d{2}-\\d{2}|none)$")

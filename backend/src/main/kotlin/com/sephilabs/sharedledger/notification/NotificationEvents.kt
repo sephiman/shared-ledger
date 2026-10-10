@@ -66,3 +66,15 @@ data class MaterializationEvent(
     val actor: NotifyActor,
     val fields: List<CardField>,
 )
+
+/** Where a consent stands on the day its notice goes out; drives the per-connection wording. */
+enum class ConsentState { EXPIRES_TODAY, EXPIRES_TOMORROW, EXPIRED }
+
+data class ConsentNotice(val bankName: String, val label: String?, val expiresOn: LocalDate?, val state: ConsentState)
+
+/** Published once per household per daily run, listing every consent that just entered the notice window. */
+data class ConsentExpiryEvent(
+    val householdId: UUID,
+    val notices: List<ConsentNotice>,
+    val actor: NotifyActor,
+)
