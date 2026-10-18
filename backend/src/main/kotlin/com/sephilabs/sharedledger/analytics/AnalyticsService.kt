@@ -5,7 +5,6 @@ import com.sephilabs.sharedledger.common.Money
 import com.sephilabs.sharedledger.networth.movement.MovementRepository
 import com.sephilabs.sharedledger.networth.movement.MovementType
 import com.sephilabs.sharedledger.networth.snapshot.SnapshotRepository
-import com.sephilabs.sharedledger.recurring.RecurringTemplateRepository
 import com.sephilabs.sharedledger.transaction.Direction
 import com.sephilabs.sharedledger.transaction.TransactionRepository
 import org.springframework.stereotype.Service
@@ -39,7 +38,7 @@ private fun median(values: List<BigDecimal>): BigDecimal {
 class AnalyticsService(
     private val transactions: TransactionRepository,
     private val categoryService: CategoryService,
-    private val recurring: RecurringTemplateRepository,
+    private val forecastEstimator: ForecastEstimator,
     private val snapshots: SnapshotRepository,
     private val movements: MovementRepository,
 ) {
@@ -179,42 +178,28 @@ class AnalyticsService(
 
     @Transactional(readOnly = true)
     fun forecast(householdId: UUID, horizonMonths: Int, windowMonths: Int): ForecastResponse {
-        val today = LocalDate.now()
-        val historyStart = YearMonth.from(today).minusMonths(windowMonths.toLong()).atDay(1)
-        val historyEnd = YearMonth.from(today).atEndOfMonth()
-        val history = transactions.findByHouseholdIdAndOccurrenceDateBetween(householdId, historyStart, historyEnd)
+        val currentMonth = YearMonth.now()
+        val basis = forecastEstimator.basis(householdId, currentMonth, windowMonths)
+        val months = (1..horizonMonths).map { currentMonth.plusMonths(it.toLong()) }
+        val scheduled = months.associateWith { basis.recurringScheduled(it) }
+        val codes = (basis.discretionaryAverage.keys + scheduled.values.flatMap { it.keys })
             .filter { it.direction == Direction.expense }
-            .groupBy { it.categoryCode }
+            .map { it.categoryCode }
+            .toSortedSet()
 
-        val templatesByCategory = recurring.findAllByHouseholdIdAndActiveTrue(householdId)
-            .filter { it.direction == Direction.expense }
-            .groupBy { it.categoryCode }
-
-        val categories = mutableListOf<CategoryForecast>()
-        for ((code, list) in history) {
-            val monthlyHistory = list.groupBy { YearMonth.from(it.occurrenceDate) }
-                .mapValues { entry -> entry.value.sumOf { it.amount } }
-            val historicalPoints = monthlyHistory.entries.sortedBy { it.key }
+        val categories = codes.map { code ->
+            val key = FlowKey(Direction.expense, code)
+            val historicalPoints = basis.monthlyHistory[key].orEmpty()
                 .map { (ym, amount) -> HistoricalPoint(ym.year, ym.monthValue, Money.normalize(amount)) }
-
-            val recurringAmount = templatesByCategory[code]?.fold(BigDecimal.ZERO) { acc, t -> acc + t.amount }
-            val movingAvg = if (monthlyHistory.isNotEmpty()) {
-                monthlyHistory.values.fold(BigDecimal.ZERO) { acc, v -> acc + v }
-                    .divide(BigDecimal.valueOf(monthlyHistory.size.toLong()), 2, RoundingMode.HALF_EVEN)
-            } else BigDecimal.ZERO
-
-            val projection = mutableListOf<ForecastPoint>()
-            var cursor = YearMonth.from(today).plusMonths(1)
-            for (i in 0 until horizonMonths) {
-                // A category whose history nets negative would otherwise project negative spending.
-                val projected = (recurringAmount ?: movingAvg).max(BigDecimal.ZERO)
-                projection += ForecastPoint(cursor.year, cursor.monthValue, Money.normalize(projected),
-                    if (recurringAmount != null) "recurring" else "history")
-                cursor = cursor.plusMonths(1)
+            val projection = months.map { ym ->
+                val recurringAmount = scheduled.getValue(ym)[key] ?: BigDecimal.ZERO
+                ForecastPoint(ym.year, ym.monthValue,
+                    Money.normalize(recurringAmount + basis.expectedDiscretionary(key)),
+                    if (recurringAmount.signum() != 0) "recurring" else "history")
             }
-            categories += CategoryForecast(code, historicalPoints, projection)
+            CategoryForecast(code, historicalPoints, projection)
         }
-        return ForecastResponse(horizonMonths, windowMonths, categories.sortedBy { it.categoryCode })
+        return ForecastResponse(horizonMonths, windowMonths, categories)
     }
 
     @Transactional(readOnly = true)
@@ -340,6 +325,7 @@ class AnalyticsService(
         val expensesByGroup: LinkedHashMap<String, BigDecimal>,
         val expensesByCategory: LinkedHashMap<String, BigDecimal>,
         val categoryGroups: Map<String, String>,
+        val discretionaryByCategory: Map<FlowKey, BigDecimal>,
     )
 
     private fun aggregateFlows(householdId: UUID, from: LocalDate, to: LocalDate): FlowAggregate {
@@ -350,7 +336,11 @@ class AnalyticsService(
         val incomeByCategory = LinkedHashMap<String, BigDecimal>()
         val expensesByGroup = LinkedHashMap<String, BigDecimal>()
         val expensesByCategory = LinkedHashMap<String, BigDecimal>()
+        val discretionaryByCategory = LinkedHashMap<FlowKey, BigDecimal>()
         for (r in rows) {
+            if (r.recurringTemplateId == null) {
+                discretionaryByCategory.merge(FlowKey(r.direction, r.categoryCode), r.amount) { a, b -> a + b }
+            }
             when (r.direction) {
                 Direction.income -> {
                     income += r.amount
@@ -364,7 +354,8 @@ class AnalyticsService(
                 }
             }
         }
-        return FlowAggregate(income, expenses, incomeByCategory, expensesByGroup, expensesByCategory, catGroup)
+        return FlowAggregate(income, expenses, incomeByCategory, expensesByGroup, expensesByCategory, catGroup,
+            discretionaryByCategory)
     }
 
     @Transactional(readOnly = true)
@@ -397,15 +388,27 @@ class AnalyticsService(
         )
     }
 
-    @Transactional(readOnly = true)
-    fun moneyFlow(householdId: UUID, from: LocalDate, to: LocalDate, level: String): MoneyFlowResponse {
-        val flows = aggregateFlows(householdId, from, to)
-        val saved = (flows.income - flows.expenses).max(BigDecimal.ZERO)
-        val deficit = (flows.expenses - flows.income).max(BigDecimal.ZERO)
+    private class FlowGraph(
+        val nodes: List<MoneyFlowNode>,
+        val links: List<MoneyFlowLink>,
+        val saved: BigDecimal,
+        val deficit: BigDecimal,
+    )
+
+    // One node/link layout for the real and the projected money flow, so both diagrams obey the same rules.
+    private fun flowGraph(
+        income: BigDecimal,
+        expenses: BigDecimal,
+        incomeByCategory: Map<String, BigDecimal>,
+        expenseBuckets: Map<String, BigDecimal>,
+        groupOf: (String) -> String,
+    ): FlowGraph {
+        val saved = (income - expenses).max(BigDecimal.ZERO)
+        val deficit = (expenses - income).max(BigDecimal.ZERO)
         val nodes = mutableListOf<MoneyFlowNode>()
         val links = mutableListOf<MoneyFlowLink>()
-        if (flows.income.signum() != 0 || flows.expenses.signum() != 0) {
-            flows.incomeByCategory.entries.sortedByDescending { it.value }.forEach { (code, amount) ->
+        if (income.signum() != 0 || expenses.signum() != 0) {
+            incomeByCategory.entries.filter { it.value.signum() > 0 }.sortedByDescending { it.value }.forEach { (code, amount) ->
                 nodes += MoneyFlowNode(id = code, side = "income", groupCode = null, amount = Money.normalize(amount))
                 links += MoneyFlowLink(source = code, target = HUB_NODE_ID, amount = Money.normalize(amount))
             }
@@ -413,14 +416,12 @@ class AnalyticsService(
                 nodes += MoneyFlowNode(id = DEFICIT_NODE_ID, side = "deficit", groupCode = null, amount = Money.normalize(deficit))
                 links += MoneyFlowLink(source = DEFICIT_NODE_ID, target = HUB_NODE_ID, amount = Money.normalize(deficit))
             }
-            nodes += MoneyFlowNode(id = HUB_NODE_ID, side = "hub", groupCode = null, amount = Money.normalize(flows.income + deficit))
-            val expenseBuckets = if (level == "category") flows.expensesByCategory else flows.expensesByGroup
+            nodes += MoneyFlowNode(id = HUB_NODE_ID, side = "hub", groupCode = null, amount = Money.normalize(income + deficit))
             // A bucket the refunds turned net-negative has no meaning as a flow out of the hub (and a
             // negative link corrupts the diagram's share maths), so it is left out. The allocation and
             // dashboard numbers keep the netted value.
             expenseBuckets.entries.filter { it.value.signum() > 0 }.sortedByDescending { it.value }.forEach { (code, amount) ->
-                val group = if (level == "category") flows.categoryGroups[code] ?: "ungrouped" else code
-                nodes += MoneyFlowNode(id = code, side = "expense", groupCode = group, amount = Money.normalize(amount))
+                nodes += MoneyFlowNode(id = code, side = "expense", groupCode = groupOf(code), amount = Money.normalize(amount))
                 links += MoneyFlowLink(source = HUB_NODE_ID, target = code, amount = Money.normalize(amount))
             }
             if (saved.signum() > 0) {
@@ -428,16 +429,120 @@ class AnalyticsService(
                 links += MoneyFlowLink(source = HUB_NODE_ID, target = SAVED_NODE_ID, amount = Money.normalize(saved))
             }
         }
+        return FlowGraph(nodes, links, saved, deficit)
+    }
+
+    @Transactional(readOnly = true)
+    fun moneyFlow(householdId: UUID, from: LocalDate, to: LocalDate, level: String): MoneyFlowResponse {
+        val flows = aggregateFlows(householdId, from, to)
+        val graph = flowGraph(
+            income = flows.income,
+            expenses = flows.expenses,
+            incomeByCategory = flows.incomeByCategory,
+            expenseBuckets = if (level == "category") flows.expensesByCategory else flows.expensesByGroup,
+            groupOf = { code -> if (level == "category") flows.categoryGroups[code] ?: "ungrouped" else code },
+        )
         return MoneyFlowResponse(
             from = from,
             to = to,
             level = level,
             income = Money.normalize(flows.income),
             expenses = Money.normalize(flows.expenses),
-            saved = Money.normalize(saved),
-            deficit = Money.normalize(deficit),
-            nodes = nodes,
-            links = links,
+            saved = Money.normalize(graph.saved),
+            deficit = Money.normalize(graph.deficit),
+            nodes = graph.nodes,
+            links = graph.links,
+        )
+    }
+
+    /** How the month of `today` is expected to end: per category, actual + recurring still due + the
+     *  discretionary average not yet spent (never below zero), on the same layout as [moneyFlow]. */
+    @Transactional(readOnly = true)
+    fun moneyFlowProjection(householdId: UUID, today: LocalDate, level: String, windowMonths: Int): MoneyFlowProjectionResponse {
+        val month = YearMonth.from(today)
+        // The same whole-month aggregation as the real panel, so the "actual" parts match it to the cent.
+        val flows = aggregateFlows(householdId, month.atDay(1), month.atEndOfMonth())
+        val basis = forecastEstimator.basis(householdId, month, windowMonths)
+        val stillDue = basis.recurringStillDue(month)
+
+        fun actualOf(key: FlowKey): BigDecimal = when (key.direction) {
+            Direction.income -> flows.incomeByCategory[key.categoryCode]
+            Direction.expense -> flows.expensesByCategory[key.categoryCode]
+        } ?: BigDecimal.ZERO
+
+        val keys = flows.incomeByCategory.keys.map { FlowKey(Direction.income, it) } +
+            flows.expensesByCategory.keys.map { FlowKey(Direction.expense, it) } +
+            stillDue.keys + basis.discretionaryAverage.keys
+        val perCategory = keys.toSet().associateWith { key ->
+            val discretionarySpent = flows.discretionaryByCategory[key] ?: BigDecimal.ZERO
+            ProjectedAmount(
+                actual = actualOf(key),
+                recurringDue = stillDue[key] ?: BigDecimal.ZERO,
+                discretionaryEstimate = (basis.expectedDiscretionary(key) - discretionarySpent).max(BigDecimal.ZERO),
+            )
+        }
+
+        val groupOfCategory = { code: String -> flows.categoryGroups[code] ?: "ungrouped" }
+        val incomeByCategory = perCategory.filterKeys { it.direction == Direction.income }.mapKeys { it.key.categoryCode }
+        val expenseByCategory = perCategory.filterKeys { it.direction == Direction.expense }.mapKeys { it.key.categoryCode }
+        val expenseBuckets = if (level == "category") expenseByCategory
+        else expenseByCategory.entries.groupBy({ groupOfCategory(it.key) }, { it.value })
+            .mapValues { (_, parts) -> parts.reduce(ProjectedAmount::plus) }
+
+        val income = incomeByCategory.values.fold(BigDecimal.ZERO) { acc, p -> acc + p.projected }
+        val expenses = expenseBuckets.values.fold(BigDecimal.ZERO) { acc, p -> acc + p.projected }
+        val graph = flowGraph(
+            income = income,
+            expenses = expenses,
+            incomeByCategory = incomeByCategory.mapValues { it.value.projected },
+            expenseBuckets = expenseBuckets.mapValues { it.value.projected },
+            groupOf = { code -> if (level == "category") groupOfCategory(code) else code },
+        )
+        val components = incomeByCategory.map { (code, p) -> p.toComponents("income", code) } +
+            expenseBuckets.map { (code, p) -> p.toComponents("expense", code) }
+        val basisWindow = basis.basisWindow
+        return MoneyFlowProjectionResponse(
+            year = month.year,
+            month = month.monthValue,
+            level = level,
+            dayOfMonth = today.dayOfMonth,
+            daysInMonth = month.lengthOfMonth(),
+            windowMonths = windowMonths,
+            monthsAvailable = basis.monthsAvailable,
+            basisFromYear = basisWindow?.start?.year,
+            basisFromMonth = basisWindow?.start?.monthValue,
+            basisToYear = basisWindow?.end?.year,
+            basisToMonth = basisWindow?.end?.monthValue,
+            income = Money.normalize(income),
+            expenses = Money.normalize(expenses),
+            saved = Money.normalize(graph.saved),
+            deficit = Money.normalize(graph.deficit),
+            nodes = graph.nodes,
+            links = graph.links,
+            components = components,
+        )
+    }
+
+    private data class ProjectedAmount(
+        val actual: BigDecimal,
+        val recurringDue: BigDecimal,
+        val discretionaryEstimate: BigDecimal,
+    ) {
+        val projected: BigDecimal get() = actual + recurringDue + discretionaryEstimate
+
+        operator fun plus(other: ProjectedAmount) = ProjectedAmount(
+            actual + other.actual,
+            recurringDue + other.recurringDue,
+            discretionaryEstimate + other.discretionaryEstimate,
+        )
+
+        fun toComponents(side: String, id: String) = ProjectedFlowComponents(
+            side = side,
+            id = id,
+            actual = Money.normalize(actual),
+            recurringDue = Money.normalize(recurringDue),
+            discretionaryEstimate = Money.normalize(discretionaryEstimate),
+            projected = Money.normalize(projected),
         )
     }
 
@@ -704,14 +809,7 @@ class AnalyticsService(
         }
         val allTotal = essentialTotal + nonEssentialTotal
 
-        // Months of the window the household could actually have data for. Shorter history divides by what
-        // exists rather than padding the range with zero months.
-        val bounds = transactions.dateBounds(householdId)
-        val monthsAvailable = bounds.minDate?.let { firstTx ->
-            val effectiveStart = maxOf(YearMonth.from(firstTx), w.start)
-            if (effectiveStart.isAfter(w.end)) 0
-            else (ChronoUnit.MONTHS.between(effectiveStart, w.end).toInt() + 1).coerceIn(0, w.months)
-        } ?: 0
+        val monthsAvailable = w.monthsCoveredSince(transactions.dateBounds(householdId).minDate)
         val denom = monthsAvailable.coerceAtLeast(1).toBigDecimal()
 
         val essentialMonthly = essentialTotal.divide(denom, 2, RoundingMode.HALF_EVEN)

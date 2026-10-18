@@ -200,6 +200,36 @@ export interface MoneyFlowResponse {
   links: MoneyFlowLink[];
 }
 
+export interface ProjectedFlowComponents {
+  side: "income" | "expense";
+  id: string;
+  actual: string;
+  recurringDue: string;
+  discretionaryEstimate: string;
+  projected: string;
+}
+
+export interface MoneyFlowProjectionResponse {
+  year: number;
+  month: number;
+  level: "group" | "category";
+  dayOfMonth: number;
+  daysInMonth: number;
+  windowMonths: number;
+  monthsAvailable: number;
+  basisFromYear: number | null;
+  basisFromMonth: number | null;
+  basisToYear: number | null;
+  basisToMonth: number | null;
+  income: string;
+  expenses: string;
+  saved: string;
+  deficit: string;
+  nodes: MoneyFlowNode[];
+  links: MoneyFlowLink[];
+  components: ProjectedFlowComponents[];
+}
+
 export interface MoverRow {
   categoryCode: string;
   groupCode: string | null;
@@ -290,6 +320,22 @@ export function useMoneyFlow(
         params: { from, to, level },
       })).data,
     enabled: enabled && Boolean(from) && Boolean(to),
+  });
+}
+
+export function useMoneyFlowProjection(
+  householdId: string,
+  level: "group" | "category",
+  windowMonths: number,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ["analytics", householdId, "money-flow-projection", level, windowMonths],
+    queryFn: async () =>
+      (await apiClient.get<MoneyFlowProjectionResponse>(`/households/${householdId}/analytics/money-flow/projection`, {
+        params: { level, windowMonths },
+      })).data,
+    enabled,
   });
 }
 

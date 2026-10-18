@@ -3,6 +3,7 @@ package com.sephilabs.sharedledger.recurring
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.ZoneId
 
 object RecurringDateMath {
 
@@ -21,6 +22,12 @@ object RecurringDateMath {
         val occurrences = occurrencesInRange(template, referenceDate.plusDays(1), ceiling)
         return occurrences.firstOrNull()
     }
+
+    /** First date the materializer has not scanned yet. Without a watermark it is the template's last edit, not
+     *  its startDate, so a backdated startDate never triggers retroactive back-fill. */
+    fun firstUnmaterializedDate(template: RecurringTemplate): LocalDate =
+        template.lastMaterializedThrough?.plusDays(1)
+            ?: template.updatedAt.atZone(ZoneId.systemDefault()).toLocalDate()
 
     private fun weeklyOccurrences(template: RecurringTemplate, from: LocalDate, to: LocalDate): List<LocalDate> {
         val targetDow = DayOfWeek.of(template.dayOfWeek?.toInt() ?: return emptyList())

@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "./client";
 
 export interface RecurringTemplate {
@@ -41,11 +41,17 @@ export function useRecurringTemplates(householdId: string) {
   });
 }
 
+// The Forecast and the month projection read active templates directly, not only their materialized rows.
+function invalidateTemplateReaders(qc: QueryClient, householdId: string) {
+  void qc.invalidateQueries({ queryKey: ["recurring", householdId] });
+  void qc.invalidateQueries({ queryKey: ["analytics", householdId] });
+}
+
 export function useCreateRecurring(householdId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: RecurringInput) => (await apiClient.post(`/households/${householdId}/recurring-templates`, input)).data,
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["recurring", householdId] }),
+    onSuccess: () => invalidateTemplateReaders(qc, householdId),
   });
 }
 
@@ -54,7 +60,7 @@ export function useUpdateRecurring(householdId: string) {
   return useMutation({
     mutationFn: async ({ id, input }: { id: string; input: RecurringInput }) =>
       (await apiClient.patch(`/households/${householdId}/recurring-templates/${id}`, input)).data,
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["recurring", householdId] }),
+    onSuccess: () => invalidateTemplateReaders(qc, householdId),
   });
 }
 
@@ -64,7 +70,7 @@ export function useDeleteRecurring(householdId: string) {
     mutationFn: async (id: string) => {
       await apiClient.delete(`/households/${householdId}/recurring-templates/${id}`);
     },
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["recurring", householdId] }),
+    onSuccess: () => invalidateTemplateReaders(qc, householdId),
   });
 }
 
@@ -74,7 +80,7 @@ export function useMaterializeRecurring(householdId: string) {
     mutationFn: async (id: string) =>
       (await apiClient.post<{ created: number }>(`/households/${householdId}/recurring-templates/${id}/run`)).data,
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["recurring", householdId] });
+      invalidateTemplateReaders(qc, householdId);
       void qc.invalidateQueries({ queryKey: ["transactions", householdId] });
     },
   });

@@ -132,6 +132,61 @@ class AnalyticsServiceTest @Autowired constructor(
     }
 
     @Test
+    fun `forecast adds the discretionary average to a recurring category instead of replacing it`() {
+        val (user, household) = seed()
+        val current = YearMonth.now()
+        val template = recurring.create(household.id, RecurringTemplateRequest(
+            direction = Direction.expense,
+            categoryCode = "home.rent",
+            amount = BigDecimal("600.00"),
+            cadence = Cadence.monthly,
+            dayOfMonth = 1,
+            startDate = current.minusMonths(3).atDay(1),
+        ), user)
+        for (back in 1L..3L) {
+            addTxWithTemplate(household, user, current.minusMonths(back).atDay(1), "home.rent", "600.00", template.id)
+            addTx(household, user, current.minusMonths(back).atDay(9), Direction.expense, "home.rent", "30.00")
+        }
+
+        val next = service.forecast(household.id, 1, 3).categories.first { it.categoryCode == "home.rent" }.projection.single()
+        assertThat(next.projectedExpense).isEqualByComparingTo("630.00")
+        assertThat(next.source).isEqualTo("recurring")
+    }
+
+    @Test
+    fun `forecast counts a yearly template only in the month it falls in`() {
+        val (user, household) = seed()
+        val due = YearMonth.now().plusMonths(2)
+        recurring.create(household.id, RecurringTemplateRequest(
+            direction = Direction.expense,
+            categoryCode = "home.rent",
+            amount = BigDecimal("1200.00"),
+            cadence = Cadence.yearly,
+            monthOfYear = due.monthValue.toShort(),
+            dayOfMonthYearly = 15,
+            startDate = YearMonth.now().atDay(1),
+        ), user)
+
+        val projection = service.forecast(household.id, 3, 3).categories.first { it.categoryCode == "home.rent" }.projection
+        assertThat(projection.map { it.projectedExpense.toPlainString() }).containsExactly("0.00", "1200.00", "0.00")
+    }
+
+    @Test
+    fun `forecast averages complete months over the months available, ignoring the current month`() {
+        val (user, household) = seed()
+        val current = YearMonth.now()
+        addTx(household, user, current.minusMonths(2).atDay(5), Direction.expense, "groceries.groceries", "300.00")
+        addTx(household, user, current.minusMonths(1).atDay(5), Direction.expense, "home.rent", "10.00")
+        addTx(household, user, current.atDay(1), Direction.expense, "groceries.groceries", "5000.00")
+
+        // Two months of history: a category seen once still averages over both, and this month's partial
+        // spending is not part of the basis.
+        val groceries = service.forecast(household.id, 1, 3).categories.first { it.categoryCode == "groceries.groceries" }
+        assertThat(groceries.projection.single().projectedExpense).isEqualByComparingTo("150.00")
+        assertThat(groceries.projection.single().source).isEqualTo("history")
+    }
+
+    @Test
     fun `recurring shares stay within a hundred percent when refunds outweigh discretionary spending`() {
         val (user, household) = seed()
         val ym = YearMonth.of(2025, 9)

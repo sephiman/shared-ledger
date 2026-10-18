@@ -176,6 +176,37 @@ data class MoneyFlowResponse(
     val links: List<MoneyFlowLink>,
 )
 
+data class ProjectedFlowComponents(
+    val side: String, // "income" | "expense"
+    val id: String, // node id: income category, or expense group/category per level
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val actual: BigDecimal,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val recurringDue: BigDecimal,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val discretionaryEstimate: BigDecimal,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val projected: BigDecimal,
+)
+
+data class MoneyFlowProjectionResponse(
+    val year: Int,
+    val month: Int,
+    val level: String, // "group" | "category"
+    val dayOfMonth: Int,
+    val daysInMonth: Int,
+    val windowMonths: Int,
+    val monthsAvailable: Int,
+    // The complete months the moving average covers; null when there is no history before this month.
+    val basisFromYear: Int?,
+    val basisFromMonth: Int?,
+    val basisToYear: Int?,
+    val basisToMonth: Int?,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val income: BigDecimal,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val expenses: BigDecimal,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val saved: BigDecimal,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val deficit: BigDecimal,
+    val nodes: List<MoneyFlowNode>,
+    val links: List<MoneyFlowLink>,
+    val components: List<ProjectedFlowComponents>,
+)
+
 data class MoverRow(
     val categoryCode: String,
     val groupCode: String?,

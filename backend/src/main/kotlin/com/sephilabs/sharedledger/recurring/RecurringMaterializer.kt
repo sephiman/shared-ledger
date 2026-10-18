@@ -15,7 +15,6 @@ import org.springframework.stereotype.Component
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.LocalDate
-import java.time.ZoneId
 import java.util.UUID
 
 @Component
@@ -58,10 +57,7 @@ class RecurringMaterializer(
         MDC.put("templateId", template_id)
         try {
             val cap = template.endDate?.let { if (it.isBefore(today)) it else today } ?: today
-            // Null watermark falls back to the entity's last edit, not template.startDate,
-            // so a backdated startDate never triggers retroactive back-fill.
-            val from = template.lastMaterializedThrough?.plusDays(1)
-                ?: template.updatedAt.atZone(ZoneId.systemDefault()).toLocalDate()
+            val from = RecurringDateMath.firstUnmaterializedDate(template)
             if (from.isAfter(cap)) return 0
 
             val dates = RecurringDateMath.occurrencesInRange(template, from, cap)
@@ -89,14 +85,16 @@ class RecurringMaterializer(
                     }
                     metrics.recurringMaterialized(template_id)
                     created++
-                } catch (ignored: DataIntegrityViolationException) {
+                } catch (_: DataIntegrityViolationException) {
                     // Idempotency: row already exists from a prior run.
                     log.debug("Skipped duplicate occurrence on {} for template {}", date, template_id)
                 }
             }
             runInTx {
                 val refreshed = templates.findById(template.id).orElse(template)
-                refreshed.lastMaterializedThrough = cap
+                if (refreshed != null) {
+                    refreshed.lastMaterializedThrough = cap
+                }
                 templates.save(refreshed)
             }
             // Per-row writes are already committed; publish one aggregated summary for the run.

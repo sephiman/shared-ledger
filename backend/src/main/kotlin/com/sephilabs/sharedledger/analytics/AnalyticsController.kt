@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import java.time.LocalDate
 import java.time.YearMonth
 import java.util.UUID
 
@@ -25,7 +26,7 @@ class AnalyticsController(
         @RequestParam month: Int,
     ): MonthDashboardResponse = metrics.analyticsTimer("month").record<MonthDashboardResponse> {
         service.monthDashboard(householdId, year, month)
-    }!!
+    }
 
     @GetMapping("/year")
     fun year(
@@ -33,7 +34,7 @@ class AnalyticsController(
         @RequestParam year: Int,
     ): YearDashboardResponse = metrics.analyticsTimer("year").record<YearDashboardResponse> {
         service.yearDashboard(householdId, year)
-    }!!
+    }
 
     @GetMapping("/year-over-year")
     fun yoy(
@@ -42,7 +43,7 @@ class AnalyticsController(
         @RequestParam(defaultValue = "5") years: Int,
     ): YearOverYearResponse = metrics.analyticsTimer("year_over_year").record<YearOverYearResponse> {
         service.yearOverYear(householdId, month, years)
-    }!!
+    }
 
     @GetMapping("/year-by-year")
     fun yearByYear(
@@ -50,7 +51,7 @@ class AnalyticsController(
         @RequestParam years: List<Int>,
     ): YearByYearResponse = metrics.analyticsTimer("year_by_year").record<YearByYearResponse> {
         service.yearByYear(householdId, years)
-    }!!
+    }
 
     @GetMapping("/trailing-12")
     fun trailing(
@@ -68,7 +69,7 @@ class AnalyticsController(
         @RequestParam(defaultValue = "3") windowMonths: Int,
     ): ForecastResponse = metrics.analyticsTimer("forecast").record<ForecastResponse> {
         service.forecast(householdId, horizonMonths.coerceIn(1, 12), windowMonths.coerceIn(1, 24))
-    }!!
+    }
 
     @GetMapping("/dashboard-extras")
     fun dashboardExtras(
@@ -78,7 +79,7 @@ class AnalyticsController(
         val ym = asOf?.let { YearMonth.parse(it) } ?: YearMonth.now()
         return metrics.analyticsTimer("dashboard_extras").record<DashboardExtrasResponse> {
             service.dashboardExtras(householdId, ym)
-        }!!
+        }
     }
 
     @GetMapping("/allocation")
@@ -89,7 +90,7 @@ class AnalyticsController(
     ): AllocationResponse = metrics.analyticsTimer("allocation").record<AllocationResponse> {
         if (month != null && month !in 1..12) throw AppException.badRequest("INVALID_PARAMETER", "month")
         service.allocation(householdId, year, month)
-    }!!
+    }
 
     @GetMapping("/money-flow")
     fun moneyFlow(
@@ -106,7 +107,19 @@ class AnalyticsController(
             AnalyticsRange.parseDate(to, "to"),
         )
         service.moneyFlow(householdId, window.from, window.to, level)
-    }!!
+    }
+
+    @GetMapping("/money-flow/projection")
+    fun moneyFlowProjection(
+        @PathVariable householdId: UUID,
+        @RequestParam(defaultValue = "group") level: String,
+        @RequestParam(defaultValue = "3") windowMonths: Int,
+    ): MoneyFlowProjectionResponse = metrics.analyticsTimer("money_flow_projection").record<MoneyFlowProjectionResponse> {
+        if (level !in setOf("group", "category")) {
+            throw AppException.badRequest("INVALID_PARAMETER", "level")
+        }
+        service.moneyFlowProjection(householdId, LocalDate.now(), level, windowMonths.coerceIn(1, 24))
+    }
 
     @GetMapping("/top-movers")
     fun topMovers(
@@ -120,7 +133,7 @@ class AnalyticsController(
             throw AppException.badRequest("INVALID_PARAMETER", "baseline")
         }
         service.topMovers(householdId, year, month, baseline)
-    }!!
+    }
 
     @GetMapping("/recurring-share")
     fun recurringShare(
@@ -134,7 +147,7 @@ class AnalyticsController(
         }
         if (month != null && month !in 1..12) throw AppException.badRequest("INVALID_PARAMETER", "month")
         service.recurringShare(householdId, scope, year, month)
-    }!!
+    }
 
     @GetMapping("/heatmap")
     fun heatmap(
@@ -155,7 +168,7 @@ class AnalyticsController(
             else -> months
         }
         service.heatmap(householdId, safeMonths, dir, AnalyticsRange.parse(from, to)?.toMonthWindow())
-    }!!
+    }
 
     @GetMapping("/daily")
     fun daily(
@@ -174,14 +187,14 @@ class AnalyticsController(
             AnalyticsRange.parseDate(to, "to"),
         )
         service.daily(householdId, window.from, window.to, dir)
-    }!!
+    }
 
     @GetMapping("/contribution-series")
     fun contributionSeries(
         @PathVariable householdId: UUID,
     ): ContributionSeriesResponse = metrics.analyticsTimer("contribution_series").record<ContributionSeriesResponse> {
         service.contributionSeries(householdId)
-    }!!
+    }
 
     @GetMapping("/years-available")
     fun yearsAvailable(
@@ -199,7 +212,7 @@ class AnalyticsController(
         val window = AnalyticsRange.parse(from, to)?.toMonthWindow()
         return metrics.analyticsTimer("cost_of_living").record<CostOfLivingResponse> {
             service.costOfLiving(householdId, ym, window)
-        }!!
+        }
     }
 
     @GetMapping("/explorer")
@@ -231,5 +244,5 @@ class AnalyticsController(
             yoyOverlay,
             AnalyticsRange.parse(from, to)?.toMonthWindow(),
         )
-    }!!
+    }
 }

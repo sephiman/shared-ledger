@@ -8,12 +8,13 @@ import { formatMoney } from "@/lib/money";
 import { monthName } from "@/lib/dates";
 import { categoryIcon } from "@/lib/categoryGroup";
 import { categoryLabelByCode } from "@/lib/categoryLabel";
+import { FORECAST_WINDOWS, parseForecastWindow, useForecastWindow } from "./forecastWindow";
 
 export function ForecastTab() {
   const { t, i18n } = useTranslation();
   const household = useActiveHousehold();
   const [horizon, setHorizon] = useState(6);
-  const [window, setWindow] = useState(3);
+  const [window, setWindow] = useForecastWindow();
   const { data } = useForecast(household.householdId, horizon, window);
   const { data: categories = [] } = useCategories(household.householdId);
 
@@ -34,8 +35,8 @@ export function ForecastTab() {
             </div>
             <div>
               <Label className="text-xs">{t("analytics.window")}</Label>
-              <Select value={window} onChange={(e) => setWindow(Number(e.target.value))} title={t("analytics.window_help")}>
-                {[3, 6, 12].map((w) => <option key={w} value={w}>{w}</option>)}
+              <Select value={window} onChange={(e) => setWindow(parseForecastWindow(e.target.value))} title={t("analytics.window_help")}>
+                {FORECAST_WINDOWS.map((w) => <option key={w} value={w}>{w}</option>)}
               </Select>
             </div>
           </div>

@@ -135,7 +135,10 @@ function splitSmallFlows(
 
 /** Map the backend's semantic nodes/links to Recharts' index-based Sankey data, collapsing sub-threshold
  *  flows into an "Others" node per side. The hub, "Saved" and "Deficit" never collapse. */
-export function buildMoneyFlowSankey(data: MoneyFlowResponse, opts: BuildMoneyFlowOptions): MoneyFlowSankeyData {
+export function buildMoneyFlowSankey(
+  data: Pick<MoneyFlowResponse, "nodes" | "income" | "expenses">,
+  opts: BuildMoneyFlowOptions,
+): MoneyFlowSankeyData {
   if (data.nodes.length === 0) return { nodes: [], links: [] };
 
   const income = Number(data.income);

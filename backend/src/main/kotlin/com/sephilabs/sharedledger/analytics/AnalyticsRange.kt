@@ -26,6 +26,15 @@ data class MonthWindow(val start: YearMonth, val end: YearMonth) {
         }
         return out
     }
+
+    /** Months of the window the household could have data for, given its first transaction. A shorter history
+     *  divides by what exists rather than padding the window with zero months. */
+    fun monthsCoveredSince(firstTransaction: LocalDate?): Int {
+        val first = firstTransaction ?: return 0
+        val effectiveStart = maxOf(YearMonth.from(first), start)
+        if (effectiveStart.isAfter(end)) return 0
+        return (ChronoUnit.MONTHS.between(effectiveStart, end).toInt() + 1).coerceIn(0, months)
+    }
 }
 
 /** Widen a window to the whole months it touches, matching how the range selector snaps in the UI. */
