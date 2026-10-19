@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { MoneyFlowNode, MoneyFlowResponse } from "@/api/analytics";
 import { useCategories } from "@/api/catalog";
@@ -6,7 +6,7 @@ import { Rectangle, ResponsiveContainer, Sankey, Tooltip } from "recharts";
 import { formatMoney, formatNumber } from "@/lib/money";
 import { categoryLabelByCode } from "@/lib/categoryLabel";
 import { categoryIcon, groupIcon } from "@/lib/categoryGroup";
-import { buildMoneyFlowSankey, type MoneyFlowSankeyData, type SankeyNodeDatum } from "./moneyflow";
+import { buildMoneyFlowSankey, nodeKey, type MoneyFlowSankeyData, type SankeyNodeDatum } from "./moneyflow";
 import { DEFICIT_COLOR, HUB_COLOR, OTHERS_COLOR, SAVED_COLOR, groupColor, incomeColor } from "./palette";
 
 interface NodeRenderProps {
@@ -30,11 +30,43 @@ interface LinkRenderProps {
 
 type FlowData = Pick<MoneyFlowResponse, "level" | "income" | "expenses" | "nodes">;
 
+const NO_KEYS: ReadonlySet<string> = new Set();
+
+/** A node drawn this thin or thinner still shows, and a tap anywhere this tall around it still lands. */
+const MIN_NODE_HEIGHT = 3;
+const MIN_HIT_HEIGHT = 24;
+
+/** Clicking a projected income/expense node; the real diagram passes none and stays read-only. */
+interface NodeToggle {
+  disabledKeys: ReadonlySet<string>;
+  onToggle: (node: SankeyNodeDatum) => void;
+  labelOf: (node: SankeyNodeDatum) => string;
+}
+
+const isToggleable = (node: SankeyNodeDatum) => node.side === "income" || node.side === "expense";
+
+interface Box {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** The bar's column, at least MIN_HIT_HEIGHT tall for a finger, plus the label's exact box: SVG text only takes
+ *  clicks on its glyphs, so word gaps would fall through. The label is never padded taller, or it would steal clicks
+ *  from a neighbour's ribbon passing just under it. */
+function hitBoxes(bar: Box, label: Box | null): Box[] {
+  const height = Math.max(bar.height, MIN_HIT_HEIGHT);
+  const column = { x: bar.x, y: bar.y + bar.height / 2 - height / 2, width: bar.width, height };
+  return label ? [column, label] : [column];
+}
+
 /** Labels and colors the backend's semantic nodes, so the real and projected panels name things alike. */
 export function useMoneyFlowSankey(
   householdId: string,
   data: FlowData | undefined,
   projected = false,
+  neverCollapse: ReadonlySet<string> = NO_KEYS,
 ): MoneyFlowSankeyData | null {
   const { t } = useTranslation();
   const { data: categories } = useCategories(householdId);
@@ -76,32 +108,68 @@ export function useMoneyFlowSankey(
       colorOf,
       othersLabel: t("analytics.money_flow_others"),
       othersColor: OTHERS_COLOR,
+      neverCollapse,
     });
-  }, [data, categories, t, projected]);
+  }, [data, categories, t, projected, neverCollapse]);
 }
 
 function MoneyFlowNodeShape({
-  x, y, width, height, payload, currency, locale, projected,
-}: NodeRenderProps & { currency: string; locale: string; projected: boolean }) {
+  x, y, width, height, payload, currency, locale, projected, toggle,
+}: NodeRenderProps & { currency: string; locale: string; projected: boolean; toggle?: NodeToggle }) {
   const isCenter = payload.column === "center";
   const isRight = payload.column === "right";
   const textX = isCenter ? x + width / 2 : isRight ? x - 8 : x + width + 8;
   const anchor = isCenter ? "middle" : isRight ? "end" : "start";
   const textY = isCenter ? y - 8 : y + height / 2 + 4;
+  const clickable = toggle != null && isToggleable(payload);
+  const actualsOnly = clickable && toggle.disabledKeys.has(nodeKey(payload));
+  const estimate = projected && !actualsOnly;
+  // Nothing actual yet: an outline sliver, so the node can always be clicked back on.
+  const empty = clickable && payload.amount <= 0;
+  const drawnHeight = clickable ? Math.max(height, MIN_NODE_HEIGHT) : height;
+  const labelRef = useRef<SVGTextElement>(null);
+  const [labelBox, setLabelBox] = useState<Box | null>(null);
+  useLayoutEffect(() => {
+    const label = labelRef.current;
+    // jsdom has no SVG layout; the bar-only hit area still works there.
+    if (!clickable || !label || typeof label.getBBox !== "function") return;
+    const { x: bx, y: by, width: bw, height: bh } = label.getBBox();
+    setLabelBox({ x: bx, y: by, width: bw, height: bh });
+  }, [clickable, payload.name, payload.amount, x, y, currency, locale]);
+  const hits = hitBoxes({ x: x - 4, y, width: width + 8, height: drawnHeight }, labelBox);
+  const onKeyDown = (e: KeyboardEvent<SVGGElement>) => {
+    if (!clickable || (e.key !== "Enter" && e.key !== " ")) return;
+    e.preventDefault();
+    toggle.onToggle(payload);
+  };
   return (
-    <g>
+    <g
+      {...(clickable && {
+        role: "button",
+        tabIndex: 0,
+        "aria-pressed": actualsOnly,
+        "aria-label": toggle.labelOf(payload),
+        onClick: () => toggle.onToggle(payload),
+        onKeyDown,
+        className: "group cursor-pointer focus:outline-none focus-visible:outline-2 focus-visible:outline-sky-500",
+      })}
+    >
+      {clickable &&
+        hits.map((hit, i) => <rect key={i} x={hit.x} y={hit.y} width={hit.width} height={hit.height} fill="transparent" />)}
       <Rectangle
         x={x}
         y={y}
         width={width}
-        height={height}
+        height={drawnHeight}
         fill={payload.fill}
-        fillOpacity={projected ? 0.45 : 0.95}
-        stroke={projected ? payload.fill : undefined}
-        strokeDasharray={projected ? "3 2" : undefined}
+        fillOpacity={empty ? 0.15 : estimate ? 0.45 : 0.95}
+        stroke={estimate || empty ? payload.fill : undefined}
+        strokeDasharray={estimate ? "3 2" : undefined}
         radius={2}
+        // Same lift as the node's ribbon: bar, label and ribbon are one control and should read as one.
+        className={clickable ? (empty ? "group-hover:[fill-opacity:0.3]" : estimate ? "group-hover:[fill-opacity:0.6]" : "group-hover:[fill-opacity:1]") : undefined}
       />
-      <text x={textX} y={textY} textAnchor={anchor} fill="currentColor" fontSize={12} className="text-gray-800 dark:text-gray-100">
+      <text ref={labelRef} x={textX} y={textY} textAnchor={anchor} fill="currentColor" fontSize={12} className="text-gray-800 dark:text-gray-100">
         <tspan fontWeight={500}>{payload.name}</tspan>
         <tspan dx={6} fontSize={11} fill="currentColor" className="tabular-nums text-gray-500 dark:text-gray-400">
           {formatMoney(payload.amount, currency, locale)}
@@ -111,17 +179,25 @@ function MoneyFlowNodeShape({
   );
 }
 
+/** A ribbon is a pointer shortcut to its non-hub node (no role or tab stop: the keyboard control is the node). */
 function MoneyFlowLinkShape({
-  sourceX, sourceY, sourceControlX, targetControlX, targetX, targetY, linkWidth, payload, projected,
-}: LinkRenderProps & { projected: boolean }) {
-  const stroke = payload.source.side === "hub" ? payload.target.fill : payload.source.fill;
+  sourceX, sourceY, sourceControlX, targetControlX, targetX, targetY, linkWidth, payload, projected, toggle,
+}: LinkRenderProps & { projected: boolean; toggle?: NodeToggle }) {
+  const flowEnd = payload.source.side === "hub" ? payload.target : payload.source;
+  const clickable = toggle != null && isToggleable(flowEnd);
+  const estimate = projected && !(toggle?.disabledKeys.has(nodeKey(flowEnd)) ?? false);
   return (
     <path
       d={`M${sourceX},${sourceY}C${sourceControlX},${sourceY} ${targetControlX},${targetY} ${targetX},${targetY}`}
       fill="none"
-      stroke={stroke}
-      strokeOpacity={projected ? 0.18 : 0.35}
+      stroke={flowEnd.fill}
+      strokeOpacity={estimate ? 0.18 : 0.35}
       strokeWidth={Math.max(1, linkWidth)}
+      {...(clickable && {
+        "data-flow-end": nodeKey(flowEnd),
+        onClick: () => toggle.onToggle(flowEnd),
+        className: estimate ? "cursor-pointer hover:[stroke-opacity:0.28]" : "cursor-pointer hover:[stroke-opacity:0.5]",
+      })}
     />
   );
 }
@@ -202,12 +278,14 @@ export function MoneyFlowSankeyChart({
   currency,
   projected = false,
   detailLine,
+  toggle,
 }: {
   sankey: MoneyFlowSankeyData;
   currency: string;
   /** Muted, dashed treatment so an estimate is never mistaken for the real diagram. */
   projected?: boolean;
   detailLine?: (node: SankeyNodeDatum) => string | null;
+  toggle?: NodeToggle;
 }) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
@@ -229,9 +307,17 @@ export function MoneyFlowSankeyChart({
             nodePadding={18}
             margin={{ top: 24, right: 16, bottom: 16, left: 16 }}
             node={(props: unknown) => (
-              <MoneyFlowNodeShape {...(props as NodeRenderProps)} currency={currency} locale={locale} projected={projected} />
+              <MoneyFlowNodeShape
+                {...(props as NodeRenderProps)}
+                currency={currency}
+                locale={locale}
+                projected={projected}
+                toggle={toggle}
+              />
             )}
-            link={(props: unknown) => <MoneyFlowLinkShape {...(props as LinkRenderProps)} projected={projected} />}
+            link={(props: unknown) => (
+              <MoneyFlowLinkShape {...(props as LinkRenderProps)} projected={projected} toggle={toggle} />
+            )}
           >
             <Tooltip
               content={(props: { active?: boolean; payload?: ReadonlyArray<SankeyTooltipItem> }) => (
@@ -263,10 +349,12 @@ export function MoneyFlowTotals({
   totals,
   currency,
   labelOf,
+  children,
 }: {
   totals: FlowTotals;
   currency: string;
   labelOf: (field: keyof FlowTotals) => string;
+  children?: ReactNode;
 }) {
   const { i18n } = useTranslation();
   const locale = i18n.language;
@@ -300,6 +388,7 @@ export function MoneyFlowTotals({
           </span>
         </span>
       )}
+      {children}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { MoneyFlowProjectionResponse, ProjectedFlowComponents } from "@/api/analytics";
+import type { MoneyFlowNode, MoneyFlowProjectionResponse, ProjectedFlowComponents } from "@/api/analytics";
 import { parseForecastWindow } from "./forecastWindow";
 import type { SankeyNodeDatum } from "./moneyflow";
 import {
@@ -9,6 +9,8 @@ import {
   hasEstimatedPart,
   isCurrentMonthScope,
   monthList,
+  presentDisabledKeys,
+  withActualsOnly,
 } from "./moneyflowProjection";
 
 function projection(partial: Partial<MoneyFlowProjectionResponse>): MoneyFlowProjectionResponse {
@@ -137,5 +139,99 @@ describe("parseForecastWindow", () => {
     expect(parseForecastWindow("12")).toBe(12);
     expect(parseForecastWindow("5")).toBe(3);
     expect(parseForecastWindow(null)).toBe(3);
+  });
+});
+
+describe("withActualsOnly", () => {
+  const node = (id: string, side: MoneyFlowNode["side"], amount: string): MoneyFlowNode => ({
+    id,
+    side,
+    groupCode: side === "expense" ? id : null,
+    amount,
+  });
+  const part = (
+    side: "income" | "expense",
+    id: string,
+    actual: string,
+    recurringDue: string,
+    discretionaryEstimate: string,
+    projected: string,
+  ): ProjectedFlowComponents => ({ side, id, actual, recurringDue, discretionaryEstimate, projected });
+
+  // Income 3000 (2500 actual + 500 still due); home 1890.12 + 350 + 38.84; leisure 0 + 0 + 120.40.
+  const base = projection({
+    income: "3000.00",
+    expenses: "2399.36",
+    saved: "600.64",
+    deficit: "0.00",
+    nodes: [
+      node("income.salary", "income", "3000.00"),
+      node("hub", "hub", "3000.00"),
+      node("home", "expense", "2278.96"),
+      node("leisure", "expense", "120.40"),
+      node("saved", "saved", "600.64"),
+    ],
+    components: [
+      part("income", "income.salary", "2500.00", "500.00", "0.00", "3000.00"),
+      part("expense", "home", "1890.12", "350.00", "38.84", "2278.96"),
+      part("expense", "leisure", "0.00", "0.00", "120.40", "120.40"),
+    ],
+  });
+  const amounts = (r: MoneyFlowProjectionResponse) => Object.fromEntries(r.nodes.map((n) => [n.id, n.amount]));
+
+  it("removes exactly the node's recurring-due and estimate from expenses, hub and saved", () => {
+    const r = withActualsOnly(base, new Set(["expense:home"]));
+
+    expect(r.expenses).toBe("2010.52");
+    expect(r.saved).toBe("989.48");
+    expect(r.deficit).toBe("0.00");
+    expect(amounts(r)).toEqual({ "income.salary": "3000.00", hub: "3000.00", home: "1890.12", leisure: "120.40", saved: "989.48" });
+    expect(r.links).toContainEqual({ source: "hub", target: "home", amount: "1890.12" });
+  });
+
+  it("turns saved into a deficit when cutting income flips the sign, and back", () => {
+    const tight = { ...base, expenses: "2799.36", saved: "200.64", nodes: base.nodes.map((n) => (n.id === "home" ? { ...n, amount: "2678.96" } : n.id === "saved" ? { ...n, amount: "200.64" } : n)) };
+
+    const r = withActualsOnly(tight, new Set(["income:income.salary"]));
+
+    expect(r.income).toBe("2500.00");
+    expect(r.saved).toBe("0.00");
+    expect(r.deficit).toBe("299.36");
+    expect(amounts(r)).toEqual({ "income.salary": "2500.00", deficit: "299.36", hub: "2799.36", home: "2678.96", leisure: "120.40" });
+    expect(r.nodes.map((n) => n.side)).toEqual(["income", "deficit", "hub", "expense", "expense"]);
+    expect(r.links).toContainEqual({ source: "deficit", target: "hub", amount: "299.36" });
+  });
+
+  it("round-trips to the exact original figures once nothing is disabled", () => {
+    expect(withActualsOnly(base, new Set())).toBe(base);
+    const restored = withActualsOnly(base, presentDisabledKeys(base, new Set<string>()));
+    expect(restored).toEqual(base);
+  });
+
+  it("keeps a zero-actuals node at zero instead of dropping it", () => {
+    const r = withActualsOnly(base, new Set(["expense:leisure"]));
+
+    expect(amounts(r).leisure).toBe("0.00");
+    expect(r.expenses).toBe("2278.96");
+    expect(r.saved).toBe("721.04");
+  });
+
+  it("draws a refund-negative actual at zero but keeps the exact actual in the totals", () => {
+    const refunded = {
+      ...base,
+      components: base.components.map((c) => (c.id === "leisure" ? { ...c, actual: "-15.00", projected: "105.40" } : c)),
+      expenses: "2384.36",
+      saved: "615.64",
+    };
+
+    const r = withActualsOnly(refunded, new Set(["expense:leisure"]));
+
+    expect(amounts(r).leisure).toBe("0.00");
+    expect(r.expenses).toBe("2263.96");
+    expect(r.saved).toBe("736.04");
+  });
+
+  it("ignores disabled keys a refetch no longer returns", () => {
+    expect(presentDisabledKeys(base, new Set(["expense:home", "expense:gone"]))).toEqual(new Set(["expense:home"]));
   });
 });

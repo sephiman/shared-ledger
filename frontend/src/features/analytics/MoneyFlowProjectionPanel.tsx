@@ -1,12 +1,31 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMoneyFlowProjection, type MoneyFlowProjectionResponse } from "@/api/analytics";
-import { Badge, Card, CardBody, CardHeader, Label, Select } from "@/components/ui/primitives";
+import { Badge, Button, Card, CardBody, CardHeader, Label, Select } from "@/components/ui/primitives";
 import { formatMoney, formatNumber } from "@/lib/money";
 import { MoneyFlowSankeyChart, MoneyFlowTotals, useMoneyFlowSankey } from "./MoneyFlowChart";
 import { FORECAST_WINDOWS, parseForecastWindow, useForecastWindow } from "./forecastWindow";
-import type { SankeyNodeDatum } from "./moneyflow";
-import { basisMonths, compactMonthSpan, componentsLookup, hasEstimatedPart, monthList } from "./moneyflowProjection";
+import { nodeKey, type SankeyNodeDatum } from "./moneyflow";
+import {
+  basisMonths,
+  compactMonthSpan,
+  componentsLookup,
+  estimatedRemainder,
+  hasEstimatedPart,
+  monthList,
+  presentDisabledKeys,
+  withActualsOnly,
+} from "./moneyflowProjection";
+
+type Level = "group" | "category";
+
+/** Nodes switched to actuals-only, valid only for the breakdown and window they were clicked under. */
+interface ActualsOnlyNodes {
+  scope: string;
+  keys: ReadonlySet<string>;
+}
+
+const NONE: ReadonlySet<string> = new Set();
 
 /** Per browser, like the theme: the panel doubles the tab's height, so whoever folds it keeps it folded. */
 const COLLAPSED_KEY = "sl.analytics.moneyFlowProjectionCollapsed";
@@ -39,21 +58,34 @@ function windowAssumption(r: MoneyFlowProjectionResponse, t: Translate, locale: 
   return t("analytics.money_flow_projection_window", { window: r.windowMonths, months });
 }
 
-export function MoneyFlowProjectionPanel({
-  householdId,
-  currency,
-  level,
-}: {
-  householdId: string;
-  currency: string;
-  level: "group" | "category";
-}) {
+export function MoneyFlowProjectionPanel({ householdId, currency }: { householdId: string; currency: string }) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const [window, setWindow] = useForecastWindow();
+  // Exploration state, deliberately not remembered: every visit starts from the group view with nothing switched off.
+  const [level, setLevel] = useState<Level>("group");
   const [collapsed, setCollapsed] = useState(readCollapsed);
-  const { data, isLoading } = useMoneyFlowProjection(householdId, level, window);
-  const sankey = useMoneyFlowSankey(householdId, data, true);
+  const { data: response, isLoading } = useMoneyFlowProjection(householdId, level, window);
+
+  // Cleared on any scope change, not in the selectors' handlers: the window is shared with the Forecast and may
+  // change elsewhere. Dropped outright so that going back to the previous scope doesn't bring old toggles back.
+  const scope = `${level}:${window}`;
+  const [actualsOnly, setActualsOnly] = useState<ActualsOnlyNodes>({ scope, keys: NONE });
+  if (actualsOnly.scope !== scope) setActualsOnly({ scope, keys: NONE });
+  const disabledKeys = useMemo(() => {
+    if (!response || actualsOnly.scope !== scope) return NONE;
+    return presentDisabledKeys(response, actualsOnly.keys);
+  }, [response, actualsOnly, scope]);
+  const data = useMemo(() => response && withActualsOnly(response, disabledKeys), [response, disabledKeys]);
+  const sankey = useMoneyFlowSankey(householdId, data, true, disabledKeys);
+
+  const toggleNode = (node: SankeyNodeDatum) => {
+    const key = nodeKey(node);
+    const next = new Set(disabledKeys);
+    if (!next.delete(key)) next.add(key);
+    setActualsOnly({ scope, keys: next });
+  };
+  const restoreAll = () => setActualsOnly({ scope, keys: NONE });
 
   useEffect(() => {
     try {
@@ -71,6 +103,9 @@ export function MoneyFlowProjectionPanel({
     return (node: SankeyNodeDatum): string | null => {
       const c = lookup(node);
       if (!c) return null;
+      if (disabledKeys.has(nodeKey(node))) {
+        return t("analytics.money_flow_projection_disabled", { excluded: money(estimatedRemainder(c).toFixed(2)) });
+      }
       if (!hasEstimatedPart(c)) return t("analytics.money_flow_projection_settled", { actual: money(c.actual) });
       const parts = {
         actual: money(c.actual),
@@ -83,7 +118,7 @@ export function MoneyFlowProjectionPanel({
         ? t("analytics.money_flow_projection_breakdown_no_history", parts)
         : t("analytics.money_flow_projection_breakdown", parts);
     };
-  }, [data, currency, locale, t]);
+  }, [data, disabledKeys, currency, locale, t]);
 
   const hasFlows = sankey != null && sankey.nodes.length > 0;
   const projectedLabel = (field: "income" | "expenses" | "saved" | "deficit") =>
@@ -117,16 +152,29 @@ export function MoneyFlowProjectionPanel({
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{basisHeadline(data, t, locale)}</p>
             )}
           </div>
-          <div>
-            <Label className="text-xs">{t("analytics.window")}</Label>
-            <Select
-              value={window}
-              onChange={(e) => setWindow(parseForecastWindow(e.target.value))}
-              title={t("analytics.window_help")}
-              aria-label={t("analytics.window")}
-            >
-              {FORECAST_WINDOWS.map((w) => <option key={w} value={w}>{w}</option>)}
-            </Select>
+          <div className="flex gap-3">
+            <div>
+              <Label className="text-xs">{t("analytics.money_flow_level")}</Label>
+              <Select
+                value={level}
+                onChange={(e) => setLevel(e.target.value as Level)}
+                aria-label={t("analytics.money_flow_projection_level")}
+              >
+                <option value="group">{t("analytics.money_flow_by_group")}</option>
+                <option value="category">{t("analytics.money_flow_by_category")}</option>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">{t("analytics.window")}</Label>
+              <Select
+                value={window}
+                onChange={(e) => setWindow(parseForecastWindow(e.target.value))}
+                title={t("analytics.window_help")}
+                aria-label={t("analytics.window")}
+              >
+                {FORECAST_WINDOWS.map((w) => <option key={w} value={w}>{w}</option>)}
+              </Select>
+            </div>
           </div>
         </div>
       </CardHeader>
@@ -140,8 +188,34 @@ export function MoneyFlowProjectionPanel({
 
           {!isLoading && data && sankey && hasFlows && (
             <>
-              <MoneyFlowSankeyChart sankey={sankey} currency={currency} projected detailLine={detailLine} />
-              <MoneyFlowTotals totals={data} currency={currency} labelOf={projectedLabel} />
+              <MoneyFlowSankeyChart
+                sankey={sankey}
+                currency={currency}
+                projected
+                detailLine={detailLine}
+                toggle={{
+                  disabledKeys,
+                  onToggle: toggleNode,
+                  labelOf: (node) => t("analytics.money_flow_projection_node_toggle", { name: node.name }),
+                }}
+              />
+              <MoneyFlowTotals totals={data} currency={currency} labelOf={projectedLabel}>
+                {disabledKeys.size > 0 && (
+                  <span className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                    <Badge tone="amber">
+                      {t(
+                        level === "group"
+                          ? "analytics.money_flow_projection_disabled_groups"
+                          : "analytics.money_flow_projection_disabled_categories",
+                        { count: disabledKeys.size },
+                      )}
+                    </Badge>
+                    <Button variant="ghost" className="px-2 py-0.5 text-xs" onClick={restoreAll}>
+                      {t("analytics.money_flow_projection_restore_all")}
+                    </Button>
+                  </span>
+                )}
+              </MoneyFlowTotals>
             </>
           )}
 

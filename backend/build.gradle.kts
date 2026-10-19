@@ -34,6 +34,8 @@ dependencies {
     // Kotlin
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
+    // Jackson 3 is what reads HTTP bodies under Boot 4; without its Kotlin module, constructor defaults are ignored.
+    implementation("tools.jackson.module:jackson-module-kotlin")
 
     // CSV parsing for import endpoints
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-csv")

@@ -45,6 +45,11 @@ export function resolveMoneyFlowRange(state: MoneyFlowScopeState, today: Date): 
   }
 }
 
+/** Identifies an income/expense node across the response's nodes, the projection components and the diagram. */
+export function nodeKey(node: { side: string; id: string }): string {
+  return `${node.side}:${node.id}`;
+}
+
 export interface SankeyNodeDatum {
   /** Display label, resolved for the active language. */
   name: string;
@@ -79,6 +84,8 @@ export interface BuildMoneyFlowOptions {
   colorOf: (node: MoneyFlowNode) => string;
   othersLabel: string;
   othersColor: string;
+  /** Node keys that must stay their own node, however small (a node the user can click must remain reachable). */
+  neverCollapse?: ReadonlySet<string>;
 }
 
 interface SideAggregation {
@@ -111,7 +118,7 @@ function splitSmallFlows(
       shareOf,
       fill: opts.colorOf(n),
     };
-    if (amount < threshold) small.push(datum);
+    if (amount < threshold && !opts.neverCollapse?.has(nodeKey(n))) small.push(datum);
     else kept.push(datum);
   }
   if (small.length === 0) return { kept, others: null };

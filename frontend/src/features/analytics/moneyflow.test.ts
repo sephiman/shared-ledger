@@ -165,4 +165,26 @@ describe("buildMoneyFlowSankey", () => {
     expect(deficit.shareOf).toBe("expenses");
     expect(r.links).toContainEqual({ source: 1, target: 2, value: 600 });
   });
+
+  it("never folds a node listed in neverCollapse into Others, however small", () => {
+    const data = response({
+      income: "1000.00",
+      expenses: "960.00",
+      saved: "40.00",
+      nodes: [
+        node("income.salary", "income", "1000.00"),
+        node("hub", "hub", "1000.00"),
+        node("home", "expense", "950.00", "home"),
+        node("leisure", "expense", "0.00", "leisure"),
+        node("personal", "expense", "10.00", "personal"),
+        node("saved", "saved", "40.00"),
+      ],
+      links: [],
+    });
+
+    const r = buildMoneyFlowSankey(data, { ...OPTS, neverCollapse: new Set(["expense:leisure"]) });
+
+    expect(r.nodes.map((n) => n.id)).toEqual(["income.salary", "hub", "home", "leisure", "__others_expense__", "saved"]);
+    expect(r.nodes[4].members?.map((m) => m.name)).toEqual(["personal"]);
+  });
 });

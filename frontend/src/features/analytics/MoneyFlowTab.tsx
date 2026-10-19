@@ -125,7 +125,7 @@ export function MoneyFlowTab() {
       </Card>
 
       {isCurrentMonthScope({ scope, year, month }, now) && (
-        <MoneyFlowProjectionPanel householdId={household.householdId} currency={currency} level={level} />
+        <MoneyFlowProjectionPanel householdId={household.householdId} currency={currency} />
       )}
     </div>
   );
