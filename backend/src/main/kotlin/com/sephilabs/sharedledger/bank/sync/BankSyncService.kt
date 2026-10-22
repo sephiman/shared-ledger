@@ -22,6 +22,7 @@ import com.sephilabs.sharedledger.bank.connector.ConsentStatus
 import com.sephilabs.sharedledger.bank.connector.FetchStrategy
 import com.sephilabs.sharedledger.bank.connector.PsuContext
 import com.sephilabs.sharedledger.bank.connector.RateLimitExceededException
+import com.sephilabs.sharedledger.bank.connector.SessionClosedException
 import com.sephilabs.sharedledger.config.AppProperties
 import com.sephilabs.sharedledger.notification.NotificationPublisher
 import com.sephilabs.sharedledger.notification.NotifyActor
@@ -223,6 +224,8 @@ class BankSyncService(
                     if (!fetchAccount(account, strategy)) break
                 } catch (ex: RateLimitExceededException) {
                     throw ex // budget/backoff is a property of the consent, not of one account
+                } catch (ex: SessionClosedException) {
+                    throw ex // so is a closed session: every other account would fail the same way
                 } catch (ex: BankConnectorException) {
                     log.warn(
                         "bank_sync_account_failed connection={} account={} strategy={} code={} error='{}'",
@@ -241,6 +244,8 @@ class BankSyncService(
                             connectionId, account.id,
                         )
                     } catch (retryEx: RateLimitExceededException) {
+                        throw retryEx
+                    } catch (retryEx: SessionClosedException) {
                         throw retryEx
                     } catch (retryEx: BankConnectorException) {
                         log.warn(
@@ -274,7 +279,7 @@ class BankSyncService(
                 notifications.bankMovementsToReview(connection.householdId, n, connection.aspspName, connection.label, NotifyActor.Schedule(connection.householdId))
                 n
             }
-        } catch (ex: RateLimitExceededException) {
+        } catch (_: RateLimitExceededException) {
             // The bank refused a background fetch: persist whatever we already have (idempotent) and
             // back off. Not a hard failure — the connection stays active and retries after the wait.
             val backoffHours = props.enableBanking.rateLimitBackoffHours
@@ -290,6 +295,23 @@ class BankSyncService(
                     if (background) { it.callsUsedToday = callsAtEnd; it.callsResetOn = today }
                 }
                 finishRun(runId, SyncRunStatus.error, n, "ASPSP_RATE_LIMIT_EXCEEDED", "Rate limited; backing off ${backoffHours}h")
+                metrics.bankMovementsIngested(n)
+                if (n > 0) notifications.bankMovementsToReview(connection.householdId, n, connection.aspspName, connection.label, NotifyActor.Schedule(connection.householdId))
+                n
+            }
+        } catch (ex: SessionClosedException) {
+            // The bank ended the consent mid-run (revoked, or replaced by a newer link): keep what it
+            // delivered, but mark it expired — retrying a closed session can only fail; a re-link fixes it.
+            log.warn("bank_sync_session_closed connection={} fetched={} code={}", connectionId, fetched.size, ex.providerCode)
+            metrics.bankSyncFailure()
+            val callsAtEnd = callsUsed
+            write {
+                val n = saveNew(connection, fetched)
+                markConnection(connectionId) {
+                    it.status = ConnectionStatus.expired
+                    if (background) { it.callsUsedToday = callsAtEnd; it.callsResetOn = today }
+                }
+                finishRun(runId, SyncRunStatus.error, n, ex.providerCode, ex.message?.take(500))
                 metrics.bankMovementsIngested(n)
                 if (n > 0) notifications.bankMovementsToReview(connection.householdId, n, connection.aspspName, connection.label, NotifyActor.Schedule(connection.householdId))
                 n

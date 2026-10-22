@@ -102,6 +102,7 @@ class BankIngestionIntegrationTest @Autowired constructor(
         fake.scriptedPages.clear()
         fake.failWithRateLimitAfter = -1
         fake.failWithProviderErrorAfter = -1
+        fake.failWithClosedSessionAfter = -1
         fake.failingAccountUids.clear()
         fake.failLongestOnly = false
         fake.accounts = listOf(AuthorizedAccount("acc-1", "NL00INGB0001234567", "Checking", "EUR"))
@@ -1476,6 +1477,38 @@ class BankIngestionIntegrationTest @Autowired constructor(
         assertThat(connection.status).isEqualTo(ConnectionStatus.suspended)
         // The failed run must not advance the sync point — a full-history retry stays possible.
         assertThat(connection.lastSyncedAt).isEqualTo(syncPointBefore)
+    }
+
+    @Test
+    fun `a session the bank closes mid-pagination keeps fetched pages, stops all accounts, and marks the connection expired`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        fake.accounts = listOf(
+            AuthorizedAccount("acc-1", "NL00INGB0001234567", "Checking", "EUR"),
+            AuthorizedAccount("acc-2", "NL00INGB0007654321", "Savings", "EUR"),
+        )
+        fake.scriptedPages.addLast(
+            MovementPage(
+                movements = listOf(movement("cs-1", today.minusDays(2), Direction.expense, "9.00", "Shop")),
+                continuationKey = "next-page",
+            ),
+        )
+        // Page 1 arrives, then Enable Banking answers 401 CLOSED_SESSION (revoked, or replaced by a re-link).
+        fake.failWithClosedSessionAfter = 1
+
+        link(household, user)
+
+        assertThat(pendingService.pendingCount(household.id)).isEqualTo(1)
+        // No bounded retry and no attempt on the second account — a closed session fails them all.
+        assertThat(fake.fetchCalls).hasSize(2)
+        assertThat(fake.fetchCalls.map { it.accountUid }).containsOnly("acc-1")
+        val connectionId = connections.findAllByHouseholdIdOrderByCreatedAtAsc(household.id).single().id
+        val run = syncRuns.findFirstByConnectionIdOrderByStartedAtDesc(connectionId)!!
+        assertThat(run.status).isEqualTo(SyncRunStatus.error)
+        assertThat(run.errorCode).isEqualTo("CLOSED_SESSION")
+        assertThat(run.newMovements).isEqualTo(1)
+        // Expired, not suspended: the scheduler stops retrying and the UI asks for a re-link.
+        assertThat(connections.findById(connectionId).get().status).isEqualTo(ConnectionStatus.expired)
     }
 
     @Test

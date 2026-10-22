@@ -139,10 +139,9 @@ class EnableBankingConnectorMappingTest {
             """{"code":400,"message":"Error interacting with ASPSP","detail":"Unknown error","error":"ASPSP_ERROR"}""",
         )
 
-        val thrown = catchThrowableOfType(
-            { connector.fetchMovements(creds, "s", "a", null, null, FetchStrategy.DEFAULT, null, null) },
-            BankConnectorException::class.java,
-        )
+        val thrown = catchThrowableOfType(BankConnectorException::class.java) {
+            connector.fetchMovements(creds, "s", "a", null, null, FetchStrategy.DEFAULT, null, null)
+        }
 
         assertThat(thrown.providerCode).isEqualTo("ASPSP_ERROR")
         assertThat(thrown.message).isEqualTo("ASPSP_ERROR: Error interacting with ASPSP — Unknown error")
@@ -158,6 +157,21 @@ class EnableBankingConnectorMappingTest {
         // Must be the dedicated type: the sync service backs off on it instead of failing hard.
         assertThatThrownBy { connector.fetchMovements(creds, "s", "a", null, null, FetchStrategy.DEFAULT, null, null) }
             .isInstanceOf(RateLimitExceededException::class.java)
+    }
+
+    @Test
+    fun `a closed session is recognised so the sync stops the whole connection`() {
+        val connector = connectorFailing(
+            HttpStatus.UNAUTHORIZED,
+            """{"code":401,"message":"Session is closed","error":"CLOSED_SESSION","detail":null}""",
+        )
+
+        val thrown = catchThrowableOfType(SessionClosedException::class.java) {
+            connector.fetchMovements(creds, "s", "a", null, null, FetchStrategy.DEFAULT, null, null)
+        }
+
+        assertThat(thrown.providerCode).isEqualTo("CLOSED_SESSION")
+        assertThat(thrown.message).isEqualTo("CLOSED_SESSION: Session is closed")
     }
 
     private fun connectorFailing(status: HttpStatus, body: String): EnableBankingConnector {

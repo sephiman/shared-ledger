@@ -19,6 +19,11 @@ open class BankConnectorException(
  *  off for a few hours; interactive fetches (PSU headers present) are not subject to this. */
 class RateLimitExceededException(message: String, cause: Throwable? = null) : BankConnectorException(message, cause)
 
+/** The provider closed or expired the consent session itself — every further call fails, so the caller
+ *  stops the whole connection and asks for a re-link instead of retrying account by account. */
+class SessionClosedException(message: String, cause: Throwable? = null, providerCode: String? = null) :
+    BankConnectorException(message, cause, providerCode)
+
 /** How to page an account's transactions.
  *  - [LONGEST]: fetch all available history forward; `dateFrom` is a hint, `dateTo` ignored. On-link sync.
  *  - [DEFAULT]: bounded by `dateFrom`/`dateTo`, **both inclusive** per the provider. Incremental syncs. */

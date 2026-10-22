@@ -33,6 +33,7 @@ class EnableBankingConnector(
 
     private companion object {
         const val RATE_LIMIT_CODE = "ASPSP_RATE_LIMIT_EXCEEDED"
+        val SESSION_CLOSED_CODES = setOf("CLOSED_SESSION", "EXPIRED_SESSION")
     }
 
     override fun listAspsps(creds: EbCredentials, country: String): List<Aspsp> = call("aspsps country=$country") {
@@ -246,11 +247,9 @@ class EnableBankingConnector(
                 op, ex.statusCode.value(), error.code, error.message, error.detail,
             )
             if (error.code == RATE_LIMIT_CODE) throw RateLimitExceededException(RATE_LIMIT_CODE, ex)
-            throw BankConnectorException(
-                error.describe() ?: ex.message ?: "Enable Banking call failed",
-                ex,
-                error.code,
-            )
+            val message = error.describe() ?: ex.message ?: "Enable Banking call failed"
+            if (error.code in SESSION_CLOSED_CODES) throw SessionClosedException(message, ex, error.code)
+            throw BankConnectorException(message, ex, error.code)
         } catch (ex: Exception) {
             log.warn("eb_call_failed op='{}' error={}", op, ex.message)
             throw BankConnectorException(ex.message ?: "Enable Banking call failed", ex)

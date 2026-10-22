@@ -582,6 +582,9 @@ Wise could be added via its own API) with the always-available CSV import as the
     continues until it's absent. Page size varies by bank. If the bank breaks **mid-pagination**, the
     pages already delivered are still stored (dedup makes it idempotent) — a bank that dies on page 2
     still yields page 1 instead of nothing — while the run is recorded as failed so it is retried.
+    The exception is a **closed session** (`CLOSED_SESSION` / `EXPIRED_SESSION`: consent revoked at the
+    bank, or replaced by a newer link): the delivered pages are kept, the remaining accounts are not
+    attempted, and the connection is marked *expired* so it stops retrying and asks for a re-link.
   - **Dedup / idempotency**: movements are keyed by **(connection + bank movement id)**, where the id
     is `entry_reference` when present, else `transaction_id`, else a stable composite — because
     `entry_reference` can be missing or duplicated. The overlap re-read therefore never duplicates.

@@ -14,6 +14,7 @@ import com.sephilabs.sharedledger.bank.connector.FetchStrategy
 import com.sephilabs.sharedledger.bank.connector.MovementPage
 import com.sephilabs.sharedledger.bank.connector.PsuContext
 import com.sephilabs.sharedledger.bank.connector.RateLimitExceededException
+import com.sephilabs.sharedledger.bank.connector.SessionClosedException
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Primary
@@ -52,6 +53,9 @@ class FakeBankConnector : BankConnector {
 
     /** When >= 0, throw ASPSP_RATE_LIMIT_EXCEEDED once this many fetch calls have succeeded. */
     var failWithRateLimitAfter: Int = -1
+
+    /** When >= 0, throw CLOSED_SESSION once this many fetch calls have succeeded. */
+    var failWithClosedSessionAfter: Int = -1
 
     /** When >= 0, throw a provider error ([providerErrorCode]) once this many fetch calls succeeded. */
     var failWithProviderErrorAfter: Int = -1
@@ -104,6 +108,9 @@ class FakeBankConnector : BankConnector {
         fetchCalls += FetchCall(accountUid, strategy, dateFrom, dateTo, psu != null, continuationKey)
         if (failWithRateLimitAfter >= 0 && fetchCalls.size > failWithRateLimitAfter) {
             throw RateLimitExceededException("ASPSP_RATE_LIMIT_EXCEEDED")
+        }
+        if (failWithClosedSessionAfter >= 0 && fetchCalls.size > failWithClosedSessionAfter) {
+            throw SessionClosedException("CLOSED_SESSION: Session is closed", null, "CLOSED_SESSION")
         }
         val accountRefused = accountUid in failingAccountUids &&
             (!failLongestOnly || strategy == FetchStrategy.LONGEST)
