@@ -1785,6 +1785,46 @@ class BankIngestionIntegrationTest @Autowired constructor(
     }
 
     @Test
+    fun `re-linking with session-scoped uids keeps one row per account, and sync uses the new uid`() {
+        val (user, household) = seed()
+        fake.accounts = listOf(AuthorizedAccount("uid-s1", "NL00INGB0001238834", "Joint", "EUR", identificationHash = "hash-joint"))
+        link(household, user)
+        val original = bankService.listConnections(household.id, user, HouseholdRole.owner).single()
+        pauseAccount(household, user, original.id, original.accounts.single().id)
+
+        fake.accounts = listOf(AuthorizedAccount("uid-s2", "NL00INGB0001238834", "Joint", "EUR", identificationHash = "hash-joint"))
+        relink(household, user, original.id)
+        fake.accounts = listOf(AuthorizedAccount("uid-s3", "NL00INGB0001238834", "Joint", "EUR", identificationHash = "hash-joint"))
+        val relinked = relink(household, user, original.id)
+
+        val account = relinked.accounts.single()
+        assertThat(account.id).isEqualTo(original.accounts.single().id)
+        assertThat(account.ingestionEnabled).isFalse()
+        bankService.updateAccount(household.id, original.id, account.id, UpdateAccountRequest(true), user, HouseholdRole.owner)
+        fake.fetchCalls.clear()
+        syncService.sync(original.id, SyncMode.MANUAL, null)
+        assertThat(fake.fetchCalls.map { it.accountUid }.distinct()).containsExactly("uid-s3")
+    }
+
+    @Test
+    fun `an account linked before hashes were stored is matched on its masked IBAN when re-linked`() {
+        val (user, household) = seed()
+        fake.accounts = listOf(AuthorizedAccount("uid-s1", "ES9900000000000000001094", "Checking", "EUR"))
+        link(household, user)
+        val original = bankService.listConnections(household.id, user, HouseholdRole.owner).single()
+
+        fake.accounts = listOf(
+            AuthorizedAccount("uid-s2", "ES9900000000000000001094", "Checking", "EUR", identificationHash = "hash-checking"),
+            AuthorizedAccount("uid-s2-other", "ES9900000000000000005555", "Savings", "EUR", identificationHash = "hash-savings"),
+        )
+        val relinked = relink(household, user, original.id)
+
+        assertThat(relinked.accounts.associate { it.name to it.id }.getValue("Checking"))
+            .isEqualTo(original.accounts.single().id)
+        assertThat(relinked.accounts).hasSize(2)
+    }
+
+    @Test
     fun `only a connection manager pauses its accounts, and only accounts of that connection`() {
         val (owner, household) = seed()
         val roommate = users.save(User(email = "mate${System.nanoTime()}@example.com", passwordHash = "x", locale = "en"))
@@ -1826,6 +1866,16 @@ class BankIngestionIntegrationTest @Autowired constructor(
     private fun link(household: Household, user: User) {
         bankService.startLink(household.id, StartLinkRequest(aspspName = "ING", country = "NL", label = "Test"), user, HouseholdRole.owner)
         bankService.completeLink(household.id, CompleteLinkRequest(code = "code", state = fake.lastState!!), user, HouseholdRole.owner)
+    }
+
+    private fun relink(household: Household, user: User, connectionId: UUID): BankConnectionDto {
+        bankService.startLink(
+            household.id,
+            StartLinkRequest(aspspName = "ING", country = "NL", relinkConnectionId = connectionId),
+            user,
+            HouseholdRole.owner,
+        )
+        return bankService.completeLink(household.id, CompleteLinkRequest(code = "code", state = fake.lastState!!), user, HouseholdRole.owner)
     }
 
     /** Without settings the notification listener bails out before formatting anything. */

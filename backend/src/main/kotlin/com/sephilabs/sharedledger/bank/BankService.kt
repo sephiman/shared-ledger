@@ -1,5 +1,6 @@
 package com.sephilabs.sharedledger.bank
 
+import com.sephilabs.sharedledger.bank.connector.AuthorizedAccount
 import com.sephilabs.sharedledger.bank.connector.BankConnector
 import com.sephilabs.sharedledger.bank.connector.BankConnectorException
 import com.sephilabs.sharedledger.bank.connector.BankCrypto
@@ -191,8 +192,9 @@ class BankService(
         connection.callsResetOn = null
         connections.save(connection)
 
+        val known = accounts.findAllByConnectionId(connection.id)
         session.accounts.forEach { acc ->
-            val existing = accounts.findByConnectionIdAndAccountUid(connection.id, acc.uid)
+            val existing = known.matching(acc)
             if (existing == null) {
                 accounts.save(
                     BankConnectionAccount(
@@ -201,9 +203,13 @@ class BankService(
                         ibanMasked = maskIban(acc.iban),
                         name = acc.name,
                         currency = acc.currency,
+                        identificationHash = acc.identificationHash,
                     ),
                 )
             } else {
+                // The provider mints a new uid per session; the old one is dead once this session exists.
+                existing.accountUid = acc.uid
+                existing.identificationHash = acc.identificationHash ?: existing.identificationHash
                 existing.ibanMasked = maskIban(acc.iban) ?: existing.ibanMasked
                 existing.name = acc.name ?: existing.name
                 existing.currency = acc.currency ?: existing.currency
@@ -256,6 +262,17 @@ class BankService(
         // Cascades remove accounts, pending movements, and sync runs (FK ON DELETE CASCADE).
         connections.delete(connection)
     }
+
+    // Rows linked before the hash was stored fall back to the same key V039 merged duplicates on.
+    private fun List<BankConnectionAccount>.matching(acc: AuthorizedAccount): BankConnectionAccount? =
+        firstOrNull { it.accountUid == acc.uid }
+            ?: acc.identificationHash?.let { hash -> firstOrNull { it.identificationHash == hash } }
+            ?: maskIban(acc.iban)?.let { masked ->
+                firstOrNull {
+                    it.identificationHash == null && it.ibanMasked == masked &&
+                        it.currency == acc.currency && it.name == acc.name
+                }
+            }
 
     private fun maskIban(iban: String?): String? {
         val trimmed = iban?.replace(" ", "") ?: return null

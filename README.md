@@ -562,6 +562,10 @@ Wise could be added via its own API) with the always-available CSV import as the
     its full history.
   - Accounts a later re-link adds start **active**; re-linking keeps existing accounts' pause state.
     Movements already in the inbox are untouched by a pause.
+  - Enable Banking issues a new account `uid` for each session, so a re-link recognises an account by
+    its `identification_hash`. Accounts stored before the hash was kept are matched on masked IBAN +
+    currency + name. The matched row keeps its id and pause state and takes the new `uid`. Copies
+    left by earlier re-links are merged into the oldest row (migration V039).
 - **Sync** follows Enable Banking's fetch rules and comes in two shapes:
   - **Initial (on link)** — a **full-history** sync using `strategy=longest` (the provider finds the
     earliest available transaction and pulls everything forward). It runs asynchronously right after

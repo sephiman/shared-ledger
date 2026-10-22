@@ -67,6 +67,8 @@ data class AuthorizedAccount(
     val iban: String? = null,
     val name: String? = null,
     val currency: String? = null,
+    // `uid` is minted per session; this hash is what stays the same for an account across re-links.
+    val identificationHash: String? = null,
 )
 
 data class AuthorizedSession(

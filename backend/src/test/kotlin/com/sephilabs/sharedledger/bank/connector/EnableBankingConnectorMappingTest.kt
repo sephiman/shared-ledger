@@ -174,6 +174,34 @@ class EnableBankingConnectorMappingTest {
         assertThat(thrown.message).isEqualTo("CLOSED_SESSION: Session is closed")
     }
 
+    @Test
+    fun `a session account carries its identification hash, the identity that survives a re-link`() {
+        val builder = RestClient.builder()
+        val server = MockRestServiceServer.bindTo(builder).build()
+        server.expect(method(org.springframework.http.HttpMethod.POST)).andRespond(
+            withSuccess(
+                """{
+                  "session_id": "s-2",
+                  "accounts": [{
+                    "uid": "uid-from-this-session",
+                    "identification_hash": "stable-hash",
+                    "account_id": {"iban": "NL00INGB0001238834"},
+                    "name": "Joint",
+                    "currency": "EUR"
+                  }],
+                  "access": {"valid_until": "2027-01-20T00:00:00Z"}
+                }""",
+                MediaType.APPLICATION_JSON,
+            ),
+        )
+
+        val account = EnableBankingConnector(props, EnableBankingJwt(), builder)
+            .completeAuthorization(creds, "code").accounts.single()
+
+        assertThat(account.uid).isEqualTo("uid-from-this-session")
+        assertThat(account.identificationHash).isEqualTo("stable-hash")
+    }
+
     private fun connectorFailing(status: HttpStatus, body: String): EnableBankingConnector {
         val builder = RestClient.builder()
         val server = MockRestServiceServer.bindTo(builder).build()

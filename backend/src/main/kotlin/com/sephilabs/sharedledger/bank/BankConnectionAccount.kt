@@ -31,6 +31,9 @@ class BankConnectionAccount(
     @Column(name = "currency", length = 3)
     var currency: String? = null,
 
+    @Column(name = "identification_hash", length = 128)
+    var identificationHash: String? = null,
+
     // Paused accounts are skipped by sync before any provider call; resuming backfills via the usual window.
     @Column(name = "ingestion_enabled", nullable = false)
     var ingestionEnabled: Boolean = true,
@@ -41,5 +44,4 @@ class BankConnectionAccount(
 
 interface BankConnectionAccountRepository : JpaRepository<BankConnectionAccount, UUID> {
     fun findAllByConnectionId(connectionId: UUID): List<BankConnectionAccount>
-    fun findByConnectionIdAndAccountUid(connectionId: UUID, accountUid: String): BankConnectionAccount?
 }

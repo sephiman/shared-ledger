@@ -84,6 +84,7 @@ class EnableBankingConnector(
                 iban = acc.path("account_id").path("iban").textOrNull() ?: acc.path("iban").textOrNull(),
                 name = acc.path("name").textOrNull() ?: acc.path("product").textOrNull(),
                 currency = acc.path("currency").textOrNull(),
+                identificationHash = acc.path("identification_hash").textOrNull(),
             )
         }
         log.info("eb_session_created accounts={}", accounts.size)
