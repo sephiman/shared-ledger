@@ -44,6 +44,7 @@ import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
+import kotlin.random.Random
 
 @ResourceLock("fake-bank-connector")
 // The recording Telegram client is a singleton this class clears per test, which would otherwise wipe
@@ -1787,14 +1788,15 @@ class BankIngestionIntegrationTest @Autowired constructor(
     @Test
     fun `re-linking with session-scoped uids keeps one row per account, and sync uses the new uid`() {
         val (user, household) = seed()
-        fake.accounts = listOf(AuthorizedAccount("uid-s1", "NL00INGB0001238834", "Joint", "EUR", identificationHash = "hash-joint"))
+        val iban = randomIban("NL")
+        fake.accounts = listOf(AuthorizedAccount("uid-s1", iban, "Joint", "EUR", identificationHash = "hash-joint"))
         link(household, user)
         val original = bankService.listConnections(household.id, user, HouseholdRole.owner).single()
         pauseAccount(household, user, original.id, original.accounts.single().id)
 
-        fake.accounts = listOf(AuthorizedAccount("uid-s2", "NL00INGB0001238834", "Joint", "EUR", identificationHash = "hash-joint"))
+        fake.accounts = listOf(AuthorizedAccount("uid-s2", iban, "Joint", "EUR", identificationHash = "hash-joint"))
         relink(household, user, original.id)
-        fake.accounts = listOf(AuthorizedAccount("uid-s3", "NL00INGB0001238834", "Joint", "EUR", identificationHash = "hash-joint"))
+        fake.accounts = listOf(AuthorizedAccount("uid-s3", iban, "Joint", "EUR", identificationHash = "hash-joint"))
         val relinked = relink(household, user, original.id)
 
         val account = relinked.accounts.single()
@@ -1807,15 +1809,31 @@ class BankIngestionIntegrationTest @Autowired constructor(
     }
 
     @Test
+    fun `an identification hash longer than 128 characters is stored and matched on re-link`() {
+        val (user, household) = seed()
+        val iban = randomIban("NL")
+        val longHash = "h".repeat(400)
+        fake.accounts = listOf(AuthorizedAccount("uid-s1", iban, "Joint", "EUR", identificationHash = longHash))
+        link(household, user)
+        val original = bankService.listConnections(household.id, user, HouseholdRole.owner).single()
+
+        fake.accounts = listOf(AuthorizedAccount("uid-s2", iban, "Joint", "EUR", identificationHash = longHash))
+        val relinked = relink(household, user, original.id)
+
+        assertThat(relinked.accounts.map { it.id }).containsExactly(original.accounts.single().id)
+    }
+
+    @Test
     fun `an account linked before hashes were stored is matched on its masked IBAN when re-linked`() {
         val (user, household) = seed()
-        fake.accounts = listOf(AuthorizedAccount("uid-s1", "ES9900000000000000001094", "Checking", "EUR"))
+        val iban = randomIban("ES")
+        fake.accounts = listOf(AuthorizedAccount("uid-s1", iban, "Checking", "EUR"))
         link(household, user)
         val original = bankService.listConnections(household.id, user, HouseholdRole.owner).single()
 
         fake.accounts = listOf(
-            AuthorizedAccount("uid-s2", "ES9900000000000000001094", "Checking", "EUR", identificationHash = "hash-checking"),
-            AuthorizedAccount("uid-s2-other", "ES9900000000000000005555", "Savings", "EUR", identificationHash = "hash-savings"),
+            AuthorizedAccount("uid-s2", iban, "Checking", "EUR", identificationHash = "hash-checking"),
+            AuthorizedAccount("uid-s2-other", randomIban("ES"), "Savings", "EUR", identificationHash = "hash-savings"),
         )
         val relinked = relink(household, user, original.id)
 
@@ -1867,6 +1885,8 @@ class BankIngestionIntegrationTest @Autowired constructor(
         bankService.startLink(household.id, StartLinkRequest(aspspName = "ING", country = "NL", label = "Test"), user, HouseholdRole.owner)
         bankService.completeLink(household.id, CompleteLinkRequest(code = "code", state = fake.lastState!!), user, HouseholdRole.owner)
     }
+
+    private fun randomIban(country: String) = country + (1..20).joinToString("") { Random.nextInt(10).toString() }
 
     private fun relink(household: Household, user: User, connectionId: UUID): BankConnectionDto {
         bankService.startLink(

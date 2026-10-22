@@ -17,6 +17,7 @@ import org.springframework.web.client.RestClient
 import java.security.KeyPairGenerator
 import java.time.LocalDate
 import java.util.Base64
+import kotlin.random.Random
 
 /** Covers what [com.sephilabs.sharedledger.bank.FakeBankConnector] bypasses: the JSON → [BankMovement]
  *  mapping and the provider's error bodies. Drives the real connector over a mocked HTTP layer so ASPSP
@@ -176,6 +177,7 @@ class EnableBankingConnectorMappingTest {
 
     @Test
     fun `a session account carries its identification hash, the identity that survives a re-link`() {
+        val iban = "NL" + (1..16).joinToString("") { Random.nextInt(10).toString() }
         val builder = RestClient.builder()
         val server = MockRestServiceServer.bindTo(builder).build()
         server.expect(method(org.springframework.http.HttpMethod.POST)).andRespond(
@@ -185,7 +187,7 @@ class EnableBankingConnectorMappingTest {
                   "accounts": [{
                     "uid": "uid-from-this-session",
                     "identification_hash": "stable-hash",
-                    "account_id": {"iban": "NL00INGB0001238834"},
+                    "account_id": {"iban": "$iban"},
                     "name": "Joint",
                     "currency": "EUR"
                   }],
@@ -200,6 +202,7 @@ class EnableBankingConnectorMappingTest {
 
         assertThat(account.uid).isEqualTo("uid-from-this-session")
         assertThat(account.identificationHash).isEqualTo("stable-hash")
+        assertThat(account.iban).isEqualTo(iban)
     }
 
     private fun connectorFailing(status: HttpStatus, body: String): EnableBankingConnector {

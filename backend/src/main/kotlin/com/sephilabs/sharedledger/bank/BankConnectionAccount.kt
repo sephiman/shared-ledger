@@ -31,7 +31,7 @@ class BankConnectionAccount(
     @Column(name = "currency", length = 3)
     var currency: String? = null,
 
-    @Column(name = "identification_hash", length = 128)
+    @Column(name = "identification_hash")
     var identificationHash: String? = null,
 
     // Paused accounts are skipped by sync before any provider call; resuming backfills via the usual window.
