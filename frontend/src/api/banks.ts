@@ -114,6 +114,10 @@ export interface PendingMovement {
   reference: string | null;
   status: MovementStatus;
   suggestedCategoryCode: string | null;
+  /** Where the suggestion came from; null without one. */
+  suggestionSource: SuggestionSource | null;
+  /** The model's own confidence (0–1, as a string) for an AI suggestion; null otherwise. */
+  suggestionConfidence: string | null;
   createdTransactionId: string | null;
   /** One for a confirm, Replace or merge (the merged items share it), N for a split — in both of the latter
    *  `createdTransactionId` is null. None while pending. */
@@ -318,7 +322,10 @@ export function useBankConnections(householdId: string, enabled = true) {
   });
 }
 
-export type PendingCategorisation = "categorized" | "uncategorized";
+export type SuggestionSource = "rule" | "ai";
+
+/** `categorized` is either origin; the two `suggested_by_*` values split it. */
+export type PendingCategorisation = "categorized" | "suggested_by_rule" | "suggested_by_ai" | "uncategorized";
 
 export function usePendingMovements(
   householdId: string,

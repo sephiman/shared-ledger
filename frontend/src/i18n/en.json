@@ -405,7 +405,18 @@
     "whitelist_check_title": "Have you whitelisted this account in your Enable Banking application?",
     "whitelist_check_body": "Non-whitelisted accounts link fine but sync nothing: the connection shows active, no movements ever arrive, and no error appears anywhere.",
     "whitelist_check_continue": "Yes, continue",
-    "whitelist_check_review": "Review instructions"
+    "whitelist_check_review": "Review instructions",
+    "catstate_suggested_by_rule": "Suggested by rule",
+    "catstate_suggested_by_ai": "Suggested by AI",
+    "catstate_unsuggested": "Unsuggested",
+    "ai_suggest": "Suggest with AI",
+    "ai_suggest_info_label": "What does Suggest with AI share?",
+    "ai_suggest_info": "Sends the pending movements that have no suggestion yet to {{model}} ({{host}}). Shared: counterparty, bank description, direction and booking month. Not shared: amounts, your IBANs, account and household identifiers. The answer is only a suggestion: nothing is confirmed until you confirm it.",
+    "ai_progress": "Suggesting with AI… batch {{done}} of {{total}}",
+    "ai_result": "AI suggestions: {{stored}} made, {{unsuggested}} below the confidence threshold or without a valid answer, {{failed}} failed batches",
+    "ai_result_stopped": "AI suggestions stopped early: {{stored}} made, {{unsuggested}} below the confidence threshold or without a valid answer, {{failed}} failed batches",
+    "ai_badge": "AI",
+    "ai_badge_info": "Suggested by AI with {{confidence}}% confidence. Check it before confirming."
   },
   "recurring": {
     "title": "Recurring",
@@ -1204,7 +1215,10 @@
     "portfolio_return_basis_help_OPEN_COST": "Divides realized and total return by the cost of the positions you currently hold. Unrealized, realized and total then share one base and add up, so it reads like a normal buy-and-hold return.",
     "portfolio_return_basis_help_NET_INVESTED": "Divides all three percentages by your net invested — the money you put in from outside (open cost minus realized profit), so buys funded by earlier sales cancel out. It's your own money currently at risk. Shows \"—\" if you've taken out more than you ever put in.",
     "portfolio_return_basis_help_TURNOVER": "Divides realized return by the cost of every lot you have ever sold, and total return by that plus your open cost. Frequent selling and rebuying (common with crypto) inflates this base, so the percentages look small. This was the original behavior.",
-    "portfolio_return_basis_disclaimer": "For a return that accounts for when you put money in and took it out, see the XIRR figure on the Portfolio page."
+    "portfolio_return_basis_disclaimer": "For a return that accounts for when you put money in and took it out, see the XIRR figure on the Portfolio page.",
+    "ai_suggestions_title": "AI category suggestions",
+    "ai_suggestions_enable": "Offer \"Suggest with AI\" in the pending inbox",
+    "ai_suggestions_help": "When a member presses \"Suggest with AI\", the counterparty, bank description, direction and booking month of the pending movements without a suggestion are sent to {{model}} at {{host}}. Amounts, the household's IBANs (every IBAN is removed from the text), account and household identifiers are not sent. A bank description can itself contain a person's name. Rules always go first, and a suggestion is only prefilled: a member confirms it, and confirming teaches the usual rule."
   },
   "notifications": {
     "title": "Notifications",
@@ -1404,7 +1418,10 @@
     "IMPORT_UNIT_PRICE_INVALID": "Unit price must be a non-negative number using comma as decimal separator",
     "IMPORT_FEE_INVALID": "Fee must be a non-negative number using comma as decimal separator",
     "LOT_SELL_EXCEEDS_HOLDINGS": "The sale of {{0}} exceeds the quantity held on that date",
-    "IMPORT_TYPE_INVALID": "Type must be BUY or SELL"
+    "IMPORT_TYPE_INVALID": "Type must be BUY or SELL",
+    "AI_SUGGESTIONS_DISABLED": "AI category suggestions are turned off for this household. An owner can turn them on in Settings.",
+    "AI_SUGGESTION_RUN_IN_PROGRESS": "AI suggestions are already running for this household. Wait for that run to finish.",
+    "AI_SUGGESTION_NO_CANDIDATES": "There are no pending movements without a suggestion to send."
   },
   "export": {
     "title": "Export everything",

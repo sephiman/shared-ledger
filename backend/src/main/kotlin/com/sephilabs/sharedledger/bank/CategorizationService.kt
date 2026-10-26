@@ -10,7 +10,7 @@ import java.util.UUID
 
 /** Deterministic categorisation rules plus learning-from-corrections: on confirm, a counterparty ->
  *  category pairing is remembered so the next movement from that payee arrives pre-categorised — but
- *  only when no existing rule already covers it (see [learn]). No ML. */
+ *  only when no existing rule already covers it (see [learn]). Deterministic; AI suggestions live in `aisuggestion`. */
 @Service
 class CategorizationService(private val rules: CategorizationRuleRepository) {
 

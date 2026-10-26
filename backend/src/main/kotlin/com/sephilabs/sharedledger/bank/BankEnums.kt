@@ -11,8 +11,12 @@ enum class SyncFrequency { daily, twice_daily }
 /** Review-inbox lifecycle. `confirmed` items are linked to a generated transaction. */
 enum class MovementStatus { pending, confirmed, rejected }
 
-/** Filters the pending inbox by whether a movement already carries a (suggested) category. */
-enum class PendingCategorisation { categorized, uncategorized }
+/** Filters the pending inbox by whether a movement already carries a (suggested) category, and from where.
+ *  `categorized` is either origin. */
+enum class PendingCategorisation { categorized, suggested_by_rule, suggested_by_ai, uncategorized }
+
+/** Where a pending item's suggested category came from. Null on an item without one (or confirmed before V042). */
+enum class SuggestionSource { rule, ai }
 
 enum class RuleField { counterparty, description, amount }
 

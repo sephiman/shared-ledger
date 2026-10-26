@@ -131,6 +131,14 @@ app:
     ttl-minutes: 60
     # The request is authenticated, so this only bounds how many addresses one account can mail.
     per-hour-per-user: 3
+  # Optional AI category suggestions for the pending inbox (any OpenAI-compatible chat-completions API).
+  # No AI_API_KEY = the feature does not exist: no setting, no button, endpoints 404. A key with a blank base
+  # URL or model (or a base URL/model without a key) is partial: hidden, plus one startup warning.
+  ai:
+    base-url: ${AI_BASE_URL:https://opencode.ai/zen/go/v1}
+    api-key: ${AI_API_KEY:}
+    model: ${AI_MODEL:deepseek-v4.1-flash}
+    timeout-ms: ${AI_TIMEOUT_MS:120000}
   scheduler:
     recurring-cron: "0 0 2 * * *"
     # Zone all @Scheduled jobs fire in. Keep UTC: business dates are stamped with UTC

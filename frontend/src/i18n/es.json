@@ -405,7 +405,18 @@
     "whitelist_check_title": "¿Has añadido esta cuenta a la lista blanca de tu aplicación de Enable Banking?",
     "whitelist_check_body": "Las cuentas que no están en la lista blanca se vinculan sin problema pero no sincronizan nada: la conexión aparece activa, no llega ningún movimiento y no aparece ningún error en ninguna parte.",
     "whitelist_check_continue": "Sí, continuar",
-    "whitelist_check_review": "Revisar instrucciones"
+    "whitelist_check_review": "Revisar instrucciones",
+    "catstate_suggested_by_rule": "Sugeridas por regla",
+    "catstate_suggested_by_ai": "Sugeridas por IA",
+    "catstate_unsuggested": "Sin sugerencia",
+    "ai_suggest": "Sugerir con IA",
+    "ai_suggest_info_label": "¿Qué comparte Sugerir con IA?",
+    "ai_suggest_info": "Envía a {{model}} ({{host}}) los movimientos pendientes que aún no tienen sugerencia. Se comparte: contraparte, descripción del banco, dirección y mes de la operación. No se comparte: importes, tus IBAN, identificadores de cuentas ni del hogar. La respuesta es solo una sugerencia: no se confirma nada hasta que tú lo confirmes.",
+    "ai_progress": "Sugiriendo con IA… lote {{done}} de {{total}}",
+    "ai_result": "Sugerencias con IA: {{stored}} hechas, {{unsuggested}} por debajo del umbral de confianza o sin respuesta válida, {{failed}} lotes fallidos",
+    "ai_result_stopped": "Las sugerencias con IA se detuvieron antes de terminar: {{stored}} hechas, {{unsuggested}} por debajo del umbral de confianza o sin respuesta válida, {{failed}} lotes fallidos",
+    "ai_badge": "IA",
+    "ai_badge_info": "Sugerida por IA con un {{confidence}} % de confianza. Revísala antes de confirmar."
   },
   "recurring": {
     "title": "Recurrentes",
@@ -1204,7 +1215,10 @@
     "portfolio_return_basis_help_OPEN_COST": "Divide la rentabilidad realizada y total entre el coste de las posiciones que mantienes actualmente. Así el no realizado, el realizado y el total comparten una misma base y suman, y se lee como una rentabilidad normal de comprar y mantener.",
     "portfolio_return_basis_help_NET_INVESTED": "Divide los tres porcentajes entre tu capital neto invertido: el dinero que aportaste desde fuera (coste abierto menos beneficio realizado), de modo que las compras pagadas con ventas anteriores se cancelan. Es tu propio dinero actualmente en riesgo. Muestra \"—\" si has retirado más de lo que llegaste a aportar.",
     "portfolio_return_basis_help_TURNOVER": "Divide la rentabilidad realizada entre el coste de todos los lotes que has vendido alguna vez, y la total entre eso más tu coste abierto. Vender y recomprar con frecuencia (habitual con las criptomonedas) infla esta base, así que los porcentajes se ven pequeños. Era el comportamiento original.",
-    "portfolio_return_basis_disclaimer": "Para una rentabilidad que tenga en cuenta cuándo metiste y sacaste el dinero, consulta la cifra XIRR en la página de Cartera."
+    "portfolio_return_basis_disclaimer": "Para una rentabilidad que tenga en cuenta cuándo metiste y sacaste el dinero, consulta la cifra XIRR en la página de Cartera.",
+    "ai_suggestions_title": "Sugerencias de categoría con IA",
+    "ai_suggestions_enable": "Ofrecer \"Sugerir con IA\" en la bandeja de pendientes",
+    "ai_suggestions_help": "Cuando un miembro pulsa \"Sugerir con IA\", la contraparte, la descripción del banco, la dirección y el mes de la operación de los movimientos pendientes sin sugerencia se envían a {{model}} en {{host}}. No se envían importes, los IBAN del hogar (se elimina cualquier IBAN del texto), ni identificadores de cuentas o del hogar. La descripción del banco puede contener el nombre de una persona. Las reglas siempre van primero y la sugerencia solo se rellena: un miembro la confirma, y al confirmar se aprende la regla habitual."
   },
   "notifications": {
     "title": "Notificaciones",
@@ -1404,7 +1418,10 @@
     "IMPORT_UNIT_PRICE_INVALID": "El precio unitario debe ser un número no negativo con coma como separador decimal",
     "IMPORT_FEE_INVALID": "La comisión debe ser un número no negativo con coma como separador decimal",
     "LOT_SELL_EXCEEDS_HOLDINGS": "La venta del {{0}} supera la cantidad en posesión en esa fecha",
-    "IMPORT_TYPE_INVALID": "El tipo debe ser BUY o SELL"
+    "IMPORT_TYPE_INVALID": "El tipo debe ser BUY o SELL",
+    "AI_SUGGESTIONS_DISABLED": "Las sugerencias de categoría con IA están desactivadas en este hogar. Un propietario puede activarlas en Ajustes.",
+    "AI_SUGGESTION_RUN_IN_PROGRESS": "Ya se están generando sugerencias con IA en este hogar. Espera a que termine esa ejecución.",
+    "AI_SUGGESTION_NO_CANDIDATES": "No hay movimientos pendientes sin sugerencia que enviar."
   },
   "export": {
     "title": "Exportar todo",

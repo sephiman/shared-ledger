@@ -1,7 +1,7 @@
 import type { MovementStatus } from "@/api/banks";
 
 export type GroupBy = "none" | "connection" | "category";
-export type CategorisationState = "all" | "uncategorized" | "categorized";
+export type CategorisationState = "all" | "uncategorized" | "categorized" | "suggested_by_rule" | "suggested_by_ai";
 
 /** The full set of pending-inbox filters, so the Clear-filters action has a single source of truth. */
 export interface PendingFilterState {

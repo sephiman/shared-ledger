@@ -5,6 +5,8 @@ import com.sephilabs.sharedledger.bank.BankConnectionRepository
 import com.sephilabs.sharedledger.bank.BankCredentialsRepository
 import com.sephilabs.sharedledger.bank.CategorizationRuleRepository
 import com.sephilabs.sharedledger.bank.PendingMovementRepository
+import com.sephilabs.sharedledger.bank.aisuggestion.AiSuggestionRunRepository
+import com.sephilabs.sharedledger.bank.aisuggestion.AiSuggestionSettingsRepository
 import com.sephilabs.sharedledger.budget.BudgetRepository
 import com.sephilabs.sharedledger.catalog.CustomCategoryRepository
 import com.sephilabs.sharedledger.fire.FireSettingsRepository
@@ -53,6 +55,8 @@ class HouseholdDataWipeService(
     private val autoSnapshotSettings: AutoSnapshotSettingsRepository,
     private val cashAdjustments: CashAdjustmentRepository,
     private val cashEstimateSettings: CashEstimateSettingsRepository,
+    private val aiSuggestionRuns: AiSuggestionRunRepository,
+    private val aiSuggestionSettings: AiSuggestionSettingsRepository,
 ) {
 
     private val log = LoggerFactory.getLogger(javaClass)
@@ -77,8 +81,10 @@ class HouseholdDataWipeService(
         val liabilityCount = liabilities.hardDeleteAllByHouseholdId(householdId)
         val lendingCount = lendings.hardDeleteAllByHouseholdId(householdId)
 
-        // 4. Bank ingestion. Pending movements & auth sessions before connections cascade the rest.
+        // 4. Bank ingestion. Pending movements (and the AI suggestions stored on them) & auth sessions before
+        // connections cascade the rest.
         val pendingCount = pendingMovements.hardDeleteAllByHouseholdId(householdId)
+        val aiRunCount = aiSuggestionRuns.hardDeleteAllByHouseholdId(householdId)
         val ruleCount = categorizationRules.hardDeleteAllByHouseholdId(householdId)
         val authSessionCount = bankAuthSessions.hardDeleteAllByHouseholdId(householdId)
         val connectionCount = bankConnections.hardDeleteAllByHouseholdId(householdId)
@@ -91,14 +97,17 @@ class HouseholdDataWipeService(
         val telegramCount = telegramSettings.hardDeleteAllByHouseholdId(householdId)
         val autoSnapshotCount = autoSnapshotSettings.hardDeleteAllByHouseholdId(householdId)
         val cashSettingsCount = cashEstimateSettings.hardDeleteAllByHouseholdId(householdId)
+        val aiSettingsCount = aiSuggestionSettings.hardDeleteAllByHouseholdId(householdId)
 
         log.info(
             "household_data_wipe household={} by_user={} tx={} mv={} snap={} snap_liab_balances={} cash_adj={} " +
                 "recurring={} budgets={} custom_categories={} holdings={} assets={} liabilities={} lendings={} " +
-                "pending={} rules={} auth_sessions={} bank_connections={} bank_credentials={} fire={} fire_brackets={} telegram={} auto_snapshot={} cash_settings={}",
+                "pending={} rules={} auth_sessions={} bank_connections={} bank_credentials={} fire={} fire_brackets={} telegram={} auto_snapshot={} cash_settings={} " +
+                "ai_runs={} ai_settings={}",
             householdId, byUserId, txCount, movementCount, snapshotCount, balanceCount, cashAdjustmentCount,
             recurringCount, budgetCount, customCategoryCount, holdingCount, assetCount, liabilityCount, lendingCount,
             pendingCount, ruleCount, authSessionCount, connectionCount, bankCredentialCount, fireCount, fireBracketCount, telegramCount, autoSnapshotCount, cashSettingsCount,
+            aiRunCount, aiSettingsCount,
         )
     }
 }

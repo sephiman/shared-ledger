@@ -372,7 +372,10 @@ Long-term wealth projection toward financial independence, derived from the hous
 - FIRE settings are edited on the FIRE page itself (saving is owner-only); assets, liabilities and their amortization schedules are managed in the Wealth hub tabs, not in Settings.
 - **Banks** (any member): link your own bank, and manage the connections you linked. See *Bank ingestion* for who can manage what.
 - **Notifications** (owners only): configure the per-household Telegram integration (see below).
-- **Danger zone — Delete all data** (owners only): a confirmation-gated action (type `delete`) that permanently wipes *every* piece of the household's financial data while keeping the household itself and its membership/invitations. It hard-deletes (including soft-deleted rows) transactions, budgets, recurring templates, net-worth snapshots and movements, cash adjustments, assets, liabilities and lendings (with their value/balance/amortization/schedule/payment history), the investment portfolio (holdings, lots and valuations), bank connections (with their accounts, sync runs, pending movements and categorization rules), and the FIRE (including its tax-bracket table), Telegram, auto-snapshot and cash-estimate settings. Global reference data (categories, asset classes, FX rates, price history) is never touched.
+- **AI category suggestions** (owners only, shown only when the instance has `AI_API_KEY`): off by
+  default; turning it on adds *Suggest with AI* to the pending inbox. See *Bank ingestion →
+  Categorisation*.
+- **Danger zone — Delete all data** (owners only): a confirmation-gated action (type `delete`) that permanently wipes *every* piece of the household's financial data while keeping the household itself and its membership/invitations. It hard-deletes (including soft-deleted rows) transactions, budgets, recurring templates, net-worth snapshots and movements, cash adjustments, assets, liabilities and lendings (with their value/balance/amortization/schedule/payment history), the investment portfolio (holdings, lots and valuations), bank connections (with their accounts, sync runs, pending movements — and the AI suggestions stored on them — and categorization rules), the AI suggestion run records, and the FIRE (including its tax-bracket table), Telegram, auto-snapshot, cash-estimate and AI-suggestion settings. Global reference data (categories, asset classes, FX rates, price history) is never touched.
 
 ### Notifications (Telegram)
 
@@ -642,7 +645,8 @@ Wise could be added via its own API) with the always-available CSV import as the
   Rejected items don't reappear in the pending list; they stay visible under a "rejected" filter,
   from which they can be **restored** back to pending (individually or in batch). Confirmed items
   are final — they already produced a transaction or movement. The list also filters by
-  connection, free-text search, categorisation state (suggested / unsuggested), and
+  connection, free-text search, categorisation state (suggested / unsuggested — or, with AI suggestions
+  on, suggested by rule / suggested by AI / unsuggested), and
   duplicates-only, can be grouped by connection or category, and all filters are clearable in one
   click.
 - **Mark as movement** (per item, under "More"): instead of a transaction, a pending item can be
@@ -764,13 +768,46 @@ Wise could be added via its own API) with the always-available CSV import as the
   direction) applied during sync, and learning from corrections — confirming with a category
   remembers "this counterparty → this category" for next time, but **only when no existing rule
   (manual or learned) already matches the movement**: a confirmation that differs from a matching
-  rule's suggestion is treated as a one-off exception, not a new rule. No ML. An **Apply rules**
+  rule's suggestion is treated as a one-off exception, not a new rule. Rules involve no ML; the optional AI layer below is separate and on demand. An **Apply rules**
   action re-runs the rules over the uncategorized pending items on demand (useful after adding
   rules). Rules are managed on their **own page** (Settings → Categorisation rules) **by any member**
   — they are shared household categorisation logic, at the same level as the transactions and pending
   movements they act on — with free-text search over the matched value, combinable filters (match
   field, direction, category, manual/learned origin), sorting (creation date, value, category),
   pagination, in-place editing, and multi-select bulk delete — handy for pruning piled-up learned rules.
+  Every suggestion records its **origin** (`rule` or `ai`); Apply rules fills items with no suggestion
+  *or only an AI one*, so a rule always outranks the model.
+  - **AI category suggestions (optional, on demand).** Rules stay the first and only automatic layer;
+    the model only ever sees what they leave. A **Suggest with AI** button next to *Apply rules* (any
+    member) sends every pending item that has **no suggestion of any origin** — regardless of the inbox
+    filters — in sequential batches of 25, and stores a suggestion only when the model's confidence is
+    **≥ 0.85**. It prefills the row exactly like a rule suggestion, with an **AI** badge (confidence in
+    its tooltip); **nothing is ever confirmed automatically**. Confirming it — as suggested or after
+    changing the category — learns the usual counterparty → category rule under the usual condition
+    (no rule matched), so the next movement from that counterparty is covered by a rule and never goes
+    to the model again. Items that already have an AI suggestion are not re-sent; clearing a row's
+    category is local like every inbox edit, so it does not make the item a candidate again. A later
+    *Apply rules* replaces an AI suggestion when a rule covers the item; saving a rule does not re-run
+    anything by itself.
+    - **What leaves the instance**: per movement only the counterparty, the bank description, the
+      direction and the booking month (plus a per-batch id `m1…m25`), and once per run the category
+      catalogue and up to 150 of the household's rules as vocabulary examples (sampled evenly across
+      categories, amount rules left out). **Never** amounts, account or household identifiers. Every
+      IBAN-shaped token is replaced by `[IBAN]` in all of that text — the app keeps only the last four
+      digits of the household's own accounts, so it removes them all rather than guessing which are
+      yours. A bank description can still contain a person's name (a Bizum or transfer line); that is
+      inherent to the data.
+    - **Progress**: the run happens server-side; the button is disabled while it runs (for every
+      member — one run per household at a time, a second press answers `409 AI_SUGGESTION_RUN_IN_PROGRESS`)
+      and when nothing is left to send. The inbox shows "batch n of N", then one result line: suggestions
+      made, items below the threshold or without a valid answer, and failed batches. A failed batch
+      (timeout or 5xx after one retry, or a 4xx) is counted and logged; the other batches still run.
+    - **Measured** on this household's real movements before building it: at ≥ 0.85 the model suggests
+      for roughly a third of new counterparties (9 of 28) with no errors among them, and nothing is
+      auto-confirmed. Sending the amount did not help and made the model overconfident, so it is not sent.
+    - **Configuration**: instance-wide `AI_API_KEY` (any OpenAI-compatible chat-completions provider;
+      see §5), then per household the owner-only setting *AI category suggestions*, **off by default**,
+      whose help text names the model and the provider host.
 - **Multi-currency** (e.g. Wise): non-EUR movements are converted to EUR at the ECB rate of the
   booking date, keeping the original amount/currency on the pending item.
 - **Read-only**: only account/movement information is ever requested; there is no payment
@@ -780,6 +817,13 @@ The bank-ingestion Settings section, the Pending sub-view, the badge, and the Ho
 three-level visibility rule: no credentials configured → nothing appears; credentials but no bank
 linked → Settings appears (to link) but the inbox/badge/card do not; at least one bank linked →
 everything appears.
+
+AI category suggestions follow the same pattern, inside the inbox: no `AI_API_KEY` on the instance →
+nothing exists (no setting, no button, no badge, no filter option; the frontend does not even request
+them, and every AI endpoint answers **404**, as the password-reset endpoints do without SMTP); key set
+but the household setting off → only the owner's setting appears in Settings; setting on → the button,
+the AI badge and the *suggested by rule / by AI* filter options appear in the inbox. The instance flag
+comes from the authenticated `GET /api/features`, never from the public `/auth/features`.
 
 ---
 
@@ -926,6 +970,7 @@ Edit `.env` and set at minimum:
 | `TELEGRAM_TOKEN_KEY` | Base64 AES key (16/24/32 bytes) used to encrypt stored Telegram bot tokens at rest. Generate with `openssl rand -base64 32`. Required only if a household saves a bot token; keep it stable (rotating it makes stored tokens undecryptable). Optional: `TELEGRAM_API_BASE_URL`, `TELEGRAM_TIMEOUT_MS`. |
 | Portfolio pricing | All optional — holdings work unpriced without them. `EQUITY_PRICE_PROVIDER` (`yahoo` default, or `eodhd` / `twelve_data`), `COINGECKO_API_KEY` (Demo key for crypto), `EODHD_API_KEY` / `TWELVEDATA_API_KEY` (only for those providers). FX (Frankfurter) and Yahoo need no key. Base-URL overrides exist for each provider; see `.env.example`. |
 | Bank ingestion | All optional. The application id and private key are **not** env vars — each household pastes its own in Settings → Banks. What stays here: `ENABLE_BANKING_SECRET_KEY` (base64 AES key, `openssl rand -base64 32`; encrypts the stored credentials and bank sessions at rest — keep it stable, rotating it makes them undecryptable) and `ENABLE_BANKING_REDIRECT_URL` (your public frontend URL + `/settings/banks/callback`; it identifies the instance, so every household registers the same value in its own EB application — left blank the app derives it from the request, fine for local dev). `ENABLE_BANKING_APP_ID` is read **once at startup**, on the first boot after `V030`, to stamp connections created before credentials were per household (see §Upgrading below); drop it afterwards — a fresh install never needs it. Optional overrides: `ENABLE_BANKING_BASE_URL`, `ENABLE_BANKING_CONSENT_VALID_DAYS`, `ENABLE_BANKING_BACKFILL_DAYS`, `ENABLE_BANKING_TIMEOUT_MS`, `ENABLE_BANKING_MAX_CALLS_PER_DAY` (keep at 4 in production — the PSD2 unattended-access cap). |
+| AI category suggestions | All optional, **as a group**. `AI_API_KEY` turns the feature on for the instance (each household owner still opts in). `AI_BASE_URL` (default `https://opencode.ai/zen/go/v1`) is any OpenAI-compatible chat-completions base; `AI_MODEL` (default `deepseek-v4.1-flash` — `deepseek-v4-flash` answers HTTP 410 deprecated); `AI_TIMEOUT_MS` per call (default `120000`). No key → the feature does not exist. A key with a blank `AI_BASE_URL`/`AI_MODEL`, or a changed URL/model without a key, keeps it hidden and logs one `ai_partially_configured missing=…` warning at startup. Requests identify as `User-Agent: shared-ledger/<version>` and carry an `x-opencode-session: <uuid per run>` header, which OpenCode needs for routing and other providers ignore; switching provider is env only. OpenCode Go states it is designed for coding-agent traffic: check that your provider's terms cover this use. |
 | `FIRE_MONTE_CARLO_TRIALS` | Trials per scenario for the FIRE Monte Carlo simulation. Default `10000`. |
 
 The `.env` file is git-ignored. `docker compose` reads it implicitly and the backend reads variables from it (via `env_file`).

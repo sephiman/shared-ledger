@@ -15,9 +15,11 @@ import {
   type MovementStatus,
   type PendingMovement,
 } from "@/api/banks";
+import { useAiSuggestionsOn } from "@/api/aiSuggestions";
 import { useCategories, type Category } from "@/api/catalog";
 import { categoryLabel, categoryLabelByCode } from "@/lib/categoryLabel";
 import { Badge, Button, Card, CardBody, CardHeader, Chip, Input, Select } from "@/components/ui/primitives";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { formatMoney } from "@/lib/money";
 import { addDaysIso, formatDate } from "@/lib/dates";
 import { showToast } from "@/lib/toastBus";
@@ -27,6 +29,7 @@ import {
   type CategorisationState,
   type GroupBy,
 } from "./pendingFilters";
+import { AiSuggestButton } from "./AiSuggestButton";
 import { bankDescription } from "./bankDescription";
 import { canMerge, type MergeSource } from "./mergeDraft";
 import { MarkAsMovementDialog } from "./MarkAsMovementDialog";
@@ -94,6 +97,8 @@ export function PendingInbox({ householdId, currency, locale }: { householdId: s
   const restoreOne = useRestoreMovement(householdId);
   const restoreBatch = useRestoreBatch(householdId);
   const applyRules = useApplyRules(householdId);
+  // Null unless the instance has a provider and this household turned the setting on.
+  const ai = useAiSuggestionsOn(householdId);
 
   const editable = status === "pending";
   // Rejected items can be sent back to the inbox; enable row selection + a restore action for them.
@@ -268,6 +273,7 @@ export function PendingInbox({ householdId, currency, locale }: { householdId: s
       onDirectionChange={(d) => setDirection(m, d)}
       descriptionValue={resolveDescription(m)}
       onDescriptionChange={(v) => setDescriptionById((prev) => ({ ...prev, [m.id]: v }))}
+      aiVisible={ai !== null}
       onConfirm={() => confirmRow(m)}
       onReject={() => rejectRow(m)}
       onRestore={() => restoreRow(m)}
@@ -304,8 +310,18 @@ export function PendingInbox({ householdId, currency, locale }: { householdId: s
             </Select>
             <Select value={categorisationState} onChange={(e) => { setCategorisationState(e.target.value as CategorisationState); setCpage(0); }}>
               <option value="all">{t("banks.catstate_all")}</option>
-              <option value="uncategorized">{t("banks.catstate_uncategorized")}</option>
-              <option value="categorized">{t("banks.catstate_categorized")}</option>
+              {ai ? (
+                <>
+                  <option value="suggested_by_rule">{t("banks.catstate_suggested_by_rule")}</option>
+                  <option value="suggested_by_ai">{t("banks.catstate_suggested_by_ai")}</option>
+                  <option value="uncategorized">{t("banks.catstate_unsuggested")}</option>
+                </>
+              ) : (
+                <>
+                  <option value="uncategorized">{t("banks.catstate_uncategorized")}</option>
+                  <option value="categorized">{t("banks.catstate_categorized")}</option>
+                </>
+              )}
             </Select>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -320,6 +336,7 @@ export function PendingInbox({ householdId, currency, locale }: { householdId: s
                 {t("banks.apply_rules")}
               </Button>
             )}
+            {editable && ai && <AiSuggestButton householdId={householdId} settings={ai} />}
             {hasActivePendingFilters(filterState) && (
               <Button variant="ghost" onClick={clearFilters}>{t("banks.clear_filters")}</Button>
             )}
@@ -474,7 +491,7 @@ function buildGroups(
 function MovementRow({
   householdId, movement, currency, locale, categories, editable, selectable, restorable, selected, onToggle,
   categoryValue, onCategoryChange, direction, onDirectionChange, descriptionValue, onDescriptionChange,
-  onConfirm, onReject, onRestore, busy,
+  aiVisible, onConfirm, onReject, onRestore, busy,
 }: {
   householdId: string;
   movement: PendingMovement;
@@ -492,6 +509,7 @@ function MovementRow({
   onDirectionChange: (d: Direction) => void;
   descriptionValue: string;
   onDescriptionChange: (value: string) => void;
+  aiVisible: boolean;
   onConfirm: () => void;
   onReject: () => void;
   onRestore: () => void;
@@ -524,6 +542,11 @@ function MovementRow({
   // Editable rows show the description in an input instead, so only the reference is left to surface here.
   const secondary = editable ? null : movement.description ?? movement.reference;
   const splitCount = movement.createdTransactionIds.length;
+  // Only while the row still shows what the model proposed; a confirmed row's code is the member's choice.
+  const aiBadge = aiVisible && movement.suggestionSource === "ai" && movement.status !== "confirmed" &&
+    (!editable || categoryValue === movement.suggestedCategoryCode)
+    ? <AiBadge confidence={movement.suggestionConfidence} />
+    : null;
 
   return (
     <li className="rounded-md border border-border p-3">
@@ -570,6 +593,7 @@ function MovementRow({
               <option key={c.code} value={c.code}>{categoryLabel(c, t)}</option>
             ))}
           </Select>
+          {aiBadge}
           {/* Full width on phones so the whole description is readable; inline from `sm` up. */}
           <Input
             value={descriptionValue}
@@ -694,7 +718,7 @@ function MovementRow({
 
       {!editable && movement.suggestedCategoryCode && (
         <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-          {t("common.category")}: {categoryLabelByCode(movement.suggestedCategoryCode, categories, t)}
+          {t("common.category")}: {categoryLabelByCode(movement.suggestedCategoryCode, categories, t)} {aiBadge}
         </p>
       )}
 
@@ -709,5 +733,17 @@ function MovementRow({
         </div>
       )}
     </li>
+  );
+}
+
+/** Marks a category the model proposed; the confidence sits in its tooltip (hover, tap or keyboard). */
+function AiBadge({ confidence }: { confidence: string | null }) {
+  const { t } = useTranslation();
+  const percent = confidence === null ? null : Math.round(Number(confidence) * 100);
+  const info = t("banks.ai_badge_info", { confidence: percent ?? "?" });
+  return (
+    <InfoTip label={info} trigger={<Badge tone="violet">{t("banks.ai_badge")}</Badge>} openOnHover>
+      {info}
+    </InfoTip>
   );
 }

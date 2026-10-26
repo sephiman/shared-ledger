@@ -51,6 +51,12 @@ app:
     username: "mailer"
     password: "not-a-real-password"
     from: "Shared Ledger <noreply@ledger.test>"
+  # Configured so the AI endpoints exist; ScriptedSuggestionModel stands in for the provider and
+  # TogglableAiAvailability flips the feature-absent case without a second context.
+  ai:
+    base-url: "https://ai.test/v1"
+    api-key: "not-a-real-key"
+    model: "test-model"
   registration:
     # Open for the whole profile rather than a @TestPropertySource on the one class that registers:
     # any property override forks a second Spring context, and booting one is the suite's biggest cost.

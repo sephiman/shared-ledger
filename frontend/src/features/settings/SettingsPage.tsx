@@ -19,6 +19,8 @@ import { formatDate } from "@/lib/dates";
 import { useBankConfig } from "@/api/banks";
 import { BanksCard } from "@/features/banks/BanksCard";
 import { BankCredentialsCard } from "@/features/banks/BankCredentialsCard";
+import { AiSuggestionsCard } from "@/features/banks/AiSuggestionsCard";
+import { useInstanceFeatures } from "@/api/features";
 
 export function SettingsPage() {
   const { t, i18n } = useTranslation();
@@ -82,6 +84,7 @@ export function SettingsPage() {
   const [wipeMsg, setWipeMsg] = useState<string | null>(null);
 
   const { data: bankConfig } = useBankConfig(household.householdId);
+  const { data: features } = useInstanceFeatures();
   const { data: allCategories = [] } = useCategories(household.householdId);
   const customCategories = allCategories.filter((c) => c.custom);
   const deleteCustom = useDeleteCustomCategory(household.householdId);
@@ -376,6 +379,9 @@ export function SettingsPage() {
           </CardBody>
         </Card>
       )}
+
+      {/* Without a provider on the instance the feature does not exist: no card, no request. */}
+      {isOwner && features?.aiCategorySuggestions && <AiSuggestionsCard householdId={household.householdId} />}
 
       <Card>
         <CardHeader>

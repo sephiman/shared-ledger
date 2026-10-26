@@ -68,6 +68,13 @@ dependencyManagement {
     }
 }
 
+// The version goes into the AI provider's User-Agent. No build time, so the output stays cacheable.
+springBoot {
+    buildInfo {
+        excludes.set(setOf("time"))
+    }
+}
+
 tasks.withType<KotlinCompile> {
     compilerOptions {
         freeCompilerArgs.addAll("-Xjsr305=strict")

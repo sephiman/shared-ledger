@@ -79,6 +79,14 @@ class PendingMovement(
     @Column(name = "suggested_category_code", length = 64)
     var suggestedCategoryCode: String? = null,
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "suggestion_source", length = 8)
+    var suggestionSource: SuggestionSource? = null,
+
+    // Only for an AI suggestion: the model's own probability that the category is right.
+    @Column(name = "suggestion_confidence", precision = 3, scale = 2)
+    var suggestionConfidence: BigDecimal? = null,
+
     /** The single transaction a confirm or Replace produced; null for a split, which has no single one. */
     @Column(name = "created_transaction_id")
     var createdTransactionId: UUID? = null,
@@ -132,9 +140,50 @@ interface PendingMovementRepository : JpaRepository<PendingMovement, UUID> {
 
     fun findAllByHouseholdIdAndStatus(householdId: UUID, status: MovementStatus): List<PendingMovement>
 
+    /** What "Suggest with AI" sends: still pending and with no suggestion of any origin. */
+    @Query(
+        """
+        SELECT m FROM PendingMovement m
+        WHERE m.householdId = :hid AND m.status = com.sephilabs.sharedledger.bank.MovementStatus.pending
+          AND (m.suggestedCategoryCode IS NULL OR m.suggestedCategoryCode = '')
+        ORDER BY m.bookingDate DESC, m.createdAt DESC
+        """,
+    )
+    fun findAiCandidates(@Param("hid") householdId: UUID): List<PendingMovement>
+
+    @Query(
+        """
+        SELECT COUNT(m) FROM PendingMovement m
+        WHERE m.householdId = :hid AND m.status = com.sephilabs.sharedledger.bank.MovementStatus.pending
+          AND (m.suggestedCategoryCode IS NULL OR m.suggestedCategoryCode = '')
+        """,
+    )
+    fun countAiCandidates(@Param("hid") householdId: UUID): Long
+
+    /** Stores an AI suggestion only if the item is still pending and still unsuggested — a confirm, a reject
+     *  or Apply rules that got there first wins. Returns 0 when it lost. */
+    @Modifying
+    @Query(
+        """
+        UPDATE PendingMovement m
+        SET m.suggestedCategoryCode = :code,
+            m.suggestionSource = com.sephilabs.sharedledger.bank.SuggestionSource.ai,
+            m.suggestionConfidence = :confidence
+        WHERE m.id = :id AND m.householdId = :hid
+          AND m.status = com.sephilabs.sharedledger.bank.MovementStatus.pending
+          AND (m.suggestedCategoryCode IS NULL OR m.suggestedCategoryCode = '')
+        """,
+    )
+    fun storeAiSuggestion(
+        @Param("id") id: UUID,
+        @Param("hid") householdId: UUID,
+        @Param("code") categoryCode: String,
+        @Param("confidence") confidence: BigDecimal,
+    ): Int
+
     /** The full-dataset pending query behind the review inbox. Text search ([search], a pre-lowercased
-     *  `%term%` or null) and [categorized] (true/false/null = either) are applied server-side so the filters
-     *  cover every row, not just a page. The possible-duplicate filter is computed cross-table in the service. */
+     *  `%term%` or null), [categorized] (true/false/null = either) and [aiSuggested] (the suggestion's origin is
+     *  AI / is not / either) are applied server-side so the filters cover every row, not just a page. The possible-duplicate filter is computed cross-table in the service. */
     @Query(
         value = """
         SELECT m FROM PendingMovement m
@@ -148,6 +197,10 @@ interface PendingMovementRepository : JpaRepository<PendingMovement, UUID> {
           AND (:categorized IS NULL
                OR (:categorized = TRUE AND m.suggestedCategoryCode IS NOT NULL AND m.suggestedCategoryCode <> '')
                OR (:categorized = FALSE AND (m.suggestedCategoryCode IS NULL OR m.suggestedCategoryCode = '')))
+          AND (:aiSuggested IS NULL
+               OR (:aiSuggested = TRUE AND m.suggestionSource = com.sephilabs.sharedledger.bank.SuggestionSource.ai)
+               OR (:aiSuggested = FALSE AND (m.suggestionSource IS NULL
+                                             OR m.suggestionSource <> com.sephilabs.sharedledger.bank.SuggestionSource.ai)))
         ORDER BY m.bookingDate DESC, m.createdAt DESC
         """,
         countQuery = """
@@ -162,6 +215,10 @@ interface PendingMovementRepository : JpaRepository<PendingMovement, UUID> {
           AND (:categorized IS NULL
                OR (:categorized = TRUE AND m.suggestedCategoryCode IS NOT NULL AND m.suggestedCategoryCode <> '')
                OR (:categorized = FALSE AND (m.suggestedCategoryCode IS NULL OR m.suggestedCategoryCode = '')))
+          AND (:aiSuggested IS NULL
+               OR (:aiSuggested = TRUE AND m.suggestionSource = com.sephilabs.sharedledger.bank.SuggestionSource.ai)
+               OR (:aiSuggested = FALSE AND (m.suggestionSource IS NULL
+                                             OR m.suggestionSource <> com.sephilabs.sharedledger.bank.SuggestionSource.ai)))
         """,
     )
     fun search(
@@ -170,6 +227,7 @@ interface PendingMovementRepository : JpaRepository<PendingMovement, UUID> {
         @Param("connectionId") connectionId: UUID?,
         @Param("search") search: String?,
         @Param("categorized") categorized: Boolean?,
+        @Param("aiSuggested") aiSuggested: Boolean?,
         pageable: Pageable,
     ): Page<PendingMovement>
 

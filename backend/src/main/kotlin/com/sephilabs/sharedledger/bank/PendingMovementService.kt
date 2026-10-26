@@ -77,17 +77,19 @@ class PendingMovementService(
         val pageSize = size.coerceIn(1, 200)
         // Pre-lowercase + wrap for the case-insensitive LIKE; blank search means "no text filter".
         val searchTerm = search?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }?.let { "%$it%" }
-        val categorized: Boolean? = when (categorisation) {
-            PendingCategorisation.categorized -> true
-            PendingCategorisation.uncategorized -> false
-            null -> null
+        val (categorized, aiSuggested) = when (categorisation) {
+            PendingCategorisation.categorized -> true to null
+            PendingCategorisation.suggested_by_rule -> true to false
+            PendingCategorisation.suggested_by_ai -> true to true
+            PendingCategorisation.uncategorized -> false to null
+            null -> null to null
         }
 
         // "Only possible duplicates" is a computed, cross-table flag (only meaningful for pending) that
         // can't be expressed in SQL. When requested, load the whole filtered set, flag it in memory,
         // then paginate the survivors here so the filter still covers the full dataset.
         if (duplicatesOnly && status == MovementStatus.pending) {
-            val all = pending.search(householdId, status, connectionId, searchTerm, categorized, Pageable.unpaged()).content
+            val all = pending.search(householdId, status, connectionId, searchTerm, categorized, aiSuggested, Pageable.unpaged()).content
             if (all.isEmpty()) return PageResponse.of(emptyList(), pageNum, pageSize, 0)
             val dupIndex = buildDuplicateIndex(householdId, all)
             val duplicates = all.filter { matchesDuplicate(dupIndex, it) }
@@ -96,7 +98,7 @@ class PendingMovementService(
         }
 
         val pageable = PageRequest.of(pageNum, pageSize)
-        val result = pending.search(householdId, status, connectionId, searchTerm, categorized, pageable)
+        val result = pending.search(householdId, status, connectionId, searchTerm, categorized, aiSuggested, pageable)
         val items = result.content
         if (items.isEmpty()) return PageResponse.of(emptyList(), pageNum, pageSize, result.totalElements)
         // Duplicate detection only matters for still-pending items; load the whole comparison
@@ -426,19 +428,21 @@ class PendingMovementService(
         return BatchResultDto(restored = movements.size)
     }
 
-    /** Re-run the rules over still-pending, *uncategorized* movements, filling each match's suggested
-     *  category. Never overwrites an existing suggestion and confirms nothing — for movements ingested
-     *  before the rules existed. */
+    /** Re-run the rules over still-pending movements that have no suggestion or only an AI one, filling each
+     *  match's suggested category — a rule outranks the model. Never overwrites a rule's suggestion and confirms
+     *  nothing — for movements ingested before the rules existed. */
     @Transactional
     fun applyRulesToPending(householdId: UUID): ApplyRulesResultDto {
         val rules = categorization.orderedRules(householdId)
         if (rules.isEmpty()) return ApplyRulesResultDto(categorized = 0)
         val movements = pending.findAllByHouseholdIdAndStatus(householdId, MovementStatus.pending)
-            .filter { it.suggestedCategoryCode.isNullOrBlank() }
+            .filter { it.suggestedCategoryCode.isNullOrBlank() || it.suggestionSource == SuggestionSource.ai }
         var categorized = 0
         for (movement in movements) {
             val rule = categorization.matchRule(rules, movement) ?: continue
             movement.suggestedCategoryCode = rule.categoryCode
+            movement.suggestionSource = SuggestionSource.rule
+            movement.suggestionConfidence = null
             movement.direction = rule.direction
             categorized++
         }
@@ -448,7 +452,12 @@ class PendingMovementService(
     @Transactional
     fun edit(householdId: UUID, id: UUID, request: EditMovementRequest): PendingMovementDto {
         val movement = requirePending(householdId, id)
-        request.suggestedCategoryCode?.let { movement.suggestedCategoryCode = it }
+        request.suggestedCategoryCode?.let {
+            // A category set by hand is no longer anybody's suggestion.
+            movement.suggestedCategoryCode = it
+            movement.suggestionSource = null
+            movement.suggestionConfidence = null
+        }
         request.direction?.let { movement.direction = it }
         request.description?.let { movement.description = it }
         return movement.toDto(connections.findById(movement.connectionId).orElse(null), account(movement), isPossibleDuplicate(movement))
@@ -623,6 +632,8 @@ class PendingMovementService(
         reference = reference,
         status = status,
         suggestedCategoryCode = suggestedCategoryCode,
+        suggestionSource = suggestionSource,
+        suggestionConfidence = suggestionConfidence,
         createdTransactionId = createdTransactionId,
         createdTransactionIds = transactionIds,
         createdMovementId = createdMovementId,

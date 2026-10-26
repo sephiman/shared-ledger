@@ -134,6 +134,9 @@ data class PendingMovementDto(
     val reference: String?,
     val status: MovementStatus,
     val suggestedCategoryCode: String?,
+    val suggestionSource: SuggestionSource? = null,
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    val suggestionConfidence: BigDecimal? = null,
     val createdTransactionId: UUID?,
     // Every transaction this item produced: one for a confirm, Replace or merge (where the merged items
     // share it), N for a split, empty while pending.

@@ -12,6 +12,7 @@ import com.sephilabs.sharedledger.bank.CategorizationService
 import com.sephilabs.sharedledger.bank.ConnectionStatus
 import com.sephilabs.sharedledger.bank.MovementStatus
 import com.sephilabs.sharedledger.bank.PendingMovement
+import com.sephilabs.sharedledger.bank.SuggestionSource
 import com.sephilabs.sharedledger.bank.PendingMovementRepository
 import com.sephilabs.sharedledger.bank.SyncRunStatus
 import com.sephilabs.sharedledger.bank.connector.BankConnector
@@ -391,6 +392,7 @@ class BankSyncService(
                 status = MovementStatus.pending,
             )
             entity.suggestedCategoryCode = categorization.suggestCategory(connection.householdId, entity)
+            entity.suggestionSource = entity.suggestedCategoryCode?.let { SuggestionSource.rule }
             pending.save(entity)
             n++
         }

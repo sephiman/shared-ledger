@@ -1,6 +1,7 @@
 package com.sephilabs.sharedledger
 
 import com.sephilabs.sharedledger.bank.FakeBankConnectorConfig
+import com.sephilabs.sharedledger.bank.aisuggestion.AiTestDoublesConfig
 import com.sephilabs.sharedledger.mail.MailTestDoublesConfig
 import com.sephilabs.sharedledger.notification.RecordingTelegramConfig
 import com.sephilabs.sharedledger.portfolio.StubPriceProviderConfig
@@ -50,6 +51,13 @@ class TestBackfillExecutorConfig {
         return Executor { task -> worker.submit(task).get() }
     }
 
+    /** And for AI suggestion runs: the POST answers once the whole run is stored. */
+    @Bean("aiSuggestionExecutor")
+    fun aiSuggestionExecutor(): Executor {
+        val worker = Executors.newSingleThreadExecutor()
+        return Executor { task -> worker.submit(task).get() }
+    }
+
     /** Replaces the production `passwordEncoder` (excluded from the test profile). Argon2 at production
      *  strength is ~50ms a hash by design, and the suite hashes on every register, login and seeded user.
      *  Same algorithm and the same encode/matches code path — only the work factor drops, so a hash
@@ -92,6 +100,7 @@ class TestSchemaResetConfig {
     RecordingTelegramConfig::class,
     StubBenchmarkSourceConfig::class,
     MailTestDoublesConfig::class,
+    AiTestDoublesConfig::class,
 )
 abstract class IntegrationTestBase {
 

@@ -38,6 +38,8 @@ const movement = (patch: Partial<PendingMovement> = {}): PendingMovement => ({
   reference: null,
   status: "pending",
   suggestedCategoryCode: "groceries",
+  suggestionSource: "rule",
+  suggestionConfidence: null,
   createdTransactionId: null,
   createdTransactionIds: [],
   createdMovementId: null,

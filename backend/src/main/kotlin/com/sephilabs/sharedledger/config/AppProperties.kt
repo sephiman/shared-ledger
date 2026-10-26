@@ -18,6 +18,7 @@ data class AppProperties(
     val mail: Mail = Mail(),
     val passwordReset: PasswordReset = PasswordReset(),
     val emailChange: EmailChange = EmailChange(),
+    val ai: Ai = Ai(),
 ) {
     data class Security(
         val loginRate: LoginRate = LoginRate(),
@@ -72,6 +73,16 @@ data class AppProperties(
     data class EmailChange(
         val ttlMinutes: Long = 60,
         val perHourPerUser: Long = 3,
+    )
+
+    /** Optional OpenAI-compatible chat-completions provider for category suggestions; resolved into an
+     *  `AiProviderSettings` by `AiConfig`. No key keeps the whole feature absent. */
+    data class Ai(
+        val baseUrl: String = DEFAULT_AI_BASE_URL,
+        val apiKey: String = "",
+        val model: String = DEFAULT_AI_MODEL,
+        // A 25-movement batch took up to 59 s in the offline experiment.
+        val timeoutMs: Long = 120000,
     )
 
     data class Scheduler(
@@ -205,3 +216,7 @@ data class AppProperties(
         val syncCron: String = "0 0 7,19 * * *",
     )
 }
+
+const val DEFAULT_AI_BASE_URL = "https://opencode.ai/zen/go/v1"
+// deepseek-v4-flash answers 410 ModelDeprecated (2026-10-26).
+const val DEFAULT_AI_MODEL = "deepseek-v4.1-flash"
