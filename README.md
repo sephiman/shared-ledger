@@ -994,9 +994,14 @@ behaves oddly. To rebuild from nothing — empty caches, no reused layers:
 docker compose build --no-cache backend
 ```
 
-The `backend-image` CI job builds the same way on a runner that has no caches at all, so the
-from-scratch path is exercised on every push. `docker builder prune` also empties the mounts, along with
-everything else.
+The `images` CI job builds the same way on a runner whose cache mounts always start empty, so the
+from-scratch Gradle path is exercised on every push. `docker builder prune` also empties the mounts, along
+with everything else.
+
+On pull requests the `images` job only builds the backend and frontend images. On a push to `main`, once
+the backend and frontend jobs pass, it publishes them to GitHub Container Registry as
+`ghcr.io/sephiman/shared-ledger-backend` and `ghcr.io/sephiman/shared-ledger-frontend`, tagged `latest`
+and `sha-<short commit>`.
 
 What happens on first boot:
 
