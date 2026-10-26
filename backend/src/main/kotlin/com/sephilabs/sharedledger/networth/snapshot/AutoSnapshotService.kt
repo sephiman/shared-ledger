@@ -44,10 +44,13 @@ class AutoSnapshotService(
     @Transactional
     fun update(householdId: UUID, enabled: Boolean, frequency: SnapshotFrequency, by: User): AutoSnapshotSettings {
         val s = getOrCreate(householdId)
+        val enabledBefore = s.enabled
+        val frequencyBefore = s.frequency
         s.enabled = enabled
         s.frequency = frequency
         s.updatedByUserId = by.id
         s.updatedAt = Instant.now()
+        log.info("auto_snapshot_settings_updated enabled={}->{} frequency={}->{}", enabledBefore, enabled, frequencyBefore, frequency)
         return s
     }
 
@@ -76,8 +79,8 @@ class AutoSnapshotService(
             return false
         }
         val request = buildRequest(householdId, today)
-        snapshotService.createScheduled(householdId, request, ownerId)
-        log.info("Auto-snapshot created for household {} on {}", householdId, today)
+        val snapshot = snapshotService.createScheduled(householdId, request, ownerId)
+        log.info("Auto-snapshot created for household {} on {}: snapshot={}", householdId, today, snapshot.id)
         return true
     }
 

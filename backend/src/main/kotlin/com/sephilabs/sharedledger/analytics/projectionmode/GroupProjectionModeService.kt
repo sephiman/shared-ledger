@@ -2,6 +2,7 @@ package com.sephilabs.sharedledger.analytics.projectionmode
 
 import com.sephilabs.sharedledger.catalog.CategoryService
 import com.sephilabs.sharedledger.common.errors.AppException
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
@@ -19,6 +20,8 @@ class GroupProjectionModeService(
     private val categories: CategoryService,
 ) {
 
+    private val log = LoggerFactory.getLogger(javaClass)
+
     @Transactional(readOnly = true)
     fun modes(householdId: UUID): GroupModes =
         GroupModes(repository.findAllByIdHouseholdId(householdId).associate { it.id.groupCode to it.mode })
@@ -34,8 +37,10 @@ class GroupProjectionModeService(
         if (groupCode !in categories.expenseGroups()) throw AppException.badRequest("INVALID_PARAMETER", "groupCode")
         val id = GroupProjectionModeId(householdId, groupCode)
         val entity = repository.findById(id).orElseGet { GroupProjectionModeEntity(id) }
+        val modeBefore = entity.mode
         entity.mode = mode
         repository.save(entity)
+        log.info("group_projection_mode_set group={} mode={}->{}", groupCode, modeBefore, mode)
         return GroupProjectionModeDto(groupCode, mode)
     }
 }

@@ -9,6 +9,7 @@ import com.sephilabs.sharedledger.household.HouseholdMemberRepository
 import com.sephilabs.sharedledger.household.HouseholdRepository
 import com.sephilabs.sharedledger.identity.user.User
 import com.sephilabs.sharedledger.observability.AppMetrics
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -24,6 +25,8 @@ class InvitationService(
     private val metrics: AppMetrics,
     private val mailDispatcher: InvitationMailDispatcher,
 ) {
+
+    private val log = LoggerFactory.getLogger(javaClass)
 
     @Transactional
     fun issue(householdId: UUID, request: CreateInvitationRequest, issuedBy: User): IssuedInvitationResponse {
@@ -56,6 +59,7 @@ class InvitationService(
             )
         }
 
+        log.info("invitation_issued invitation={} role={} emailed={}", invitation.id, invitation.role, emailSent)
         return IssuedInvitationResponse(invitation.id, token, request.role, invitation.email, expiresAt, emailSent)
     }
 
@@ -79,6 +83,7 @@ class InvitationService(
         if (invitation.acceptedAt != null) throw AppException.conflict("INVITATION_ALREADY_ACCEPTED")
         invitation.revokedAt = Instant.now()
         invitation.updatedByUserId = by.id
+        log.info("invitation_revoked invitation={}", invitation.id)
     }
 
     @Transactional
@@ -111,6 +116,7 @@ class InvitationService(
             )
         }
 
+        log.info("invitation_resent invitation={} role={} emailed={}", invitation.id, invitation.role, emailSent)
         return IssuedInvitationResponse(invitation.id, token, invitation.role, invitation.email, expiresAt, emailSent)
     }
 
@@ -137,6 +143,10 @@ class InvitationService(
         invitation.acceptedByUserId = acceptingUser.id
         invitation.updatedByUserId = acceptingUser.id
         metrics.invitationAccepted(invitation.role.name)
+        log.info(
+            "invitation_accepted invitation={} household={} role={} via=accept",
+            invitation.id, invitation.householdId, invitation.role,
+        )
     }
 
     @Transactional
@@ -151,6 +161,10 @@ class InvitationService(
         invitation.acceptedByUserId = acceptingUser.id
         invitation.updatedByUserId = acceptingUser.id
         metrics.invitationAccepted(invitation.role.name)
+        log.info(
+            "invitation_accepted invitation={} household={} role={} via=register user={}",
+            invitation.id, invitation.householdId, invitation.role, acceptingUser.id,
+        )
         return invitation.householdId
     }
 

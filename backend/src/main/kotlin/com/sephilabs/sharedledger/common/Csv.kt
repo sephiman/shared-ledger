@@ -1,5 +1,6 @@
 package com.sephilabs.sharedledger.common
 
+import org.slf4j.LoggerFactory
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
@@ -14,6 +15,8 @@ object Csv {
 
     const val SEPARATOR: Char = ';'
     private const val EOL = "\r\n"
+
+    private val log = LoggerFactory.getLogger(javaClass)
 
     fun row(vararg fields: Any?): String =
         fields.joinToString(SEPARATOR.toString()) { escape(it?.toString() ?: "") } + EOL
@@ -31,6 +34,7 @@ object Csv {
     /** Wraps a CSV body in the standard `text/csv` attachment response used by every export endpoint. */
     fun download(householdName: String, suffix: String, body: String): ResponseEntity<String> {
         val filename = exportFilename(LocalDate.now(), householdName, suffix)
+        log.info("data_exported kind={}", suffix)
         return ResponseEntity.ok()
             .contentType(MediaType.parseMediaType("text/csv; charset=utf-8"))
             .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"$filename\"")

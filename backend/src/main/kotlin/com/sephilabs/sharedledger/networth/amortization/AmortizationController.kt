@@ -6,6 +6,7 @@ import com.sephilabs.sharedledger.identity.auth.CurrentUser
 import com.sephilabs.sharedledger.notification.NotificationPublisher
 import com.sephilabs.sharedledger.notification.NotifyActor
 import jakarta.validation.Valid
+import org.slf4j.LoggerFactory
 import org.springframework.http.ResponseEntity
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.*
@@ -26,6 +27,8 @@ class AmortizationController(
     private val notifications: NotificationPublisher,
     private val currentUser: CurrentUser,
 ) {
+
+    private val log = LoggerFactory.getLogger(javaClass)
 
     @GetMapping("/schedule")
     fun schedule(@PathVariable householdId: UUID, @PathVariable liabilityId: UUID): LiabilityScheduleDto =
@@ -63,6 +66,10 @@ class AmortizationController(
             updatedByUserId = by.id,
         )
         parts.save(part)
+        log.info(
+            "amortization_part_created liability={} part={} method={} start_mode={}",
+            liabilityId, part.id, part.method, part.startMode,
+        )
         return ResponseEntity.status(201).body(part.toDto())
     }
 
@@ -92,6 +99,10 @@ class AmortizationController(
             part.anchorBalance = null
         }
         part.updatedByUserId = by.id
+        log.info(
+            "amortization_part_updated liability={} part={} method={} start_mode={}",
+            liabilityId, part.id, part.method, part.startMode,
+        )
         return part.toDto()
     }
 
@@ -111,6 +122,7 @@ class AmortizationController(
         part.anchorDate = body.anchorDate
         part.anchorBalance = Money.normalize(body.anchorBalance)
         part.updatedByUserId = by.id
+        log.info("amortization_part_reanchored liability={} part={}", liabilityId, part.id)
         return part.toDto()
     }
 
@@ -126,6 +138,7 @@ class AmortizationController(
         val part = scheduleService.ownPart(liabilityId, partId)
         part.deletedAt = Instant.now()
         part.updatedByUserId = by.id
+        log.info("amortization_part_deleted liability={} part={}", liabilityId, part.id)
         return ResponseEntity.noContent().build()
     }
 
@@ -150,6 +163,7 @@ class AmortizationController(
             updatedByUserId = by.id,
         )
         revisions.save(revision)
+        log.info("amortization_revision_added part={} revision={}", partId, revision.id)
         return ResponseEntity.status(201).body(RevisionDto(revision.id, revision.effectiveDate, revision.annualRate))
     }
 
@@ -168,6 +182,7 @@ class AmortizationController(
         if (revision.partId != partId) throw AppException.notFound("AMORTIZATION_REVISION_NOT_FOUND")
         revision.deletedAt = Instant.now()
         revision.updatedByUserId = by.id
+        log.info("amortization_revision_deleted part={} revision={}", partId, revision.id)
         return ResponseEntity.noContent().build()
     }
 
@@ -207,6 +222,7 @@ class AmortizationController(
         notifications.amortizationPrepayment(
             householdId, liability.name, prepayment.amount, newBalance, prepayment.prepaymentDate, NotifyActor.Human(by.email),
         )
+        log.info("amortization_prepayment_recorded part={} prepayment={} mode={}", partId, prepayment.id, prepayment.mode)
         return ResponseEntity.status(201).body(
             PrepaymentDto(prepayment.id, prepayment.partId, prepayment.prepaymentDate, prepayment.amount, prepayment.mode),
         )
@@ -227,6 +243,7 @@ class AmortizationController(
         if (prepayment.partId != partId) throw AppException.notFound("AMORTIZATION_PREPAYMENT_NOT_FOUND")
         prepayment.deletedAt = Instant.now()
         prepayment.updatedByUserId = by.id
+        log.info("amortization_prepayment_deleted part={} prepayment={}", partId, prepayment.id)
         return ResponseEntity.noContent().build()
     }
 

@@ -7,6 +7,7 @@ import com.sephilabs.sharedledger.household.HouseholdContext
 import com.sephilabs.sharedledger.identity.auth.CurrentUser
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
+import org.slf4j.LoggerFactory
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
@@ -30,6 +31,8 @@ class BankController(
     private val currentUser: CurrentUser,
     private val householdContext: HouseholdContext,
 ) {
+
+    private val log = LoggerFactory.getLogger(javaClass)
 
     @GetMapping("/config")
     fun config(@PathVariable householdId: UUID): BankConfigDto = bankService.config(householdId)
@@ -71,6 +74,7 @@ class BankController(
         bankService.requireManageable(householdId, id, currentUser.requireUser(), householdContext.role())
         // User pressed "Sync now" → interactive incremental sync with their PSU context.
         syncService.enqueue(id, SyncMode.MANUAL, psuOf(request))
+        log.info("bank_sync_requested connection={} mode={}", id, SyncMode.MANUAL)
         return ResponseEntity.accepted().build()
     }
 

@@ -4,6 +4,7 @@ import com.sephilabs.sharedledger.bank.connector.BankCrypto
 import com.sephilabs.sharedledger.bank.connector.EbCredentials
 import com.sephilabs.sharedledger.bank.connector.EbPrivateKey
 import com.sephilabs.sharedledger.common.errors.AppException
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
@@ -17,6 +18,8 @@ class BankCredentialsService(
     private val connections: BankConnectionRepository,
     private val crypto: BankCrypto,
 ) {
+
+    private val log = LoggerFactory.getLogger(javaClass)
 
     /** The household's credentials, or null when none are configured. */
     @Transactional(readOnly = true)
@@ -70,10 +73,16 @@ class BankCredentialsService(
             createdByUserId = byUserId,
             updatedByUserId = byUserId,
         )
+        val appIdChanged = existing != null && existing.appId != appId
         row.appId = appId
         normalizedKey?.let { row.privateKeyEnc = crypto.encrypt(it) }
         row.updatedByUserId = byUserId
-        return repo.save(row)
+        repo.save(row)
+        log.info(
+            "bank_credentials_saved first={} key_replaced={} app_id_changed={} mismatched_connections={}",
+            existing == null, normalizedKey != null, appIdChanged, mismatched,
+        )
+        return row
     }
 
     /** Normalizes a paste (PEM or bare base64) and proves it parses as PKCS#8. PKCS#1 is the common wrong

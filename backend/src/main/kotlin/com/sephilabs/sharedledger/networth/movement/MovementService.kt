@@ -10,6 +10,7 @@ import com.sephilabs.sharedledger.notification.NotifyAction
 import com.sephilabs.sharedledger.notification.NotifyActor
 import com.sephilabs.sharedledger.notification.NotificationPublisher
 import com.sephilabs.sharedledger.observability.AppMetrics
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
@@ -25,6 +26,8 @@ class MovementService(
     private val metrics: AppMetrics,
     private val notifications: NotificationPublisher,
 ) {
+
+    private val log = LoggerFactory.getLogger(javaClass)
 
     @Transactional
     fun create(householdId: UUID, request: MovementRequest, by: User): MovementDto {
@@ -47,6 +50,10 @@ class MovementService(
             targetLiabilityId = request.liabilityId?.toString(),
         )
         notifications.movement(movement, NotifyAction.CREATE, NotifyActor.Human(by.email))
+        log.info(
+            "nw_movement_created movement={} type={} asset_class={} liability={}",
+            movement.id, movement.type, movement.assetClassCode, movement.liabilityId,
+        )
         return movement.toDto(nameFor(householdId, movement.liabilityId))
     }
 
@@ -62,6 +69,10 @@ class MovementService(
         movement.description = request.description
         movement.updatedByUserId = by.id
         notifications.movement(movement, NotifyAction.UPDATE, NotifyActor.Human(by.email))
+        log.info(
+            "nw_movement_updated movement={} type={} asset_class={} liability={}",
+            movement.id, movement.type, movement.assetClassCode, movement.liabilityId,
+        )
         return movement.toDto(nameFor(householdId, movement.liabilityId))
     }
 
@@ -71,6 +82,7 @@ class MovementService(
         m.deletedAt = Instant.now()
         m.updatedByUserId = by.id
         notifications.movement(m, NotifyAction.DELETE, NotifyActor.Human(by.email))
+        log.info("nw_movement_deleted movement={}", m.id)
     }
 
     @Transactional(readOnly = true)

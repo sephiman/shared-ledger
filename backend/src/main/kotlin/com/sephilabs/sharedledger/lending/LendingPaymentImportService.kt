@@ -67,6 +67,7 @@ class LendingPaymentImportService(
             inserted++
         }
         val totalSkipped = parsed.validRows.size - inserted
+        log.info("lending_payment_import_finished inserted={} skipped={}", inserted, totalSkipped)
         return ExecuteResult(
             inserted = inserted,
             skipped = totalSkipped,

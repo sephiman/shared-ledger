@@ -13,6 +13,7 @@ import com.sephilabs.sharedledger.networth.snapshot.Snapshot
 import com.sephilabs.sharedledger.networth.snapshot.SnapshotRepository
 import com.sephilabs.sharedledger.transaction.Direction
 import com.sephilabs.sharedledger.transaction.TransactionRepository
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
@@ -36,6 +37,8 @@ class FireService(
     private val analytics: AnalyticsService,
     private val props: AppProperties,
 ) {
+
+    private val log = LoggerFactory.getLogger(javaClass)
 
     private val rng: SplittableRandom = SplittableRandom()
 
@@ -86,6 +89,17 @@ class FireService(
         taxBrackets.saveAll(request.taxBrackets.map {
             FireTaxBracket(FireTaxBracketId(householdId, Money.normalize(it.lowerBound)), it.ratePct)
         })
+        val tiers = listOfNotNull(
+            "lean".takeIf { s.tierLeanEnabled },
+            "fire".takeIf { s.tierFireEnabled },
+            "fat".takeIf { s.tierFatEnabled },
+            "custom".takeIf { s.tierCustomEnabled },
+        )
+        log.info(
+            "fire_settings_updated scenarios={} brackets={} tiers={} contribution_mode={} capital_gains_tax={}",
+            request.returnScenarios.size, request.taxBrackets.size, tiers.joinToString(","), s.contributionMode,
+            s.applyCapitalGainsTax,
+        )
         return s.toDto(request.taxBrackets.map { TaxBracket(Money.normalize(it.lowerBound), it.ratePct) })
     }
 

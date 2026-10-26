@@ -10,6 +10,7 @@ import com.sephilabs.sharedledger.notification.NotifyAction
 import com.sephilabs.sharedledger.notification.NotifyActor
 import com.sephilabs.sharedledger.notification.NotificationPublisher
 import com.sephilabs.sharedledger.observability.AppMetrics
+import org.slf4j.LoggerFactory
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
@@ -27,9 +28,17 @@ class TransactionService(
     private val notifications: NotificationPublisher,
 ) {
 
+    private val log = LoggerFactory.getLogger(javaClass)
+
     @Transactional
-    fun create(householdId: UUID, request: TransactionRequest, by: User): Transaction =
-        createInternal(householdId, request, by, notify = true)
+    fun create(householdId: UUID, request: TransactionRequest, by: User): Transaction {
+        val tx = createInternal(householdId, request, by, notify = true)
+        log.info(
+            "transaction_created tx={} direction={} category={} refund={}",
+            tx.id, tx.direction, tx.categoryCode, tx.isRefund,
+        )
+        return tx
+    }
 
     /** Shared creation logic (category validation, save, metrics) with the notification made optional. The bank
      *  review inbox reuses it: single confirm notifies, batch confirm suppresses per-item and emits one
@@ -76,6 +85,10 @@ class TransactionService(
         tx.refundOfTransactionId = request.refundOfTransactionId
         tx.updatedByUserId = by.id
         notifications.transaction(tx, NotifyAction.UPDATE, NotifyActor.Human(by.email))
+        log.info(
+            "transaction_updated tx={} direction={} category={} refund={}",
+            tx.id, tx.direction, tx.categoryCode, tx.isRefund,
+        )
         return tx
     }
 
@@ -85,6 +98,7 @@ class TransactionService(
         tx.deletedAt = Instant.now()
         tx.updatedByUserId = by.id
         notifications.transaction(tx, NotifyAction.DELETE, NotifyActor.Human(by.email))
+        log.info("transaction_deleted tx={}", tx.id)
     }
 
     @Transactional(readOnly = true)

@@ -65,7 +65,7 @@ class MovementImportService(
             val key = dedupKey(row.date, row.type, row.assetClassCode, row.liabilityId, row.amount, row.description)
             if (parsed.existingKeys.contains(key)) {
                 val summary = rowSummary(row.date, row.type.name, row.assetClassCode, row.liabilityId, row.amount, row.description)
-                log.info("Movement import skipped row {}: duplicate — {}", row.rowNumber, summary)
+                log.info("Movement import skipped row {}: duplicate", row.rowNumber)
                 if (skippedList.size < MAX_SKIPPED_REPORTED) skippedList.add(SkippedRow(row.rowNumber, summary))
                 continue
             }

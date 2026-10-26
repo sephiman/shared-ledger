@@ -3,6 +3,7 @@ package com.sephilabs.sharedledger.bank
 import com.sephilabs.sharedledger.common.errors.AppException
 import com.sephilabs.sharedledger.identity.user.User
 import com.sephilabs.sharedledger.transaction.Direction
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
@@ -13,6 +14,8 @@ import java.util.UUID
  *  only when no existing rule already covers it (see [learn]). Deterministic; AI suggestions live in `aisuggestion`. */
 @Service
 class CategorizationService(private val rules: CategorizationRuleRepository) {
+
+    private val log = LoggerFactory.getLogger(javaClass)
 
     /** First matching rule's category (lowest priority number wins), scoped to the movement's direction. */
     @Transactional(readOnly = true)
@@ -37,7 +40,7 @@ class CategorizationService(private val rules: CategorizationRuleRepository) {
         val value = movement.counterparty?.trim().orEmpty()
         if (value.isBlank()) return
         if (matchRule(orderedRules(householdId), movement) != null) return
-        rules.save(
+        val rule = rules.save(
             CategorizationRule(
                 householdId = householdId,
                 matchField = RuleField.counterparty,
@@ -50,6 +53,7 @@ class CategorizationService(private val rules: CategorizationRuleRepository) {
                 createdByUserId = by.id,
             ),
         )
+        log.info("bank_rule_learned rule={} category={} direction={}", rule.id, categoryCode, direction)
     }
 
     @Transactional(readOnly = true)
@@ -57,8 +61,8 @@ class CategorizationService(private val rules: CategorizationRuleRepository) {
         rules.findAllByHouseholdIdOrderByPriorityAsc(householdId).map { it.toDto() }
 
     @Transactional
-    fun create(householdId: UUID, request: CategorizationRuleRequest, by: User): CategorizationRuleDto =
-        rules.save(
+    fun create(householdId: UUID, request: CategorizationRuleRequest, by: User): CategorizationRuleDto {
+        val rule = rules.save(
             CategorizationRule(
                 householdId = householdId,
                 matchField = request.matchField,
@@ -70,7 +74,13 @@ class CategorizationService(private val rules: CategorizationRuleRepository) {
                 source = RuleSource.manual,
                 createdByUserId = by.id,
             ),
-        ).toDto()
+        )
+        log.info(
+            "bank_rule_created rule={} field={} op={} category={} direction={}",
+            rule.id, rule.matchField, rule.matchOp, rule.categoryCode, rule.direction,
+        )
+        return rule.toDto()
+    }
 
     @Transactional
     fun update(householdId: UUID, id: UUID, request: CategorizationRuleRequest): CategorizationRuleDto {
@@ -81,6 +91,10 @@ class CategorizationService(private val rules: CategorizationRuleRepository) {
         rule.categoryCode = request.categoryCode
         rule.direction = request.direction
         rule.priority = request.priority ?: rule.priority
+        log.info(
+            "bank_rule_updated rule={} field={} op={} category={} direction={}",
+            rule.id, rule.matchField, rule.matchOp, rule.categoryCode, rule.direction,
+        )
         return rule.toDto()
     }
 
@@ -88,6 +102,7 @@ class CategorizationService(private val rules: CategorizationRuleRepository) {
     fun delete(householdId: UUID, id: UUID) {
         val rule = rules.findByIdAndHouseholdId(id, householdId) ?: throw AppException.notFound("BANK_RULE_NOT_FOUND")
         rules.delete(rule)
+        log.info("bank_rule_deleted rule={}", rule.id)
     }
 
     /** Delete the household's rules among [ids]; ids of other households are silently ignored. */
@@ -95,6 +110,7 @@ class CategorizationService(private val rules: CategorizationRuleRepository) {
     fun deleteBatch(householdId: UUID, ids: List<UUID>): DeletedCountDto {
         val toDelete = rules.findAllByIdInAndHouseholdId(ids, householdId)
         rules.deleteAll(toDelete)
+        log.info("bank_rules_deleted count={} requested={}", toDelete.size, ids.size)
         return DeletedCountDto(deleted = toDelete.size)
     }
 

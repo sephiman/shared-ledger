@@ -12,6 +12,7 @@ import com.sephilabs.sharedledger.observability.AppMetrics
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import jakarta.validation.Valid
+import org.slf4j.LoggerFactory
 import org.springframework.http.ResponseEntity
 import org.springframework.security.authentication.BadCredentialsException
 import org.springframework.security.core.context.SecurityContextHolder
@@ -31,6 +32,8 @@ class AuthController(
     private val rateLimiter: LoginRateLimiter,
     private val mail: MailAvailability,
 ) {
+
+    private val log = LoggerFactory.getLogger(javaClass)
 
     @GetMapping("/csrf")
     fun csrf(token: CsrfToken): Map<String, String> {
@@ -70,6 +73,7 @@ class AuthController(
     fun logout(request: HttpServletRequest): Map<String, String> {
         request.getSession(false)?.invalidate()
         SecurityContextHolder.clearContext()
+        log.info("auth_logout")
         return mapOf("status" to "ok")
     }
 

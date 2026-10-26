@@ -14,6 +14,7 @@ import com.sephilabs.sharedledger.networth.asset.AssetRepository
 import com.sephilabs.sharedledger.networth.asset.AssetType
 import com.sephilabs.sharedledger.networth.asset.AssetValueEntry
 import com.sephilabs.sharedledger.networth.asset.AssetValueEntryRepository
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.io.InputStream
@@ -29,6 +30,9 @@ class AssetImportService(
     private val assets: AssetRepository,
     private val values: AssetValueEntryRepository,
 ) {
+
+    private val log = LoggerFactory.getLogger(javaClass)
+
     private val expectedHeaders = listOf("name", "type", "active", "value_date", "value")
 
     @Transactional(readOnly = true)
@@ -72,6 +76,7 @@ class AssetImportService(
                 }
             }
         }
+        log.info("asset_import_finished inserted={} skipped={}", inserted, parsed.toSkip)
         return ExecuteResult(inserted = inserted, skipped = parsed.toSkip, replaced = 0)
     }
 

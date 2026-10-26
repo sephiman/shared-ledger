@@ -13,6 +13,7 @@ import com.sephilabs.sharedledger.networth.liability.Liability
 import com.sephilabs.sharedledger.networth.liability.LiabilityBalanceEntry
 import com.sephilabs.sharedledger.networth.liability.LiabilityBalanceEntryRepository
 import com.sephilabs.sharedledger.networth.liability.LiabilityRepository
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.io.InputStream
@@ -28,6 +29,9 @@ class LiabilityImportService(
     private val liabilities: LiabilityRepository,
     private val balances: LiabilityBalanceEntryRepository,
 ) {
+
+    private val log = LoggerFactory.getLogger(javaClass)
+
     private val expectedHeaders = listOf("name", "active", "amortizable", "charge_day", "balance_date", "balance")
 
     @Transactional(readOnly = true)
@@ -73,6 +77,7 @@ class LiabilityImportService(
                 }
             }
         }
+        log.info("liability_import_finished inserted={} skipped={}", inserted, parsed.toSkip)
         return ExecuteResult(inserted = inserted, skipped = parsed.toSkip, replaced = 0)
     }
 

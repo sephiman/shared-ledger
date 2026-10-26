@@ -10,6 +10,7 @@ import com.sephilabs.sharedledger.common.errors.AppException
 import com.sephilabs.sharedledger.config.AppProperties
 import com.sephilabs.sharedledger.household.HouseholdRole
 import com.sephilabs.sharedledger.identity.user.User
+import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.scheduling.support.CronExpression
 import org.springframework.stereotype.Service
@@ -35,6 +36,8 @@ class BankService(
     private val syncRuns: BankSyncRunRepository,
     private val events: ApplicationEventPublisher,
 ) {
+
+    private val log = LoggerFactory.getLogger(javaClass)
 
     @Transactional(readOnly = true)
     fun config(householdId: UUID): BankConfigDto {
@@ -143,6 +146,7 @@ class BankService(
         } catch (ex: BankConnectorException) {
             throw AppException.badRequest("BANK_PROVIDER_ERROR", ex.message ?: "")
         }
+        log.info("bank_link_started relink_connection={}", request.relinkConnectionId)
         return StartLinkResponse(authUrl = start.url)
     }
 
@@ -193,9 +197,11 @@ class BankService(
         connections.save(connection)
 
         val known = accounts.findAllByConnectionId(connection.id)
+        var newAccounts = 0
         session.accounts.forEach { acc ->
             val existing = known.matching(acc)
             if (existing == null) {
+                newAccounts++
                 accounts.save(
                     BankConnectionAccount(
                         connectionId = connection.id,
@@ -219,6 +225,10 @@ class BankService(
         authSessions.delete(auth)
         // Initial backfill sync runs off-thread once this transaction commits.
         events.publishEvent(BankConnectionLinked(connection.id, psu))
+        log.info(
+            "bank_link_completed connection={} relink={} accounts={} new_accounts={}",
+            connection.id, auth.relinkConnectionId != null, session.accounts.size, newAccounts,
+        )
         return connection.toDto(canManage(connection, by, role), creds.appId)
     }
 
@@ -231,10 +241,17 @@ class BankService(
         role: HouseholdRole,
     ): BankConnectionDto {
         val connection = manageable(householdId, id, by, role)
+        val ingestionBefore = connection.ingestionEnabled
+        val frequencyBefore = connection.syncFrequency
         request.label?.let { connection.label = it }
         request.ingestionEnabled?.let { connection.ingestionEnabled = it }
         request.syncFrequency?.let { connection.syncFrequency = it }
         connection.updatedByUserId = by.id
+        log.info(
+            "bank_connection_updated connection={} ingestion={}->{} frequency={}->{} label_changed={}",
+            connection.id, ingestionBefore, connection.ingestionEnabled, frequencyBefore, connection.syncFrequency,
+            request.label != null,
+        )
         return connection.toDto(canManage = true, configuredAppId = credentials.findRow(householdId)?.appId)
     }
 
@@ -251,8 +268,13 @@ class BankService(
         val account = accounts.findById(accountId).orElse(null)
             ?.takeIf { it.connectionId == connection.id }
             ?: throw AppException.notFound("BANK_ACCOUNT_NOT_FOUND")
+        val ingestionBefore = account.ingestionEnabled
         account.ingestionEnabled = request.ingestionEnabled
         connection.updatedByUserId = by.id
+        log.info(
+            "bank_account_ingestion_changed connection={} account={} enabled={}->{}",
+            connection.id, account.id, ingestionBefore, account.ingestionEnabled,
+        )
         return connection.toDto(canManage = true, configuredAppId = credentials.findRow(householdId)?.appId)
     }
 
@@ -261,6 +283,7 @@ class BankService(
         val connection = manageable(householdId, id, by, role)
         // Cascades remove accounts, pending movements, and sync runs (FK ON DELETE CASCADE).
         connections.delete(connection)
+        log.info("bank_connection_deleted connection={}", connection.id)
     }
 
     // Rows linked before the hash was stored fall back to the same key V039 merged duplicates on.

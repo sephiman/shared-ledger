@@ -79,6 +79,7 @@ class AmortizationMaterializer(
             }
             if (created > 0) {
                 notifications.amortizationInstalments(householdId, name, lastInstalment, created, NotifyActor.Schedule(householdId))
+                log.info("amortization_materialized household={} liability={} created={}", householdId, liabilityId, created)
             }
             return created
         } catch (ex: Exception) {

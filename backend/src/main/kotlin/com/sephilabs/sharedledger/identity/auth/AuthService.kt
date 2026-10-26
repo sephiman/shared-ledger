@@ -15,6 +15,7 @@ import com.sephilabs.sharedledger.identity.user.PortfolioReturnBasis
 import com.sephilabs.sharedledger.identity.user.User
 import com.sephilabs.sharedledger.identity.user.UserRepository
 import com.sephilabs.sharedledger.observability.AppMetrics
+import org.slf4j.LoggerFactory
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -32,6 +33,8 @@ class AuthService(
     private val metrics: AppMetrics,
     private val props: AppProperties,
 ) {
+
+    private val log = LoggerFactory.getLogger(javaClass)
 
     @Transactional
     fun register(request: RegisterRequest): User {
@@ -69,16 +72,19 @@ class AuthService(
         )
         users.save(user)
 
-        if (token != null) {
+        val householdId = if (token != null) {
             invitations.consumeIfPresent(token, user)
         } else {
             val input = request.household!!
             val household = Household(name = input.name, currency = input.currency.uppercase(), defaultLocale = input.defaultLocale)
             households.save(household)
             members.save(HouseholdMember(HouseholdMemberId(household.id, user.id), HouseholdRole.owner))
+            household.id
         }
 
         metrics.registration(mode.name, "success")
+        // No userId in the MDC yet: the request was anonymous.
+        log.info("user_registered user={} household={} via_invitation={}", user.id, householdId, token != null)
         return user
     }
 
@@ -86,6 +92,7 @@ class AuthService(
     fun recordLogin(userId: UUID) {
         val user = loadManaged(userId)
         user.lastLoginAt = Instant.now()
+        log.info("auth_login user={}", user.id)
     }
 
     @Transactional
@@ -96,12 +103,15 @@ class AuthService(
         }
         user.passwordHash = encoder.encode(newPassword)!!
         emailChange.cancelPending(user.id)
+        log.info("user_password_changed")
     }
 
     @Transactional
     fun updateLocale(userId: UUID, locale: String): User {
         val user = loadManaged(userId)
+        val localeBefore = user.locale
         user.locale = locale
+        log.info("user_locale_changed locale={}->{}", localeBefore, locale)
         return user
     }
 
@@ -114,6 +124,7 @@ class AuthService(
         val user = loadManaged(userId)
         // Store in enum order so equivalent selections serialize identically.
         user.hiddenHomePanels = HomePanel.entries.map { it.id }.filter { it in hiddenPanels }.joinToString(",")
+        log.info("user_home_panels_changed hidden={}", user.hiddenHomePanels)
         return user
     }
 
@@ -123,7 +134,9 @@ class AuthService(
             throw AppException.badRequest("INVALID_PORTFOLIO_RETURN_BASIS")
         }
         val user = loadManaged(userId)
+        val basisBefore = user.portfolioReturnBasis
         user.portfolioReturnBasis = basis
+        log.info("user_return_basis_changed basis={}->{}", basisBefore, basis)
         return user
     }
 
@@ -135,6 +148,7 @@ class AuthService(
         }
         val user = loadManaged(userId)
         user.dismissedConsentNotices = notices.distinct().sorted().joinToString(",")
+        log.info("user_consent_notices_dismissed count={}", notices.distinct().size)
         return user
     }
 
@@ -144,6 +158,7 @@ class AuthService(
         members.findByIdHouseholdIdAndIdUserId(householdId, userId)
             ?: throw AppException.forbidden("NOT_A_HOUSEHOLD_MEMBER")
         user.defaultHouseholdId = householdId
+        log.info("user_default_household_changed household={}", householdId)
         return user
     }
 

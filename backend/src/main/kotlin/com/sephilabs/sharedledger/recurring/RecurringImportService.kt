@@ -56,7 +56,7 @@ class RecurringImportService(
             val key = dedupKey(row)
             if (parsed.existingKeys.contains(key)) {
                 val summary = rowSummary(row)
-                log.info("Recurring import skipped row {}: duplicate — {}", row.rowNumber, summary)
+                log.info("Recurring import skipped row {}: duplicate", row.rowNumber)
                 if (skippedList.size < MAX_SKIPPED_REPORTED) skippedList.add(SkippedRow(row.rowNumber, summary))
                 continue
             }

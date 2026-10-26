@@ -4,6 +4,7 @@ import com.sephilabs.sharedledger.common.errors.AppException
 import com.sephilabs.sharedledger.identity.user.User
 import jakarta.persistence.EntityManager
 import jakarta.persistence.PersistenceContext
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.text.Normalizer
@@ -15,6 +16,8 @@ class CustomCategoryWriter(
     private val customs: CustomCategoryRepository,
     private val categories: CategoryService,
 ) {
+
+    private val log = LoggerFactory.getLogger(javaClass)
 
     @PersistenceContext
     private lateinit var em: EntityManager
@@ -51,7 +54,12 @@ class CustomCategoryWriter(
             essential = essential,
             createdByUserId = by.id,
         )
-        return customs.save(entity)
+        customs.save(entity)
+        log.info(
+            "custom_category_created category={} kind={} group={} essential={}",
+            code, kind, resolvedGroup, essential,
+        )
+        return entity
     }
 
     @Transactional
@@ -70,12 +78,18 @@ class CustomCategoryWriter(
             if (trimmed.isEmpty()) throw AppException.badRequest("INVALID_NAME")
             entity.name = trimmed
         }
+        val groupBefore = entity.groupCode
+        val essentialBefore = entity.essential
         if (groupCode != null) {
             entity.groupCode = validateAndResolveGroup(entity.kind, groupCode)
         }
         if (essential != null) {
             entity.essential = essential
         }
+        log.info(
+            "custom_category_updated category={} group={}->{} essential={}->{} name_changed={}",
+            code, groupBefore, entity.groupCode, essentialBefore, entity.essential, name != null,
+        )
         return entity
     }
 
@@ -86,19 +100,23 @@ class CustomCategoryWriter(
         val entity = customs.findByIdHouseholdIdAndIdCode(householdId, code)
             ?: throw AppException.notFound("CUSTOM_CATEGORY_NOT_FOUND")
 
-        em.createNativeQuery(
+        val txDeleted = em.createNativeQuery(
             "DELETE FROM transactions WHERE household_id = :hid AND category_code = :code"
         ).setParameter("hid", householdId).setParameter("code", code).executeUpdate()
 
-        em.createNativeQuery(
+        val budgetsDeleted = em.createNativeQuery(
             "DELETE FROM budgets WHERE household_id = :hid AND category_code = :code"
         ).setParameter("hid", householdId).setParameter("code", code).executeUpdate()
 
-        em.createNativeQuery(
+        val recurringDeleted = em.createNativeQuery(
             "DELETE FROM recurring_templates WHERE household_id = :hid AND category_code = :code"
         ).setParameter("hid", householdId).setParameter("code", code).executeUpdate()
 
         customs.delete(entity)
+        log.info(
+            "custom_category_deleted category={} tx_deleted={} budgets_deleted={} recurring_deleted={}",
+            code, txDeleted, budgetsDeleted, recurringDeleted,
+        )
     }
 
     private fun validateAndResolveGroup(kind: String, groupCode: String?): String? {

@@ -7,6 +7,7 @@ import com.sephilabs.sharedledger.identity.user.User
 import com.sephilabs.sharedledger.notification.NotifyAction
 import com.sephilabs.sharedledger.notification.NotifyActor
 import com.sephilabs.sharedledger.notification.NotificationPublisher
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
@@ -21,6 +22,8 @@ class LendingService(
     private val schedules: LendingScheduleRepository,
     private val notifications: NotificationPublisher,
 ) {
+
+    private val log = LoggerFactory.getLogger(javaClass)
 
     @Transactional
     fun create(householdId: UUID, request: LendingRequest, by: User): Lending {
@@ -38,7 +41,9 @@ class LendingService(
             createdByUserId = by.id,
             updatedByUserId = by.id,
         )
-        return lendings.save(lending)
+        lendings.save(lending)
+        log.info("lending_created lending={} interest_type={}", lending.id, lending.interestType)
+        return lending
     }
 
     @Transactional
@@ -56,6 +61,7 @@ class LendingService(
         lending.annualInterestRate = request.annualInterestRate?.let { normalizeRate(it) }
         lending.compoundingPeriod = request.compoundingPeriod
         lending.updatedByUserId = by.id
+        log.info("lending_updated lending={} interest_type={}", lending.id, lending.interestType)
         return lending
     }
 
@@ -64,23 +70,26 @@ class LendingService(
         val lending = loadOwn(householdId, id)
         lending.deletedAt = Instant.now()
         lending.updatedByUserId = by.id
+        log.info("lending_deleted lending={}", lending.id)
     }
 
     @Transactional
     fun settle(householdId: UUID, id: UUID, request: LendingStatusTransitionRequest, by: User): Lending =
-        transitionStatus(householdId, id, LendingStatus.settled, request.closedDate, by)
+        transitionStatus(householdId, id, LendingStatus.settled, request.closedDate, by, reason = "settle")
 
     @Transactional
     fun writeOff(householdId: UUID, id: UUID, request: LendingStatusTransitionRequest, by: User): Lending =
-        transitionStatus(householdId, id, LendingStatus.written_off, request.closedDate, by)
+        transitionStatus(householdId, id, LendingStatus.written_off, request.closedDate, by, reason = "write_off")
 
     @Transactional
     fun reopen(householdId: UUID, id: UUID, by: User): Lending {
         val lending = loadOwn(householdId, id)
         if (lending.status == LendingStatus.active) return lending
+        val statusBefore = lending.status
         lending.status = LendingStatus.active
         lending.closedDate = null
         lending.updatedByUserId = by.id
+        log.info("lending_status_changed lending={} status={}->{} reason=reopen", lending.id, statusBefore, lending.status)
         return lending
     }
 
@@ -160,6 +169,7 @@ class LendingService(
         payments.save(payment)
         settleIfPaidOff(lending, by)
         notifications.lendingPayment(payment, lending.householdId, lending.borrowerName, NotifyAction.CREATE, NotifyActor.Human(by.email))
+        log.info("lending_payment_registered lending={} payment={}", lending.id, payment.id)
         return payment
     }
 
@@ -180,6 +190,7 @@ class LendingService(
         payment.updatedByUserId = by.id
         settleIfPaidOff(lending, by)
         notifications.lendingPayment(payment, lending.householdId, lending.borrowerName, NotifyAction.UPDATE, NotifyActor.Human(by.email))
+        log.info("lending_payment_updated lending={} payment={}", lending.id, payment.id)
         return payment
     }
 
@@ -190,6 +201,7 @@ class LendingService(
         payment.deletedAt = Instant.now()
         payment.updatedByUserId = by.id
         notifications.lendingPayment(payment, lending.householdId, lending.borrowerName, NotifyAction.DELETE, NotifyActor.Human(by.email))
+        log.info("lending_payment_deleted lending={} payment={}", lending.id, payment.id)
     }
 
     @Transactional
@@ -209,7 +221,12 @@ class LendingService(
                 createdByUserId = by.id,
                 updatedByUserId = by.id,
             )
-            return schedules.save(schedule)
+            schedules.save(schedule)
+            log.info(
+                "lending_schedule_saved lending={} schedule={} frequency={} active={} created=true",
+                lending.id, schedule.id, schedule.frequency, schedule.active,
+            )
+            return schedule
         }
         existing.frequency = request.frequency
         existing.dayOfWeek = request.dayOfWeek
@@ -217,6 +234,10 @@ class LendingService(
         existing.expectedAmount = Money.normalize(request.expectedAmount)
         existing.active = request.active
         existing.updatedByUserId = by.id
+        log.info(
+            "lending_schedule_saved lending={} schedule={} frequency={} active={} created=false",
+            lending.id, existing.id, existing.frequency, existing.active,
+        )
         return existing
     }
 
@@ -225,8 +246,10 @@ class LendingService(
         val lending = loadOwn(householdId, lendingId)
         val schedule = schedules.findByLendingId(lending.id)
             ?: throw AppException.notFound("LENDING_SCHEDULE_NOT_FOUND")
+        val wasActive = schedule.active
         schedule.active = active
         schedule.updatedByUserId = by.id
+        log.info("lending_schedule_active_changed lending={} schedule={} active={}->{}", lending.id, schedule.id, wasActive, active)
         return schedule
     }
 
@@ -235,6 +258,7 @@ class LendingService(
         val lending = loadOwn(householdId, lendingId)
         val schedule = schedules.findByLendingId(lending.id) ?: return
         schedules.delete(schedule)
+        log.info("lending_schedule_deleted lending={} schedule={}", lending.id, schedule.id)
     }
 
     @Transactional(readOnly = true)
@@ -300,7 +324,7 @@ class LendingService(
         val asOf = maxOf(lastPaymentDate, LocalDate.now())
         val outstanding = LendingBalanceCalculator.compute(lending, livePayments, asOf)
         if (outstanding.totalOutstanding.signum() == 0) {
-            transitionStatus(lending.householdId, lending.id, LendingStatus.settled, lastPaymentDate, by)
+            transitionStatus(lending.householdId, lending.id, LendingStatus.settled, lastPaymentDate, by, reason = "paid_off")
         }
     }
 
@@ -310,9 +334,11 @@ class LendingService(
         target: LendingStatus,
         explicitDate: LocalDate?,
         by: User,
+        reason: String,
     ): Lending {
         val lending = loadOwn(householdId, id)
         if (lending.status == target) return lending
+        val statusBefore = lending.status
         val closedDate = explicitDate ?: LocalDate.now()
         if (closedDate.isBefore(lending.startDate)) {
             throw AppException.badRequest("LENDING_CLOSED_DATE_BEFORE_START")
@@ -324,6 +350,7 @@ class LendingService(
             it.active = false
             it.updatedByUserId = by.id
         }
+        log.info("lending_status_changed lending={} status={}->{} reason={}", lending.id, statusBefore, target, reason)
         return lending
     }
 

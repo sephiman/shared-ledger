@@ -8,6 +8,7 @@ import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Size
+import org.slf4j.LoggerFactory
 import org.springframework.http.ResponseEntity
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -71,6 +72,8 @@ class LiabilityController(
     private val currentUser: CurrentUser,
 ) {
 
+    private val log = LoggerFactory.getLogger(javaClass)
+
     @GetMapping
     fun list(@PathVariable householdId: UUID): List<LiabilityDto> =
         liabilities.findAllByHouseholdIdOrderByNameAsc(householdId).map { l ->
@@ -96,6 +99,10 @@ class LiabilityController(
             updatedByUserId = by.id,
         )
         liabilities.save(liability)
+        log.info(
+            "liability_created liability={} active={} amortizable={}",
+            liability.id, liability.active, liability.amortizable,
+        )
         return ResponseEntity.status(201).body(liability.toDto())
     }
 
@@ -109,11 +116,17 @@ class LiabilityController(
         val by = currentUser.requireUser()
         validateAmortization(body)
         val liability = loadOwn(householdId, id)
+        val wasActive = liability.active
+        val wasAmortizable = liability.amortizable
         liability.name = body.name.trim()
         liability.active = body.active
         liability.amortizable = body.amortizable
         liability.chargeDay = body.chargeDay
         liability.updatedByUserId = by.id
+        log.info(
+            "liability_updated liability={} active={}->{} amortizable={}->{}",
+            liability.id, wasActive, liability.active, wasAmortizable, liability.amortizable,
+        )
         return liability.toDto()
     }
 
@@ -130,6 +143,7 @@ class LiabilityController(
         val liability = loadOwn(householdId, id)
         liability.deletedAt = Instant.now()
         liability.updatedByUserId = by.id
+        log.info("liability_deleted liability={}", liability.id)
         return ResponseEntity.noContent().build()
     }
 
@@ -157,6 +171,7 @@ class LiabilityController(
             updatedByUserId = by.id,
         )
         balances.save(entry)
+        log.info("liability_value_added liability={} entry={}", id, entry.id)
         return ResponseEntity.status(201).body(LiabilityBalanceEntryDto(entry.id, entry.balanceDate, entry.balance))
     }
 
@@ -174,6 +189,7 @@ class LiabilityController(
         entry.balanceDate = body.balanceDate
         entry.balance = Money.normalize(body.balance)
         entry.updatedByUserId = by.id
+        log.info("liability_value_updated liability={} entry={}", id, entry.id)
         return LiabilityBalanceEntryDto(entry.id, entry.balanceDate, entry.balance)
     }
 
@@ -189,6 +205,7 @@ class LiabilityController(
         val entry = ownEntry(id, entryId)
         entry.deletedAt = Instant.now()
         entry.updatedByUserId = by.id
+        log.info("liability_value_deleted liability={} entry={}", id, entry.id)
         return ResponseEntity.noContent().build()
     }
 

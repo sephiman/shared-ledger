@@ -98,6 +98,12 @@ class LendingScheduleMaterializer(
             notifications.recurringLendingPayments(
                 lending.householdId, lending.borrowerName, schedule.expectedAmount, created, actor,
             )
+            if (created > 0) {
+                log.info(
+                    "lending_schedule_materialized household={} lending={} schedule={} created={} trigger={}",
+                    lending.householdId, lending.id, scheduleId, created, if (firedBy != null) "manual" else "schedule",
+                )
+            }
             return created
         } catch (ex: Exception) {
             log.error("Lending schedule materialization failed for schedule {}", scheduleId, ex)

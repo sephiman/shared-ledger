@@ -11,6 +11,7 @@ import com.sephilabs.sharedledger.portfolio.HoldingService
 import com.sephilabs.sharedledger.recurring.RecurringService
 import com.sephilabs.sharedledger.transaction.TransactionSearchCriteria
 import com.sephilabs.sharedledger.transaction.TransactionService
+import org.slf4j.LoggerFactory
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
@@ -37,6 +38,8 @@ class DataExportController(
     private val named: NamedCsvExportService,
     private val households: HouseholdRepository,
 ) {
+
+    private val log = LoggerFactory.getLogger(javaClass)
 
     @GetMapping("/export-all.zip")
     fun exportAll(@PathVariable householdId: UUID): ResponseEntity<ByteArray> {
@@ -77,6 +80,7 @@ class DataExportController(
             }
         }
 
+        log.info("data_export_all files={}", files.size)
         val zipName = Csv.exportFilename(today, household.name, "all").removeSuffix(".csv") + ".zip"
         return ResponseEntity.ok()
             .contentType(MediaType.parseMediaType("application/zip"))

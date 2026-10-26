@@ -9,6 +9,7 @@ import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
+import org.slf4j.LoggerFactory
 import org.springframework.http.ResponseEntity
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.*
@@ -65,6 +66,8 @@ class HouseholdController(
     private val householdContext: HouseholdContext,
 ) {
 
+    private val log = LoggerFactory.getLogger(javaClass)
+
     @GetMapping
     fun listMine(): List<HouseholdDto> {
         val user = currentUser.requireUser()
@@ -92,6 +95,10 @@ class HouseholdController(
         if (isFirstHousehold) {
             user.locale = body.defaultLocale
         }
+        log.info(
+            "household_created household={} currency={} locale={} first={}",
+            household.id, household.currency, household.defaultLocale, isFirstHousehold,
+        )
         val dto = HouseholdDto(household.id, household.name, household.currency, household.defaultLocale, HouseholdRole.owner.name)
         return ResponseEntity.status(201).body(dto)
     }
@@ -134,7 +141,9 @@ class HouseholdController(
             val owners = members.findAllByIdHouseholdId(householdId).count { it.role == HouseholdRole.owner }
             if (owners <= 1) throw AppException.conflict("LAST_HOUSEHOLD_OWNER")
         }
+        val roleBefore = membership.role
         membership.role = body.role
+        log.info("household_member_role_changed target_user={} role={}->{}", userId, roleBefore, membership.role)
         return HouseholdMemberDto(userId, user.email, membership.role, membership.joinedAt)
     }
 
@@ -146,9 +155,15 @@ class HouseholdController(
         @Valid @RequestBody body: HouseholdUpdateRequest,
     ): HouseholdDto {
         val h = households.getOrThrow(householdId)
+        val currencyBefore = h.currency
+        val localeBefore = h.defaultLocale
         body.name?.let { h.name = it }
         body.currency?.let { h.currency = it.uppercase() }
         body.defaultLocale?.let { h.defaultLocale = it }
+        log.info(
+            "household_updated currency={}->{} locale={}->{} name_changed={}",
+            currencyBefore, h.currency, localeBefore, h.defaultLocale, body.name != null,
+        )
         return HouseholdDto(h.id, h.name, h.currency, h.defaultLocale, householdContext.role().name)
     }
 
@@ -163,6 +178,7 @@ class HouseholdController(
             throw AppException.conflict("HOUSEHOLD_IS_DEFAULT")
         }
         households.deleteById(householdId)
+        log.info("household_deleted household={}", householdId)
         return ResponseEntity.noContent().build()
     }
 }

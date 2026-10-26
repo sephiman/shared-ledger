@@ -6,6 +6,7 @@ import com.sephilabs.sharedledger.common.errors.AppException
 import com.sephilabs.sharedledger.identity.auth.CurrentUser
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotNull
+import org.slf4j.LoggerFactory
 import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.http.ResponseEntity
 import org.springframework.transaction.annotation.Transactional
@@ -76,6 +77,8 @@ class CashController(
     private val currentUser: CurrentUser,
 ) {
 
+    private val log = LoggerFactory.getLogger(javaClass)
+
     @GetMapping("/adjustments")
     fun listAdjustments(@PathVariable householdId: UUID): List<CashAdjustmentDto> =
         adjustments.findAllByHouseholdIdOrderByAdjustmentDateDescCreatedAtDesc(householdId)
@@ -96,6 +99,7 @@ class CashController(
             updatedByUserId = by.id,
         )
         adjustments.save(entry)
+        log.info("cash_adjustment_added adjustment={}", entry.id)
         return ResponseEntity.status(201).body(CashAdjustmentDto(entry.id, entry.adjustmentDate, entry.amount))
     }
 
@@ -111,6 +115,7 @@ class CashController(
         entry.adjustmentDate = body.adjustmentDate
         entry.amount = Money.normalize(body.amount)
         entry.updatedByUserId = by.id
+        log.info("cash_adjustment_updated adjustment={}", entry.id)
         return CashAdjustmentDto(entry.id, entry.adjustmentDate, entry.amount)
     }
 
@@ -121,6 +126,7 @@ class CashController(
         val entry = loadOwn(householdId, id)
         entry.deletedAt = Instant.now()
         entry.updatedByUserId = by.id
+        log.info("cash_adjustment_deleted adjustment={}", entry.id)
         return ResponseEntity.noContent().build()
     }
 

@@ -8,6 +8,7 @@ import com.sephilabs.sharedledger.networth.movement.MovementRepository
 import com.sephilabs.sharedledger.networth.movement.MovementType
 import com.sephilabs.sharedledger.transaction.Direction
 import com.sephilabs.sharedledger.transaction.TransactionRepository
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
@@ -47,6 +48,8 @@ class CashEstimateService(
     private val lendingPayments: LendingPaymentRepository,
 ) {
 
+    private val log = LoggerFactory.getLogger(javaClass)
+
     @Transactional
     fun getOrCreateSettings(householdId: UUID): CashEstimateSettings =
         settingsRepo.findById(householdId).orElseGet {
@@ -62,11 +65,16 @@ class CashEstimateService(
         by: User,
     ): CashEstimateSettings {
         val s = getOrCreateSettings(householdId)
+        val before = Triple(s.includeTransactions, s.includeLendings, s.includeMovements)
         s.includeTransactions = includeTransactions
         s.includeLendings = includeLendings
         s.includeMovements = includeMovements
         s.updatedByUserId = by.id
         s.updatedAt = Instant.now()
+        log.info(
+            "cash_settings_updated transactions={}->{} lendings={}->{} movements={}->{}",
+            before.first, includeTransactions, before.second, includeLendings, before.third, includeMovements,
+        )
         return s
     }
 

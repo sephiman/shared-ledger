@@ -10,6 +10,7 @@ import com.sephilabs.sharedledger.notification.NotificationPublisher
 import com.sephilabs.sharedledger.observability.AppMetrics
 import com.sephilabs.sharedledger.transaction.Transaction
 import com.sephilabs.sharedledger.transaction.TransactionRepository
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -25,6 +26,8 @@ class RecurringService(
     private val metrics: AppMetrics,
     private val notifications: NotificationPublisher,
 ) {
+
+    private val log = LoggerFactory.getLogger(javaClass)
 
     @Transactional
     fun create(householdId: UUID, request: RecurringTemplateRequest, by: User): RecurringTemplate {
@@ -47,7 +50,12 @@ class RecurringService(
             createdByUserId = by.id,
             updatedByUserId = by.id,
         )
-        return repository.save(template)
+        repository.save(template)
+        log.info(
+            "recurring_created template={} direction={} category={} cadence={} active={}",
+            template.id, template.direction, template.categoryCode, template.cadence, template.active,
+        )
+        return template
     }
 
     @Transactional
@@ -66,8 +74,13 @@ class RecurringService(
         template.dayOfMonthYearly = request.dayOfMonthYearly
         template.startDate = request.startDate
         template.endDate = request.endDate
+        val wasActive = template.active
         template.active = request.active
         template.updatedByUserId = by.id
+        log.info(
+            "recurring_updated template={} direction={} category={} cadence={} active={}->{}",
+            template.id, template.direction, template.categoryCode, template.cadence, wasActive, template.active,
+        )
         return template
     }
 
@@ -76,6 +89,7 @@ class RecurringService(
         val template = loadOwn(householdId, id)
         template.deletedAt = Instant.now()
         template.updatedByUserId = by.id
+        log.info("recurring_deleted template={}", template.id)
     }
 
     @Transactional(readOnly = true)
@@ -174,6 +188,7 @@ class RecurringService(
         template.lastMaterializedThrough = today
         template.updatedByUserId = by.id
         notifications.recurringTransactions(template, created, NotifyActor.Human(by.email))
+        log.info("recurring_fired template={} created={}", template.id, created)
         return created
     }
 

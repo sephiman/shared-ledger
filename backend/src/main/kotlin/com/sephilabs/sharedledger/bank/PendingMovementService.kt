@@ -10,6 +10,7 @@ import com.sephilabs.sharedledger.notification.NotificationPublisher
 import com.sephilabs.sharedledger.notification.NotifyActor
 import com.sephilabs.sharedledger.observability.AppMetrics
 import com.sephilabs.sharedledger.transaction.*
+import org.slf4j.LoggerFactory
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
@@ -38,6 +39,8 @@ class PendingMovementService(
     private val notifications: NotificationPublisher,
     private val metrics: AppMetrics,
 ) {
+
+    private val log = LoggerFactory.getLogger(javaClass)
 
     @Transactional(readOnly = true)
     fun pendingCount(householdId: UUID): Long =
@@ -142,6 +145,10 @@ class PendingMovementService(
         markConfirmed(movement, categoryCode, by)
         if (request.saveRule) categorization.learn(householdId, movement, categoryCode, direction, by)
         metrics.bankMovementsIngested(1)
+        log.info(
+            "bank_movement_confirmed movement={} tx={} category={} direction={} rule_saved={}",
+            movement.id, tx.id, categoryCode, direction, request.saveRule,
+        )
         return movement.toDto(connections.findById(movement.connectionId).orElse(null), account(movement), false)
     }
 
@@ -154,6 +161,10 @@ class PendingMovementService(
         createMovement(householdId, movement, request, by)
         markConfirmed(movement, categoryCode = null, by)
         metrics.bankMovementsIngested(1)
+        log.info(
+            "bank_movement_confirmed_as_movement movement={} nw_movement={} type={}",
+            movement.id, movement.createdMovementId, request.type,
+        )
         return movement.toDto(connections.findById(movement.connectionId).orElse(null), account(movement), false)
     }
 
@@ -185,6 +196,10 @@ class PendingMovementService(
         link(movement, tx.id)
         markConfirmed(movement, request.categoryCode, by)
         metrics.bankMovementsIngested(1)
+        log.info(
+            "bank_movement_confirmed_as_refund movement={} tx={} category={} refund_of={}",
+            movement.id, tx.id, request.categoryCode, request.refundOfTransactionId,
+        )
         return movement.toDto(connections.findById(movement.connectionId).orElse(null), account(movement), false)
     }
 
@@ -261,6 +276,7 @@ class PendingMovementService(
         link(movement, tx.id)
         markConfirmed(movement, categoryCode, by)
         metrics.bankMovementsIngested(1)
+        log.info("bank_movement_replaced movement={} tx={} category={}", movement.id, tx.id, categoryCode)
         return movement.toDto(connections.findById(movement.connectionId).orElse(null), account(movement), false)
     }
 
@@ -299,6 +315,7 @@ class PendingMovementService(
         markConfirmed(movement, categoryCode = null, by)
         notifications.bankMovementSplit(householdId, parts.size, movement.amount, NotifyActor.Human(by.email))
         metrics.bankMovementsIngested(1)
+        log.info("bank_movement_split movement={} parts={} direction={}", movement.id, parts.size, direction)
         return movement.toDto(
             connections.findById(movement.connectionId).orElse(null),
             account(movement),
@@ -351,6 +368,10 @@ class PendingMovementService(
         }
         notifications.bankMovementsMerged(householdId, movements.size, tx.amount, NotifyActor.Human(by.email))
         metrics.bankMovementsIngested(movements.size)
+        log.info(
+            "bank_movements_merged count={} tx={} direction={} category={}",
+            movements.size, tx.id, direction, categoryCode,
+        )
         return MergeResultDto(transactionId = tx.id, mergedCount = movements.size)
     }
 
@@ -365,6 +386,7 @@ class PendingMovementService(
             throw AppException.badRequest("BANK_MERGE_NOT_CANCELLING_OUT")
         }
         movements.forEach { markRejected(it, by) }
+        log.info("bank_movements_cancelled_out count={}", movements.size)
         return BatchResultDto(rejected = movements.size)
     }
 
@@ -393,6 +415,7 @@ class PendingMovementService(
         }
         notifications.bankMovementsConfirmed(householdId, confirmed, NotifyActor.Human(by.email))
         metrics.bankMovementsIngested(confirmed)
+        log.info("bank_movements_confirmed count={} skipped={}", confirmed, skipped.size)
         return BatchResultDto(confirmed = confirmed, skipped = skipped)
     }
 
@@ -400,6 +423,7 @@ class PendingMovementService(
     fun reject(householdId: UUID, id: UUID, by: User): PendingMovementDto {
         val movement = requirePending(householdId, id)
         markRejected(movement, by)
+        log.info("bank_movement_rejected movement={}", movement.id)
         return movement.toDto(connections.findById(movement.connectionId).orElse(null), account(movement), false)
     }
 
@@ -407,6 +431,7 @@ class PendingMovementService(
     fun rejectBatch(householdId: UUID, ids: List<UUID>, by: User): BatchResultDto {
         val movements = pending.findAllByIdInAndHouseholdId(ids, householdId).filter { it.status == MovementStatus.pending }
         movements.forEach { markRejected(it, by) }
+        log.info("bank_movements_rejected count={} requested={}", movements.size, ids.size)
         return BatchResultDto(rejected = movements.size)
     }
 
@@ -418,6 +443,7 @@ class PendingMovementService(
             ?: throw AppException.notFound("PENDING_MOVEMENT_NOT_FOUND")
         if (movement.status != MovementStatus.rejected) throw AppException.conflict("PENDING_MOVEMENT_NOT_REJECTED")
         restoreToPending(movement)
+        log.info("bank_movement_restored movement={}", movement.id)
         return movement.toDto(connections.findById(movement.connectionId).orElse(null), account(movement), isPossibleDuplicate(movement))
     }
 
@@ -425,6 +451,7 @@ class PendingMovementService(
     fun restoreBatch(householdId: UUID, ids: List<UUID>): BatchResultDto {
         val movements = pending.findAllByIdInAndHouseholdId(ids, householdId).filter { it.status == MovementStatus.rejected }
         movements.forEach { restoreToPending(it) }
+        log.info("bank_movements_restored count={} requested={}", movements.size, ids.size)
         return BatchResultDto(restored = movements.size)
     }
 
@@ -446,6 +473,7 @@ class PendingMovementService(
             movement.direction = rule.direction
             categorized++
         }
+        log.info("bank_rules_applied candidates={} categorized={}", movements.size, categorized)
         return ApplyRulesResultDto(categorized = categorized)
     }
 
@@ -460,6 +488,10 @@ class PendingMovementService(
         }
         request.direction?.let { movement.direction = it }
         request.description?.let { movement.description = it }
+        log.info(
+            "bank_movement_edited movement={} category={} direction={} description_changed={}",
+            movement.id, request.suggestedCategoryCode, request.direction, request.description != null,
+        )
         return movement.toDto(connections.findById(movement.connectionId).orElse(null), account(movement), isPossibleDuplicate(movement))
     }
 

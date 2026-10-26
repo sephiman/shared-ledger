@@ -8,6 +8,7 @@ import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Size
+import org.slf4j.LoggerFactory
 import org.springframework.http.ResponseEntity
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -64,6 +65,8 @@ class AssetController(
     private val currentUser: CurrentUser,
 ) {
 
+    private val log = LoggerFactory.getLogger(javaClass)
+
     @GetMapping
     fun list(@PathVariable householdId: UUID): List<AssetDto> =
         assets.findAllByHouseholdIdOrderByNameAsc(householdId).map { it.toDto() }
@@ -81,6 +84,7 @@ class AssetController(
             updatedByUserId = by.id,
         )
         assets.save(asset)
+        log.info("asset_created asset={} type={} active={}", asset.id, asset.type, asset.active)
         return ResponseEntity.status(201).body(asset.toDto())
     }
 
@@ -93,10 +97,12 @@ class AssetController(
     ): AssetDto {
         val by = currentUser.requireUser()
         val asset = loadOwn(householdId, id)
+        val wasActive = asset.active
         asset.name = body.name.trim()
         asset.type = body.type
         asset.active = body.active
         asset.updatedByUserId = by.id
+        log.info("asset_updated asset={} type={} active={}->{}", asset.id, asset.type, wasActive, asset.active)
         return asset.toDto()
     }
 
@@ -107,6 +113,7 @@ class AssetController(
         val asset = loadOwn(householdId, id)
         asset.deletedAt = Instant.now()
         asset.updatedByUserId = by.id
+        log.info("asset_deleted asset={}", asset.id)
         return ResponseEntity.noContent().build()
     }
 
@@ -134,6 +141,7 @@ class AssetController(
             updatedByUserId = by.id,
         )
         values.save(entry)
+        log.info("asset_value_added asset={} entry={}", id, entry.id)
         return ResponseEntity.status(201).body(AssetValueEntryDto(entry.id, entry.valueDate, entry.value))
     }
 
@@ -151,6 +159,7 @@ class AssetController(
         entry.valueDate = body.valueDate
         entry.value = Money.normalize(body.value)
         entry.updatedByUserId = by.id
+        log.info("asset_value_updated asset={} entry={}", id, entry.id)
         return AssetValueEntryDto(entry.id, entry.valueDate, entry.value)
     }
 
@@ -166,6 +175,7 @@ class AssetController(
         val entry = ownEntry(id, entryId)
         entry.deletedAt = Instant.now()
         entry.updatedByUserId = by.id
+        log.info("asset_value_deleted asset={} entry={}", id, entry.id)
         return ResponseEntity.noContent().build()
     }
 

@@ -21,6 +21,7 @@ import com.sephilabs.sharedledger.networth.amortization.AmortizationRateRevision
 import com.sephilabs.sharedledger.networth.amortization.PrepaymentMode
 import com.sephilabs.sharedledger.networth.amortization.StartMode
 import com.sephilabs.sharedledger.networth.liability.LiabilityRepository
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.io.InputStream
@@ -40,6 +41,9 @@ class AmortizationImportService(
     private val prepayments: AmortizationPrepaymentRepository,
     private val entries: AmortizationEntryRepository,
 ) {
+
+    private val log = LoggerFactory.getLogger(javaClass)
+
     private val expectedHeaders = listOf(
         "liability_name", "part_label", "record_type", "date", "method",
         "principal", "annual_rate", "term_months", "instalment", "amount", "mode", "interest", "resulting_balance",
@@ -125,6 +129,7 @@ class AmortizationImportService(
                 }
             }
         }
+        log.info("amortization_import_finished inserted={} skipped={}", inserted, skipped)
         return ExecuteResult(inserted = inserted, skipped = skipped, replaced = 0)
     }
 

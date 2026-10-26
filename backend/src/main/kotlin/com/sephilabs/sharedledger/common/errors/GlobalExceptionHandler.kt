@@ -1,6 +1,7 @@
 package com.sephilabs.sharedledger.common.errors
 
 import com.sephilabs.sharedledger.i18n.Messages
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.ConstraintViolationException
 import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
@@ -13,6 +14,7 @@ import org.springframework.security.core.AuthenticationException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
+import org.springframework.web.servlet.HandlerMapping
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
 import tools.jackson.core.JacksonException
 import tools.jackson.databind.exc.InvalidNullException
@@ -30,7 +32,8 @@ class GlobalExceptionHandler(private val messages: Messages) {
     private val log = LoggerFactory.getLogger(GlobalExceptionHandler::class.java)
 
     @ExceptionHandler(AppException::class)
-    fun handleAppException(ex: AppException): ResponseEntity<ApiError> {
+    fun handleAppException(ex: AppException, request: HttpServletRequest): ResponseEntity<ApiError> {
+        if (ex.httpStatus in 400..499) logRefusal(ex.httpStatus, ex.code, request)
         val message = messages.resolve(ex.code, ex.args, ex.fallbackMessage)
         val args = ex.args.map { it.toString() }.takeIf { it.isNotEmpty() }
         return ResponseEntity.status(ex.httpStatus).body(ApiError(ex.code, message, ex.fields, args))
@@ -111,10 +114,12 @@ class GlobalExceptionHandler(private val messages: Messages) {
     }
 
     @ExceptionHandler(BadCredentialsException::class)
-    fun handleBadCredentials(ex: BadCredentialsException): ResponseEntity<ApiError> =
-        ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(
+    fun handleBadCredentials(ex: BadCredentialsException, request: HttpServletRequest): ResponseEntity<ApiError> {
+        logRefusal(HttpStatus.UNAUTHORIZED.value(), "INVALID_CREDENTIALS", request)
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(
             ApiError("INVALID_CREDENTIALS", messages.resolve("INVALID_CREDENTIALS", emptyArray(), "Invalid credentials"))
         )
+    }
 
     @ExceptionHandler(AuthenticationException::class)
     fun handleAuth(ex: AuthenticationException): ResponseEntity<ApiError> =
@@ -123,10 +128,12 @@ class GlobalExceptionHandler(private val messages: Messages) {
         )
 
     @ExceptionHandler(AccessDeniedException::class)
-    fun handleAccessDenied(ex: AccessDeniedException): ResponseEntity<ApiError> =
-        ResponseEntity.status(HttpStatus.FORBIDDEN).body(
+    fun handleAccessDenied(ex: AccessDeniedException, request: HttpServletRequest): ResponseEntity<ApiError> {
+        logRefusal(HttpStatus.FORBIDDEN.value(), "FORBIDDEN", request)
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(
             ApiError("FORBIDDEN", messages.resolve("FORBIDDEN", emptyArray(), "Access denied"))
         )
+    }
 
     @ExceptionHandler(DataIntegrityViolationException::class)
     fun handleDataIntegrity(ex: DataIntegrityViolationException): ResponseEntity<ApiError> {
@@ -136,6 +143,12 @@ class GlobalExceptionHandler(private val messages: Messages) {
                 message = messages.resolve("DATA_INTEGRITY_VIOLATION", emptyArray(), "Conflict with existing data"),
             )
         )
+    }
+
+    // The route template, not the raw URI: invitation tokens travel as path variables.
+    private fun logRefusal(status: Int, code: String, request: HttpServletRequest) {
+        val route = request.getAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE) as? String ?: "unmapped"
+        log.info("request_refused status={} code={} method={} path={}", status, code, request.method, route)
     }
 
     @ExceptionHandler(Exception::class)

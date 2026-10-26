@@ -72,7 +72,7 @@ class TransactionImportService(
             val key = TransactionKeys.dedupKey(row.date, row.direction, row.categoryCode, row.amount, row.description)
             if (parsed.existingKeys.contains(key)) {
                 val summary = rowSummary(row.date, row.direction.name, row.categoryCode, row.amount, row.description)
-                log.info("Transaction import skipped row {}: duplicate of existing — {}", row.rowNumber, summary)
+                log.info("Transaction import skipped row {}: duplicate of existing", row.rowNumber)
                 if (skippedList.size < MAX_SKIPPED_REPORTED) skippedList.add(SkippedRow(row.rowNumber, summary))
                 continue
             }

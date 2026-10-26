@@ -7,6 +7,7 @@ import com.sephilabs.sharedledger.household.RequireHouseholdOwner
 import com.sephilabs.sharedledger.identity.auth.CurrentUser
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Size
+import org.slf4j.LoggerFactory
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -66,6 +67,8 @@ class TelegramSettingsController(
     private val formatter: TelegramMessageFormatter,
 ) {
 
+    private val log = LoggerFactory.getLogger(javaClass)
+
     @GetMapping
     @Transactional(readOnly = true)
     fun get(@PathVariable householdId: UUID): TelegramSettingsDto =
@@ -78,8 +81,10 @@ class TelegramSettingsController(
         @Valid @RequestBody body: TelegramSettingsUpdateRequest,
     ): TelegramSettingsDto {
         val user = currentUser.requireUser()
-        val settings = settingsRepo.findByHouseholdId(householdId)
+        val existing = settingsRepo.findByHouseholdId(householdId)
+        val settings = existing
             ?: TelegramSettings(householdId = householdId, createdByUserId = user.id, updatedByUserId = user.id)
+        val activeBefore = existing?.active
         settings.active = body.active
         settings.notifyTransactions = body.notifyTransactions
         settings.notifySnapshots = body.notifySnapshots
@@ -93,7 +98,12 @@ class TelegramSettingsController(
         settings.chatId = body.chatId?.takeIf { it.isNotBlank() }
         body.botToken?.takeIf { it.isNotBlank() }?.let { settings.botTokenEnc = crypto.encrypt(it.trim()) }
         settings.updatedByUserId = user.id
-        return settingsRepo.save(settings).toDto()
+        val saved = settingsRepo.save(settings)
+        log.info(
+            "telegram_settings_updated active={}->{} token_replaced={} chat_set={}",
+            activeBefore, saved.active, !body.botToken.isNullOrBlank(), saved.chatId != null,
+        )
+        return saved.toDto()
     }
 
     @PostMapping("/test")
@@ -106,6 +116,7 @@ class TelegramSettingsController(
         val locale = Locale.forLanguageTag(household.defaultLocale.ifBlank { "en" })
         val token = crypto.decrypt(settings.botTokenEnc!!)
         val result = client.sendMessage(token, settings.chatId!!, formatter.testMessage(locale))
+        log.info("telegram_test_sent ok={}", result.ok)
         return TelegramTestResult(result.ok, result.description)
     }
 

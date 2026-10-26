@@ -11,6 +11,7 @@ import com.sephilabs.sharedledger.notification.NotificationPublisher
 import com.sephilabs.sharedledger.portfolio.price.FxRateRepository
 import com.sephilabs.sharedledger.portfolio.price.HoldingBackfillRequested
 import com.sephilabs.sharedledger.portfolio.price.PriceRefreshService
+import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -30,6 +31,8 @@ class HoldingService(
     private val events: ApplicationEventPublisher,
     private val props: AppProperties,
 ) {
+
+    private val log = LoggerFactory.getLogger(javaClass)
 
     private val baseCurrency: String get() = props.portfolio.baseCurrency
 
@@ -64,6 +67,10 @@ class HoldingService(
         holdings.save(holding)
         // Backfill runs async after commit; a provider outage must never fail the create.
         if (holding.linked) events.publishEvent(HoldingBackfillRequested(holding.id))
+        log.info(
+            "holding_created holding={} asset_class={} linked={} provider={}",
+            holding.id, holding.assetClass, holding.linked, holding.provider,
+        )
         return toDto(holding)
     }
 
@@ -79,6 +86,7 @@ class HoldingService(
         holding.updatedByUserId = by.id
         // Non-fatal: backfill runs async after commit; nightly jobs catch up on any failure.
         events.publishEvent(HoldingBackfillRequested(holding.id))
+        log.info("holding_linked holding={} provider={}", holding.id, holding.provider)
         return toDto(holding)
     }
 
@@ -87,15 +95,18 @@ class HoldingService(
         val holding = loadOwn(householdId, id)
         if (!holding.linked) throw AppException.badRequest("HOLDING_NOT_LINKED")
         // Stored price history stays: it is keyed by provider coordinates and shareable.
+        val providerBefore = holding.provider
         holding.provider = null
         holding.providerSymbol = null
         holding.updatedByUserId = by.id
+        log.info("holding_unlinked holding={} provider={}", holding.id, providerBefore)
         return toDto(holding)
     }
 
     @Transactional
     fun update(householdId: UUID, id: UUID, request: HoldingUpdateRequest, by: User): HoldingDto {
         val holding = loadOwn(householdId, id)
+        val wasActive = holding.active
         request.symbol?.let {
             val symbol = normalizeSymbol(it)
             if (symbol != holding.symbol &&
@@ -117,6 +128,7 @@ class HoldingService(
         }
         request.active?.let { holding.active = it }
         holding.updatedByUserId = by.id
+        log.info("holding_updated holding={} active={}->{}", holding.id, wasActive, holding.active)
         return toDto(holding)
     }
 
@@ -124,12 +136,14 @@ class HoldingService(
     fun delete(householdId: UUID, id: UUID, by: User) {
         val holding = loadOwn(householdId, id)
         val now = Instant.now()
-        lots.findAllByHoldingIdOrderByTradedOnAscCreatedAtAsc(holding.id).forEach {
+        val holdingLots = lots.findAllByHoldingIdOrderByTradedOnAscCreatedAtAsc(holding.id)
+        holdingLots.forEach {
             it.deletedAt = now
             it.updatedByUserId = by.id
         }
         holding.deletedAt = now
         holding.updatedByUserId = by.id
+        log.info("holding_deleted holding={} lots_deleted={}", holding.id, holdingLots.size)
     }
 
     @Transactional
@@ -157,7 +171,11 @@ class HoldingService(
             // Head backfill runs async after commit; nightly jobs catch up on any failure.
             events.publishEvent(HoldingBackfillRequested(holding.id, request.tradedOn))
         }
-        if (notify) notifyTrade(holding, lot, NotifyAction.CREATE, by)
+        // Imports pass notify=false and log one summary line instead of one per lot.
+        if (notify) {
+            notifyTrade(holding, lot, NotifyAction.CREATE, by)
+            log.info("holding_lot_added holding={} lot={} type={}", holding.id, lot.id, lot.type)
+        }
         return toDto(lot)
     }
 
@@ -186,6 +204,7 @@ class HoldingService(
             events.publishEvent(HoldingBackfillRequested(holding.id, request.tradedOn))
         }
         notifyTrade(holding, lot, NotifyAction.UPDATE, by)
+        log.info("holding_lot_updated holding={} lot={} type={}", holding.id, lot.id, lot.type)
         return toDto(lot)
     }
 
@@ -199,6 +218,7 @@ class HoldingService(
         lot.deletedAt = Instant.now()
         lot.updatedByUserId = by.id
         notifyTrade(holding, lot, NotifyAction.DELETE, by)
+        log.info("holding_lot_deleted holding={} lot={}", holding.id, lot.id)
     }
 
     /** Publishes a buy/sell notification (Telegram etc.); holding lifecycle stays silent. */

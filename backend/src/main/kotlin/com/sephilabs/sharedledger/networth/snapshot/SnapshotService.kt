@@ -15,6 +15,7 @@ import com.sephilabs.sharedledger.notification.NotifyActor
 import com.sephilabs.sharedledger.notification.NotificationPublisher
 import com.sephilabs.sharedledger.observability.AppMetrics
 import com.sephilabs.sharedledger.portfolio.PortfolioValuationService
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
@@ -35,6 +36,8 @@ class SnapshotService(
     private val metrics: AppMetrics,
     private val notifications: NotificationPublisher,
 ) {
+
+    private val log = LoggerFactory.getLogger(javaClass)
 
     /** Computed value of each active named asset/liability at [date] — auto-fill source for the form. */
     @Transactional(readOnly = true)
@@ -123,6 +126,7 @@ class SnapshotService(
         metrics.snapshotCreated()
         val dto = toDto(snapshot)
         notifications.snapshot(dto, householdId, NotifyAction.CREATE, actor)
+        log.info("snapshot_created snapshot={} source={}", dto.id, if (actor is NotifyActor.Schedule) "schedule" else "manual")
         return dto
     }
 
@@ -175,6 +179,7 @@ class SnapshotService(
         portfolioValuation.freezeValuations(snapshot.id, householdId, request.snapshotDate)
         val dto = toDto(snapshot)
         notifications.snapshot(dto, householdId, NotifyAction.UPDATE, NotifyActor.Human(by.email))
+        log.info("snapshot_updated snapshot={}", dto.id)
         return dto
     }
 
@@ -185,6 +190,7 @@ class SnapshotService(
         val dto = toDto(s)
         snapshots.delete(s)
         notifications.snapshot(dto, householdId, NotifyAction.DELETE, NotifyActor.Human(by.email))
+        log.info("snapshot_deleted snapshot={}", id)
     }
 
     @Transactional(readOnly = true)

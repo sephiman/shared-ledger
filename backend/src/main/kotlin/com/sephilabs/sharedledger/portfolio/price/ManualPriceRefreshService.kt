@@ -29,10 +29,14 @@ class ManualPriceRefreshService(
         synchronized(lock) {
             val last = lastRunAt
             val cooldown = Duration.ofSeconds(props.portfolio.manualRefreshCooldownSeconds)
-            if (last != null && Duration.between(last, now) < cooldown) return false
+            if (last != null && Duration.between(last, now) < cooldown) {
+                log.info("portfolio_price_refresh_requested started=false reason=cooldown")
+                return false
+            }
             lastRunAt = now
         }
         executor.execute { runAll() }
+        log.info("portfolio_price_refresh_requested started=true")
         return true
     }
 

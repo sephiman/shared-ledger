@@ -6,6 +6,7 @@ import com.sephilabs.sharedledger.common.errors.AppException
 import com.sephilabs.sharedledger.identity.user.User
 import com.sephilabs.sharedledger.transaction.Direction
 import com.sephilabs.sharedledger.transaction.TransactionRepository
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
@@ -21,9 +22,12 @@ class BudgetService(
     private val categoryService: CategoryService,
 ) {
 
+    private val log = LoggerFactory.getLogger(javaClass)
+
     @Transactional
     fun upsert(householdId: UUID, request: BudgetUpsertRequest, by: User): List<BudgetDto> {
         val result = mutableListOf<Budget>()
+        var created = 0
         for (item in request.items) {
             val category = categoryService.find(householdId, item.categoryCode)
                 ?: throw AppException.notFound("CATEGORY_NOT_FOUND")
@@ -51,8 +55,10 @@ class BudgetService(
                 )
                 budgets.save(b)
                 result += b
+                created++
             }
         }
+        log.info("budget_upserted items={} created={} updated={}", result.size, created, result.size - created)
         return result.map { it.toDto() }
     }
 
@@ -61,6 +67,7 @@ class BudgetService(
         val b = budgets.findById(id).orElseThrow { AppException.notFound("BUDGET_NOT_FOUND") }
         if (b.householdId != householdId) throw AppException.notFound("BUDGET_NOT_FOUND")
         budgets.delete(b)
+        log.info("budget_deleted budget={}", id)
     }
 
     @Transactional(readOnly = true)

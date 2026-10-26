@@ -99,6 +99,9 @@ class RecurringMaterializer(
             }
             // Per-row writes are already committed; publish one aggregated summary for the run.
             notifications.recurringTransactions(template, created, NotifyActor.Schedule(template.householdId))
+            if (created > 0) {
+                log.info("recurring_materialized household={} template={} created={}", template.householdId, template_id, created)
+            }
             return created
         } catch (ex: Exception) {
             metrics.recurringFailure(template_id)
