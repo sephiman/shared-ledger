@@ -63,6 +63,16 @@ export function estimatedRemainder(c: ProjectedFlowComponents): Decimal {
   return toDecimal(c.recurringDue).plus(c.discretionaryEstimate);
 }
 
+/** The groups in the order the projection draws them (a group at its first drawn category), then the ones it does
+ *  not draw — nothing to project, or folded into "Others" — in catalog order. */
+export function modeSettingsOrder(drawn: readonly SankeyNodeDatum[], groups: readonly string[]): string[] {
+  const ordered = new Set<string>();
+  for (const n of drawn) {
+    if (n.side === "expense" && n.groupCode != null && groups.includes(n.groupCode)) ordered.add(n.groupCode);
+  }
+  return [...ordered, ...groups.filter((g) => !ordered.has(g))];
+}
+
 /** The disabled keys that name a node of this response; stale ones from a refetch don't count. */
 export function presentDisabledKeys(data: MoneyFlowProjectionResponse, disabled: ReadonlySet<string>): Set<string> {
   return new Set(data.components.map(nodeKey).filter((k) => disabled.has(k)));

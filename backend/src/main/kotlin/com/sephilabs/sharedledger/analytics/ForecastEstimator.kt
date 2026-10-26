@@ -1,5 +1,7 @@
 package com.sephilabs.sharedledger.analytics
 
+import com.sephilabs.sharedledger.analytics.projectionmode.ProjectionMode
+import com.sephilabs.sharedledger.common.Money
 import com.sephilabs.sharedledger.recurring.RecurringDateMath
 import com.sephilabs.sharedledger.recurring.RecurringTemplate
 import com.sephilabs.sharedledger.recurring.RecurringTemplateRepository
@@ -12,6 +14,18 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.util.TreeMap
 import java.util.UUID
+
+/** How much of a month is still ahead. The current day counts as elapsed, like the panel's "Day N of M". */
+data class MonthProgress(val daysInMonth: Int, val daysRemaining: Int) {
+    companion object {
+        fun asOf(today: LocalDate): MonthProgress {
+            val daysInMonth = YearMonth.from(today).lengthOfMonth()
+            return MonthProgress(daysInMonth, daysInMonth - today.dayOfMonth)
+        }
+
+        fun wholeMonth(month: YearMonth): MonthProgress = MonthProgress(month.lengthOfMonth(), month.lengthOfMonth())
+    }
+}
 
 /** Income and expense categories are estimated independently, so a category is keyed with its direction. */
 data class FlowKey(val direction: Direction, val categoryCode: String)
@@ -37,6 +51,16 @@ class ForecastBasis(
 
     fun expectedDiscretionary(key: FlowKey): BigDecimal =
         (discretionaryAverage[key] ?: BigDecimal.ZERO).max(BigDecimal.ZERO)
+
+    /** The one place a projection mode is applied. Over a whole month both modes expect exactly the average:
+     *  nothing is spent yet, and the prorated share is M/M of it. */
+    fun discretionaryTerm(key: FlowKey, mode: ProjectionMode, spentSoFar: BigDecimal, progress: MonthProgress): BigDecimal =
+        when (mode) {
+            ProjectionMode.ENVELOPE -> (expectedDiscretionary(key) - spentSoFar).max(BigDecimal.ZERO)
+            ProjectionMode.PRORATE -> expectedDiscretionary(key)
+                .multiply(BigDecimal.valueOf(progress.daysRemaining.toLong()))
+                .divide(BigDecimal.valueOf(progress.daysInMonth.toLong()), Money.SCALE, RoundingMode.HALF_EVEN)
+        }
 
     fun recurringScheduled(month: YearMonth): Map<FlowKey, BigDecimal> =
         recurringFrom(month) { month.atDay(1) }

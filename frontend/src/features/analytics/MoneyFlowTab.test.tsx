@@ -1,4 +1,4 @@
-import type { ReactElement } from "react";
+import { useSyncExternalStore, type ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -6,6 +6,25 @@ import type { MoneyFlowProjectionResponse, MoneyFlowResponse } from "@/api/analy
 import i18n from "@/i18n";
 
 const calls = vi.hoisted(() => ({ windows: [] as number[], realLevels: [] as string[], projectionLevels: [] as string[] }));
+
+/** The stored projection modes, as a tiny store: a save bumps the version so the projection "refetches". */
+const modes = vi.hoisted(() => {
+  const listeners = new Set<() => void>();
+  return {
+    stored: {} as Record<string, "ENVELOPE" | "PRORATE">,
+    saved: [] as { groupCode: string; mode: string }[],
+    failSaves: false,
+    version: 0,
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    bump() {
+      this.version++;
+      listeners.forEach((l) => l());
+    },
+  };
+});
 
 type Level = "group" | "category";
 type FlowNode = MoneyFlowResponse["nodes"][number];
@@ -22,6 +41,7 @@ const part = (side: Components["side"], id: string, actual: string, recurringDue
   recurringDue,
   discretionaryEstimate,
   projected,
+  projectionMode: side === "income" ? null : "ENVELOPE",
 });
 
 const REAL: Record<Level, MoneyFlowResponse> = {
@@ -60,6 +80,7 @@ const PROJECTION_BASE = {
   month: 10,
   dayOfMonth: 18,
   daysInMonth: 31,
+  daysRemaining: 13,
   windowMonths: 3,
   monthsAvailable: 2,
   basisFromYear: 2026,
@@ -128,6 +149,56 @@ vi.mock("recharts", async (importOriginal) => {
 
 vi.mock("@/api/catalog", () => ({ useCategories: () => ({ data: [] }) }));
 
+vi.mock("@/api/projectionModes", async () => {
+  const { useState } = await import("react");
+  const { EXPENSE_GROUPS } = await import("@/lib/categoryGroup");
+  type Saved = { groupCode: string; mode: "ENVELOPE" | "PRORATE" };
+  return {
+    useProjectionModes: () => ({
+      data: EXPENSE_GROUPS.map((groupCode) => ({ groupCode, mode: modes.stored[groupCode] ?? "ENVELOPE" })),
+      isLoading: false,
+      isError: false,
+    }),
+    useSetProjectionMode: () => {
+      const [state, setState] = useState<{ status: "idle" | "success" | "error"; variables?: Saved }>({ status: "idle" });
+      return {
+        variables: state.variables,
+        isPending: false,
+        isSuccess: state.status === "success",
+        isError: state.status === "error",
+        mutate: (variables: Saved) => {
+          modes.saved.push(variables);
+          if (modes.failSaves) {
+            setState({ status: "error", variables });
+            return;
+          }
+          modes.stored[variables.groupCode] = variables.mode;
+          setState({ status: "success", variables });
+          modes.bump();
+        },
+      };
+    },
+  };
+});
+
+/** What the backend answers once Outings is stored as PRORATE: its estimate drops from €120.40 to €50.00. */
+function withStoredModes(r: MoneyFlowProjectionResponse): MoneyFlowProjectionResponse {
+  if (r.level !== "group" || modes.stored.outings !== "PRORATE") return r;
+  return {
+    ...r,
+    expenses: "2328.96",
+    saved: "671.04",
+    nodes: r.nodes.map((n) => {
+      if (n.id === "outings") return { ...n, amount: "50.00" };
+      if (n.side === "saved") return { ...n, amount: "671.04" };
+      return n;
+    }),
+    components: r.components.map((c) =>
+      c.id === "outings" ? { ...c, discretionaryEstimate: "50.00", projected: "50.00", projectionMode: "PRORATE" } : c,
+    ),
+  };
+}
+
 vi.mock("@/api/analytics", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/api/analytics")>()),
   useYearsAvailable: () => ({ data: { years: [2025, 2026] } }),
@@ -136,9 +207,10 @@ vi.mock("@/api/analytics", async (importOriginal) => ({
     return { data: REAL[level], isLoading: false };
   },
   useMoneyFlowProjection: (_h: string, level: Level, windowMonths: number) => {
+    useSyncExternalStore(modes.subscribe.bind(modes), () => modes.version);
     calls.projectionLevels.push(level);
     calls.windows.push(windowMonths);
-    return { data: { ...PROJECTION[level], windowMonths }, isLoading: false };
+    return { data: { ...withStoredModes(PROJECTION[level]), windowMonths }, isLoading: false };
   },
   useForecast: () => ({ data: undefined }),
 }));
@@ -174,6 +246,9 @@ beforeEach(() => {
   calls.windows = [];
   calls.realLevels = [];
   calls.projectionLevels = [];
+  modes.stored = {};
+  modes.saved = [];
+  modes.failSaves = false;
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date(2026, 9, 18));
 });
@@ -432,5 +507,135 @@ describe("independent breakdowns", () => {
     expect(realBreakdown()).toHaveValue("group");
     expect(diagram("real").getByText(/Home$/)).toBeInTheDocument();
     expect(diagram("projection").getByText(/Rent$/)).toBeInTheDocument();
+  });
+});
+
+describe("configure projections", () => {
+  const configure = () => screen.getByRole("button", { name: "Configure projections" });
+  const modeOf = (group: string) => screen.getByRole("combobox", { name: group });
+
+  it("starts collapsed, and lists the drawn groups first and the rest in catalog order once opened", async () => {
+    const user = userEvent.setup();
+    render(<MoneyFlowTab />);
+
+    expect(configure()).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("combobox", { name: "Home" })).not.toBeInTheDocument();
+
+    await user.click(configure());
+
+    expect(configure()).toHaveAttribute("aria-expanded", "true");
+    const list = within(screen.getByRole("list", { name: "Projection mode per group" }));
+    expect(list.getAllByRole("combobox").map((c) => c.getAttribute("aria-label"))).toEqual([
+      "Home", "Outings", "Transport", "Groceries", "Shopping", "Financial", "Health", "Personal",
+    ]);
+    expect(list.getAllByRole("listitem")[1]).toHaveTextContent(/^🎉 Outings/);
+    expect(list.queryByText(/Others/)).not.toBeInTheDocument();
+    expect(modeOf("Home")).toHaveValue("ENVELOPE");
+    expect(screen.getByText("Prorate remaining days: average × 13/31 days remaining.")).toBeInTheDocument();
+  });
+
+  it("is collapsed again after a reload", async () => {
+    const user = userEvent.setup();
+    render(<MoneyFlowTab />);
+    await user.click(configure());
+
+    cleanup();
+    render(<MoneyFlowTab />);
+
+    expect(configure()).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("saves a change at once, confirms it and recalculates the panel", async () => {
+    const user = userEvent.setup();
+    render(<MoneyFlowTab />);
+    await user.click(configure());
+
+    await user.selectOptions(modeOf("Outings"), "PRORATE");
+
+    expect(modes.saved).toEqual([{ groupCode: "outings", mode: "PRORATE" }]);
+    expect(modeOf("Outings")).toHaveValue("PRORATE");
+    expect(screen.getByRole("status")).toHaveTextContent("Saved");
+    expect(total("Projected expenses")).toHaveTextContent("€2,328.96");
+    expect(total("Saved (projected)")).toHaveTextContent("€671.04");
+  });
+
+  it("shows an inline error and keeps the stored mode when the save fails", async () => {
+    const user = userEvent.setup();
+    modes.failSaves = true;
+    render(<MoneyFlowTab />);
+    await user.click(configure());
+
+    await user.selectOptions(modeOf("Outings"), "PRORATE");
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't save. Try again.");
+    expect(modeOf("Outings")).toHaveValue("ENVELOPE");
+    expect(total("Projected expenses")).toHaveTextContent("€2,399.36");
+  });
+
+  it("explains a prorated node in its tooltip", async () => {
+    const user = userEvent.setup();
+    render(<MoneyFlowTab />);
+    await user.click(configure());
+    await user.selectOptions(modeOf("Outings"), "PRORATE");
+
+    await user.hover(node(/Outings: count only actuals/));
+
+    expect(
+      await screen.findByText(
+        "€0.00 actual + €0.00 recurring still due + €50.00 prorated discretionary (Aug–Sep 2026 average × 13/31 days remaining) = €50.00 projected",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the envelope wording for a node in the full month average mode", async () => {
+    const user = userEvent.setup();
+    render(<MoneyFlowTab />);
+
+    await user.hover(node(/Outings: count only actuals/));
+
+    expect(
+      await screen.findByText(
+        "€0.00 actual + €0.00 recurring still due + €120.40 discretionary estimate (Aug–Sep 2026 average) = €120.40 projected",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("restores a node to its configured mode with Restore all", async () => {
+    const user = userEvent.setup();
+    render(<MoneyFlowTab />);
+    await user.click(configure());
+    await user.selectOptions(modeOf("Outings"), "PRORATE");
+
+    await user.click(node(/Outings: count only actuals/));
+    expect(total("Projected expenses")).toHaveTextContent("€2,278.96");
+
+    await user.click(screen.getByRole("button", { name: "Restore all" }));
+
+    expect(total("Projected expenses")).toHaveTextContent("€2,328.96");
+    expect(diagram("projection").getByText("€50.00")).toBeInTheDocument();
+  });
+
+  it("says in the assumptions where the modes are configured", () => {
+    render(<MoneyFlowTab />);
+
+    expect(
+      screen.getByText(
+        "Each group projects its variable spending with its own mode (full month average or prorated over the remaining days), set under Configure projections.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("speaks Spanish", async () => {
+    const user = userEvent.setup();
+    await i18n.changeLanguage("es");
+    render(<MoneyFlowTab />);
+
+    await user.click(screen.getByRole("button", { name: "Configurar proyecciones" }));
+
+    const select = screen.getByRole("combobox", { name: "Ocio" });
+    expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "Media del mes completa",
+      "Prorratear días restantes",
+    ]);
   });
 });

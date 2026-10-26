@@ -13,6 +13,7 @@ import java.util.UUID
 class CustomCategoryWriter(
     private val globals: CategoryRepository,
     private val customs: CustomCategoryRepository,
+    private val categories: CategoryService,
 ) {
 
     @PersistenceContext
@@ -104,7 +105,7 @@ class CustomCategoryWriter(
         when (kind) {
             "expense" -> {
                 if (groupCode.isNullOrBlank()) throw AppException.badRequest("INVALID_GROUP")
-                if (groupCode !in allowedExpenseGroups()) throw AppException.badRequest("INVALID_GROUP")
+                if (groupCode !in categories.expenseGroups()) throw AppException.badRequest("INVALID_GROUP")
                 return groupCode
             }
             "income" -> {
@@ -114,13 +115,6 @@ class CustomCategoryWriter(
             else -> throw AppException.badRequest("INVALID_KIND")
         }
     }
-
-    private fun allowedExpenseGroups(): Set<String> =
-        globals.findAllByOrderBySortOrderAsc()
-            .asSequence()
-            .filter { it.kind == "expense" }
-            .mapNotNull { it.groupCode }
-            .toSet()
 
     private fun rejectIfCodeTaken(householdId: UUID, code: String) {
         if (globals.findById(code).isPresent) throw AppException.conflict("CATEGORY_CODE_CONFLICT")

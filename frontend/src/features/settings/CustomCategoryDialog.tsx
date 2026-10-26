@@ -3,9 +3,8 @@ import { useTranslation } from "react-i18next";
 import { apiErrorMessage } from "@/api/client";
 import { useCreateCustomCategory, useUpdateCustomCategory, type Category } from "@/api/catalog";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select } from "@/components/ui/primitives";
-import { groupIcon } from "@/lib/categoryGroup";
+import { EXPENSE_GROUPS, groupIcon } from "@/lib/categoryGroup";
 
-const EXPENSE_GROUPS = ["home", "transport", "groceries", "shopping", "outings", "financial", "health", "personal"] as const;
 
 interface Props {
   open: boolean;

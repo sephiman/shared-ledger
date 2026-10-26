@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "./client";
+import type { ProjectionMode } from "./projectionModes";
 
 export interface GroupTotal {
   groupCode: string;
@@ -207,6 +208,8 @@ export interface ProjectedFlowComponents {
   recurringDue: string;
   discretionaryEstimate: string;
   projected: string;
+  /** The expense node's group mode; null for income, whose mode is not configurable. */
+  projectionMode: ProjectionMode | null;
 }
 
 export interface MoneyFlowProjectionResponse {
@@ -215,6 +218,8 @@ export interface MoneyFlowProjectionResponse {
   level: "group" | "category";
   dayOfMonth: number;
   daysInMonth: number;
+  /** The current day counts as elapsed. */
+  daysRemaining: number;
   windowMonths: number;
   monthsAvailable: number;
   basisFromYear: number | null;

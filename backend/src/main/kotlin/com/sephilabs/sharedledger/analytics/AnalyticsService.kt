@@ -1,5 +1,8 @@
 package com.sephilabs.sharedledger.analytics
 
+import com.sephilabs.sharedledger.analytics.projectionmode.GroupModes
+import com.sephilabs.sharedledger.analytics.projectionmode.GroupProjectionModeService
+import com.sephilabs.sharedledger.analytics.projectionmode.ProjectionMode
 import com.sephilabs.sharedledger.catalog.CategoryService
 import com.sephilabs.sharedledger.common.Money
 import com.sephilabs.sharedledger.networth.movement.MovementRepository
@@ -39,6 +42,7 @@ class AnalyticsService(
     private val transactions: TransactionRepository,
     private val categoryService: CategoryService,
     private val forecastEstimator: ForecastEstimator,
+    private val projectionModes: GroupProjectionModeService,
     private val snapshots: SnapshotRepository,
     private val movements: MovementRepository,
 ) {
@@ -180,6 +184,8 @@ class AnalyticsService(
     fun forecast(householdId: UUID, horizonMonths: Int, windowMonths: Int): ForecastResponse {
         val currentMonth = YearMonth.now()
         val basis = forecastEstimator.basis(householdId, currentMonth, windowMonths)
+        val modes = projectionModes.modes(householdId)
+        val groupOf = categoryService.listForHousehold(householdId).associate { it.code to (it.group ?: "ungrouped") }
         val months = (1..horizonMonths).map { currentMonth.plusMonths(it.toLong()) }
         val scheduled = months.associateWith { basis.recurringScheduled(it) }
         val codes = (basis.discretionaryAverage.keys + scheduled.values.flatMap { it.keys })
@@ -189,12 +195,14 @@ class AnalyticsService(
 
         val categories = codes.map { code ->
             val key = FlowKey(Direction.expense, code)
+            val mode = projectionModeOf(key, modes) { groupOf[it] ?: "ungrouped" }
             val historicalPoints = basis.monthlyHistory[key].orEmpty()
                 .map { (ym, amount) -> HistoricalPoint(ym.year, ym.monthValue, Money.normalize(amount)) }
             val projection = months.map { ym ->
                 val recurringAmount = scheduled.getValue(ym)[key] ?: BigDecimal.ZERO
                 ForecastPoint(ym.year, ym.monthValue,
-                    Money.normalize(recurringAmount + basis.expectedDiscretionary(key)),
+                    Money.normalize(recurringAmount +
+                        basis.discretionaryTerm(key, mode, BigDecimal.ZERO, MonthProgress.wholeMonth(ym))),
                     if (recurringAmount.signum() != 0) "recurring" else "history")
             }
             CategoryForecast(code, historicalPoints, projection)
@@ -456,7 +464,7 @@ class AnalyticsService(
     }
 
     /** How the month of `today` is expected to end: per category, actual + recurring still due + the
-     *  discretionary average not yet spent (never below zero), on the same layout as [moneyFlow]. */
+     *  discretionary term of its group's projection mode, on the same layout as [moneyFlow]. */
     @Transactional(readOnly = true)
     fun moneyFlowProjection(householdId: UUID, today: LocalDate, level: String, windowMonths: Int): MoneyFlowProjectionResponse {
         val month = YearMonth.from(today)
@@ -464,6 +472,9 @@ class AnalyticsService(
         val flows = aggregateFlows(householdId, month.atDay(1), month.atEndOfMonth())
         val basis = forecastEstimator.basis(householdId, month, windowMonths)
         val stillDue = basis.recurringStillDue(month)
+        val modes = projectionModes.modes(householdId)
+        val progress = MonthProgress.asOf(today)
+        val groupOfCategory = { code: String -> flows.categoryGroups[code] ?: "ungrouped" }
 
         fun actualOf(key: FlowKey): BigDecimal = when (key.direction) {
             Direction.income -> flows.incomeByCategory[key.categoryCode]
@@ -478,11 +489,11 @@ class AnalyticsService(
             ProjectedAmount(
                 actual = actualOf(key),
                 recurringDue = stillDue[key] ?: BigDecimal.ZERO,
-                discretionaryEstimate = (basis.expectedDiscretionary(key) - discretionarySpent).max(BigDecimal.ZERO),
+                discretionaryEstimate = basis.discretionaryTerm(key, projectionModeOf(key, modes, groupOfCategory),
+                    discretionarySpent, progress),
             )
         }
 
-        val groupOfCategory = { code: String -> flows.categoryGroups[code] ?: "ungrouped" }
         val incomeByCategory = perCategory.filterKeys { it.direction == Direction.income }.mapKeys { it.key.categoryCode }
         val expenseByCategory = perCategory.filterKeys { it.direction == Direction.expense }.mapKeys { it.key.categoryCode }
         val expenseBuckets = if (level == "category") expenseByCategory
@@ -498,15 +509,19 @@ class AnalyticsService(
             expenseBuckets = expenseBuckets.mapValues { it.value.projected },
             groupOf = { code -> if (level == "category") groupOfCategory(code) else code },
         )
-        val components = incomeByCategory.map { (code, p) -> p.toComponents("income", code) } +
-            expenseBuckets.map { (code, p) -> p.toComponents("expense", code) }
+        val components = incomeByCategory.map { (code, p) -> p.toComponents("income", code, null) } +
+            expenseBuckets.map { (code, p) ->
+                val group = if (level == "category") groupOfCategory(code) else code
+                p.toComponents("expense", code, modes.of(group))
+            }
         val basisWindow = basis.basisWindow
         return MoneyFlowProjectionResponse(
             year = month.year,
             month = month.monthValue,
             level = level,
             dayOfMonth = today.dayOfMonth,
-            daysInMonth = month.lengthOfMonth(),
+            daysInMonth = progress.daysInMonth,
+            daysRemaining = progress.daysRemaining,
             windowMonths = windowMonths,
             monthsAvailable = basis.monthsAvailable,
             basisFromYear = basisWindow?.start?.year,
@@ -536,15 +551,23 @@ class AnalyticsService(
             discretionaryEstimate + other.discretionaryEstimate,
         )
 
-        fun toComponents(side: String, id: String) = ProjectedFlowComponents(
+        fun toComponents(side: String, id: String, mode: ProjectionMode?) = ProjectedFlowComponents(
             side = side,
             id = id,
             actual = Money.normalize(actual),
             recurringDue = Money.normalize(recurringDue),
             discretionaryEstimate = Money.normalize(discretionaryEstimate),
             projected = Money.normalize(projected),
+            projectionMode = mode?.name,
         )
     }
+
+    // Income has no groups and its mode is not configurable: it keeps the envelope it always had.
+    private fun projectionModeOf(key: FlowKey, modes: GroupModes, groupOf: (String) -> String): ProjectionMode =
+        when (key.direction) {
+            Direction.income -> ProjectionMode.ENVELOPE
+            Direction.expense -> modes.of(groupOf(key.categoryCode))
+        }
 
     @Transactional(readOnly = true)
     fun topMovers(householdId: UUID, year: Int, month: Int, baseline: String): TopMoversResponse {

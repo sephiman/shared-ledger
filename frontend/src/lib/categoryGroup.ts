@@ -11,6 +11,9 @@ const GROUP_ICONS: Record<string, string> = {
   ungrouped: "\u{1F3F7}\u{FE0F}",
 };
 
+/** The global expense groups in catalog order; every expense category, custom ones included, belongs to one. */
+export const EXPENSE_GROUPS = ["home", "transport", "groceries", "shopping", "outings", "financial", "health", "personal"] as const;
+
 export function groupFromCode(code: string): string {
   const i = code.indexOf(".");
   return i === -1 ? "ungrouped" : code.slice(0, i);

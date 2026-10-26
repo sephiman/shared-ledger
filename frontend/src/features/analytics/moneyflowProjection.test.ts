@@ -9,6 +9,7 @@ import {
   hasEstimatedPart,
   isCurrentMonthScope,
   monthList,
+  modeSettingsOrder,
   presentDisabledKeys,
   withActualsOnly,
 } from "./moneyflowProjection";
@@ -20,6 +21,7 @@ function projection(partial: Partial<MoneyFlowProjectionResponse>): MoneyFlowPro
     level: "group",
     dayOfMonth: 18,
     daysInMonth: 31,
+    daysRemaining: 13,
     windowMonths: 3,
     monthsAvailable: 3,
     basisFromYear: 2026,
@@ -56,6 +58,7 @@ const components = (side: "income" | "expense", id: string, recurringDue = "0.00
   recurringDue,
   discretionaryEstimate,
   projected: "10.00",
+  projectionMode: side === "income" ? null : "ENVELOPE",
 });
 
 describe("isCurrentMonthScope", () => {
@@ -156,7 +159,15 @@ describe("withActualsOnly", () => {
     recurringDue: string,
     discretionaryEstimate: string,
     projected: string,
-  ): ProjectedFlowComponents => ({ side, id, actual, recurringDue, discretionaryEstimate, projected });
+  ): ProjectedFlowComponents => ({
+    side,
+    id,
+    actual,
+    recurringDue,
+    discretionaryEstimate,
+    projected,
+    projectionMode: side === "income" ? null : "ENVELOPE",
+  });
 
   // Income 3000 (2500 actual + 500 still due); home 1890.12 + 350 + 38.84; leisure 0 + 0 + 120.40.
   const base = projection({
@@ -233,5 +244,40 @@ describe("withActualsOnly", () => {
 
   it("ignores disabled keys a refetch no longer returns", () => {
     expect(presentDisabledKeys(base, new Set(["expense:home", "expense:gone"]))).toEqual(new Set(["expense:home"]));
+  });
+});
+
+describe("modeSettingsOrder", () => {
+  const drawn = (id: string, side: SankeyNodeDatum["side"], groupCode: string | null): SankeyNodeDatum => ({
+    ...datum(id, side),
+    groupCode,
+  });
+  const groups = ["home", "transport", "groceries", "shopping", "outings", "financial", "health", "personal"];
+
+  it("lists the groups the diagram draws in its order, then the rest in catalog order", () => {
+    const nodes = [
+      drawn("income.salary", "income", null),
+      drawn("hub", "hub", null),
+      drawn("outings", "expense", "outings"),
+      drawn("home", "expense", "home"),
+      drawn("__others_expense__", "others", null),
+      drawn("saved", "saved", null),
+    ];
+
+    expect(modeSettingsOrder(nodes, groups)).toEqual(
+      ["outings", "home", "transport", "groceries", "shopping", "financial", "health", "personal"],
+    );
+  });
+
+  it("places a group once, at its first drawn category, in the category breakdown", () => {
+    const nodes = [
+      drawn("groceries.groceries", "expense", "groceries"),
+      drawn("home.rent", "expense", "home"),
+      drawn("groceries.other", "expense", "groceries"),
+      drawn("other.thing", "expense", "ungrouped"),
+    ];
+
+    expect(modeSettingsOrder(nodes, groups).slice(0, 3)).toEqual(["groceries", "home", "transport"]);
+    expect(modeSettingsOrder(nodes, groups)).not.toContain("ungrouped");
   });
 });

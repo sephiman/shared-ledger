@@ -40,6 +40,15 @@ class CategoryService(
         return customs.findByIdHouseholdIdAndIdCode(householdId, code)?.toView()
     }
 
+    /** The global expense groups; custom categories must belong to one of them, so no household adds any. */
+    @Transactional(readOnly = true)
+    fun expenseGroups(): Set<String> =
+        globals.findAllByOrderBySortOrderAsc()
+            .asSequence()
+            .filter { it.kind == "expense" }
+            .mapNotNull { it.groupCode }
+            .toSet()
+
     /** Resolve a category and require its kind to match the direction. Replaces the V004
      *  `enforce_transaction_direction` SQL trigger. */
     @Transactional(readOnly = true)

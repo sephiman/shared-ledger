@@ -4,7 +4,9 @@ import { useMoneyFlowProjection, type MoneyFlowProjectionResponse } from "@/api/
 import { Badge, Button, Card, CardBody, CardHeader, Label, Select } from "@/components/ui/primitives";
 import { formatMoney, formatNumber } from "@/lib/money";
 import { MoneyFlowSankeyChart, MoneyFlowTotals, useMoneyFlowSankey } from "./MoneyFlowChart";
+import { ProjectionModeSettings } from "./ProjectionModeSettings";
 import { FORECAST_WINDOWS, parseForecastWindow, useForecastWindow } from "./forecastWindow";
+import { EXPENSE_GROUPS } from "@/lib/categoryGroup";
 import { nodeKey, type SankeyNodeDatum } from "./moneyflow";
 import {
   basisMonths,
@@ -12,6 +14,7 @@ import {
   componentsLookup,
   estimatedRemainder,
   hasEstimatedPart,
+  modeSettingsOrder,
   monthList,
   presentDisabledKeys,
   withActualsOnly,
@@ -87,6 +90,11 @@ export function MoneyFlowProjectionPanel({ householdId, currency }: { householdI
   };
   const restoreAll = () => setActualsOnly({ scope, keys: NONE });
 
+  // Never remembered: the section opens collapsed on every visit. Held here, not in the section, so a refetch
+  // under another breakdown or window doesn't fold it.
+  const [modesOrder, setModesOrder] = useState<readonly string[] | null>(null);
+  const toggleModes = () => setModesOrder((open) => (open ? null : modeSettingsOrder(sankey?.nodes ?? [], EXPENSE_GROUPS)));
+
   useEffect(() => {
     try {
       localStorage.setItem(COLLAPSED_KEY, collapsed ? "1" : "0");
@@ -114,8 +122,13 @@ export function MoneyFlowProjectionPanel({ householdId, currency }: { householdI
         projected: money(c.projected),
         span,
       };
-      return data.monthsAvailable === 0
-        ? t("analytics.money_flow_projection_breakdown_no_history", parts)
+      if (data.monthsAvailable === 0) return t("analytics.money_flow_projection_breakdown_no_history", parts);
+      return c.projectionMode === "PRORATE"
+        ? t("analytics.money_flow_projection_breakdown_prorated", {
+            ...parts,
+            remaining: data.daysRemaining,
+            days: data.daysInMonth,
+          })
         : t("analytics.money_flow_projection_breakdown", parts);
     };
   }, [data, disabledKeys, currency, locale, t]);
@@ -219,6 +232,16 @@ export function MoneyFlowProjectionPanel({ householdId, currency }: { householdI
             </>
           )}
 
+          {data && hasFlows && (
+            <ProjectionModeSettings
+              householdId={householdId}
+              order={modesOrder}
+              onToggle={toggleModes}
+              daysRemaining={data.daysRemaining}
+              daysInMonth={data.daysInMonth}
+            />
+          )}
+
           {data && (
             <ul className="space-y-0.5 border-t border-border pt-3 text-xs text-gray-500 dark:text-gray-400">
               <li>
@@ -230,6 +253,7 @@ export function MoneyFlowProjectionPanel({ householdId, currency }: { householdI
               </li>
               <li>{windowAssumption(data, t, locale)}</li>
               <li>{t("analytics.money_flow_projection_recurring")}</li>
+              <li>{t("analytics.money_flow_projection_modes_note")}</li>
             </ul>
           )}
         </CardBody>

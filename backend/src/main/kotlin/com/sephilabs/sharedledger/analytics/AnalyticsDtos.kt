@@ -183,6 +183,7 @@ data class ProjectedFlowComponents(
     @JsonFormat(shape = JsonFormat.Shape.STRING) val recurringDue: BigDecimal,
     @JsonFormat(shape = JsonFormat.Shape.STRING) val discretionaryEstimate: BigDecimal,
     @JsonFormat(shape = JsonFormat.Shape.STRING) val projected: BigDecimal,
+    val projectionMode: String?, // the expense node's group mode; null for income, whose mode is not configurable
 )
 
 data class MoneyFlowProjectionResponse(
@@ -191,6 +192,7 @@ data class MoneyFlowProjectionResponse(
     val level: String, // "group" | "category"
     val dayOfMonth: Int,
     val daysInMonth: Int,
+    val daysRemaining: Int, // the current day counts as elapsed
     val windowMonths: Int,
     val monthsAvailable: Int,
     // The complete months the moving average covers; null when there is no history before this month.
