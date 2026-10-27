@@ -1,4 +1,4 @@
-import "@testing-library/jest-dom";
+import "@testing-library/jest-dom/vitest";
 
 // No localStorage in this jsdom either, which is why ThemeProvider guards every access. Stubbing it
 // lets tests assert on the persisted preference instead of only on the silent fallback.

@@ -15,7 +15,7 @@ import org.springframework.context.annotation.Import
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.test.context.ActiveProfiles
-import org.testcontainers.containers.PostgreSQLContainer
+import org.testcontainers.postgresql.PostgreSQLContainer
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 
@@ -107,7 +107,7 @@ abstract class IntegrationTestBase {
     companion object {
         @JvmStatic
         @ServiceConnection
-        val postgres: PostgreSQLContainer<*> = PostgreSQLContainer("postgres:16-alpine")
+        val postgres: PostgreSQLContainer = PostgreSQLContainer("postgres:17-alpine")
             .withDatabaseName("sharedledger_test")
             .withUsername("test")
             .withPassword("test")
