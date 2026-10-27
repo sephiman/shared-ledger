@@ -980,6 +980,17 @@ The `.env` file is git-ignored. `docker compose` reads it implicitly and the bac
 ## 6. Start the application
 
 ```bash
+docker compose pull
+docker compose up -d
+```
+
+This runs the images CI published for the latest `main` (see the `images` job below). The packages are
+private unless made public, so the host needs a one-time `docker login ghcr.io` with a GitHub token that
+has `read:packages`.
+
+To build from the checked-out source instead, under the same image names:
+
+```bash
 docker compose up -d --build
 ```
 

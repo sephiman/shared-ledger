@@ -2,7 +2,7 @@ services:
   backend:
     build:
       context: ./backend
-    image: shared-ledger-backend:latest
+    image: ghcr.io/sephiman/shared-ledger-backend:latest
     container_name: shared-ledger-backend
     env_file: .env
     environment:
@@ -65,7 +65,7 @@ services:
   frontend:
     build:
       context: ./frontend
-    image: shared-ledger-frontend:latest
+    image: ghcr.io/sephiman/shared-ledger-frontend:latest
     container_name: shared-ledger-frontend
     depends_on:
       backend:
