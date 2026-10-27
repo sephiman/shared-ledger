@@ -7,8 +7,10 @@ import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
 import jakarta.persistence.Id
+import jakarta.persistence.LockModeType
 import jakarta.persistence.Table
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
@@ -65,4 +67,12 @@ interface CategorizationRuleRepository : JpaRepository<CategorizationRule, UUID>
     fun findByIdAndHouseholdId(id: UUID, householdId: UUID): CategorizationRule?
     fun findAllByHouseholdIdOrderByPriorityAsc(householdId: UUID): List<CategorizationRule>
     fun findAllByIdInAndHouseholdId(ids: Collection<UUID>, householdId: UUID): List<CategorizationRule>
+
+    /** Serialises rule rewrites that read the whole set (a generalisation's max+1 priority) per household. */
+    @Query(value = "SELECT 1 FROM pg_advisory_xact_lock(hashtextextended(CAST(:hid AS text), 0))", nativeQuery = true)
+    fun lockRulesOf(@Param("hid") householdId: UUID): Int
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT r FROM CategorizationRule r WHERE r.householdId = :hid AND r.id IN :ids")
+    fun lockAllByIdInAndHouseholdId(@Param("ids") ids: Collection<UUID>, @Param("hid") householdId: UUID): List<CategorizationRule>
 }

@@ -373,9 +373,9 @@ Long-term wealth projection toward financial independence, derived from the hous
 - **Banks** (any member): link your own bank, and manage the connections you linked. See *Bank ingestion* for who can manage what.
 - **Notifications** (owners only): configure the per-household Telegram integration (see below).
 - **AI category suggestions** (owners only, shown only when the instance has `AI_API_KEY`): off by
-  default; turning it on adds *Suggest with AI* to the pending inbox. See *Bank ingestion →
-  Categorisation*.
-- **Danger zone — Delete all data** (owners only): a confirmation-gated action (type `delete`) that permanently wipes *every* piece of the household's financial data while keeping the household itself and its membership/invitations. It hard-deletes (including soft-deleted rows) transactions, budgets, recurring templates, net-worth snapshots and movements, cash adjustments, assets, liabilities and lendings (with their value/balance/amortization/schedule/payment history), the investment portfolio (holdings, lots and valuations), bank connections (with their accounts, sync runs, pending movements — and the AI suggestions stored on them — and categorization rules), the AI suggestion run records, and the FIRE (including its tax-bracket table), Telegram, auto-snapshot, cash-estimate and AI-suggestion settings. Global reference data (categories, asset classes, FX rates, price history) is never touched.
+  default; turning it on adds *Suggest with AI* to the pending inbox and *Suggest generalised rules* to
+  the rules page. See *Bank ingestion → Categorisation*.
+- **Danger zone — Delete all data** (owners only): a confirmation-gated action (type `delete`) that permanently wipes *every* piece of the household's financial data while keeping the household itself and its membership/invitations. It hard-deletes (including soft-deleted rows) transactions, budgets, recurring templates, net-worth snapshots and movements, cash adjustments, assets, liabilities and lendings (with their value/balance/amortization/schedule/payment history), the investment portfolio (holdings, lots and valuations), bank connections (with their accounts, sync runs, pending movements — and the AI suggestions stored on them — and categorization rules), the AI suggestion and rule-generalisation run records, and the FIRE (including its tax-bracket table), Telegram, auto-snapshot, cash-estimate and AI-suggestion settings. Global reference data (categories, asset classes, FX rates, price history) is never touched.
 
 ### Notifications (Telegram)
 
@@ -808,6 +808,51 @@ Wise could be added via its own API) with the always-available CSV import as the
     - **Configuration**: instance-wide `AI_API_KEY` (any OpenAI-compatible chat-completions provider;
       see §5), then per household the owner-only setting *AI category suggestions*, **off by default**,
       whose help text names the model and the provider host.
+  - **AI-proposed generalised rules (optional, on demand).** Rules pile up one per branch or wording
+    (`counterparty equals "Albert Heijn 8591"`, `"AH 8591"`, …), so a new branch of the same chain is
+    not covered. **Suggest generalised rules** on the rules page (any member; same setting and
+    visibility as *Suggest with AI*, no second toggle) asks the model to group rules of one field —
+    counterparty or description, `equals` or `contains`, learned or manual — that belong to the same
+    merchant, brand, employer, institution or recurring payee and share direction and category, and to
+    propose one `<field> contains <pattern>` rule per group. The member accepts, edits or dismisses each
+    proposal; there is no accept-all. Amount rules are never sent or replaced.
+    - **The model proposes, the app decides.** Every proposal — on arrival, on every refresh, after every
+      edit of its pattern (through the server, never re-implemented in the browser) and again on accept —
+      is checked with the engine's own matching (trimmed, case-insensitive substring). It must replace at
+      least two rules of its own field, direction and category and appear in every one of their values
+      (inside a `contains` value, so it matches everything that rule matched); be at least 3 characters;
+      and not be a legal suffix or payment-processor prefix (B.V., S.L.U., N.V., S.L., S.A., GmbH, Ltd,
+      CCV*, BCK*, Zettle, SumUp, iZ*, PayPal, Adyen, Mollie, Stripe, Tikkie, Bizum). Below the AI confidence
+      threshold (0.85) or failing those, it is discarded. It is shown but **cannot be accepted** while it
+      has a **collision** — it also matches another rule's value or a text of that field confirmed in the
+      last 12 months, of the same direction and a different category (count plus up to three examples) —
+      or while accepting would **change a known movement's category**.
+    - **Precedence.** The engine takes the first matching rule of the movement's direction in priority
+      order (lower first; `contains` and `equals` have no specificity between them, and equal priorities
+      have no defined order). An accepted rule is written as a *manual* rule with priority one above every
+      rule of its direction, so no movement another rule wins today can change hands. What can change is
+      who wins where a replaced rule used to — a later rule of another field, say, once an early
+      description rule is gone. So the server **replays the engine before and after** over every movement
+      the household knows — the whole inbox, everything confirmed in the last 12 months, and every rule
+      value as a synthetic movement (amount rules sit out of those, which carry no amount) — and blocks
+      the proposal if any category would change, listing up to three. The guarantee is therefore
+      "nothing you have seen changes", not every conceivable text. Accepting creates the new rule and
+      deletes the replaced ones in one transaction; on any failure nothing changes.
+    - **What leaves the instance**: one call per run with the household's counterparty and description
+      rules (value with IBANs replaced by `[IBAN]`, field, match type, direction, category; rule ids
+      replaced by `r1…rN`), at most the 300 most recent (the result says when more exist), plus the
+      category catalogue. **Never** amount rules, movements, amounts, account or household identifiers.
+    - **Ephemeral proposals**: they are held in the backend's memory for 30 minutes, keyed by run, and
+      shown only in the page that started the run — dismissing or reloading drops them. Only the run
+      record is stored (rules sent, proposals returned, discarded, shown and accepted; tokens are logged,
+      never returned). This assumes a **single backend instance**, as the rest of the app does. Needs at
+      least 2 counterparty or description rules; one run per household at a time (`409
+      RULE_GENERALISATION_RUN_IN_PROGRESS`). Endpoints: `GET`/`POST
+      /api/households/{id}/banks/rules/generalisations` (status and proposals / start, 202),
+      `POST …/validate` (the verdict for an edited pattern, always 200) and `POST …/accept` (400
+      `VALIDATION_FAILED` naming `pattern`, `field`, `categoryCode` or `absorbedRuleIds`; 409
+      `RULE_GENERALISATION_COLLISION`, `RULE_GENERALISATION_PRECEDENCE` (a known movement would change
+      category) or `RULE_GENERALISATION_STALE`).
 - **Multi-currency** (e.g. Wise): non-EUR movements are converted to EUR at the ECB rate of the
   booking date, keeping the original amount/currency on the pending item.
 - **Read-only**: only account/movement information is ever requested; there is no payment
@@ -822,7 +867,8 @@ AI category suggestions follow the same pattern, inside the inbox: no `AI_API_KE
 nothing exists (no setting, no button, no badge, no filter option; the frontend does not even request
 them, and every AI endpoint answers **404**, as the password-reset endpoints do without SMTP); key set
 but the household setting off → only the owner's setting appears in Settings; setting on → the button,
-the AI badge and the *suggested by rule / by AI* filter options appear in the inbox. The instance flag
+the AI badge and the *suggested by rule / by AI* filter options appear in the inbox, and *Suggest
+generalised rules* appears on the rules page. The instance flag
 comes from the authenticated `GET /api/features`, never from the public `/auth/features`.
 
 ---
@@ -856,7 +902,7 @@ comes from the authenticated `GET /api/features`, never from the public `/auth/f
 ### API conventions
 
 - **Null means absent.** In a JSON request body, an explicit `null` and an omitted field are the same thing: "not stating it". A field with a default (e.g. a transaction's `isRefund` → `false`, a recurring template's `active` → `true`, login's `rememberMe` → `true`) takes that default either way; an optional field with no default is simply empty. This holds for every request body, not per endpoint.
-- **Required fields** (no default) that are missing or `null` are a **400 `INVALID_PARAMETER`** naming the field: `args` holds its path (e.g. `occurrenceDate`, or `items[0].year` inside a list) and `fields` maps that path to "This field is required". A value of the wrong type or format (e.g. `"amount": "abc"`) gets the same shape with "Invalid value". Rules beyond shape (lengths, ranges, patterns) answer **400 `VALIDATION_FAILED`** with per-field messages.
+- **Required fields** (no default) that are missing or `null` are a **400 `INVALID_PARAMETER`** naming the field: `args` holds its path (e.g. `occurrenceDate`, or `items[0].year` inside a list) and `fields` maps that path to "This field is required". A value of the wrong type or format (e.g. `"amount": "abc"`) gets the same shape with "Invalid value". Rules beyond shape (lengths, ranges, patterns) answer **400 `VALIDATION_FAILED`** with per-field messages. Business rules a service checks on a well-formed body (e.g. a generalised rule's pattern too short, or not found in a rule it replaces) answer the same **400 `VALIDATION_FAILED`** shape, `fields` mapping the offending field to the reason. A request that clashes with the current state instead (a collision, a stale id, a run in progress) is a **409** with its own code.
 - A body that isn't valid JSON is a **400 `MALFORMED_BODY`**.
 - **500 `INTERNAL_ERROR`** is reserved for server faults, never for anything a client sent; every one is logged at ERROR with its stack trace.
 
@@ -970,7 +1016,7 @@ Edit `.env` and set at minimum:
 | `TELEGRAM_TOKEN_KEY` | Base64 AES key (16/24/32 bytes) used to encrypt stored Telegram bot tokens at rest. Generate with `openssl rand -base64 32`. Required only if a household saves a bot token; keep it stable (rotating it makes stored tokens undecryptable). Optional: `TELEGRAM_API_BASE_URL`, `TELEGRAM_TIMEOUT_MS`. |
 | Portfolio pricing | All optional — holdings work unpriced without them. `EQUITY_PRICE_PROVIDER` (`yahoo` default, or `eodhd` / `twelve_data`), `COINGECKO_API_KEY` (Demo key for crypto), `EODHD_API_KEY` / `TWELVEDATA_API_KEY` (only for those providers). FX (Frankfurter) and Yahoo need no key. Base-URL overrides exist for each provider; see `.env.example`. |
 | Bank ingestion | All optional. The application id and private key are **not** env vars — each household pastes its own in Settings → Banks. What stays here: `ENABLE_BANKING_SECRET_KEY` (base64 AES key, `openssl rand -base64 32`; encrypts the stored credentials and bank sessions at rest — keep it stable, rotating it makes them undecryptable) and `ENABLE_BANKING_REDIRECT_URL` (your public frontend URL + `/settings/banks/callback`; it identifies the instance, so every household registers the same value in its own EB application — left blank the app derives it from the request, fine for local dev). `ENABLE_BANKING_APP_ID` is read **once at startup**, on the first boot after `V030`, to stamp connections created before credentials were per household (see §Upgrading below); drop it afterwards — a fresh install never needs it. Optional overrides: `ENABLE_BANKING_BASE_URL`, `ENABLE_BANKING_CONSENT_VALID_DAYS`, `ENABLE_BANKING_BACKFILL_DAYS`, `ENABLE_BANKING_TIMEOUT_MS`, `ENABLE_BANKING_MAX_CALLS_PER_DAY` (keep at 4 in production — the PSD2 unattended-access cap). |
-| AI category suggestions | All optional, **as a group**. `AI_API_KEY` turns the feature on for the instance (each household owner still opts in). `AI_BASE_URL` (default `https://opencode.ai/zen/go/v1`) is any OpenAI-compatible chat-completions base; `AI_MODEL` (default `deepseek-v4.1-flash` — `deepseek-v4-flash` answers HTTP 410 deprecated); `AI_TIMEOUT_MS` per call (default `120000`). No key → the feature does not exist. A key with a blank `AI_BASE_URL`/`AI_MODEL`, or a changed URL/model without a key, keeps it hidden and logs one `ai_partially_configured missing=…` warning at startup. Requests identify as `User-Agent: shared-ledger/<version>` and carry an `x-opencode-session: <uuid per run>` header, which OpenCode needs for routing and other providers ignore; switching provider is env only. OpenCode Go states it is designed for coding-agent traffic: check that your provider's terms cover this use. |
+| AI category suggestions (and generalised rules) | All optional, **as a group**. `AI_API_KEY` turns the feature on for the instance (each household owner still opts in). `AI_BASE_URL` (default `https://opencode.ai/zen/go/v1`) is any OpenAI-compatible chat-completions base; `AI_MODEL` (default `deepseek-v4.1-flash` — `deepseek-v4-flash` answers HTTP 410 deprecated); `AI_TIMEOUT_MS` per call (default `120000`). No key → the feature does not exist. A key with a blank `AI_BASE_URL`/`AI_MODEL`, or a changed URL/model without a key, keeps it hidden and logs one `ai_partially_configured missing=…` warning at startup. Requests identify as `User-Agent: shared-ledger/<version>` and carry an `x-opencode-session: <uuid per run>` header, which OpenCode needs for routing and other providers ignore; switching provider is env only. OpenCode Go states it is designed for coding-agent traffic: check that your provider's terms cover this use. |
 | `FIRE_MONTE_CARLO_TRIALS` | Trials per scenario for the FIRE Monte Carlo simulation. Default `10000`. |
 
 The `.env` file is git-ignored. `docker compose` reads it implicitly and the backend reads variables from it (via `env_file`).

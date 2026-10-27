@@ -114,21 +114,49 @@ class CategorizationService(private val rules: CategorizationRuleRepository) {
         return DeletedCountDto(deleted = toDelete.size)
     }
 
+    /** Replaces [absorbed] with one `[field] contains` rule placed after every rule of its direction, so a
+     *  movement some other rule wins today can never change hands. Never the default-priority [create] path, which
+     *  would put it ahead of every learned rule. Checking the proposal is the caller's job. */
+    @Transactional
+    fun generalise(
+        householdId: UUID,
+        field: RuleField,
+        pattern: String,
+        categoryCode: String,
+        direction: Direction,
+        absorbed: List<CategorizationRule>,
+        by: User,
+    ): CategorizationRuleDto {
+        val last = orderedRules(householdId).filter { it.direction == direction }.maxOfOrNull { it.priority } ?: DEFAULT_PRIORITY
+        val rule = rules.save(
+            CategorizationRule(
+                householdId = householdId,
+                matchField = field,
+                matchOp = RuleOp.contains,
+                matchValue = pattern.trim(),
+                categoryCode = categoryCode,
+                direction = direction,
+                priority = last + 1,
+                source = RuleSource.manual,
+                createdByUserId = by.id,
+            ),
+        )
+        rules.deleteAll(absorbed)
+        rules.flush()
+        log.info(
+            "bank_rule_generalised rule={} field={} category={} direction={} priority={} absorbed={}",
+            rule.id, field, categoryCode, direction, rule.priority, absorbed.size,
+        )
+        return rule.toDto()
+    }
+
     private fun CategorizationRule.matches(m: PendingMovement): Boolean = when (matchField) {
         RuleField.counterparty -> textMatches(m.counterparty)
         RuleField.description -> textMatches(m.description)
         RuleField.amount -> amountMatches(m.amount)
     }
 
-    private fun CategorizationRule.textMatches(target: String?): Boolean {
-        val value = target?.trim()?.lowercase() ?: return false
-        val expected = matchValue.trim().lowercase()
-        return when (matchOp) {
-            RuleOp.equals -> value == expected
-            RuleOp.contains -> value.contains(expected)
-            RuleOp.range -> false
-        }
-    }
+    private fun CategorizationRule.textMatches(target: String?): Boolean = textMatches(matchOp, matchValue, target)
 
     private fun CategorizationRule.amountMatches(amount: BigDecimal): Boolean = when (matchOp) {
         RuleOp.equals -> runCatching { BigDecimal(matchValue.trim()).compareTo(amount) == 0 }.getOrDefault(false)

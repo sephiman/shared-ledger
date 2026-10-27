@@ -4,8 +4,6 @@ import com.sephilabs.sharedledger.bank.CategorizationService
 import com.sephilabs.sharedledger.bank.MovementStatus
 import com.sephilabs.sharedledger.bank.PendingMovement
 import com.sephilabs.sharedledger.bank.PendingMovementRepository
-import com.sephilabs.sharedledger.catalog.CategoryService
-import com.sephilabs.sharedledger.i18n.Messages
 import com.sephilabs.sharedledger.transaction.Direction
 import org.slf4j.LoggerFactory
 import org.slf4j.MDC
@@ -16,7 +14,6 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.Instant
 import java.time.YearMonth
-import java.util.Locale
 import java.util.UUID
 
 const val AI_SUGGESTION_MIN_CONFIDENCE = 0.85
@@ -28,9 +25,8 @@ class AiSuggestionRunner(
     private val model: SuggestionModel,
     private val pending: PendingMovementRepository,
     private val runs: AiSuggestionRunRepository,
-    private val categories: CategoryService,
+    private val promptCatalogue: PromptCatalogue,
     private val categorization: CategorizationService,
-    private val messages: Messages,
     transactionManager: PlatformTransactionManager,
 ) {
 
@@ -44,7 +40,7 @@ class AiSuggestionRunner(
         MDC.put("householdId", householdId.toString())
         MDC.put("aiRunId", runId.toString())
         try {
-            val catalogue = catalogue(householdId)
+            val catalogue = promptCatalogue.forHousehold(householdId)
             val rules = ruleExamples(householdId)
             val system = CategorySuggestionPrompt.system(catalogue, rules)
             val directionByCode = catalogue.associate { it.code to it.direction }
@@ -156,18 +152,6 @@ class AiSuggestionRunner(
                 finishedAt = Instant.now()
             }
         }!!
-
-    private fun catalogue(householdId: UUID): List<CatalogueEntry> =
-        categories.listForHousehold(householdId).map {
-            CatalogueEntry(
-                code = it.code,
-                // Global names are i18n keys; the prompt is in English whatever the members read.
-                name = if (it.custom) it.name else messages.resolve(it.name, fallback = it.code, locale = Locale.ENGLISH),
-                group = it.group,
-                direction = Direction.valueOf(it.kind),
-                essential = it.essential,
-            )
-        }
 
     private fun ruleExamples(householdId: UUID): List<RuleExample> =
         categorization.orderedRules(householdId).map {

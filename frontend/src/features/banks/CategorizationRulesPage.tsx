@@ -14,6 +14,7 @@ import {
   type RuleOp,
   type RuleSource,
 } from "@/api/banks";
+import { useAiSuggestionsOn } from "@/api/aiSuggestions";
 import { useCategories, type Category } from "@/api/catalog";
 import { categoryLabel, categoryLabelByCode } from "@/lib/categoryLabel";
 import { formatDate } from "@/lib/dates";
@@ -26,6 +27,7 @@ import {
   type RuleFilterState,
   type RuleSortKey,
 } from "./ruleFilters";
+import { RuleGeneralisationPanel } from "./RuleGeneralisationPanel";
 
 const PAGE_SIZE = 25;
 
@@ -38,6 +40,7 @@ export function CategorizationRulesPage() {
   const { data: categories = [] } = useCategories(householdId);
   const del = useDeleteRule(householdId);
   const delBatch = useDeleteRules(householdId);
+  const ai = useAiSuggestionsOn(householdId);
 
   const [filters, setFiltersState] = useState<RuleFilterState>(RULE_FILTER_DEFAULTS);
   const [sort, setSort] = useState<RuleSortKey>("newest");
@@ -96,6 +99,8 @@ export function CategorizationRulesPage() {
       </div>
 
       <AddRuleCard householdId={householdId} categories={categories} />
+
+      {ai && <RuleGeneralisationPanel householdId={householdId} settings={ai} categories={categories} />}
 
       <Card>
         <CardBody className="space-y-4">
