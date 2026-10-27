@@ -13,27 +13,27 @@ export function Badge({ children, tone = "neutral", className }: { children: Rea
   return <span className={cn("inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium", tones[tone], className)}>{children}</span>;
 }
 
-export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" | "danger" | "ghost" }>(
-  ({ className, variant = "primary", type = "button", ...props }, ref) => {
-    const variants = {
-      primary: "bg-primary text-primary-foreground hover:bg-sky-600",
-      secondary: "bg-raised border border-border-strong text-gray-900 hover:bg-raised-hover dark:text-gray-100",
-      danger: "bg-red-600 text-white hover:bg-red-700",
-      ghost: "bg-transparent text-gray-700 hover:bg-item-hover dark:text-gray-200",
-    };
-    return (
-      <button
-        ref={ref}
-        type={type}
-        className={cn(
-          "inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed",
-          variants[variant],
-          className,
-        )}
-        {...props}
-      />
-    );
-  },
+type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
+
+const buttonVariants: Record<ButtonVariant, string> = {
+  primary: "bg-primary text-primary-foreground hover:bg-sky-600",
+  secondary: "bg-raised border border-border-strong text-gray-900 hover:bg-raised-hover dark:text-gray-100",
+  danger: "bg-red-600 text-white hover:bg-red-700",
+  ghost: "bg-transparent text-gray-700 hover:bg-item-hover dark:text-gray-200",
+};
+
+// Shared with links that navigate but should look like a button (a <Link> must stay an <a>).
+export const buttonClassName = (variant: ButtonVariant = "primary", className?: string) =>
+  cn(
+    "inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed",
+    buttonVariants[variant],
+    className,
+  );
+
+export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }>(
+  ({ className, variant = "primary", type = "button", ...props }, ref) => (
+    <button ref={ref} type={type} className={buttonClassName(variant, className)} {...props} />
+  ),
 );
 Button.displayName = "Button";
 

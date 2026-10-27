@@ -115,11 +115,11 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function renderPage() {
+function renderPage(state?: unknown) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[{ pathname: "/settings/rules", state }]}>
         <CategorizationRulesPage />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -266,5 +266,25 @@ describe("Suggest generalised rules: proposals", () => {
     await user.click(await button());
 
     expect(await screen.findByText("Only the 300 most recent of 340 rules were sent.")).toBeInTheDocument();
+  });
+});
+
+describe("rules page back link", () => {
+  it("returns to settings when opened from there", async () => {
+    renderPage();
+
+    expect(await screen.findByRole("link", { name: "Back" })).toHaveAttribute("href", "/settings");
+  });
+
+  it("returns to the pending inbox when opened from it", async () => {
+    renderPage({ backTo: "/transactions?tab=pending" });
+
+    expect(await screen.findByRole("link", { name: "Back" })).toHaveAttribute("href", "/transactions?tab=pending");
+  });
+
+  it("ignores a back target that leaves the app", async () => {
+    renderPage({ backTo: "//evil.example" });
+
+    expect(await screen.findByRole("link", { name: "Back" })).toHaveAttribute("href", "/settings");
   });
 });

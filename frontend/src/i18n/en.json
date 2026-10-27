@@ -292,6 +292,7 @@
     "catstate_categorized": "Categorized",
     "only_duplicates": "Only possible duplicates",
     "apply_rules": "Apply rules",
+    "manage_rules": "Manage rules",
     "rules_applied": "{{count}} categorised",
     "clear_filters": "Clear filters",
     "uncategorized": "Uncategorized",

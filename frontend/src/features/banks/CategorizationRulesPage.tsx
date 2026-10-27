@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
 import {
@@ -31,7 +31,19 @@ import { RuleGeneralisationPanel } from "./RuleGeneralisationPanel";
 
 const PAGE_SIZE = 25;
 
+// Where "Back" returns to when the page was opened from elsewhere (e.g. the pending inbox).
+export interface RulesPageState {
+  backTo: string;
+}
+
+// Only in-app paths: router state survives reloads and history, so never trust its shape.
+function backTarget(state: unknown): string {
+  const backTo = (state as Partial<RulesPageState> | null)?.backTo;
+  return typeof backTo === "string" && backTo.startsWith("/") && !backTo.startsWith("//") ? backTo : "/settings";
+}
+
 export function CategorizationRulesPage() {
+  const backTo = backTarget(useLocation().state);
   const { t, i18n } = useTranslation();
   const household = useActiveHousehold();
   const householdId = household.householdId;
@@ -95,7 +107,7 @@ export function CategorizationRulesPage() {
           <h1 className="text-xl font-semibold">{t("banks.rules_title")}</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("banks.rules_page_description")}</p>
         </div>
-        <Link to="/settings" className="text-sm text-primary">{t("common.back")}</Link>
+        <Link to={backTo} className="text-sm text-primary">{t("common.back")}</Link>
       </div>
 
       <AddRuleCard householdId={householdId} categories={categories} />

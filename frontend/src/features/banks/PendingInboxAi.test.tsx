@@ -2,13 +2,14 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { AxiosResponse } from "axios";
 import { apiClient } from "@/api/client";
 import type { AiSuggestionRun, AiSuggestionSettings, AiSuggestionStatus } from "@/api/aiSuggestions";
 import type { PendingMovement } from "@/api/banks";
 import type { Category } from "@/api/catalog";
 import i18n from "@/i18n";
+import type { RulesPageState } from "./CategorizationRulesPage";
 import { PendingInbox } from "./PendingInbox";
 
 /** The inbox against a stubbed HTTP layer, so the real hooks decide what is requested and rendered. */
@@ -198,5 +199,33 @@ describe("pending inbox with AI suggestions", () => {
 
     expect(await screen.findByText("Suggesting with AI… batch 2 of 3")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Suggest with AI" })).toBeDisabled();
+  });
+});
+
+// Stands in for the rules page (its own test covers rendering); shows the state the link handed over.
+function BackTarget() {
+  const state = useLocation().state as RulesPageState | null;
+  return <p>back to {state?.backTo}</p>;
+}
+
+describe("pending inbox toolbar", () => {
+  it("opens the rules page with a way back to the inbox", async () => {
+    server.features = false;
+    const user = userEvent.setup();
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/transactions?tab=pending"]}>
+          <Routes>
+            <Route path="/transactions" element={<PendingInbox householdId="h1" currency="EUR" locale="en" />} />
+            <Route path="/settings/rules" element={<BackTarget />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await user.click(await screen.findByRole("link", { name: "Manage rules" }));
+
+    expect(await screen.findByText("back to /transactions?tab=pending")).toBeInTheDocument();
   });
 });

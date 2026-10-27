@@ -770,7 +770,7 @@ Wise could be added via its own API) with the always-available CSV import as the
   (manual or learned) already matches the movement**: a confirmation that differs from a matching
   rule's suggestion is treated as a one-off exception, not a new rule. Rules involve no ML; the optional AI layer below is separate and on demand. An **Apply rules**
   action re-runs the rules over the uncategorized pending items on demand (useful after adding
-  rules). Rules are managed on their **own page** (Settings → Categorisation rules) **by any member**
+  rules). Rules are managed on their **own page** (Settings → Categorisation rules, also linked as *Manage rules* from the pending inbox toolbar) **by any member**
   — they are shared household categorisation logic, at the same level as the transactions and pending
   movements they act on — with free-text search over the matched value, combinable filters (match
   field, direction, category, manual/learned origin), sorting (creation date, value, category),

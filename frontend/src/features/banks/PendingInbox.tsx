@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   useApplyRules,
@@ -18,7 +18,7 @@ import {
 import { useAiSuggestionsOn } from "@/api/aiSuggestions";
 import { useCategories, type Category } from "@/api/catalog";
 import { categoryLabel, categoryLabelByCode } from "@/lib/categoryLabel";
-import { Badge, Button, Card, CardBody, CardHeader, Chip, Input, Select } from "@/components/ui/primitives";
+import { Badge, Button, buttonClassName, Card, CardBody, CardHeader, Chip, Input, Select } from "@/components/ui/primitives";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { formatMoney } from "@/lib/money";
 import { addDaysIso, formatDate } from "@/lib/dates";
@@ -30,6 +30,7 @@ import {
   type GroupBy,
 } from "./pendingFilters";
 import { AiSuggestButton } from "./AiSuggestButton";
+import type { RulesPageState } from "./CategorizationRulesPage";
 import { bankDescription } from "./bankDescription";
 import { canMerge, type MergeSource } from "./mergeDraft";
 import { MarkAsMovementDialog } from "./MarkAsMovementDialog";
@@ -55,6 +56,8 @@ const REJECT_BUTTON_CLASS =
 
 export function PendingInbox({ householdId, currency, locale }: { householdId: string; currency: string; locale: string }) {
   const { t } = useTranslation();
+  const location = useLocation();
+  const rulesState: RulesPageState = { backTo: location.pathname + location.search };
 
   const [status, setStatus] = useState<MovementStatus>(PENDING_FILTER_DEFAULTS.status);
   const [connectionId, setConnectionId] = useState(PENDING_FILTER_DEFAULTS.connectionId);
@@ -337,6 +340,9 @@ export function PendingInbox({ householdId, currency, locale }: { householdId: s
               </Button>
             )}
             {editable && ai && <AiSuggestButton householdId={householdId} settings={ai} />}
+            <Link to="/settings/rules" state={rulesState} className={buttonClassName("secondary")}>
+              {t("banks.manage_rules")}
+            </Link>
             {hasActivePendingFilters(filterState) && (
               <Button variant="ghost" onClick={clearFilters}>{t("banks.clear_filters")}</Button>
             )}
