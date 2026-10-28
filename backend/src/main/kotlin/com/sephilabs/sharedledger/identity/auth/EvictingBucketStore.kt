@@ -19,9 +19,11 @@ class EvictingBucketStore<K : Any>(
 
     fun tryAcquire(key: K): Boolean {
         val now = System.nanoTime()
-        val entry = entries.compute(key) { _, existing ->
-            (existing ?: Entry(build(), now)).also { it.lastAccessNanos = now }
-        }!!
+        val entry = checkNotNull(
+            entries.compute(key) { _, existing ->
+                (existing ?: Entry(build(), now)).also { it.lastAccessNanos = now }
+            }
+        )
         maybeSweep(now)
         return entry.bucket.tryConsume(1)
     }

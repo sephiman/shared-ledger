@@ -399,7 +399,7 @@ class BankSyncService(
         return n
     }
 
-    private fun <T> write(block: () -> T): T = tx.execute { block() }!!
+    private fun <T> write(block: () -> T): T = checkNotNull(tx.execute { block() })
 
     private fun markConnection(id: UUID, mutate: (BankConnection) -> Unit) {
         connections.findById(id).ifPresent(mutate)

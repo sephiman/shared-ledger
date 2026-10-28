@@ -199,18 +199,20 @@ class PortfolioValuationService(
         if (start.isAfter(end)) return PortfolioEvolutionDto(emptyList())
 
         // One in-memory forward-fill cursor per holding and per foreign currency.
-        val priceSeries = all.filter { it.linked }.associate { holding ->
+        val priceSeries = all.mapNotNull { holding ->
+            val provider = holding.provider ?: return@mapNotNull null
+            val providerSymbol = holding.providerSymbol ?: return@mapNotNull null
             val currency = priceCurrencyFor(holding)
             val head = prices.findFirstByProviderAndProviderSymbolAndCurrencyAndPriceDateLessThanEqualOrderByPriceDateDesc(
-                holding.provider!!.name, holding.providerSymbol!!, currency, start.minusDays(1),
+                provider.name, providerSymbol, currency, start.minusDays(1),
             )
             val range = prices.findAllByProviderAndProviderSymbolAndCurrencyAndPriceDateBetweenOrderByPriceDateAsc(
-                holding.provider!!.name, holding.providerSymbol!!, currency, start, end,
+                provider.name, providerSymbol, currency, start, end,
             )
             holding.id to ForwardFill(
                 (listOfNotNull(head) + range).map { it.priceDate to it.price },
             )
-        }
+        }.toMap()
         val fxSeries = all
             .map { priceCurrencyFor(it) }
             .filter { it != baseCurrency }
@@ -344,10 +346,11 @@ class PortfolioValuationService(
 
     /** Last stored price <= date plus the FX rate into base; null when unpriced (unlinked, no data, no FX). */
     fun priceFor(holding: Holding, date: LocalDate): PortfolioValuationCalculator.PriceInput? {
-        if (!holding.linked) return null
+        val provider = holding.provider ?: return null
+        val providerSymbol = holding.providerSymbol ?: return null
         val currency = priceCurrencyFor(holding)
         val point = prices.findFirstByProviderAndProviderSymbolAndCurrencyAndPriceDateLessThanEqualOrderByPriceDateDesc(
-            holding.provider!!.name, holding.providerSymbol!!, currency, date,
+            provider.name, providerSymbol, currency, date,
         ) ?: return null
         val fx = if (currency == baseCurrency) {
             BigDecimal.ONE

@@ -538,7 +538,7 @@ class FireService(
 
         init {
             flatTargets = DoubleArray(simTiers.size) { t ->
-                if (simTiers[t].annualNetSpending == null) simTiers[t].targetToday!!.toDouble() else Double.NaN
+                simTiers[t].targetToday?.toDouble() ?: Double.NaN
             }
             fixedTargets = if (taxOn) null else Array(simTiers.size) { t ->
                 DoubleArray(years + 1) { y ->

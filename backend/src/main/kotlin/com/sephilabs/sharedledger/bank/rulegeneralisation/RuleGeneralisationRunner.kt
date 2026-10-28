@@ -132,7 +132,7 @@ class RuleGeneralisationRunner(
         status: AiSuggestionRunStatus,
         answer: ChatAnswer? = null,
         counts: (RuleGeneralisationRun) -> Unit = {},
-    ): RuleGeneralisationRun = tx.execute {
+    ): RuleGeneralisationRun = checkNotNull(tx.execute {
         runs.findById(runId).orElseThrow().apply {
             counts(this)
             inputTokens += answer?.inputTokens ?: 0
@@ -140,5 +140,5 @@ class RuleGeneralisationRunner(
             this.status = status
             finishedAt = Instant.now()
         }
-    }!!
+    })
 }

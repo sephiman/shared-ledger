@@ -146,12 +146,12 @@ class AiSuggestionRunner(
     }
 
     private fun finish(runId: UUID, status: AiSuggestionRunStatus): AiSuggestionRun =
-        tx.execute {
+        checkNotNull(tx.execute {
             runs.findById(runId).orElseThrow().apply {
                 this.status = status
                 finishedAt = Instant.now()
             }
-        }!!
+        })
 
     private fun ruleExamples(householdId: UUID): List<RuleExample> =
         categorization.orderedRules(householdId).map {

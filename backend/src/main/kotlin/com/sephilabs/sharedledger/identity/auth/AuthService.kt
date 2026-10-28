@@ -48,12 +48,13 @@ class AuthService(
         // so an unauthenticated caller without a valid invitation can't enumerate registered emails
         // (the email-taken 409 is only reachable once the invite/household path is satisfied).
         val token = request.invitationToken
+        val householdInput = request.household
         if (token == null) {
             if (mode == AppProperties.RegistrationMode.INVITE_ONLY) {
                 metrics.registration(mode.name, "failed_invalid_invite")
                 throw AppException.forbidden("REGISTRATION_REQUIRES_INVITATION")
             }
-            if (request.household == null) {
+            if (householdInput == null) {
                 throw AppException.badRequest("REGISTRATION_HOUSEHOLD_REQUIRED")
             }
         } else {
@@ -67,7 +68,7 @@ class AuthService(
 
         val user = User(
             email = request.email.lowercase(),
-            passwordHash = encoder.encode(request.password)!!,
+            passwordHash = checkNotNull(encoder.encode(request.password)),
             locale = request.locale,
         )
         users.save(user)
@@ -75,7 +76,7 @@ class AuthService(
         val householdId = if (token != null) {
             invitations.consumeIfPresent(token, user)
         } else {
-            val input = request.household!!
+            val input = checkNotNull(householdInput)
             val household = Household(name = input.name, currency = input.currency.uppercase(), defaultLocale = input.defaultLocale)
             households.save(household)
             members.save(HouseholdMember(HouseholdMemberId(household.id, user.id), HouseholdRole.owner))
@@ -101,7 +102,7 @@ class AuthService(
         if (!encoder.matches(current, user.passwordHash)) {
             throw AppException.badRequest("PASSWORD_MISMATCH")
         }
-        user.passwordHash = encoder.encode(newPassword)!!
+        user.passwordHash = checkNotNull(encoder.encode(newPassword))
         emailChange.cancelPending(user.id)
         log.info("user_password_changed")
     }

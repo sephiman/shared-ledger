@@ -96,7 +96,7 @@ class BenchmarkService(
             )
         }
 
-        val anchor = eurByDate.getValue(firstAvailable)!!
+        val anchor = checkNotNull(eurByDate[firstAvailable])
         val points = sampleDates.map { date ->
             val eur = eurByDate[date]
             val twr = eur?.divide(anchor, MathContext.DECIMAL64)

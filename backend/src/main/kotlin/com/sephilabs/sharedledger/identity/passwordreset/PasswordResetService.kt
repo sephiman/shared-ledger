@@ -70,7 +70,7 @@ class PasswordResetService(
     fun reset(token: String, newPassword: String) {
         val row = activeToken(token)
         val user = users.findById(row.userId).orElseThrow { invalidToken() }
-        user.passwordHash = encoder.encode(newPassword)!!
+        user.passwordHash = checkNotNull(encoder.encode(newPassword))
         row.usedAt = Instant.now()
         emailChange.cancelPending(user.id)
         // Whoever prompted the reset may hold a live session; none of them survives the new password.

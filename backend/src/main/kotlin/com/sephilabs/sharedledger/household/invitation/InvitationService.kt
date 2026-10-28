@@ -45,13 +45,14 @@ class InvitationService(
         invitations.save(invitation)
         metrics.invitationIssued(request.role.name)
 
-        val emailSent = !invitation.email.isNullOrBlank() && mailDispatcher.isConfigured
-        if (emailSent) {
+        val recipient = invitation.email?.takeIf { it.isNotBlank() }
+        val emailSent = recipient != null && mailDispatcher.isConfigured
+        if (recipient != null && mailDispatcher.isConfigured) {
             val household = households.findById(householdId).orElse(null)
             val householdName = household?.name ?: ""
             val locale = household?.defaultLocale?.ifBlank { "en" } ?: "en"
             mailDispatcher.dispatch(
-                recipientEmail = invitation.email!!,
+                recipientEmail = recipient,
                 householdName = householdName,
                 token = token,
                 localeStr = locale,
@@ -102,13 +103,14 @@ class InvitationService(
         invitation.updatedByUserId = by.id
         invitations.save(invitation)
 
-        val emailSent = !invitation.email.isNullOrBlank() && mailDispatcher.isConfigured
-        if (emailSent) {
+        val recipient = invitation.email?.takeIf { it.isNotBlank() }
+        val emailSent = recipient != null && mailDispatcher.isConfigured
+        if (recipient != null && mailDispatcher.isConfigured) {
             val household = households.findById(householdId).orElse(null)
             val householdName = household?.name ?: ""
             val locale = household?.defaultLocale?.ifBlank { "en" } ?: "en"
             mailDispatcher.dispatch(
-                recipientEmail = invitation.email!!,
+                recipientEmail = recipient,
                 householdName = householdName,
                 token = token,
                 localeStr = locale,

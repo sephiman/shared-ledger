@@ -91,6 +91,6 @@ class AmortizationMaterializer(
     }
 
     private fun <T> runInTx(block: () -> T): T {
-        return TransactionTemplate(txManager).execute { block() }!!
+        return checkNotNull(TransactionTemplate(txManager).execute { block() })
     }
 }

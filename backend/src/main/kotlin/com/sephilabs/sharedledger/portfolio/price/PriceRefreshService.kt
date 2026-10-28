@@ -237,22 +237,24 @@ class PriceRefreshService(
 
     /** When an older lot appears, fetch only the missing head range (clamped to the ceiling). */
     fun extendBackfill(holding: Holding, newEarliest: LocalDate, today: LocalDate = LocalDate.now()) {
-        if (!holding.linked || !props.portfolio.backfillOnLink) return
+        val provider = holding.provider ?: return
+        val providerSymbol = holding.providerSymbol ?: return
+        if (!props.portfolio.backfillOnLink) return
         val currency = priceCurrencyOf(holding)
-        val minStored = prices.findMinPriceDate(holding.provider!!.name, holding.providerSymbol!!, currency)
+        val minStored = prices.findMinPriceDate(provider.name, providerSymbol, currency)
             ?: return backfillForHolding(holding, today)
         val from = clampToCeiling(holding, newEarliest, today)
         if (from.isBefore(minStored)) {
             try {
                 fetchRange(holding, from, minStored.minusDays(1))
             } catch (ex: ProviderException) {
-                metrics.priceRefreshFailure(holding.provider!!.name)
+                metrics.priceRefreshFailure(provider.name)
                 log.error("Backfill extension failed for holding {}: {}", holding.symbol, ex.message)
             }
         }
         // Head range beyond the CoinGecko ceiling: Binance covers what CoinGecko can't.
-        if (holding.provider == HoldingProvider.coingecko && newEarliest.isBefore(from)) {
-            fallbackCryptoFill(holding.providerSymbol!!, holding.symbol, newEarliest, from.minusDays(1), today)
+        if (provider == HoldingProvider.coingecko && newEarliest.isBefore(from)) {
+            fallbackCryptoFill(providerSymbol, holding.symbol, newEarliest, from.minusDays(1), today)
         }
     }
 
@@ -340,12 +342,13 @@ class PriceRefreshService(
 
     private fun fetchRange(holding: Holding, from: LocalDate, to: LocalDate) {
         if (from.isAfter(to)) return
+        val provider = holding.provider ?: return
+        val providerSymbol = holding.providerSymbol ?: return
         val currency = priceCurrencyOf(holding)
-        val provider = holding.provider!!
         when (provider) {
             HoldingProvider.coingecko -> {
-                val history = crypto.dailyHistory(holding.providerSymbol!!, vsCurrency, from, to)
-                storeAll(provider.name, holding.providerSymbol!!, currency, history)
+                val history = crypto.dailyHistory(providerSymbol, vsCurrency, from, to)
+                storeAll(provider.name, providerSymbol, currency, history)
             }
             HoldingProvider.yahoo, HoldingProvider.eodhd, HoldingProvider.twelvedata -> {
                 if (provider != props.portfolio.equityProvider.asHoldingProvider()) {
@@ -353,9 +356,9 @@ class PriceRefreshService(
                     log.info("Skipping fetch for {}: linked to inactive provider {}", holding.symbol, provider)
                     return
                 }
-                val history = equity.dailyHistory(holding.providerSymbol!!, from, to)
+                val history = equity.dailyHistory(providerSymbol, from, to)
                 val effectiveCurrency = reconcileCurrency(listOf(holding), currency, history.currency, from, to)
-                storeAll(provider.name, holding.providerSymbol!!, effectiveCurrency, history.prices)
+                storeAll(provider.name, providerSymbol, effectiveCurrency, history.prices)
             }
         }
     }
@@ -424,7 +427,7 @@ class PriceRefreshService(
                             asOf = asOf,
                         )
                     )
-                } catch (ignored: DataIntegrityViolationException) {
+                } catch (_: DataIntegrityViolationException) {
                     // Race with a concurrent backfill: the row exists now, nothing to do.
                 }
             }
@@ -451,7 +454,7 @@ class PriceRefreshService(
                             rateDate = day.date,
                         )
                     )
-                } catch (ignored: DataIntegrityViolationException) {
+                } catch (_: DataIntegrityViolationException) {
                     // Concurrent insert; the observation is already stored.
                 }
             }
@@ -466,7 +469,7 @@ class PriceRefreshService(
         if (minIntervalMs > 0) {
             try {
                 Thread.sleep(minIntervalMs)
-            } catch (ex: InterruptedException) {
+            } catch (_: InterruptedException) {
                 Thread.currentThread().interrupt()
             }
         }

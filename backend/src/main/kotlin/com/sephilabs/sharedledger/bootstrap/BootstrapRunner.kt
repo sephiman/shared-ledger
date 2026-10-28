@@ -49,7 +49,7 @@ class BootstrapRunner(
 
             val admin = User(
                 email = email.lowercase(),
-                passwordHash = encoder.encode(password)!!,
+                passwordHash = checkNotNull(encoder.encode(password)),
                 locale = props.bootstrap.householdLocale,
             )
             users.save(admin)

@@ -743,7 +743,7 @@ class AnalyticsService(
             HeatmapCategoryRow(
                 categoryCode = cat.code,
                 groupCode = cat.group,
-                values = cells[cat.code]!!.map { v -> v?.let { Money.normalize(it) } },
+                values = cells.getValue(cat.code).map { v -> v?.let { Money.normalize(it) } },
             )
         }
 

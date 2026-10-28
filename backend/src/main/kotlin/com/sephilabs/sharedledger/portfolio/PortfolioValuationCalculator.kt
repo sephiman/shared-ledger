@@ -250,13 +250,13 @@ object PortfolioValuationCalculator {
             )
         }
         val value =
-            if (closed) BigDecimal.ZERO.setScale(Money.SCALE)
-            else Money.normalize(state.netQuantity.multiply(price!!.price, MC).multiply(price.fxToBase, MC))
+            if (closed || price == null) BigDecimal.ZERO.setScale(Money.SCALE)
+            else Money.normalize(state.netQuantity.multiply(price.price, MC).multiply(price.fxToBase, MC))
         val unrealized = value.subtract(state.remainingCostBasisBase)
         val unrealizedPct =
             if (state.remainingCostBasisBase.signum() == 0) null
             else unrealized.divide(state.remainingCostBasisBase, FRACTION_SCALE, RoundingMode.HALF_EVEN)
-        val stale = !closed && price!!.priceDate.isBefore(asOfDate.minusDays(staleThresholdDays))
+        val stale = !closed && price != null && price.priceDate.isBefore(asOfDate.minusDays(staleThresholdDays))
         return HoldingValuationResult(
             netQuantity = state.netQuantity,
             remainingCostBasisBase = state.remainingCostBasisBase,
@@ -266,7 +266,7 @@ object PortfolioValuationCalculator {
             unrealizedPnlAbs = unrealized,
             unrealizedPnlPct = unrealizedPct,
             totalReturnBase = state.realizedPnlBase.add(unrealized),
-            priceAsOf = if (closed) price?.priceDate else price!!.priceDate,
+            priceAsOf = price?.priceDate,
             stale = stale,
         )
     }
