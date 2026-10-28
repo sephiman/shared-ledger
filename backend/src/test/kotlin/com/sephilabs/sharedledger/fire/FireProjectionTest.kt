@@ -186,9 +186,10 @@ class FireProjectionTest @Autowired constructor(
         // 10000(1+r) + 5000(1+r)^0.5 = 16000 is ~8%.
         assertThat(result.actualReturn).isNotNull
         assertThat(result.actualReturnUnavailableReason).isNull()
-        val pct = result.actualReturn!!.annualizedPercent.toDouble()
+        val actualReturn = result.actualReturn!!
+        val pct = actualReturn.annualizedPercent.toDouble()
         assertThat(pct).isBetween(7.0, 9.0)
-        assertThat(result.actualReturn!!.movementCount).isEqualTo(1)
+        assertThat(actualReturn.movementCount).isEqualTo(1)
     }
 
     @Test

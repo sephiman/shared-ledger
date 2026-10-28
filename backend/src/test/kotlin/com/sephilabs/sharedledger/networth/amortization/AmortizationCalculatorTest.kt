@@ -149,7 +149,8 @@ class AmortizationCalculatorTest {
         assertThat(after.instalment).isGreaterThan(BigDecimal("500"))
         assertThat(after.principal).isLessThan(BigDecimal("5000")) // NOT the whole ~287k balance
         // Payoff stays essentially the same (reduce term is the mode that shortens it).
-        assertThat(p.payoffDate!!).isBetween(base.payoffDate!!.minusMonths(1), base.payoffDate!!.plusMonths(1))
+        val basePayoff = checkNotNull(base.payoffDate)
+        assertThat(p.payoffDate).isBetween(basePayoff.minusMonths(1), basePayoff.plusMonths(1))
         // Interest is saved versus not prepaying.
         assertThat(p.totalInterest).isLessThan(base.totalInterest)
     }

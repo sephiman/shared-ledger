@@ -48,7 +48,7 @@ class BinanceClient(
                     // Kline layout: [0]=openTime ms, [4]=close (string).
                     if (kline.size <= CLOSE_INDEX) continue
                     val openTime = (kline[0] as? Number)?.toLong() ?: continue
-                    val close = kline[CLOSE_INDEX]?.toString()?.toBigDecimalOrNull() ?: continue
+                    val close = kline[CLOSE_INDEX].toString().toBigDecimalOrNull() ?: continue
                     prices += DailyPrice(
                         Instant.ofEpochMilli(openTime).atZone(ZoneOffset.UTC).toLocalDate(),
                         close,

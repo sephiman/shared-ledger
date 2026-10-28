@@ -29,7 +29,7 @@ class TransactionTotals(private val em: EntityManager) {
         val query = cb.createTupleQuery()
         val root = query.from(Transaction::class.java)
         val direction = root.get<Direction>("direction")
-        query.multiselect(direction, cb.count(root), cb.sum(root.get<BigDecimal>("amount")))
+        query.select(cb.tuple(direction, cb.count(root), cb.sum(root.get<BigDecimal>("amount"))))
             .where(TransactionSpecs.fromCriteria(criteria).toPredicate(root, query, cb))
             .groupBy(direction)
         val rows = em.createQuery(query).resultList

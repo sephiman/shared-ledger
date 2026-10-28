@@ -6,7 +6,8 @@ import org.springframework.security.authentication.AuthenticationManager
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository
-import org.springframework.session.jdbc.JdbcIndexedSessionRepository
+import org.springframework.session.FindByIndexNameSessionRepository
+import org.springframework.session.Session
 import org.springframework.stereotype.Component
 
 /** The server-side session rows (SPRING_SESSION) of one user. Every session is indexed by its principal
@@ -14,7 +15,7 @@ import org.springframework.stereotype.Component
  *  pointing at an address the user no longer has. */
 @Component
 class UserSessions(
-    private val sessions: JdbcIndexedSessionRepository,
+    private val sessions: FindByIndexNameSessionRepository<out Session>,
     private val authManager: AuthenticationManager,
 ) {
     private val contextRepo = HttpSessionSecurityContextRepository()

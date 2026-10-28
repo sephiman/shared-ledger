@@ -65,7 +65,7 @@ class MovementQueryRepositoryImpl(
         q.firstResult = criteria.page * criteria.size
         q.maxResults = criteria.size
 
-        val countQ = em.createQuery("SELECT COUNT(m) FROM NetWorthMovement m $where", java.lang.Long::class.java)
+        val countQ = em.createQuery("SELECT COUNT(m) FROM NetWorthMovement m $where", Long::class.javaObjectType)
         params.forEach { (k, v) -> countQ.setParameter(k, v) }
 
         return MovementSearchResult(items = q.resultList, total = countQ.singleResult.toLong())

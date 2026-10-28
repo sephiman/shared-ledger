@@ -92,7 +92,7 @@ class PortfolioController(
         @RequestParam(required = false) keys: List<String>?,
     ): BenchmarkSeriesResponseDto = metrics.analyticsTimer("portfolio_benchmarks").record<BenchmarkSeriesResponseDto> {
         benchmarks.series(householdId, from, to, assetClass, holdingId, keys ?: emptyList())
-    }!!
+    }
 
     @GetMapping("/holdings")
     fun list(@PathVariable householdId: UUID): List<HoldingDto> = service.list(householdId)

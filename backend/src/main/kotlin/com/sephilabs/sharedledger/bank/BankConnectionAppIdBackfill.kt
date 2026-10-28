@@ -33,7 +33,7 @@ class BankConnectionAppIdBackfill(
         val appId = props.enableBanking.appId.trim()
         if (appId.isEmpty()) return@ApplicationRunner
 
-        val stamped = TransactionTemplate(txManager).execute { connections.stampMissingAppId(appId) } ?: 0
+        val stamped = TransactionTemplate(txManager).execute { connections.stampMissingAppId(appId) }
         if (stamped > 0) {
             log.info("Stamped {} unattributed bank connection(s) with legacy application id", stamped)
         }
