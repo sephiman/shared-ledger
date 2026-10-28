@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
-/** Any member, like writing a rule. 404 without an AI provider, 409 `AI_SUGGESTIONS_DISABLED` with the setting off. */
+/** Any member, like writing a rule. 404 without an AI provider, 409 `AI_FEATURES_DISABLED` with the setting off. */
 @RestController
 @RequestMapping("/api/households/{householdId}/banks/rules/generalisations")
 class RuleGeneralisationController(

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { displaySign, isPositiveDisplay, signedTxAmount } from "./txDisplay";
+import Decimal from "decimal.js";
+import { formatSignedMoney, formatTxAmount, isPositiveDisplay, signedTxAmount } from "./txDisplay";
 
 const income = { direction: "income" as const, amount: "100.00" };
 const expense = { direction: "expense" as const, amount: "40.00" };
@@ -24,10 +25,18 @@ describe("isPositiveDisplay", () => {
   });
 });
 
-describe("displaySign", () => {
-  it("only ever adds a plus — the minus belongs to the number", () => {
-    expect(displaySign(income)).toBe("+");
-    expect(displaySign(refund)).toBe("+");
-    expect(displaySign(expense)).toBe("");
+describe("formatSignedMoney", () => {
+  it("adds a plus to money in; the minus belongs to the number", () => {
+    expect(formatSignedMoney(new Decimal("100"), "EUR", "en")).toBe("+€100.00");
+    expect(formatSignedMoney(new Decimal("-40"), "EUR", "en")).toBe("-€40.00");
+    expect(formatSignedMoney(new Decimal("0"), "EUR", "en")).toBe("€0.00");
+  });
+});
+
+describe("formatTxAmount", () => {
+  it("is the row's signed amount, refunds positive", () => {
+    expect(formatTxAmount(income, "EUR", "en")).toBe("+€100.00");
+    expect(formatTxAmount(expense, "EUR", "en")).toBe("-€40.00");
+    expect(formatTxAmount(refund, "EUR", "en")).toBe("+€30.00");
   });
 });

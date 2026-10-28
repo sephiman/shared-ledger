@@ -18,9 +18,16 @@ import { categoryIcon } from "@/lib/categoryGroup";
 import { categoryLabel, categoryLabelByCode } from "@/lib/categoryLabel";
 import { QuickAddForm } from "./QuickAddForm";
 import { RegisterRefundDialog } from "./RegisterRefundDialog";
-import { displaySign, isPositiveDisplay, signedTxAmount } from "./txDisplay";
-import { hasActiveTransactionFilters } from "./txFilters";
+import { TransactionTotalsLine } from "./TransactionTotalsLine";
+import { formatTxAmount, isPositiveDisplay } from "./txDisplay";
+import {
+  hasActiveTransactionFilters,
+  transactionFiltersFromSearch,
+  type TransactionListFilters,
+  withTransactionFilters,
+} from "./txFilters";
 import { PendingInbox } from "@/features/banks/PendingInbox";
+import { AskBox } from "@/features/ask/AskBox";
 
 type PanelMode = { kind: "closed" } | { kind: "create" } | { kind: "edit"; tx: Transaction };
 
@@ -71,48 +78,16 @@ function buildExportQuery(filters: TransactionFilters): string {
   return s ? `?${s}` : "";
 }
 
-function initialFiltersFromUrl(searchParams: URLSearchParams): TransactionFilters {
-  const dir = searchParams.get("direction");
-  return {
-    size: 50,
-    page: 0,
-    from: searchParams.get("from") ?? undefined,
-    to: searchParams.get("to") ?? undefined,
-    direction: dir === "income" || dir === "expense" ? dir : undefined,
-    categoryCode: searchParams.get("categoryCode") ?? undefined,
-    categoryGroup: searchParams.get("categoryGroup") ?? undefined,
-    isRefund: searchParams.get("isRefund") === "true" ? true : undefined,
-  };
-}
-
 export function TransactionsPage() {
   const { t, i18n } = useTranslation();
   const household = useActiveHousehold();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [filters, setFilters] = useState<TransactionFilters>(() => initialFiltersFromUrl(searchParams));
-
-  // The filter params can change while this page stays mounted (e.g. the "view match" link inside
-  // the Pending tab navigates within /transactions, so the useState seed above never re-runs).
-  // Re-apply them on change. Keyed on the individual values so a tab-only change doesn't clobber
-  // filters the user edited by hand (manual edits don't touch the URL).
-  const urlFrom = searchParams.get("from") ?? undefined;
-  const urlTo = searchParams.get("to") ?? undefined;
-  const urlDirection = searchParams.get("direction") ?? undefined;
-  const urlCategoryCode = searchParams.get("categoryCode") ?? undefined;
-  const urlCategoryGroup = searchParams.get("categoryGroup") ?? undefined;
-  const urlIsRefund = searchParams.get("isRefund") ?? undefined;
-  useEffect(() => {
-    setFilters((f) => ({
-      ...f,
-      page: 0,
-      from: urlFrom,
-      to: urlTo,
-      direction: urlDirection === "income" || urlDirection === "expense" ? urlDirection : undefined,
-      categoryCode: urlCategoryCode,
-      categoryGroup: urlCategoryGroup,
-      isRefund: urlIsRefund === "true" ? true : undefined,
-    }));
-  }, [urlFrom, urlTo, urlDirection, urlCategoryCode, urlCategoryGroup, urlIsRefund]);
+  // The URL holds the list filters — hand edits, deep links (e.g. from analytics) and questions alike — so
+  // a filtered list can be reloaded, shared or reached back to.
+  const listFilters = transactionFiltersFromSearch(searchParams);
+  const filters: TransactionFilters = { size: 50, page: 0, ...listFilters };
+  const setListFilters = (next: TransactionListFilters) =>
+    setSearchParams(withTransactionFilters(searchParams, next), { replace: true });
   const [panel, setPanel] = useState<PanelMode>({ kind: "closed" });
   // The purchase a manually-recorded refund is being registered against.
   const [refundFor, setRefundFor] = useState<Transaction | null>(null);
@@ -144,15 +119,7 @@ export function TransactionsPage() {
     }
   }, [panel]);
 
-  // Reset every list filter to its default. Filters set via the controls live only in state, while
-  // deep-links (e.g. from analytics) live in the URL and get re-applied by the sync effect above — so
-  // clear both to be sure nothing lingers.
-  const clearFilters = () => {
-    setFilters((f) => ({ size: f.size, page: 0 }));
-    const next = new URLSearchParams(searchParams);
-    ["from", "to", "direction", "categoryCode", "categoryGroup", "isRefund"].forEach((k) => next.delete(k));
-    setSearchParams(next, { replace: true });
-  };
+  const clearFilters = () => setListFilters({});
 
   const closePanel = () => setPanel({ kind: "closed" });
   const toggleCreate = () =>
@@ -183,6 +150,8 @@ export function TransactionsPage() {
           </div>
         )}
       </div>
+
+      <AskBox view="transactions" />
 
       {showPending && (
         <TabBar
@@ -227,21 +196,20 @@ export function TransactionsPage() {
           <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
             <div>
               <Label>{t("tx.filter_from")}</Label>
-              <Input type="date" value={filters.from ?? ""} onChange={(e) => setFilters({ ...filters, from: e.target.value || undefined, page: 0 })} />
+              <Input type="date" value={filters.from ?? ""} onChange={(e) => setListFilters({ ...listFilters, from: e.target.value || undefined })} />
             </div>
             <div>
               <Label>{t("tx.filter_to")}</Label>
-              <Input type="date" value={filters.to ?? ""} onChange={(e) => setFilters({ ...filters, to: e.target.value || undefined, page: 0 })} />
+              <Input type="date" value={filters.to ?? ""} onChange={(e) => setListFilters({ ...listFilters, to: e.target.value || undefined })} />
             </div>
             <div>
               <Label>{t("common.direction")}</Label>
               <Select
                 value={filters.direction ?? ""}
                 onChange={(e) =>
-                  setFilters({
-                    ...filters,
+                  setListFilters({
+                    ...listFilters,
                     direction: (e.target.value || undefined) as "income" | "expense" | undefined,
-                    page: 0,
                   })
                 }
               >
@@ -252,7 +220,7 @@ export function TransactionsPage() {
             </div>
             <div>
               <Label>{t("common.category")}</Label>
-              <Select value={filters.categoryCode ?? ""} onChange={(e) => setFilters({ ...filters, categoryCode: e.target.value || undefined, page: 0 })}>
+              <Select value={filters.categoryCode ?? ""} onChange={(e) => setListFilters({ ...listFilters, categoryCode: e.target.value || undefined })}>
                 <option value="">{t("common.all")}</option>
                 {categories
                   .slice()
@@ -268,7 +236,7 @@ export function TransactionsPage() {
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Chip
               active={filters.isRefund === true}
-              onClick={() => setFilters({ ...filters, isRefund: filters.isRefund ? undefined : true, page: 0 })}
+              onClick={() => setListFilters({ ...listFilters, isRefund: listFilters.isRefund ? undefined : true })}
             >
               {t("tx.refunds_only")}
             </Chip>
@@ -284,6 +252,7 @@ export function TransactionsPage() {
             <p className="text-gray-500 dark:text-gray-400">{t("common.empty")}</p>
           ) : (
             <>
+              <TransactionTotalsLine householdId={household.householdId} filters={listFilters} currency={household.currency} />
               <ul className="space-y-2 md:hidden">
                 {page.items.map((tx) => (
                   <li key={tx.id} className="rounded-md border border-border p-3">
@@ -303,8 +272,7 @@ export function TransactionsPage() {
                       </div>
                       <div className="flex flex-col items-end gap-1">
                         <span className={`font-medium ${isPositiveDisplay(tx) ? "text-green-600 dark:text-green-400" : "text-gray-900 dark:text-gray-100"}`}>
-                          {displaySign(tx)}
-                          {formatMoney(signedTxAmount(tx).toFixed(2), household.currency, i18n.language)}
+                          {formatTxAmount(tx, household.currency, i18n.language)}
                         </span>
                         <div className="flex gap-1">
                           {canRefund(tx) && (
@@ -367,8 +335,7 @@ export function TransactionsPage() {
                         <RefundNote tx={tx} currency={household.currency} locale={i18n.language} />
                       </td>
                       <td className={`text-right font-medium ${isPositiveDisplay(tx) ? "text-green-600 dark:text-green-400" : "text-gray-900 dark:text-gray-100"}`}>
-                        {displaySign(tx)}
-                        {formatMoney(signedTxAmount(tx).toFixed(2), household.currency, i18n.language)}
+                        {formatTxAmount(tx, household.currency, i18n.language)}
                       </td>
                       <td className="text-right">
                         <div className="inline-flex gap-1">

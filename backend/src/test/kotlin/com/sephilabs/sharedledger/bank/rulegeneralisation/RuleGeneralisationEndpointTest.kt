@@ -85,13 +85,13 @@ class RuleGeneralisationEndpointTest @Autowired constructor(
         val body = request("Vomar", ids(household, "Vomar Filmwijk", "Vomar Almere Stad"))
 
         mockMvc.perform(get(path(household)).cookie(session))
-            .andExpect(status().isConflict).andExpect(jsonPath("$.code").value("AI_SUGGESTIONS_DISABLED"))
+            .andExpect(status().isConflict).andExpect(jsonPath("$.code").value("AI_FEATURES_DISABLED"))
         mockMvc.perform(post(path(household)).with(csrf()).cookie(session))
-            .andExpect(status().isConflict).andExpect(jsonPath("$.code").value("AI_SUGGESTIONS_DISABLED"))
+            .andExpect(status().isConflict).andExpect(jsonPath("$.code").value("AI_FEATURES_DISABLED"))
         postJson(session, "${path(household)}/validate", body)
-            .andExpect(status().isConflict).andExpect(jsonPath("$.code").value("AI_SUGGESTIONS_DISABLED"))
+            .andExpect(status().isConflict).andExpect(jsonPath("$.code").value("AI_FEATURES_DISABLED"))
         postJson(session, "${path(household)}/accept", body)
-            .andExpect(status().isConflict).andExpect(jsonPath("$.code").value("AI_SUGGESTIONS_DISABLED"))
+            .andExpect(status().isConflict).andExpect(jsonPath("$.code").value("AI_FEATURES_DISABLED"))
         assertThat(model.prompts).isEmpty()
         assertThat(rules.findAllByHouseholdIdOrderByPriorityAsc(household)).hasSize(REAL_RULES.size)
     }

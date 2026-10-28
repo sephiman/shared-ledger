@@ -1,4 +1,5 @@
 import {useEffect, useMemo, useState} from "react";
+import {useSearchParams} from "react-router-dom";
 import {useTranslation} from "react-i18next";
 import {useActiveHousehold} from "@/auth/AuthContext";
 import {type ExplorerResponse, useExplorer, useHeatmap} from "@/api/analytics";
@@ -13,7 +14,7 @@ import {
     Select
 } from "@/components/ui/primitives";
 import {RangeSelector} from "@/components/ui/RangeSelector";
-import {isRangeComplete, monthRangeParams} from "@/lib/range";
+import {isRangeComplete, monthRangeParams, type RangeValue} from "@/lib/range";
 import {useRangeState} from "@/lib/useRangeState";
 import {Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis,} from "recharts";
 import {formatCompactMoney, formatMoney, formatNumber} from "@/lib/money";
@@ -21,65 +22,68 @@ import {monthName} from "@/lib/dates";
 import {categoryIcon, groupIcon} from "@/lib/categoryGroup";
 import {categoryLabel} from "@/lib/categoryLabel";
 import {ChartTooltip} from "@/components/charts/ChartTooltip";
+import {AskBox} from "@/features/ask/AskBox";
+import {decodeScope, encodeScope, type ExplorerUrlState, explorerSearch, explorerStateFromSearch, type ScopeValue} from "./explorerUrl";
 
 const CURRENT_COLOR = "#0ea5e9";
 const PRIOR_COLOR = "#94a3b8";
 
 const TOP_DESC_DEFAULT_LIMIT = 10;
 
-interface ScopeValue {
-  type: "group" | "category";
-  code: string;
-}
-
-function encodeScope(s: ScopeValue): string {
-  return `${s.type}:${s.code}`;
-}
-
-function decodeScope(v: string): ScopeValue | null {
-  const i = v.indexOf(":");
-  if (i < 0) return null;
-  const type = v.slice(0, i);
-  const code = v.slice(i + 1);
-  if (type !== "group" && type !== "category") return null;
-  return { type, code };
-}
-
 export function ExplorerTab() {
   const { t, i18n } = useTranslation();
   const household = useActiveHousehold();
   const { data: categories = [] } = useCategories(household.householdId);
-  const [scope, setScope] = useState<ScopeValue | null>(null);
-  const [range, setRange] = useRangeState("analytics.explorer", "1y");
-  const [yoyOverlay, setYoyOverlay] = useState<boolean>(true);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlState = useMemo(() => explorerStateFromSearch(searchParams), [searchParams]);
+  const [storedRange, storeRange] = useRangeState("analytics.explorer", "1y");
+  const [storedStackedRange, storeStackedRange] = useRangeState("analytics.explorer.stacked", "1y");
+  const range = urlState.range ?? storedRange;
+  const stackedRange = urlState.stackedRange ?? storedStackedRange;
+  const wantsOverlay = urlState.prior ?? true;
+  // Set once the server says the range has no year behind it; the overlay is then neither offered nor asked for.
+  const [noPriorYear, setNoPriorYear] = useState(false);
+  const yoyOverlay = wantsOverlay && !noPriorYear;
   const [showAllDescriptions, setShowAllDescriptions] = useState<boolean>(false);
+
+  // Each panel writes its own complete state and leaves the other's params as they were. Replace, so a
+  // click is not a history entry.
+  const writeUrl = (next: ExplorerUrlState) => setSearchParams(explorerSearch(next), { replace: true });
+  const updateMain = (patch: Pick<ExplorerUrlState, "scope" | "range" | "prior">) =>
+    writeUrl({ ...urlState, range, prior: wantsOverlay, ...patch });
+  const updateStacked = (patch: Pick<ExplorerUrlState, "stacked" | "stackedRange">) =>
+    writeUrl({ ...urlState, stacked: urlState.stacked ?? [], stackedRange, ...patch });
+  const setRange = (next: RangeValue) => {
+    storeRange(next);
+    updateMain({ range: next });
+  };
+  const setStackedRange = (next: RangeValue) => {
+    storeStackedRange(next);
+    updateStacked({ stackedRange: next });
+  };
 
   const rangeReady = isRangeComplete(range);
   const { data, isLoading } = useExplorer(
     household.householdId,
     {
-      scopeType: scope?.type,
-      scopeCode: scope?.code,
+      scopeType: urlState.scope?.type,
+      scopeCode: urlState.scope?.code,
       ...monthRangeParams(range),
       yoyOverlay,
     },
     rangeReady,
   );
 
-  // Adopt the server-resolved scope on first load so the dropdown reflects the default.
-  useEffect(() => {
-    if (scope == null && data) {
-      setScope({ type: data.scopeType, code: data.scopeCode });
-    }
-  }, [data, scope]);
+  // Without a scope in the URL the server picks the default; the dropdown shows what it picked.
+  const scope: ScopeValue | null = urlState.scope ?? (data ? { type: data.scopeType, code: data.scopeCode } : null);
 
   // Hide the toggle entirely when there's not enough prior data to overlay. Only once the server has
-  // answered — before that `data` is undefined, and acting on it would switch the overlay off on every
-  // first load rather than only when the range genuinely has no year behind it.
+  // answered — before that `data` is undefined, and acting on it would drop the overlay on every first
+  // load rather than only when the range genuinely has no year behind it. The URL keeps what was asked.
   const yoyAvailable = (data?.priorYearsAvailable ?? 0) >= 1;
   useEffect(() => {
-    if (data && !yoyAvailable && yoyOverlay) setYoyOverlay(false);
-  }, [data, yoyAvailable, yoyOverlay]);
+    if (data) setNoPriorYear(!yoyAvailable);
+  }, [data, yoyAvailable]);
 
   const scopeOptions = useMemo(() => buildScopeOptions(categories, t), [categories, t]);
 
@@ -89,6 +93,9 @@ export function ExplorerTab() {
         <CardHeader>
           <p className="font-medium">{t("analytics.explorer")}</p>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("analytics.explorer_description")}</p>
+          <div className="mt-3">
+            <AskBox view="explorer" />
+          </div>
         </CardHeader>
         <CardBody className="space-y-4">
           <div className="flex flex-wrap items-end gap-3">
@@ -98,7 +105,7 @@ export function ExplorerTab() {
                 value={scope ? encodeScope(scope) : ""}
                 onChange={(e) => {
                   const next = decodeScope(e.target.value);
-                  if (next) setScope(next);
+                  if (next) updateMain({ scope: next });
                   setShowAllDescriptions(false);
                 }}
               >
@@ -124,7 +131,7 @@ export function ExplorerTab() {
                   <input
                     type="checkbox"
                     checked={yoyOverlay}
-                    onChange={(e) => setYoyOverlay(e.target.checked)}
+                    onChange={(e) => updateMain({ prior: e.target.checked })}
                     className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
                   />
                   <span>{t("analytics.explorer_yoy_help")}</span>
@@ -153,6 +160,12 @@ export function ExplorerTab() {
         categories={categories}
         currency={household.currency}
         locale={i18n.language}
+        selection={(urlState.stacked ?? []).map(encodeScope)}
+        onSelectionChange={(next) =>
+          updateStacked({ stacked: next.map(decodeScope).filter((v): v is ScopeValue => v !== null) })
+        }
+        range={stackedRange}
+        onRangeChange={setStackedRange}
       />
     </div>
   );
@@ -379,15 +392,21 @@ function StackedExplorerPanel({
   categories,
   currency,
   locale,
+  selection,
+  onSelectionChange,
+  range,
+  onRangeChange,
 }: {
   householdId: string;
   categories: Category[];
   currency: string;
   locale: string;
+  selection: string[];
+  onSelectionChange: (next: string[]) => void;
+  range: RangeValue;
+  onRangeChange: (next: RangeValue) => void;
 }) {
   const { t } = useTranslation();
-  const [selection, setSelection] = useState<string[]>([]);
-  const [range, setRange] = useRangeState("analytics.explorer.stacked", "1y");
   const [showTotal, setShowTotal] = useState(true);
 
   const rangeReady = isRangeComplete(range);
@@ -423,26 +442,28 @@ function StackedExplorerPanel({
 
   const toggleGroup = (groupCode: string) => {
     const groupEnc = encodeScope({ type: "group", code: groupCode });
-    setSelection((prev) => {
-      if (prev.includes(groupEnc)) return prev.filter((v) => v !== groupEnc);
-      // Selecting the group as one band clears any of its individual category bands.
-      const childEncs = new Set(
-        (tree.find((g) => g.code === groupCode)?.categories ?? []).map((c) =>
-          encodeScope({ type: "category", code: c.code }),
-        ),
-      );
-      return [...prev.filter((v) => !childEncs.has(v)), groupEnc];
-    });
+    if (selection.includes(groupEnc)) {
+      onSelectionChange(selection.filter((v) => v !== groupEnc));
+      return;
+    }
+    // Selecting the group as one band clears any of its individual category bands.
+    const childEncs = new Set(
+      (tree.find((g) => g.code === groupCode)?.categories ?? []).map((c) =>
+        encodeScope({ type: "category", code: c.code }),
+      ),
+    );
+    onSelectionChange([...selection.filter((v) => !childEncs.has(v)), groupEnc]);
   };
 
   const toggleCategory = (groupCode: string, catCode: string) => {
     const catEnc = encodeScope({ type: "category", code: catCode });
     const groupEnc = encodeScope({ type: "group", code: groupCode });
-    setSelection((prev) => {
-      if (prev.includes(catEnc)) return prev.filter((v) => v !== catEnc);
-      // Picking a category breaks the group band down into individual bands.
-      return [...prev.filter((v) => v !== groupEnc), catEnc];
-    });
+    if (selection.includes(catEnc)) {
+      onSelectionChange(selection.filter((v) => v !== catEnc));
+      return;
+    }
+    // Picking a category breaks the group band down into individual bands.
+    onSelectionChange([...selection.filter((v) => v !== groupEnc), catEnc]);
   };
 
   const { chartData, bands, total, monthsCount } = useMemo(() => {
@@ -520,7 +541,7 @@ function StackedExplorerPanel({
               <span>{t("analytics.stacked_selected_count", { count: selection.length })}</span>
               <button
                 type="button"
-                onClick={() => setSelection([])}
+                onClick={() => onSelectionChange([])}
                 disabled={selection.length === 0}
                 className="font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40 disabled:no-underline"
               >
@@ -532,7 +553,7 @@ function StackedExplorerPanel({
           {/* Chart, range and summary */}
           <div className="space-y-4">
             <div className="flex flex-wrap items-end gap-3">
-              <RangeSelector value={range} onChange={setRange} />
+              <RangeSelector value={range} onChange={onRangeChange} />
               <div>
                 <Label>{t("analytics.stacked_total_line")}</Label>
                 <label className="mt-2 inline-flex items-center gap-2 text-sm">

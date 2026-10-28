@@ -43,7 +43,7 @@ class AiSuggestionService(
      *  and hands them to the runner. Not transactional: the run row must be committed before the worker reads it. */
     fun start(householdId: UUID, by: User): AiSuggestionRunDto {
         val provider = availability.requireConfigured()
-        if (!settings.isEnabled(householdId)) throw rejected(householdId, by, "AI_SUGGESTIONS_DISABLED")
+        if (!settings.isEnabled(householdId)) throw rejected(householdId, by, AI_FEATURES_DISABLED)
         val candidates = pending.findAiCandidates(householdId).map { it.id }
         if (candidates.isEmpty()) throw rejected(householdId, by, "AI_SUGGESTION_NO_CANDIDATES")
         val run = try {

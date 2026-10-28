@@ -7,6 +7,9 @@ import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 import java.util.UUID
 
+/** One household switch governs every AI feature; each answers this code when it is off. */
+const val AI_FEATURES_DISABLED = "AI_FEATURES_DISABLED"
+
 @Service
 class AiSuggestionSettingsService(
     private val availability: AiAvailability,

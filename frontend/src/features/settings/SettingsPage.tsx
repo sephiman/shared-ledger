@@ -19,7 +19,7 @@ import { formatDate } from "@/lib/dates";
 import { useBankConfig } from "@/api/banks";
 import { BanksCard } from "@/features/banks/BanksCard";
 import { BankCredentialsCard } from "@/features/banks/BankCredentialsCard";
-import { AiSuggestionsCard } from "@/features/banks/AiSuggestionsCard";
+import { AiFeaturesCard } from "./AiFeaturesCard";
 import { useInstanceFeatures } from "@/api/features";
 
 export function SettingsPage() {
@@ -381,7 +381,7 @@ export function SettingsPage() {
       )}
 
       {/* Without a provider on the instance the feature does not exist: no card, no request. */}
-      {isOwner && features?.aiCategorySuggestions && <AiSuggestionsCard householdId={household.householdId} />}
+      {isOwner && features?.ai && <AiFeaturesCard householdId={household.householdId} />}
 
       <Card>
         <CardHeader>

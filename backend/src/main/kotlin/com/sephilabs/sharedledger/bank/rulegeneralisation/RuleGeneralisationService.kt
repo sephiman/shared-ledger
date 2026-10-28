@@ -3,6 +3,7 @@ package com.sephilabs.sharedledger.bank.rulegeneralisation
 import com.sephilabs.sharedledger.bank.CategorizationRuleRepository
 import com.sephilabs.sharedledger.bank.CategorizationService
 import com.sephilabs.sharedledger.bank.RuleField
+import com.sephilabs.sharedledger.bank.aisuggestion.AI_FEATURES_DISABLED
 import com.sephilabs.sharedledger.bank.aisuggestion.AiAvailability
 import com.sephilabs.sharedledger.bank.aisuggestion.AiSuggestionRunStatus
 import com.sephilabs.sharedledger.bank.aisuggestion.AiSuggestionSettingsService
@@ -142,7 +143,7 @@ class RuleGeneralisationService(
 
     private fun requireOn(householdId: UUID, by: User? = null) = availability.requireConfigured().also {
         if (!settings.isEnabled(householdId)) {
-            throw by?.let { rejected(householdId, it, "AI_SUGGESTIONS_DISABLED") } ?: AppException.conflict("AI_SUGGESTIONS_DISABLED")
+            throw by?.let { rejected(householdId, it, AI_FEATURES_DISABLED) } ?: AppException.conflict(AI_FEATURES_DISABLED)
         }
     }
 

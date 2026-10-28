@@ -26,6 +26,7 @@ class TransactionController(
     private val service: TransactionService,
     private val currentUser: CurrentUser,
     private val households: HouseholdRepository,
+    private val totals: TransactionTotals,
 ) {
 
     @GetMapping
@@ -58,6 +59,33 @@ class TransactionController(
             )
         )
     }
+
+    /** The totals line above the list: the same filters as [list], over every page. */
+    @GetMapping("/totals")
+    fun totals(
+        @PathVariable householdId: UUID,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) from: LocalDate?,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) to: LocalDate?,
+        @RequestParam(required = false) direction: Direction?,
+        @RequestParam(required = false) categoryCode: String?,
+        @RequestParam(required = false) categoryGroup: String?,
+        @RequestParam(required = false) isRefund: Boolean?,
+        @RequestParam(required = false) q: String?,
+    ): TransactionTotalsDto = totals.of(
+        TransactionSearchCriteria(
+            householdId = householdId,
+            from = from,
+            to = to,
+            direction = direction,
+            categoryCode = categoryCode,
+            categoryGroup = categoryGroup,
+            page = 0,
+            size = Int.MAX_VALUE,
+            sort = "date_desc",
+            isRefund = isRefund,
+            q = q,
+        )
+    )
 
     @PostMapping
     fun create(

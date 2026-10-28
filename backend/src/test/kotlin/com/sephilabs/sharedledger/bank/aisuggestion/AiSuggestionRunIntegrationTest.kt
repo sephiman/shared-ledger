@@ -284,7 +284,7 @@ class AiSuggestionRunIntegrationTest @Autowired constructor(
         val off = fixtures.household(aiEnabled = false)
         fixtures.item(off, "Shop")
         assertThatThrownBy { service.start(off.household.id, off.user) }
-            .isInstanceOfSatisfying(AppException::class.java) { assertThat(it.code).isEqualTo("AI_SUGGESTIONS_DISABLED") }
+            .isInstanceOfSatisfying(AppException::class.java) { assertThat(it.code).isEqualTo("AI_FEATURES_DISABLED") }
         assertThat(model.prompts).isEmpty()
     }
 

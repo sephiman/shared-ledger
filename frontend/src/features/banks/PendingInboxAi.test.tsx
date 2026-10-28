@@ -46,7 +46,7 @@ const posted: string[] = [];
 const ok = <T,>(data: T) => Promise.resolve({ data } as AxiosResponse<T>);
 
 function route(url: string): unknown {
-  if (url === "/features") return { aiCategorySuggestions: server.features };
+  if (url === "/features") return { ai: server.features };
   if (url === "/households/h1/ai-suggestions/settings") return server.settings;
   if (url === "/households/h1/banks/pending/ai-suggestions") {
     return server.statuses.length > 1 ? server.statuses.shift() : server.statuses[0];

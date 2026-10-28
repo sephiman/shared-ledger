@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { AxiosResponse } from "axios";
 import { apiClient } from "@/api/client";
 import i18n from "@/i18n";
-import { AiSuggestionsCard } from "./AiSuggestionsCard";
+import { AiFeaturesCard } from "./AiFeaturesCard";
 
 const ok = <T,>(data: T) => Promise.resolve({ data } as AxiosResponse<T>);
 
@@ -13,7 +13,7 @@ function renderCard() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <AiSuggestionsCard householdId="h1" />
+      <AiFeaturesCard householdId="h1" />
     </QueryClientProvider>,
   );
 }
@@ -27,39 +27,44 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("AI suggestions setting", () => {
-  it("is off by default and says what is sent, to which model and host, and what is not", async () => {
+describe("AI features setting", () => {
+  it("is one switch, off by default, naming the model and host and what each feature sends", async () => {
     vi.spyOn(apiClient, "get").mockImplementation((url: string) =>
       url === "/features"
-        ? ok({ aiCategorySuggestions: true })
+        ? ok({ ai: true })
         : ok({ enabled: false, model: "deepseek-v4.1-flash", providerHost: "opencode.ai" }),
     );
     renderCard();
 
-    expect(await screen.findByRole("checkbox", { name: "Offer \"Suggest with AI\" in the pending inbox" })).not.toBeChecked();
-    const help = screen.getByText(/are sent to deepseek-v4\.1-flash at opencode\.ai/);
-    expect(help.textContent).toContain("the counterparty, bank description, direction and booking month");
-    expect(help.textContent).toContain("Amounts, the household's IBANs (every IBAN is removed from the text), account and household identifiers are not sent");
+    expect(await screen.findByRole("checkbox", { name: "Turn on AI features for this household" })).not.toBeChecked();
+    expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+    expect(screen.getByText(/Data goes to deepseek-v4\.1-flash at opencode\.ai/)).toBeInTheDocument();
+    const lines = screen.getAllByRole("listitem").map((li) => li.textContent);
+    expect(lines).toHaveLength(3);
+    expect(lines[0]).toContain("the counterparty, bank description, direction and booking month");
+    expect(lines[0]).toContain("Amounts, the household's IBANs (every IBAN is removed from the text), account and household identifiers are not sent");
+    expect(lines[1]).toContain("Amount rules are never sent");
+    expect(lines[2]).toContain("only your question and the list of categories");
   });
 
   it("turns the setting on through the API", async () => {
     const user = userEvent.setup();
     vi.spyOn(apiClient, "get").mockImplementation((url: string) =>
       url === "/features"
-        ? ok({ aiCategorySuggestions: true })
+        ? ok({ ai: true })
         : ok({ enabled: false, model: "m", providerHost: "h" }),
     );
     const put = vi.spyOn(apiClient, "put").mockImplementation(() => ok({ enabled: true, model: "m", providerHost: "h" }));
     renderCard();
 
-    await user.click(await screen.findByRole("checkbox", { name: "Offer \"Suggest with AI\" in the pending inbox" }));
+    await user.click(await screen.findByRole("checkbox", { name: "Turn on AI features for this household" }));
 
     expect(put).toHaveBeenCalledWith("/households/h1/ai-suggestions/settings", { enabled: true });
     await waitFor(() => expect(screen.getByRole("checkbox")).toBeChecked());
   });
 
   it("asks for nothing when the instance has no provider", async () => {
-    const get = vi.spyOn(apiClient, "get").mockImplementation(() => ok({ aiCategorySuggestions: false }));
+    const get = vi.spyOn(apiClient, "get").mockImplementation(() => ok({ ai: false }));
     const { container } = renderCard();
 
     await waitFor(() => expect(get).toHaveBeenCalledWith("/features"));

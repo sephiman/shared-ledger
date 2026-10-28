@@ -74,6 +74,23 @@ interface TransactionRepository :
         occurrenceDate: LocalDate,
     ): Boolean
 
+    /** Expense categories by how many confirmed, non-refund transactions they had since [from], most first. */
+    @Query("""
+        SELECT t.categoryCode
+        FROM Transaction t
+        WHERE t.householdId = :hid
+          AND t.direction = com.sephilabs.sharedledger.transaction.Direction.expense
+          AND t.isRefund = false
+          AND t.occurrenceDate BETWEEN :from AND :to
+        GROUP BY t.categoryCode
+        ORDER BY COUNT(t) DESC, t.categoryCode ASC
+    """)
+    fun expenseCategoriesByUse(
+        @Param("hid") householdId: UUID,
+        @Param("from") from: LocalDate,
+        @Param("to") to: LocalDate,
+    ): List<String>
+
     @Query("""
         SELECT t.categoryCode, COUNT(t)
         FROM Transaction t

@@ -1,4 +1,5 @@
 import Decimal from "decimal.js";
+import { formatMoney } from "@/lib/money";
 
 /** How a transaction reads in the ledger. Amounts are stored as magnitudes with the direction carrying the
  *  sign — except refunds, which are expenses stored negative. Formatting the raw value would show an
@@ -20,7 +21,13 @@ export function isPositiveDisplay(tx: SignedTx): boolean {
   return signedTxAmount(tx).gte(0);
 }
 
-/** The explicit "+" the list puts on incoming money; the minus comes from the number itself. */
-export function displaySign(tx: SignedTx): "+" | "" {
-  return signedTxAmount(tx).gt(0) ? "+" : "";
+/** The one way the ledger writes a signed amount — rows and the totals line alike: an explicit "+" on money in,
+ *  the minus from the number itself. */
+export function formatSignedMoney(value: Decimal, currency: string, locale: string): string {
+  return `${value.gt(0) ? "+" : ""}${formatMoney(value.toFixed(2), currency, locale)}`;
+}
+
+/** A row's amount as the list shows it. */
+export function formatTxAmount(tx: SignedTx, currency: string, locale: string): string {
+  return formatSignedMoney(signedTxAmount(tx), currency, locale);
 }

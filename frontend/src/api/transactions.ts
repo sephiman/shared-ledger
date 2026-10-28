@@ -66,6 +66,28 @@ export function useTransactions(householdId: string, filters: TransactionFilters
   });
 }
 
+/** The list's totals line, over every page of the filtered set. Amounts are exact decimals as strings, stored the
+ *  way rows are (the direction carries the sign): [expenses] is net of refunds, negative when refunds outweigh
+ *  spending; [net] is income minus expenses. */
+export interface TransactionTotals {
+  count: number;
+  income: string;
+  expenses: string;
+  net: string;
+}
+
+/** Keyed under the list, so whatever refreshes the list refreshes its totals. */
+export function useTransactionTotals(
+  householdId: string,
+  filters: Pick<TransactionFilters, "from" | "to" | "direction" | "categoryCode" | "categoryGroup" | "isRefund">,
+) {
+  return useQuery({
+    queryKey: ["transactions", householdId, "totals", filters],
+    queryFn: async () =>
+      (await apiClient.get<TransactionTotals>(`/households/${householdId}/transactions/totals`, { params: filters })).data,
+  });
+}
+
 /** One transaction by id; used to open the refund picker on an already-linked purchase. */
 export function useTransaction(householdId: string, id: string | null) {
   return useQuery({

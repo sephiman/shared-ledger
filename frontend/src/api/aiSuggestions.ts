@@ -39,7 +39,7 @@ export function useAiSuggestionSettings(householdId: string) {
     queryKey: settingsKey(householdId),
     queryFn: async () =>
       (await apiClient.get<AiSuggestionSettings>(`/households/${householdId}/ai-suggestions/settings`)).data,
-    enabled: features?.aiCategorySuggestions === true,
+    enabled: features?.ai === true,
   });
 }
 

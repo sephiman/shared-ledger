@@ -57,15 +57,15 @@ class AiSuggestionEndpointTest @Autowired constructor(
     }
 
     @Test
-    fun `features say AI suggestions exist only when a provider is configured, and only to signed-in users`() {
+    fun `features say AI exists only when a provider is configured, and only to signed-in users`() {
         val session = sessionOf(register(newEmail("ai-features")))
 
         mockMvc.perform(get("/api/features").cookie(session))
             .andExpect(status().isOk)
-            .andExpect(jsonPath("$.aiCategorySuggestions").value(true))
+            .andExpect(jsonPath("$.ai").value(true))
         availability.forced = false
         mockMvc.perform(get("/api/features").cookie(session))
-            .andExpect(jsonPath("$.aiCategorySuggestions").value(false))
+            .andExpect(jsonPath("$.ai").value(false))
         mockMvc.perform(get("/api/features")).andExpect(status().isUnauthorized)
     }
 
@@ -73,7 +73,7 @@ class AiSuggestionEndpointTest @Autowired constructor(
     fun `the public auth features say nothing about AI`() {
         mockMvc.perform(get("/api/auth/features"))
             .andExpect(status().isOk)
-            .andExpect(jsonPath("$.aiCategorySuggestions").doesNotExist())
+            .andExpect(jsonPath("$.ai").doesNotExist())
     }
 
     @Test
@@ -164,7 +164,7 @@ class AiSuggestionEndpointTest @Autowired constructor(
 
         mockMvc.perform(post(runPath(household)).with(csrf()).cookie(owner))
             .andExpect(status().isConflict)
-            .andExpect(jsonPath("$.code").value("AI_SUGGESTIONS_DISABLED"))
+            .andExpect(jsonPath("$.code").value("AI_FEATURES_DISABLED"))
         assertThat(model.prompts).isEmpty()
     }
 

@@ -7,12 +7,12 @@ import org.springframework.web.bind.annotation.RestController
 
 /** Instance capabilities for signed-in users. Kept apart from the public `/auth/features` so an anonymous
  *  caller learns nothing about which integrations this instance has. */
-data class InstanceFeaturesDto(val aiCategorySuggestions: Boolean)
+data class InstanceFeaturesDto(val ai: Boolean)
 
 @RestController
 @RequestMapping("/api/features")
 class FeaturesController(private val ai: AiAvailability) {
 
     @GetMapping
-    fun features(): InstanceFeaturesDto = InstanceFeaturesDto(aiCategorySuggestions = ai.enabled)
+    fun features(): InstanceFeaturesDto = InstanceFeaturesDto(ai = ai.enabled)
 }
