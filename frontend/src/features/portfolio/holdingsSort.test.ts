@@ -15,6 +15,7 @@ function row(symbol: string, over: { currentValue?: string | null; netQuantity?:
       provider: null,
       providerSymbol: null,
       linked: currentValue != null,
+      providerNotFoundSince: null,
       active: true,
       lots: [],
       netQuantity,

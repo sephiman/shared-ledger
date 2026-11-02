@@ -6,11 +6,14 @@ import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.hamcrest.Matchers.containsString
 import org.junit.jupiter.api.Test
 import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.test.web.client.MockRestServiceServer
 import org.springframework.test.web.client.match.MockRestRequestMatchers.header
 import org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo
+import org.springframework.test.web.client.response.MockRestResponseCreators.withResourceNotFound
 import org.springframework.test.web.client.response.MockRestResponseCreators.withServerError
+import org.springframework.test.web.client.response.MockRestResponseCreators.withStatus
 import org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess
 import org.springframework.web.client.RestClient
 import java.math.BigDecimal
@@ -166,5 +169,36 @@ class YahooFinanceClientTest {
         assertThatThrownBy { client.search("AAPL") }
             .isInstanceOf(ProviderException::class.java)
             .hasMessageContaining("both hosts")
+    }
+
+    @Test
+    fun `a 404 chart answer is a SymbolNotFoundException and query2 is not retried`() {
+        val (client, primary, fallback) = client()
+        primary.expect(requestTo(containsString("/v8/finance/chart/LCWD.MI")))
+            .andRespond(
+                withResourceNotFound()
+                    .body("""{"chart":{"result":null,"error":{"code":"Not Found","description":"No data found, symbol may be delisted"}}}""")
+                    .contentType(MediaType.APPLICATION_JSON),
+            )
+
+        assertThatThrownBy { client.dailyHistory("LCWD.MI", LocalDate.of(2025, 2, 21), LocalDate.of(2025, 2, 22)) }
+            .isInstanceOfSatisfying(SymbolNotFoundException::class.java) { assertThat(it.symbol).isEqualTo("LCWD.MI") }
+
+        primary.verify()
+        fallback.verify()
+    }
+
+    @Test
+    fun `a 403 on query1 still falls back to query2`() {
+        val (client, primary, fallback) = client()
+        primary.expect(requestTo(containsString("/v8/finance/chart/WEBN.DE"))).andRespond(withStatus(HttpStatus.FORBIDDEN))
+        fallback.expect(requestTo(containsString("/v8/finance/chart/WEBN.DE")))
+            .andRespond(withSuccess("""{"chart":{"result":[]}}""", MediaType.APPLICATION_JSON))
+
+        val history = client.dailyHistory("WEBN.DE", LocalDate.of(2026, 5, 1), LocalDate.of(2026, 5, 2))
+
+        assertThat(history.prices).isEmpty()
+        primary.verify()
+        fallback.verify()
     }
 }

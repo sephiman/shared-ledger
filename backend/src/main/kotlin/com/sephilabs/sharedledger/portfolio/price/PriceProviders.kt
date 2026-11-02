@@ -20,7 +20,11 @@ data class DailyPrice(val date: LocalDate, val price: BigDecimal)
  *  carry none, so the chart's meta.currency is the source of truth; null when unreported (EODHD). */
 data class EquityHistory(val currency: String?, val prices: List<DailyPrice>)
 
-class ProviderException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)
+open class ProviderException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)
+
+/** The provider answered that it does not list [symbol] (delisted, renamed or mistyped) — not a transient failure. */
+class SymbolNotFoundException(val symbol: String, message: String, cause: Throwable? = null) :
+    ProviderException(message, cause)
 
 interface CryptoPriceProvider {
     fun search(query: String): List<SymbolCandidate>

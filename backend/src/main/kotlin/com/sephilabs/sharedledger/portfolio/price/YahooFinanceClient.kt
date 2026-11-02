@@ -3,6 +3,7 @@ package com.sephilabs.sharedledger.portfolio.price
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.sephilabs.sharedledger.config.AppProperties
 import org.springframework.http.HttpHeaders
+import org.springframework.web.client.HttpClientErrorException
 import org.springframework.web.client.RestClient
 import java.math.BigDecimal
 import java.time.Instant
@@ -101,16 +102,7 @@ class YahooFinanceClient(
 
     override fun dailyHistory(symbol: String, from: LocalDate, to: LocalDate): EquityHistory =
         call("chart") { rest ->
-            val response = rest.get()
-                .uri { builder ->
-                    builder.path("/v8/finance/chart/{symbol}")
-                        .queryParam("period1", from.atStartOfDay(ZoneOffset.UTC).toEpochSecond())
-                        .queryParam("period2", to.plusDays(1).atStartOfDay(ZoneOffset.UTC).toEpochSecond())
-                        .queryParam("interval", "1d")
-                        .build(symbol)
-                }
-                .retrieve()
-                .body(ChartResponse::class.java)
+            val response = fetchChart(rest, symbol, from, to)
             response?.chart?.error?.let {
                 throw ProviderException("Yahoo chart error for $symbol: ${it.code} ${it.description}")
             }
@@ -129,6 +121,23 @@ class YahooFinanceClient(
                 .sortedBy { it.date }
             // Search results carry no currency; the chart meta is the source of truth.
             EquityHistory(result.meta?.currency?.uppercase(), prices)
+        }
+
+    private fun fetchChart(rest: RestClient, symbol: String, from: LocalDate, to: LocalDate): ChartResponse? =
+        try {
+            rest.get()
+                .uri { builder ->
+                    builder.path("/v8/finance/chart/{symbol}")
+                        .queryParam("period1", from.atStartOfDay(ZoneOffset.UTC).toEpochSecond())
+                        .queryParam("period2", to.plusDays(1).atStartOfDay(ZoneOffset.UTC).toEpochSecond())
+                        .queryParam("interval", "1d")
+                        .build(symbol)
+                }
+                .retrieve()
+                .body(ChartResponse::class.java)
+        } catch (ex: HttpClientErrorException.NotFound) {
+            // Both hosts serve the same listing, so a 404 answers for the symbol and query2 is not retried.
+            throw SymbolNotFoundException(symbol, "Yahoo does not list $symbol (404)", ex)
         }
 
     /** Runs [block] against query1, retrying once against query2 on transport failure. */

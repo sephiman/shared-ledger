@@ -14,6 +14,7 @@ function row(id: string, over: Partial<HoldingSummary> = {}): HoldingSummary {
       provider: null,
       providerSymbol: null,
       linked: true,
+      providerNotFoundSince: null,
       active: true,
       lots: [],
       netQuantity: "1",

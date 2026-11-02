@@ -39,6 +39,8 @@ export interface Holding {
   provider: HoldingProvider | null;
   providerSymbol: string | null;
   linked: boolean;
+  // Day the price provider first answered that it does not list providerSymbol; null while it resolves.
+  providerNotFoundSince: string | null;
   active: boolean;
   lots: Lot[];
   netQuantity: string;

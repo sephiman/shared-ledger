@@ -10,6 +10,7 @@ import com.sephilabs.sharedledger.notification.NotifyActor
 import com.sephilabs.sharedledger.notification.NotificationPublisher
 import com.sephilabs.sharedledger.portfolio.price.FxRateRepository
 import com.sephilabs.sharedledger.portfolio.price.HoldingBackfillRequested
+import com.sephilabs.sharedledger.portfolio.price.HoldingReopened
 import com.sephilabs.sharedledger.portfolio.price.PriceRefreshService
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
@@ -83,6 +84,7 @@ class HoldingService(
             normalizeCurrency(currency)?.let { holding.nativeCurrency = it }
         }
         request.isin?.let { holding.isin = normalizeIsin(it) }
+        holding.providerNotFoundSince = null
         holding.updatedByUserId = by.id
         // Non-fatal: backfill runs async after commit; nightly jobs catch up on any failure.
         events.publishEvent(HoldingBackfillRequested(holding.id))
@@ -98,6 +100,7 @@ class HoldingService(
         val providerBefore = holding.provider
         holding.provider = null
         holding.providerSymbol = null
+        holding.providerNotFoundSince = null
         holding.updatedByUserId = by.id
         log.info("holding_unlinked holding={} provider={}", holding.id, providerBefore)
         return toDto(holding)
@@ -152,6 +155,7 @@ class HoldingService(
         validateLot(request)
         val currency = normalizeCurrency(request.currency) ?: holding.nativeCurrency
         val previousEarliest = lots.findMinTradedOn(holding.id)
+        val previousEntries = ledgerEntries(holding.id)
         val lot = HoldingLot(
             holdingId = holding.id,
             type = request.type,
@@ -165,12 +169,10 @@ class HoldingService(
             createdByUserId = by.id,
             updatedByUserId = by.id,
         )
-        validateLedger(ledgerEntries(holding.id) + lot.toEntry())
+        val newEntries = previousEntries + lot.toEntry()
+        validateLedger(newEntries)
         lots.save(lot)
-        if (previousEarliest == null || request.tradedOn.isBefore(previousEarliest)) {
-            // Head backfill runs async after commit; nightly jobs catch up on any failure.
-            events.publishEvent(HoldingBackfillRequested(holding.id, request.tradedOn))
-        }
+        requestPriceBackfill(holding.id, previousEntries, newEntries, newHead(previousEarliest, request.tradedOn))
         // Imports pass notify=false and log one summary line instead of one per lot.
         if (notify) {
             notifyTrade(holding, lot, NotifyAction.CREATE, by)
@@ -187,6 +189,8 @@ class HoldingService(
             ?: throw AppException.notFound("HOLDING_LOT_NOT_FOUND")
         val currency = normalizeCurrency(request.currency) ?: holding.nativeCurrency
         val previousEarliest = lots.findMinTradedOn(holding.id)
+        // Taken before the lot is mutated: the managed entity is what the ledger query returns.
+        val previousEntries = ledgerEntries(holding.id)
         if (currency != lot.currency || request.tradedOn != lot.tradedOn) {
             lot.fxRateToBase = fxRateToBase(currency, request.tradedOn)
         }
@@ -198,11 +202,9 @@ class HoldingService(
         lot.fee = request.fee
         lot.note = request.note?.trim()?.takeIf { it.isNotEmpty() }
         lot.updatedByUserId = by.id
-        validateLedger(ledgerEntries(holding.id, exclude = lot.id) + lot.toEntry())
-        if (previousEarliest == null || request.tradedOn.isBefore(previousEarliest)) {
-            // Editing a lot to an earlier date needs the head backfilled too.
-            events.publishEvent(HoldingBackfillRequested(holding.id, request.tradedOn))
-        }
+        val newEntries = ledgerEntries(holding.id, exclude = lot.id) + lot.toEntry()
+        validateLedger(newEntries)
+        requestPriceBackfill(holding.id, previousEntries, newEntries, newHead(previousEarliest, request.tradedOn))
         notifyTrade(holding, lot, NotifyAction.UPDATE, by)
         log.info("holding_lot_updated holding={} lot={} type={}", holding.id, lot.id, lot.type)
         return toDto(lot)
@@ -213,10 +215,13 @@ class HoldingService(
         val holding = loadOwn(householdId, holdingId)
         val lot = lots.findByIdAndHoldingId(lotId, holding.id)
             ?: throw AppException.notFound("HOLDING_LOT_NOT_FOUND")
+        val previousEntries = ledgerEntries(holding.id)
+        val remainingEntries = previousEntries.filter { it.id != lot.id }
         // Deleting a BUY must not leave later SELLs uncovered.
-        validateLedger(ledgerEntries(holding.id, exclude = lot.id))
+        validateLedger(remainingEntries)
         lot.deletedAt = Instant.now()
         lot.updatedByUserId = by.id
+        requestPriceBackfill(holding.id, previousEntries, remainingEntries, newHead = null)
         notifyTrade(holding, lot, NotifyAction.DELETE, by)
         log.info("holding_lot_deleted holding={} lot={}", holding.id, lot.id)
     }
@@ -250,6 +255,27 @@ class HoldingService(
             throw AppException.badRequest("LOT_SELL_EXCEEDS_HOLDINGS", ex.tradedOn.toString())
         }
     }
+
+    private fun newHead(previousEarliest: LocalDate?, tradedOn: LocalDate): LocalDate? =
+        tradedOn.takeIf { previousEarliest == null || it.isBefore(previousEarliest) }
+
+    /** Runs async after commit; nightly jobs catch up on any failure. A reopened position's series stops near the
+     *  old close, and its coordinate gap-fill also covers a new head, so it supersedes the head-only backfill. */
+    private fun requestPriceBackfill(
+        holdingId: UUID,
+        before: List<PortfolioValuationCalculator.LedgerEntry>,
+        after: List<PortfolioValuationCalculator.LedgerEntry>,
+        newHead: LocalDate?,
+    ) {
+        if (isClosed(before) && !isClosed(after)) {
+            events.publishEvent(HoldingReopened(holdingId))
+        } else if (newHead != null) {
+            events.publishEvent(HoldingBackfillRequested(holdingId, newHead))
+        }
+    }
+
+    private fun isClosed(entries: List<PortfolioValuationCalculator.LedgerEntry>): Boolean =
+        entries.isNotEmpty() && PortfolioValuationCalculator.replay(entries, props.portfolio.costMethod).netQuantity.signum() == 0
 
     @Transactional(readOnly = true)
     fun exportCsv(householdId: UUID): String {
@@ -323,6 +349,7 @@ class HoldingService(
             provider = holding.provider,
             providerSymbol = holding.providerSymbol,
             linked = holding.linked,
+            providerNotFoundSince = holding.providerNotFoundSince,
             active = holding.active,
             lots = sortedLotEntities.map { toDto(it, breakdown[it.id]) },
             netQuantity = state.netQuantity,

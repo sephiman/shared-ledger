@@ -58,9 +58,21 @@ function lot(over: Partial<Lot> = {}): Lot {
 function holding(
   symbol: string,
   currentValue: string | null,
-  over: { assetClass?: HoldingAssetClass; closed?: boolean; netQuantity?: string; lots?: Lot[] } = {},
+  over: {
+    assetClass?: HoldingAssetClass;
+    closed?: boolean;
+    netQuantity?: string;
+    lots?: Lot[];
+    providerNotFoundSince?: string | null;
+  } = {},
 ): HoldingSummary {
-  const { assetClass = "crypto", closed = false, netQuantity = closed ? "0" : "1", lots = [] } = over;
+  const {
+    assetClass = "crypto",
+    closed = false,
+    netQuantity = closed ? "0" : "1",
+    lots = [],
+    providerNotFoundSince = null,
+  } = over;
   return {
     holding: {
       id: symbol,
@@ -72,6 +84,7 @@ function holding(
       provider: "coingecko",
       providerSymbol: symbol.toLowerCase(),
       linked: currentValue != null,
+      providerNotFoundSince,
       active: true,
       lots,
       netQuantity,
@@ -257,6 +270,23 @@ describe("hiding closed and dust holdings", () => {
     show([OPEN, CLOSED, DUST]);
     expect(screen.getByText("1 posición (+2 cerradas)")).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "Mostrar cerradas" })).toBeInTheDocument();
+  });
+});
+
+describe("a symbol the provider no longer lists", () => {
+  it("is flagged on the row with the day it was first missing", () => {
+    show([holding("LCWD", "500.00", { assetClass: "etf", providerNotFoundSince: "2026-11-02" }), OPEN]);
+
+    const badges = screen.getAllByText("Not listed by provider");
+    expect(badges.length).toBeGreaterThan(0);
+    expect(badges[0]).toHaveAttribute("title", expect.stringContaining("lcwd"));
+    expect(badges[0]).toHaveAttribute("title", expect.stringMatching(/2026/));
+  });
+
+  it("is not flagged while the symbol resolves", () => {
+    show([OPEN]);
+
+    expect(screen.queryByText("Not listed by provider")).not.toBeInTheDocument();
   });
 });
 

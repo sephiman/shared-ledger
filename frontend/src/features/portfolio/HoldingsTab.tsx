@@ -445,6 +445,7 @@ export function HoldingsTab() {
                                   {t("portfolio.closed")}
                                 </span>
                               )}
+                              <ProviderNotListedBadge holding={row.holding} locale={locale} />
                             </p>
                             {row.holding.label && (
                               <p className="mt-0.5 truncate text-sm text-gray-600 dark:text-gray-300">{row.holding.label}</p>
@@ -528,6 +529,7 @@ export function HoldingsTab() {
                                 {t("portfolio.closed")}
                               </span>
                             )}
+                            <ProviderNotListedBadge holding={row.holding} locale={locale} />
                           </td>
                           <td className="whitespace-nowrap text-right font-mono tabular-nums">{formatQty(row.holding.netQuantity)}</td>
                           <td className="whitespace-nowrap text-right font-mono tabular-nums">{money(row.holding.remainingCostBasis)}</td>
@@ -682,6 +684,23 @@ function StalePriceDot({ age, locale, className }: { age: PriceAge; locale: stri
       title={t("portfolio.price_age_tooltip", { when: priceAsOfLabel(age, locale) })}
       className={cn("inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500 align-middle", className)}
     />
+  );
+}
+
+/** The provider answered 404 for the linked symbol (delisted, renamed or mistyped); its stored history stays. */
+function ProviderNotListedBadge({ holding, locale }: { holding: Holding; locale: string }) {
+  const { t } = useTranslation();
+  if (!holding.providerNotFoundSince) return null;
+  return (
+    <span
+      className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-normal text-amber-800 dark:bg-amber-900/50 dark:text-amber-200"
+      title={t("portfolio.provider_not_listed_tooltip", {
+        symbol: holding.providerSymbol,
+        date: formatDate(holding.providerNotFoundSince, locale),
+      })}
+    >
+      {t("portfolio.provider_not_listed")}
+    </span>
   );
 }
 

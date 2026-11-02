@@ -764,6 +764,8 @@
     "unrealized_short": "Unrealized",
     "held_short": "held",
     "closed": "Closed",
+    "provider_not_listed": "Not listed by provider",
+    "provider_not_listed_tooltip": "The price provider has not listed {{symbol}} since {{date}}: it may be delisted or renamed. Relink the holding to a current symbol; stored prices are kept.",
     "lot_type": {
       "BUY": "Buy",
       "SELL": "Sell"

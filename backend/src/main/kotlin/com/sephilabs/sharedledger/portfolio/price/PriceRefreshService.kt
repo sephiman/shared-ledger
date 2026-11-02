@@ -4,9 +4,12 @@ import com.sephilabs.sharedledger.config.AppProperties
 import com.sephilabs.sharedledger.observability.AppMetrics
 import com.sephilabs.sharedledger.portfolio.Holding
 import com.sephilabs.sharedledger.portfolio.HoldingAssetClass
+import com.sephilabs.sharedledger.portfolio.HoldingLot
 import com.sephilabs.sharedledger.portfolio.HoldingLotRepository
 import com.sephilabs.sharedledger.portfolio.HoldingProvider
 import com.sephilabs.sharedledger.portfolio.HoldingRepository
+import com.sephilabs.sharedledger.portfolio.PortfolioValuationCalculator
+import com.sephilabs.sharedledger.portfolio.toEntry
 import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
@@ -15,6 +18,8 @@ import org.springframework.transaction.support.TransactionTemplate
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
+import java.util.UUID
 
 /** Gap-fill and backfill engine for price_history and fx_rates. Idempotent: rows are upserted by their
  *  unique (provider coordinates, date) key, so overlapping runs and re-runs after failures self-heal. */
@@ -39,29 +44,29 @@ class PriceRefreshService(
 
     /** Hourly: gap-fill missed days, then upsert today's row from one batched current-price call. */
     fun refreshCrypto(today: LocalDate) {
-        val linked = linkedHoldings(HoldingProvider.coingecko)
-        // Ticker per coordinate (BTC for coingecko id "bitcoin") to build Binance fallback pairs.
-        val tickerByCoord = linked.associate { it.providerSymbol!! to it.symbol }
-        val holdingsByCoord = linked.groupBy { it.providerSymbol!! }
-        val coords = tickerByCoord.keys.toList()
-        if (coords.isEmpty()) return
+        val demands = demandsFor(HoldingProvider.coingecko)
+        if (demands.isEmpty()) return
 
-        for (id in coords) {
-            val ticker = tickerByCoord.getValue(id)
-            val group = holdingsByCoord.getValue(id)
+        for (demand in demands) {
+            val id = demand.providerSymbol
             try {
-                gapFillCrypto(id, ticker, group, today)
+                gapFillCrypto(demand, today)
             } catch (ex: ProviderException) {
                 metrics.priceRefreshFailure(CoinGeckoClient.PROVIDER)
                 log.error("Crypto gap-fill failed for {}: {}; trying Binance fallback", id, ex.message)
                 // Binance covers from the last stored day, or the earliest lot when CoinGecko
                 // never populated the series at all.
                 val maxStored = prices.findMaxPriceDate(CoinGeckoClient.PROVIDER, id, baseCurrency)
-                val from = maxStored?.plusDays(1) ?: cryptoCeiling(earliestLotOf(group, today), today)
-                fallbackCryptoFill(id, ticker, from, today.minusDays(1), today)
+                if (maxStored == null || demand.needsTail(maxStored, today.minusDays(1))) {
+                    val from = maxStored?.plusDays(1) ?: cryptoCeiling(demand.earliestLot ?: today, today)
+                    fallbackCryptoFill(id, tickerOf(demand), from, demand.fetchUntil(today.minusDays(1)), today)
+                }
             }
             pace(props.portfolio.coingecko.minRequestIntervalMs)
         }
+        // A closed position's value is zero at any price, so only open coordinates need today's quote.
+        val coords = demands.filter { it.open }.map { it.providerSymbol }
+        if (coords.isEmpty()) return
         try {
             val current = crypto.currentPrices(coords, vsCurrency)
             val now = Instant.now()
@@ -75,41 +80,68 @@ class PriceRefreshService(
         }
     }
 
-    /** Nightly, after FX: per distinct linked equity symbol, gap-fill EOD prices to today. Only holdings on the
-     *  ACTIVE provider are refreshed; others keep their stored prices and show stale until relinked. A failing
-     *  symbol never crashes the job. */
+    /** Nightly, after FX: per distinct linked equity symbol, gap-fill EOD prices — to today while a holding is
+     *  open, only up to the close once all are closed. Only holdings on the ACTIVE provider are refreshed; others
+     *  keep their stored prices and show stale until relinked. A failing symbol never crashes the job, and one
+     *  the provider no longer lists is re-checked weekly instead of nightly. */
     fun refreshEquities(today: LocalDate) {
         val active = props.portfolio.equityProvider.asHoldingProvider()
-        val symbols = linkedHoldings(active)
-        val byCoordinate = symbols.groupBy { it.providerSymbol!! to priceCurrencyOf(it) }
-        for ((coordinate, group) in byCoordinate) {
-            val (symbol, currency) = coordinate
-            try {
-                if (refreshEquitySymbol(active.name, symbol, currency, group, today)) {
-                    metrics.priceRefreshed(active.name)
-                }
-            } catch (ex: ProviderException) {
-                metrics.priceRefreshFailure(active.name)
-                log.error("Equity refresh failed for {}: {}", symbol, ex.message)
-            }
+        for (demand in demandsFor(active)) {
+            if (inNotFoundBackoff(demand, today)) continue
+            refreshEquityDemand(active, demand, today)
             pace(activeEquityConfig().minRequestIntervalMs)
         }
     }
 
+    /** Gap-fills the coordinate [holding] prices off, e.g. after a reopened position left its series ending at the
+     *  old close. A user action, so it ignores the not-found back-off. */
+    fun gapFillCoordinateOf(holding: Holding, today: LocalDate = LocalDate.now()) {
+        val provider = holding.provider ?: return
+        if (!props.portfolio.backfillOnLink) return
+        val demand = demandsFor(provider)
+            .firstOrNull { it.providerSymbol == holding.providerSymbol && it.currency == priceCurrencyOf(holding) }
+            ?: return
+        when (provider) {
+            HoldingProvider.coingecko -> try {
+                gapFillCrypto(demand, today)
+            } catch (ex: ProviderException) {
+                metrics.priceRefreshFailure(provider.name)
+                log.error("Crypto gap-fill failed for {}: {}", demand.providerSymbol, ex.message)
+            }
+            HoldingProvider.yahoo, HoldingProvider.eodhd, HoldingProvider.twelvedata ->
+                if (provider == props.portfolio.equityProvider.asHoldingProvider()) refreshEquityDemand(provider, demand, today)
+        }
+    }
+
+    private fun refreshEquityDemand(provider: HoldingProvider, demand: CoordinateDemand, today: LocalDate) {
+        try {
+            if (refreshEquitySymbol(provider.name, demand, today)) {
+                metrics.priceRefreshed(provider.name)
+                clearNotFound(demand.holdings, demand.providerSymbol)
+            }
+        } catch (_: SymbolNotFoundException) {
+            metrics.priceRefreshFailure(provider.name)
+            log.warn("Equity refresh: {} is not listed by {}; re-checking weekly", demand.providerSymbol, provider)
+            markNotFound(demand.holdings, demand.providerSymbol, today)
+        } catch (ex: ProviderException) {
+            metrics.priceRefreshFailure(provider.name)
+            log.error("Equity refresh failed for {}: {}", demand.providerSymbol, ex.message)
+        }
+    }
+
     /** Fills an equity series both ways so a failed request-time backfill self-heals: bootstraps the
-     *  ceiling-clamped range, extends the head to the earliest lot, tails to today. True if anything was fetched. */
-    private fun refreshEquitySymbol(
-        provider: String,
-        symbol: String,
-        currency: String,
-        group: List<Holding>,
-        today: LocalDate,
-    ): Boolean {
+     *  ceiling-clamped range, extends the head to the earliest lot, tails to today (or just past the close of a
+     *  fully closed coordinate, after which nothing is fetched). True if anything was fetched. */
+    private fun refreshEquitySymbol(provider: String, demand: CoordinateDemand, today: LocalDate): Boolean {
+        val symbol = demand.providerSymbol
+        val currency = demand.currency
+        val group = demand.holdings
         val minStored = prices.findMinPriceDate(provider, symbol, currency)
         val maxStored = prices.findMaxPriceDate(provider, symbol, currency)
-        val desiredFrom = clampToEquityCeiling(earliestLotOf(group, today), today)
+        val desiredFrom = clampToEquityCeiling(demand.earliestLot ?: today, today)
+        val until = demand.fetchUntil(today)
         if (minStored == null || maxStored == null) {
-            return fetchEquityRange(provider, symbol, group, currency, desiredFrom, today, today, isHead = true)
+            return fetchEquityRange(provider, symbol, group, currency, desiredFrom, until, today, isHead = true)
         }
         var fetched = false
         if (desiredFrom.isBefore(minStored)) {
@@ -117,8 +149,9 @@ class PriceRefreshService(
             fetched = fetchEquityRange(provider, symbol, group, currency, desiredFrom, minStored.minusDays(1), today, isHead = true)
             pace(activeEquityConfig().minRequestIntervalMs)
         }
-        if (maxStored.isBefore(today)) {
-            fetched = fetchEquityRange(provider, symbol, group, currency, maxStored.plusDays(1), today, today, isHead = false) || fetched
+        if (demand.needsTail(maxStored, today)) {
+            val tailFrom = clampToEquityCeiling(maxStored.plusDays(1), today)
+            fetched = fetchEquityRange(provider, symbol, group, currency, tailFrom, until, today, isHead = false) || fetched
         }
         return fetched
     }
@@ -225,6 +258,11 @@ class PriceRefreshService(
             if (holding.provider == HoldingProvider.coingecko && earliestLot.isBefore(from)) {
                 fallbackCryptoFill(holding.providerSymbol!!, holding.symbol, earliestLot, from.minusDays(1), today)
             }
+        } catch (_: SymbolNotFoundException) {
+            // Typically a mistyped or delisted symbol picked at link time: say so instead of a bare stale price.
+            metrics.priceRefreshFailure(holding.provider!!.name)
+            log.warn("Backfill: {} is not listed by {}", holding.providerSymbol, holding.provider)
+            markNotFound(listOf(holding), holding.providerSymbol!!, today)
         } catch (ex: ProviderException) {
             // Linking never fails on provider trouble; the nightly gap-fill will retry.
             metrics.priceRefreshFailure(holding.provider!!.name)
@@ -247,6 +285,10 @@ class PriceRefreshService(
         if (from.isBefore(minStored)) {
             try {
                 fetchRange(holding, from, minStored.minusDays(1))
+            } catch (_: SymbolNotFoundException) {
+                metrics.priceRefreshFailure(provider.name)
+                log.warn("Backfill extension: {} is not listed by {}", providerSymbol, provider)
+                markNotFound(listOf(holding), providerSymbol, today)
             } catch (ex: ProviderException) {
                 metrics.priceRefreshFailure(provider.name)
                 log.error("Backfill extension failed for holding {}: {}", holding.symbol, ex.message)
@@ -311,17 +353,20 @@ class PriceRefreshService(
     /** Gap-fills a crypto series both ways so a failed request-time backfill self-heals: bootstraps the
      *  ceiling-clamped range, extends the head to the earliest lot, tails to yesterday (today's row comes from
      *  the current-price call). Lots older than CoinGecko's ceiling are covered by the Binance fallback. */
-    private fun gapFillCrypto(id: String, ticker: String, group: List<Holding>, today: LocalDate) {
+    private fun gapFillCrypto(demand: CoordinateDemand, today: LocalDate) {
+        val id = demand.providerSymbol
+        val ticker = tickerOf(demand)
         val currency = baseCurrency
-        val earliestLot = earliestLotOf(group, today)
+        val earliestLot = demand.earliestLot ?: today
         val ceilingFrom = cryptoCeiling(earliestLot, today)
         val yesterday = today.minusDays(1)
+        val until = demand.fetchUntil(yesterday)
         val minStored = prices.findMinPriceDate(CoinGeckoClient.PROVIDER, id, currency)
         val maxStored = prices.findMaxPriceDate(CoinGeckoClient.PROVIDER, id, currency)
 
         if (minStored == null || maxStored == null) {
-            if (!ceilingFrom.isAfter(yesterday)) {
-                storeAll(CoinGeckoClient.PROVIDER, id, currency, crypto.dailyHistory(id, vsCurrency, ceilingFrom, yesterday))
+            if (!ceilingFrom.isAfter(until)) {
+                storeAll(CoinGeckoClient.PROVIDER, id, currency, crypto.dailyHistory(id, vsCurrency, ceilingFrom, until))
             }
         } else {
             if (ceilingFrom.isBefore(minStored)) {
@@ -329,9 +374,16 @@ class PriceRefreshService(
                 storeAll(CoinGeckoClient.PROVIDER, id, currency, crypto.dailyHistory(id, vsCurrency, ceilingFrom, minStored.minusDays(1)))
                 pace(props.portfolio.coingecko.minRequestIntervalMs)
             }
-            val tailFrom = maxStored.plusDays(1)
-            if (!tailFrom.isAfter(yesterday)) {
-                storeAll(CoinGeckoClient.PROVIDER, id, currency, crypto.dailyHistory(id, vsCurrency, tailFrom, yesterday))
+            if (demand.needsTail(maxStored, yesterday)) {
+                val rawTailFrom = maxStored.plusDays(1)
+                // A tail older than CoinGecko's ceiling (a long-closed position reopened): Binance covers the part before it.
+                val tailFrom = cryptoCeiling(rawTailFrom, today)
+                if (!tailFrom.isAfter(until)) {
+                    storeAll(CoinGeckoClient.PROVIDER, id, currency, crypto.dailyHistory(id, vsCurrency, tailFrom, until))
+                }
+                if (rawTailFrom.isBefore(tailFrom)) {
+                    fallbackCryptoFill(id, ticker, rawTailFrom, minOf(tailFrom.minusDays(1), until), today)
+                }
             }
         }
         // Lots older than the CoinGecko ceiling: Binance covers the pre-ceiling head.
@@ -363,9 +415,6 @@ class PriceRefreshService(
         }
     }
 
-    private fun earliestLotOf(group: List<Holding>, default: LocalDate): LocalDate =
-        group.mapNotNull { lots.findMinTradedOn(it.id) }.minOrNull() ?: default
-
     private fun cryptoCeiling(candidate: LocalDate, today: LocalDate): LocalDate =
         maxOf(candidate, today.minusDays(props.portfolio.cryptoHistoryCeilingDays))
 
@@ -391,8 +440,56 @@ class PriceRefreshService(
     private fun priceCurrencyOf(holding: Holding): String =
         if (holding.assetClass == HoldingAssetClass.crypto) baseCurrency else holding.nativeCurrency
 
-    private fun linkedHoldings(provider: HoldingProvider): List<Holding> =
-        holdings.findAllLinkedActive().filter { it.provider == provider }
+    /** Linked active holdings on [provider], one demand per price coordinate they share across households. */
+    private fun demandsFor(provider: HoldingProvider): List<CoordinateDemand> {
+        val linked = holdings.findAllLinkedActive().filter { it.provider == provider }
+        if (linked.isEmpty()) return emptyList()
+        val lotsByHolding = lots.findAllByHoldingIdIn(linked.map { it.id }).groupBy { it.holdingId }
+        return linked
+            .groupBy { it.providerSymbol!! to priceCurrencyOf(it) }
+            .map { (coordinate, group) -> demandOf(coordinate.first, coordinate.second, group, lotsByHolding) }
+    }
+
+    private fun demandOf(
+        providerSymbol: String,
+        currency: String,
+        group: List<Holding>,
+        lotsByHolding: Map<UUID, List<HoldingLot>>,
+    ): CoordinateDemand {
+        val groupLots = group.map { lotsByHolding[it.id].orEmpty() }
+        val allLots = groupLots.flatten()
+        // Exact zero, as the valuation uses: a dust remnant is still a position and keeps its daily price.
+        val anyOpen = groupLots.any { it.isEmpty() || netQuantity(it).signum() != 0 }
+        return CoordinateDemand(
+            providerSymbol = providerSymbol,
+            currency = currency,
+            holdings = group,
+            earliestLot = allLots.minOfOrNull { it.tradedOn },
+            closedOn = if (anyOpen) null else allLots.maxOf { it.tradedOn },
+        )
+    }
+
+    private fun netQuantity(holdingLots: List<HoldingLot>): BigDecimal =
+        PortfolioValuationCalculator.replay(holdingLots.map { it.toEntry() }, props.portfolio.costMethod).netQuantity
+
+    private fun tickerOf(demand: CoordinateDemand): String = demand.holdings.first().symbol
+
+    // Re-checked on every 7th day since the first 404, so a relisting or a transient 404 heals within a week.
+    private fun inNotFoundBackoff(demand: CoordinateDemand, today: LocalDate): Boolean {
+        val since = demand.holdings.map { it.providerNotFoundSince ?: return false }.min()
+        val days = ChronoUnit.DAYS.between(since, today)
+        return days <= 0 || days % NOT_FOUND_RECHECK_DAYS != 0L
+    }
+
+    private fun markNotFound(group: List<Holding>, providerSymbol: String, today: LocalDate) {
+        runInTx { holdings.markProviderNotFound(group.map { it.id }, providerSymbol, today) }
+    }
+
+    private fun clearNotFound(group: List<Holding>, providerSymbol: String) {
+        if (group.none { it.providerNotFoundSince != null }) return
+        runInTx { holdings.clearProviderNotFound(group.map { it.id }, providerSymbol) }
+        log.info("Equity refresh: {} is listed again", providerSymbol)
+    }
 
     private fun earliestLotDateFor(currency: String): LocalDate? =
         holdings.findAllLinkedActive()
@@ -483,6 +580,8 @@ class PriceRefreshService(
         const val FX_HEAD_MARGIN_DAYS: Long = 7
 
         const val USD = "USD"
+
+        const val NOT_FOUND_RECHECK_DAYS: Long = 7
 
         // Binance quotes crypto in USDT; assumed 1:1 with USD before FX conversion.
         const val BINANCE_USD_QUOTE = "USDT"

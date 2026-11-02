@@ -8,6 +8,7 @@ import jakarta.persistence.Enumerated
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import org.hibernate.annotations.SQLRestriction
+import java.time.LocalDate
 import java.util.UUID
 
 enum class HoldingAssetClass { crypto, etf, stock, fund }
@@ -53,6 +54,10 @@ class Holding(
 
     @Column(name = "provider_symbol", length = 120)
     var providerSymbol: String? = null,
+
+    // The refresh writes it with targeted updates (never a full save), so it can't clobber a concurrent user edit.
+    @Column(name = "provider_not_found_since")
+    var providerNotFoundSince: LocalDate? = null,
 
     @Column(name = "active", nullable = false)
     var active: Boolean = true,

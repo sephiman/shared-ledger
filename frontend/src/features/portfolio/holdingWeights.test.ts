@@ -14,6 +14,7 @@ function row(id: string, currentValue: string | null): HoldingSummary {
       provider: null,
       providerSymbol: null,
       linked: currentValue != null,
+      providerNotFoundSince: null,
       active: true,
       lots: [],
       netQuantity: "1",

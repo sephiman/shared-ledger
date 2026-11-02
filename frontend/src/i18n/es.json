@@ -764,6 +764,8 @@
     "unrealized_short": "No realizado",
     "held_short": "en cartera",
     "closed": "Cerrada",
+    "provider_not_listed": "El proveedor no la cotiza",
+    "provider_not_listed_tooltip": "El proveedor de precios no cotiza {{symbol}} desde el {{date}}: puede haberse excluido de cotización o cambiado de símbolo. Vuelve a vincular la posición a un símbolo vigente; los precios guardados se conservan.",
     "lot_type": {
       "BUY": "Compra",
       "SELL": "Venta"

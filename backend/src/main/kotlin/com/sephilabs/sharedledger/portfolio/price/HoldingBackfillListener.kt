@@ -1,5 +1,6 @@
 package com.sephilabs.sharedledger.portfolio.price
 
+import com.sephilabs.sharedledger.portfolio.Holding
 import com.sephilabs.sharedledger.portfolio.HoldingRepository
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
@@ -17,6 +18,9 @@ data class HoldingBackfillRequested(
     val newEarliest: LocalDate? = null,
 )
 
+/** A fully closed holding became open again; its stored series stops just past the old close. */
+data class HoldingReopened(val holdingId: UUID)
+
 /** Runs the backfill off the request thread and only after the triggering mutation commits: AFTER_COMMIT
  *  guarantees the holding/lot is visible. Failure is non-fatal — provider errors are swallowed and the
  *  nightly gap-fill re-attempts any range still missing. */
@@ -33,22 +37,31 @@ class HoldingBackfillListener(
         executor.execute { runBackfill(event) }
     }
 
-    private fun runBackfill(event: HoldingBackfillRequested) {
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    fun onReopened(event: HoldingReopened) {
+        executor.execute { runForHolding(event.holdingId) { priceRefresh.gapFillCoordinateOf(it) } }
+    }
+
+    private fun runBackfill(event: HoldingBackfillRequested) = runForHolding(event.holdingId) { holding ->
+        val newEarliest = event.newEarliest
+        if (newEarliest != null) {
+            priceRefresh.extendBackfill(holding, newEarliest)
+        } else {
+            priceRefresh.backfillForHolding(holding)
+        }
+    }
+
+    private fun runForHolding(holdingId: UUID, backfill: (Holding) -> Unit) {
         try {
             // Reloaded in the backfill thread's own transaction; the committing transaction is gone.
-            val holding = holdings.findById(event.holdingId).orElse(null)
+            val holding = holdings.findById(holdingId).orElse(null)
             if (holding == null) {
-                log.warn("Backfill skipped: holding {} no longer exists", event.holdingId)
+                log.warn("Backfill skipped: holding {} no longer exists", holdingId)
                 return
             }
-            val newEarliest = event.newEarliest
-            if (newEarliest != null) {
-                priceRefresh.extendBackfill(holding, newEarliest)
-            } else {
-                priceRefresh.backfillForHolding(holding)
-            }
+            backfill(holding)
         } catch (ex: Exception) {
-            log.error("Backfill for holding {} failed", event.holdingId, ex)
+            log.error("Backfill for holding {} failed", holdingId, ex)
         }
     }
 }

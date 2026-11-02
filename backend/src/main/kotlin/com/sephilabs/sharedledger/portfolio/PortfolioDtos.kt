@@ -90,6 +90,8 @@ data class HoldingDto(
     val provider: HoldingProvider?,
     val providerSymbol: String?,
     val linked: Boolean,
+    // Day the provider first answered that it does not list providerSymbol; null while it resolves.
+    val providerNotFoundSince: LocalDate?,
     val active: Boolean,
     val lots: List<LotDto>,
     @JsonFormat(shape = JsonFormat.Shape.STRING)

@@ -27,6 +27,7 @@ function row(
       provider: null,
       providerSymbol: null,
       linked: true,
+      providerNotFoundSince: null,
       active: true,
       lots: [],
       netQuantity: closed ? "0" : "1",

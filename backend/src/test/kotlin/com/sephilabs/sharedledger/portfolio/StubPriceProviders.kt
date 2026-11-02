@@ -8,6 +8,7 @@ import com.sephilabs.sharedledger.portfolio.price.EquityPriceProvider
 import com.sephilabs.sharedledger.portfolio.price.FxRateProvider
 import com.sephilabs.sharedledger.portfolio.price.ProviderException
 import com.sephilabs.sharedledger.portfolio.price.SymbolCandidate
+import com.sephilabs.sharedledger.portfolio.price.SymbolNotFoundException
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Primary
@@ -40,6 +41,8 @@ class StubEquityProvider : EquityPriceProvider {
     // Listing currency reported with the history (Yahoo chart meta); null when unset.
     val currencies = mutableMapOf<String, String>()
     val failFor = mutableSetOf<String>()
+    // Symbols the provider answers 404 for (delisted); the call is still recorded.
+    val notFoundFor = mutableSetOf<String>()
     val historyCalls = mutableListOf<Triple<String, LocalDate, LocalDate>>()
     var searchResults = listOf<SymbolCandidate>()
     var isinResults = mapOf<String, List<SymbolCandidate>>()
@@ -58,6 +61,7 @@ class StubEquityProvider : EquityPriceProvider {
     override fun dailyHistory(symbol: String, from: LocalDate, to: LocalDate): EquityHistory {
         if (symbol in failFor) throw ProviderException("stubbed failure for $symbol")
         historyCalls += Triple(symbol, from, to)
+        if (symbol in notFoundFor) throw SymbolNotFoundException(symbol, "stubbed 404 for $symbol")
         val prices = history[symbol]?.filter { !it.date.isBefore(from) && !it.date.isAfter(to) } ?: emptyList()
         return EquityHistory(currencies[symbol], prices)
     }
