@@ -304,6 +304,45 @@ class PriceRefreshIntegrationTest @Autowired constructor(
     }
 
     @Test
+    fun `a later equity run overwrites the intraday price stored for the last day`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val ps = createLinkedEtfWithLot(household.id, user, "INTRA", lotDaysAgo = 3)
+        seedEquityPrice(ps, today.minusDays(3), "100")
+        stubEquity.history[ps] = mutableListOf(DailyPrice(today, BigDecimal("101")))
+
+        refresh.refreshEquities(today)
+        stubEquity.history[ps] = mutableListOf(DailyPrice(today, BigDecimal("102")))
+        refresh.refreshEquities(today)
+        assertThat(priceOn(ps, today)).isEqualByComparingTo(BigDecimal("102"))
+
+        // The next day's run still settles yesterday's bar at its real close.
+        stubEquity.history[ps] = mutableListOf(DailyPrice(today, BigDecimal("104")))
+        refresh.refreshEquities(today.plusDays(1))
+        assertThat(priceOn(ps, today)).isEqualByComparingTo(BigDecimal("104"))
+    }
+
+    @Test
+    fun `equity head gap-fill for a lot dated on a market holiday is not repeated every run`() {
+        val (user, household) = seed()
+        val today = LocalDate.now()
+        val ps = createLinkedEtfWithLot(household.id, user, "HOLI", lotDaysAgo = 10)
+        // No bar on the lot day itself; the nearest trading days are either side of it.
+        seedEquityPrice(ps, today.minusDays(9), "100")
+        stubEquity.history[ps] = mutableListOf(
+            DailyPrice(today.minusDays(12), BigDecimal("98")),
+            DailyPrice(today.minusDays(9), BigDecimal("100")),
+        )
+
+        refresh.refreshEquities(today)
+        assertThat(prices.findMinPriceDate("yahoo", ps, "EUR")).isEqualTo(today.minusDays(12))
+
+        stubEquity.historyCalls.clear()
+        refresh.refreshEquities(today)
+        assertThat(stubEquity.historyCalls.filter { it.first == ps }).containsExactly(Triple(ps, today.minusDays(9), today))
+    }
+
+    @Test
     fun `crypto nightly bootstraps a series the request-time backfill never populated`() {
         val (user, household) = seed()
         val today = LocalDate.now()
@@ -363,6 +402,26 @@ class PriceRefreshIntegrationTest @Autowired constructor(
             )
         )
     }
+
+    private fun createLinkedEtfWithLot(householdId: java.util.UUID, user: User, prefix: String, lotDaysAgo: Long): String {
+        val symbol = "$prefix${System.nanoTime() % 100000}"
+        val ps = "$symbol.DE"
+        holdingService.create(
+            householdId,
+            HoldingRequest(assetClass = HoldingAssetClass.etf, symbol = symbol, provider = HoldingProvider.yahoo, providerSymbol = ps),
+            user,
+        )
+        holdingService.addLot(
+            householdId,
+            holdingService.list(householdId).single { it.symbol == symbol }.id,
+            LotRequest(tradedOn = LocalDate.now().minusDays(lotDaysAgo), quantity = BigDecimal("1"), unitPrice = BigDecimal("100")),
+            user,
+        )
+        return ps
+    }
+
+    private fun priceOn(providerSymbol: String, date: LocalDate): BigDecimal? =
+        prices.findByProviderAndProviderSymbolAndCurrencyAndPriceDate("yahoo", providerSymbol, "EUR", date)?.price
 
     private fun createLinkedCrypto(householdId: java.util.UUID, user: User, symbol: String, coinId: String) =
         holdingService.create(

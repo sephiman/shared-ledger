@@ -107,7 +107,12 @@ data class AppProperties(
         val tokenKey: String = "",
     )
 
-    enum class EquityProviderKind { YAHOO, EODHD, TWELVE_DATA }
+    // Intraday refresh re-fetches every open symbol each run; only a quota-free provider can afford that.
+    enum class EquityProviderKind(val allowsIntradayRefresh: Boolean) {
+        YAHOO(allowsIntradayRefresh = true),
+        EODHD(allowsIntradayRefresh = false),
+        TWELVE_DATA(allowsIntradayRefresh = false),
+    }
 
     data class Portfolio(
         val coingecko: PriceProviderConfig = PriceProviderConfig(

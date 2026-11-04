@@ -1,5 +1,6 @@
 package com.sephilabs.sharedledger.portfolio.price
 
+import com.sephilabs.sharedledger.config.AppProperties
 import com.sephilabs.sharedledger.portfolio.benchmark.BenchmarkRefreshService
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Scheduled
@@ -8,11 +9,13 @@ import java.time.LocalDate
 
 /** Cron entry points for the price jobs. Ordering matters: FX runs first (00:30) so the equity job (01:00)
  *  converts with the day's rate; benchmarks follow (01:15) and top up their own FX. Crypto is hourly and
- *  FX-independent. Each job swallows its failures so one bad provider never kills the scheduler. */
+ *  FX-independent; equities also refresh hourly on weekdays when the provider has no quota. Each job swallows
+ *  its failures so one bad provider never kills the scheduler. */
 @Component
 class PortfolioPriceScheduler(
     private val refreshService: PriceRefreshService,
     private val benchmarkRefreshService: BenchmarkRefreshService,
+    private val props: AppProperties,
 ) {
 
     private val log = LoggerFactory.getLogger(PortfolioPriceScheduler::class.java)
@@ -25,6 +28,12 @@ class PortfolioPriceScheduler(
 
     @Scheduled(cron = "\${app.portfolio.equity-refresh-cron}", zone = "\${app.scheduler.timezone}")
     fun equityNightly() = guarded("equity") { refreshService.refreshEquities(LocalDate.now()) }
+
+    @Scheduled(cron = "\${app.portfolio.equity-intraday-refresh-cron}", zone = "\${app.scheduler.timezone}")
+    fun equityIntraday() {
+        if (!props.portfolio.equityProvider.allowsIntradayRefresh) return
+        guarded("equity intraday") { refreshService.refreshEquities(LocalDate.now()) }
+    }
 
     @Scheduled(cron = "\${app.portfolio.benchmark-refresh-cron}", zone = "\${app.scheduler.timezone}")
     fun benchmarkNightly() = guarded("benchmark") { benchmarkRefreshService.refresh(LocalDate.now()) }

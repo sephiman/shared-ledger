@@ -706,7 +706,7 @@
     "price_manual": "manual — se valora con instantáneas",
     "oldest_price": "Precio más antiguo: {{age}}",
     "cadence_info": "¿Cada cuánto se actualizan los precios?",
-    "cadence_tooltip": "Cripto ~cada hora; acciones, ETFs y tipos de cambio a diario tras el cierre; fondos solo con instantáneas. Despliega un activo para ver la fecha de su precio.",
+    "cadence_tooltip": "Cripto ~cada hora; acciones y ETFs ~cada hora entre semana; tipos de cambio a diario; fondos solo con instantáneas. Despliega un activo para ver la fecha de su precio.",
     "pnl": "P&G",
     "weight": "Peso",
     "symbol": "Símbolo",

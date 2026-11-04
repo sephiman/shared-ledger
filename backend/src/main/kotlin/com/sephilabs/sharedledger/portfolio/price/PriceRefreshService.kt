@@ -138,22 +138,29 @@ class PriceRefreshService(
         val group = demand.holdings
         val minStored = prices.findMinPriceDate(provider, symbol, currency)
         val maxStored = prices.findMaxPriceDate(provider, symbol, currency)
-        val desiredFrom = clampToEquityCeiling(demand.earliestLot ?: today, today)
+        val earliestLot = demand.earliestLot ?: today
+        // Starts a few days early so a lot dated on a market holiday still gets a prior close and the gap closes.
+        val headFrom = clampToEquityCeiling(earliestLot.minusDays(EQUITY_HEAD_MARGIN_DAYS), today)
         val until = demand.fetchUntil(today)
         if (minStored == null || maxStored == null) {
-            return fetchEquityRange(provider, symbol, group, currency, desiredFrom, until, today, isHead = true)
+            return fetchEquityRange(provider, symbol, group, currency, headFrom, until, today, isHead = true)
         }
         var fetched = false
-        if (desiredFrom.isBefore(minStored)) {
-            log.info("Equity head gap-fill for {} [{}..{}]", symbol, desiredFrom, minStored.minusDays(1))
-            fetched = fetchEquityRange(provider, symbol, group, currency, desiredFrom, minStored.minusDays(1), today, isHead = true)
+        if (clampToEquityCeiling(earliestLot, today).isBefore(minStored)) {
+            log.info("Equity head gap-fill for {} [{}..{}]", symbol, headFrom, minStored.minusDays(1))
+            fetched = fetchEquityRange(provider, symbol, group, currency, headFrom, minStored.minusDays(1), today, isHead = true)
             pace(activeEquityConfig().minRequestIntervalMs)
         }
-        if (demand.needsTail(maxStored, today)) {
-            val tailFrom = clampToEquityCeiling(maxStored.plusDays(1), today)
-            fetched = fetchEquityRange(provider, symbol, group, currency, tailFrom, until, today, isHead = false) || fetched
-        }
-        return fetched
+        val tailFrom = equityTailFrom(demand, maxStored, today) ?: return fetched
+        return fetchEquityRange(provider, symbol, group, currency, tailFrom, until, today, isHead = false) || fetched
+    }
+
+    // An open series re-fetches its last stored day: a run during market hours stores a partial bar that only a
+    // later run can settle to the close. A closed series only fills up to its close, as before.
+    private fun equityTailFrom(demand: CoordinateDemand, maxStored: LocalDate, today: LocalDate): LocalDate? = when {
+        demand.open -> clampToEquityCeiling(maxStored, today)
+        demand.needsTail(maxStored, today) -> clampToEquityCeiling(maxStored.plusDays(1), today)
+        else -> null
     }
 
     /** A head fetch also tops up the foreign-currency FX head so old-date valuations convert (the nightly FX
@@ -578,6 +585,7 @@ class PriceRefreshService(
 
         // Head-fetch margin so weekend/holiday dates can forward-fill from a business day.
         const val FX_HEAD_MARGIN_DAYS: Long = 7
+        const val EQUITY_HEAD_MARGIN_DAYS: Long = 7
 
         const val USD = "USD"
 

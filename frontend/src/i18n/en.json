@@ -706,7 +706,7 @@
     "price_manual": "manual — valued via snapshots",
     "oldest_price": "Oldest price: {{age}}",
     "cadence_info": "How often do prices refresh?",
-    "cadence_tooltip": "Crypto ~hourly; stocks, ETFs and exchange rates daily after market close; funds only via snapshots. Expand a holding to see its price date.",
+    "cadence_tooltip": "Crypto ~hourly; stocks and ETFs ~hourly on weekdays; exchange rates daily; funds only via snapshots. Expand a holding to see its price date.",
     "pnl": "P&L",
     "weight": "Weight",
     "symbol": "Symbol",

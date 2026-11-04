@@ -197,6 +197,9 @@ app:
     fx-refresh-cron: "0 30 0 * * *"
     # After FX (00:30), before the recurring materializer (02:00).
     equity-refresh-cron: "0 0 1 * * *"
+    # Weekday intraday equity refresh (minute 10, clear of crypto at :05). Runs only on a
+    # quota-free provider (yahoo); with eodhd / twelve_data the nightly job is the only one.
+    equity-intraday-refresh-cron: "0 10 * * * MON-FRI"
     # Benchmark overlay series (indices/commodities/crypto). After equities (01:00); it
     # tops up its own FX (USD) so ordering vs the FX job is not load-bearing.
     benchmark-refresh-cron: "0 15 1 * * *"

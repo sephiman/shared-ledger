@@ -32,4 +32,10 @@ class EquityProviderConfigTest {
         assertThat(AppProperties.EquityProviderKind.EODHD.asHoldingProvider()).isEqualTo(HoldingProvider.eodhd)
         assertThat(AppProperties.EquityProviderKind.TWELVE_DATA.asHoldingProvider()).isEqualTo(HoldingProvider.twelvedata)
     }
+
+    @Test
+    fun `only the quota-free provider allows the hourly intraday refresh`() {
+        assertThat(AppProperties.EquityProviderKind.entries.filter { it.allowsIntradayRefresh })
+            .containsExactly(AppProperties.EquityProviderKind.YAHOO)
+    }
 }

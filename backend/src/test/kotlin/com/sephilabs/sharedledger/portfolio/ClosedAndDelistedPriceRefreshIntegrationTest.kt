@@ -72,7 +72,7 @@ class ClosedAndDelistedPriceRefreshIntegrationTest @Autowired constructor(
 
         refresh.refreshEquities(today)
 
-        assertThat(callsFor(etf)).containsExactly(Triple(etf.ps, ago(20), ago(11)))
+        assertThat(callsFor(etf)).containsExactly(Triple(etf.ps, ago(27), ago(11)))
         assertThat(storedDates(etf)).containsExactly(ago(20), ago(15), ago(10))
     }
 
@@ -168,7 +168,7 @@ class ClosedAndDelistedPriceRefreshIntegrationTest @Autowired constructor(
 
         buy(etf, daysAgo = 2, qty = "2")
 
-        assertThat(callsFor(etf)).containsExactly(Triple(etf.ps, ago(9), today))
+        assertThat(callsFor(etf)).containsExactly(Triple(etf.ps, ago(10), today))
         assertThat(storedDates(etf)).containsExactly(ago(20), ago(10), ago(5), today)
     }
 
@@ -179,7 +179,7 @@ class ClosedAndDelistedPriceRefreshIntegrationTest @Autowired constructor(
 
         holdingService.deleteLot(etf.household, etf.id, sellId, etf.user)
 
-        assertThat(callsFor(etf)).containsExactly(Triple(etf.ps, ago(9), today))
+        assertThat(callsFor(etf)).containsExactly(Triple(etf.ps, ago(10), today))
         assertThat(prices.findMaxPriceDate("yahoo", etf.ps, "EUR")).isEqualTo(today)
     }
 
@@ -194,7 +194,7 @@ class ClosedAndDelistedPriceRefreshIntegrationTest @Autowired constructor(
             etf.user,
         )
 
-        assertThat(callsFor(etf)).containsExactly(Triple(etf.ps, ago(9), today))
+        assertThat(callsFor(etf)).containsExactly(Triple(etf.ps, ago(10), today))
         assertThat(prices.findMaxPriceDate("yahoo", etf.ps, "EUR")).isEqualTo(today)
     }
 
@@ -206,8 +206,8 @@ class ClosedAndDelistedPriceRefreshIntegrationTest @Autowired constructor(
         buy(etf, daysAgo = 30, qty = "1")
 
         assertThat(callsFor(etf)).containsExactlyInAnyOrder(
-            Triple(etf.ps, ago(30), ago(21)),
-            Triple(etf.ps, ago(9), today),
+            Triple(etf.ps, ago(37), ago(21)),
+            Triple(etf.ps, ago(10), today),
         )
         assertThat(storedDates(etf)).containsExactly(ago(30), ago(20), ago(10), ago(5), today)
     }

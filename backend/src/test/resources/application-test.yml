@@ -16,6 +16,7 @@ app:
     crypto-refresh-cron: "0 0 0 29 2 ?"
     fx-refresh-cron: "0 0 0 29 2 ?"
     equity-refresh-cron: "0 0 0 29 2 ?"
+    equity-intraday-refresh-cron: "0 0 0 29 2 ?"
     benchmark-refresh-cron: "0 0 0 29 2 ?"
     # No provider HTTP at startup; benchmark refresh is invoked directly in its test.
     benchmark-backfill-on-start: false
