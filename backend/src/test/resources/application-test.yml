@@ -39,7 +39,7 @@ app:
     # The application id + private key are per-household rows now (tests seed them); only the
     # at-rest encryption key stays configuration.
     secret-key: "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE="
-    sync-cron: "0 0 0 29 2 ?"
+    sync-tick-cron: "0 0 0 29 2 ?"
     reminder-cron: "0 0 0 29 2 ?"
     min-request-interval-ms: 0
     backfill-days: 90

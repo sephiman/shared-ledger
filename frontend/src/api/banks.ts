@@ -39,6 +39,19 @@ export interface BankConfig {
   nextSyncTimes: string[];
 }
 
+/** When this household's banks sync in the background: one or two "HH:mm" times in [timezone]. */
+export interface BankSyncSchedule {
+  times: string[];
+  timezone: string;
+  /** True while the household uses the instance default (07:00 and 19:00 UTC). */
+  isDefault: boolean;
+}
+
+export interface BankSyncScheduleInput {
+  times: string[];
+  timezone: string;
+}
+
 export interface BankCredentials {
   appId: string | null;
   /** The private key is write-only; the form only learns whether one is stored. */
@@ -383,6 +396,31 @@ export function useCategorizationRules(householdId: string) {
 }
 
 // --- Credential mutations --------------------------------------------------------------------
+
+export function useBankSyncSchedule(householdId: string) {
+  return useQuery({
+    queryKey: ["banks", householdId, "sync-schedule"],
+    queryFn: async () => (await apiClient.get<BankSyncSchedule>(`${base(householdId)}/sync-schedule`)).data,
+  });
+}
+
+/** Owner-only. Invalidates the bank tree so the "syncs daily at" line picks up the new times. */
+export function useSaveBankSyncSchedule(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: BankSyncScheduleInput) =>
+      (await apiClient.put<BankSyncSchedule>(`${base(householdId)}/sync-schedule`, input)).data,
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["banks", householdId] }),
+  });
+}
+
+export function useResetBankSyncSchedule(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => (await apiClient.delete<BankSyncSchedule>(`${base(householdId)}/sync-schedule`)).data,
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["banks", householdId] }),
+  });
+}
 
 /** Saving credentials changes which connections still work, so the whole bank tree is invalidated. */
 export function useSaveBankCredentials(householdId: string) {

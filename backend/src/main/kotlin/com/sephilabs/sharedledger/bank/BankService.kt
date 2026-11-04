@@ -6,19 +6,17 @@ import com.sephilabs.sharedledger.bank.connector.BankConnectorException
 import com.sephilabs.sharedledger.bank.connector.BankCrypto
 import com.sephilabs.sharedledger.bank.connector.PsuContext
 import com.sephilabs.sharedledger.bank.sync.BankConnectionLinked
+import com.sephilabs.sharedledger.bank.syncschedule.BankSyncScheduleService
 import com.sephilabs.sharedledger.common.errors.AppException
 import com.sephilabs.sharedledger.config.AppProperties
 import com.sephilabs.sharedledger.household.HouseholdRole
 import com.sephilabs.sharedledger.identity.user.User
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
-import org.springframework.scheduling.support.CronExpression
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Duration
 import java.time.Instant
-import java.time.ZoneId
-import java.time.ZonedDateTime
 import java.util.UUID
 
 /** Facade over the split bank storage (connections + accounts + auth sessions + sync runs). Usable only
@@ -35,6 +33,7 @@ class BankService(
     private val authSessions: BankAuthSessionRepository,
     private val syncRuns: BankSyncRunRepository,
     private val events: ApplicationEventPublisher,
+    private val syncSchedules: BankSyncScheduleService,
 ) {
 
     private val log = LoggerFactory.getLogger(javaClass)
@@ -46,22 +45,8 @@ class BankService(
             credentialsConfigured = configured,
             connectionCount = connections.countByHouseholdId(householdId),
             // Absolute instants so the UI can render them in the viewer's own timezone (DST-correct).
-            nextSyncTimes = if (configured) upcomingSyncRuns(count = 3) else emptyList(),
+            nextSyncTimes = if (configured) syncSchedules.timesFor(householdId).nextRuns(Instant.now(), count = 3) else emptyList(),
         )
-    }
-
-    /** The next [count] background-sync fire times, from the configured cron + scheduler zone. */
-    private fun upcomingSyncRuns(count: Int): List<Instant> {
-        val cron = runCatching { CronExpression.parse(props.enableBanking.syncCron) }.getOrNull() ?: return emptyList()
-        val zone = runCatching { ZoneId.of(props.scheduler.timezone) }.getOrDefault(ZoneId.of("UTC"))
-        val runs = mutableListOf<Instant>()
-        var cursor: ZonedDateTime = ZonedDateTime.now(zone)
-        repeat(count) {
-            val next = cron.next(cursor) ?: return runs
-            runs.add(next.toInstant())
-            cursor = next
-        }
-        return runs
     }
 
     @Transactional(readOnly = true)

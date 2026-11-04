@@ -17,6 +17,7 @@ import { apiErrorMessage } from "@/api/client";
 import { formatDate } from "@/lib/dates";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select } from "@/components/ui/primitives";
 import { BankAccountList } from "./BankAccountList";
+import { BankSyncScheduleEditor } from "./BankSyncScheduleEditor";
 import { showWhitelistPhase } from "./whitelistInstructionsBus";
 import { consentUrgency, type ConsentUrgency } from "./consentUrgency";
 
@@ -61,11 +62,14 @@ export function BanksCard({
   householdId,
   locale,
   canReviewInstructions = false,
+  canEditSchedule = false,
 }: {
   householdId: string;
   locale: string;
   /** Whether the setup instructions are on this page to jump back to — they live in the owner-only card. */
   canReviewInstructions?: boolean;
+  /** Owners choose when the household's banks sync in the background. */
+  canEditSchedule?: boolean;
 }) {
   const { t } = useTranslation();
   const { data: connections = [] } = useBankConnections(householdId);
@@ -157,6 +161,8 @@ export function BanksCard({
             {t("banks.auto_sync_schedule", { times: syncTimes.join(", ") })}
           </p>
         )}
+
+        {canLink && canEditSchedule && <BankSyncScheduleEditor householdId={householdId} />}
 
         {!canLink && (
           <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">

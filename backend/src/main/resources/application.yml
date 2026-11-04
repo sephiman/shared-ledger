@@ -234,7 +234,8 @@ app:
     backfill-days: ${ENABLE_BANKING_BACKFILL_DAYS:90}
     # Keep at 4 in production (PSD2 unattended-access cap); raise only for local testing.
     max-calls-per-day: ${ENABLE_BANKING_MAX_CALLS_PER_DAY:4}
-    # Twice daily (07:00, 19:00), within the ≤4 calls/consent/day budget.
-    sync-cron: "0 0 7,19 * * *"
+    # Every 15 minutes: each household's own sync times (default 07:00 & 19:00 UTC) decide who syncs.
+    # Keep in step with SyncTimes.SLOT.
+    sync-tick-cron: "0 */15 * * * *"
     # Daily consent-expiry notice (stored data only, no provider call).
     reminder-cron: "0 0 8 * * *"

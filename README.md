@@ -393,7 +393,7 @@ Long-term wealth projection toward financial independence, derived from the hous
   default, governing every AI feature — *Suggest with AI* in the pending inbox, *Suggest generalised
   rules* on the rules page and the *Ask* box. Its help text names the model and the provider host and
   says, one line per feature, what that feature sends. See *AI features*.
-- **Danger zone — Delete all data** (owners only): a confirmation-gated action (type `delete`) that permanently wipes *every* piece of the household's financial data while keeping the household itself and its membership/invitations. It hard-deletes (including soft-deleted rows) transactions, budgets, recurring templates, net-worth snapshots and movements, cash adjustments, assets, liabilities and lendings (with their value/balance/amortization/schedule/payment history), the investment portfolio (holdings, lots and valuations), bank connections (with their accounts, sync runs, pending movements — and the AI suggestions stored on them — and categorization rules), the AI suggestion and rule-generalisation run records, and the FIRE (including its tax-bracket table), Telegram, auto-snapshot, cash-estimate and AI-suggestion settings. Global reference data (categories, asset classes, FX rates, price history) is never touched.
+- **Danger zone — Delete all data** (owners only): a confirmation-gated action (type `delete`) that permanently wipes *every* piece of the household's financial data while keeping the household itself and its membership/invitations. It hard-deletes (including soft-deleted rows) transactions, budgets, recurring templates, net-worth snapshots and movements, cash adjustments, assets, liabilities and lendings (with their value/balance/amortization/schedule/payment history), the investment portfolio (holdings, lots and valuations), bank connections (with their accounts, sync runs, pending movements — and the AI suggestions stored on them — and categorization rules, and the household's background sync times), the AI suggestion and rule-generalisation run records, and the FIRE (including its tax-bracket table), Telegram, auto-snapshot, cash-estimate and AI-suggestion settings. Global reference data (categories, asset classes, FX rates, price history) is never touched.
 
 ### AI features
 
@@ -608,6 +608,15 @@ Wise could be added via its own API) with the always-available CSV import as the
     earliest available transaction and pulls everything forward). It runs asynchronously right after
     linking but **interactively** (the holder's PSU headers are sent), so it is *not* a background
     fetch and is *not* gated by the per-day budget — it pages through all history.
+  - **When background sync runs — per household.** Owners pick **one or two daily times** in
+    Settings → Banks (*Background sync times*), each on a quarter hour and at least **2 hours apart**,
+    in their **own time zone** (the browser's, stored with the times — so 07:00 stays 07:00 across a
+    DST change). A household that never set them uses the default **07:00 & 19:00 UTC**; *Reset to
+    default* returns to it. The cap of two is the ~4 unattended calls/consent/day budget: each run
+    spends one session check plus a call per account page. A scheduler tick every 15 minutes syncs the
+    connections whose household has a time in that slot; a time missed while the instance was down is
+    skipped, not caught up. Members see the times ("syncs daily at …", in their own zone); only owners
+    change them.
   - **Background (scheduled, 1–2×/day, never live)** — an **incremental** sync using
     `strategy=default` from the **last sync point minus a small overlap** (a few days, to catch
     late-booked items) up to **today**. Both window bounds are **inclusive** and the upper one is
@@ -984,11 +993,11 @@ All scheduled jobs fire in `app.scheduler.timezone` (env `SCHEDULER_TIMEZONE`), 
 | Benchmark series refresh | 01:15 | 02:15 | 03:15 |
 | Recurring / lending / amortization materialize | 02:00 | 03:00 | 04:00 |
 | Auto-snapshot due-check | 06:00 | 07:00 | 08:00 |
-| Bank sync (incremental) | 07:00 & 19:00 | 08:00 & 20:00 | 09:00 & 21:00 |
+| Bank sync (incremental) — tick every 15 min; each household's own times, default below | 07:00 & 19:00 | 08:00 & 20:00 | 09:00 & 21:00 |
 | Consent-expiry notice | 08:00 | 09:00 | 10:00 |
 | Crypto price refresh | hourly at :05 | hourly at :05 | hourly at :05 |
 
-The ordering matters: **FX refresh runs before equity refresh** so non-EUR equity valuations convert with the day's rate. **Leave `SCHEDULER_TIMEZONE` at UTC.** Business dates are stamped in UTC (`LocalDate.now()`), so pointing the scheduler at a non-UTC zone would run the early-morning jobs on the *previous* UTC calendar day and break that FX→equity ordering. If you want the jobs to run at a different wall-clock time, shift the cron expressions rather than the timezone.
+The ordering matters: **FX refresh runs before equity refresh** so non-EUR equity valuations convert with the day's rate. **Leave `SCHEDULER_TIMEZONE` at UTC.** Business dates are stamped in UTC (`LocalDate.now()`), so pointing the scheduler at a non-UTC zone would run the early-morning jobs on the *previous* UTC calendar day and break that FX→equity ordering. If you want the jobs to run at a different wall-clock time, shift the cron expressions rather than the timezone. Bank sync times are the exception: households set them in their own zone (Settings → Banks), independent of `SCHEDULER_TIMEZONE`.
 
 ---
 
