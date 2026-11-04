@@ -149,6 +149,23 @@ class EnableBankingConnectorMappingTest {
     }
 
     @Test
+    fun `an ASPSP error without detail carries the provider request id so support can trace the call`() {
+        // Real BBVA failure (2026-11-04): detail is null, so the request id is the only lead left.
+        val connector = connectorFailing(
+            HttpStatus.BAD_REQUEST,
+            """{"code":400,"message":"Error interacting with ASPSP","detail":null,"error":"ASPSP_ERROR"}""",
+            mapOf("X-Request-ID" to "eb-req-123"),
+        )
+
+        val thrown = catchThrowableOfType(BankConnectorException::class.java) {
+            connector.fetchMovements(creds, "s", "a", null, null, FetchStrategy.DEFAULT, null, null)
+        }
+
+        assertThat(thrown.providerCode).isEqualTo("ASPSP_ERROR")
+        assertThat(thrown.message).isEqualTo("ASPSP_ERROR: Error interacting with ASPSP [request-id=eb-req-123]")
+    }
+
+    @Test
     fun `a rate limit is recognised from the error field even though code holds the status`() {
         val connector = connectorFailing(
             HttpStatus.TOO_MANY_REQUESTS,
@@ -205,11 +222,16 @@ class EnableBankingConnectorMappingTest {
         assertThat(account.iban).isEqualTo(iban)
     }
 
-    private fun connectorFailing(status: HttpStatus, body: String): EnableBankingConnector {
+    private fun connectorFailing(
+        status: HttpStatus,
+        body: String,
+        headers: Map<String, String> = emptyMap(),
+    ): EnableBankingConnector {
         val builder = RestClient.builder()
         val server = MockRestServiceServer.bindTo(builder).build()
-        server.expect(method(org.springframework.http.HttpMethod.GET))
-            .andRespond(withStatus(status).body(body).contentType(MediaType.APPLICATION_JSON))
+        val response = withStatus(status).body(body).contentType(MediaType.APPLICATION_JSON)
+        headers.forEach { (name, value) -> response.header(name, value) }
+        server.expect(method(org.springframework.http.HttpMethod.GET)).andRespond(response)
         return EnableBankingConnector(props, EnableBankingJwt(), builder)
     }
 

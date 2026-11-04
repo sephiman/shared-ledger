@@ -34,6 +34,8 @@ class EnableBankingConnector(
     private companion object {
         const val RATE_LIMIT_CODE = "ASPSP_RATE_LIMIT_EXCEEDED"
         val SESSION_CLOSED_CODES = setOf("CLOSED_SESSION", "EXPIRED_SESSION")
+        val REQUEST_ID_HEADER = Regex("(x-)?(request|correlation|trace)-?id", RegexOption.IGNORE_CASE)
+        const val MAX_LOGGED_BODY = 1000
     }
 
     override fun listAspsps(creds: EbCredentials, country: String): List<Aspsp> = call("aspsps country=$country") {
@@ -242,13 +244,20 @@ class EnableBankingConnector(
         } catch (ex: BankConnectorException) {
             throw ex
         } catch (ex: RestClientResponseException) {
-            val error = errorOf(ex.responseBodyAsString)
+            val raw = ex.responseBodyAsString
+            val error = errorOf(raw)
+            val headers = ex.responseHeaders?.toSingleValueMap().orEmpty().filterKeys { !it.equals("set-cookie", true) }
+            val requestId = headers.entries.firstOrNull { REQUEST_ID_HEADER.matches(it.key) }?.value
+            // The raw body and headers are logged because a bare ASPSP_ERROR (detail=null) hides the
+            // bank's reason; the request id is what Enable Banking support needs to find the call.
             log.warn(
-                "eb_call_failed op='{}' status={} code={} message='{}' detail='{}'",
-                op, ex.statusCode.value(), error.code, error.message, error.detail,
+                "eb_call_failed op='{}' status={} code={} message='{}' detail='{}' requestId={} body='{}' headers={}",
+                op, ex.statusCode.value(), error.code, error.message, error.detail, requestId,
+                raw.take(MAX_LOGGED_BODY), headers,
             )
             if (error.code == RATE_LIMIT_CODE) throw RateLimitExceededException(RATE_LIMIT_CODE, ex)
-            val message = error.describe() ?: ex.message ?: "Enable Banking call failed"
+            val described = error.describe() ?: ex.message ?: "Enable Banking call failed"
+            val message = requestId?.let { "$described [request-id=$it]" } ?: described
             if (error.code in SESSION_CLOSED_CODES) throw SessionClosedException(message, ex, error.code)
             throw BankConnectorException(message, ex, error.code)
         } catch (ex: Exception) {
