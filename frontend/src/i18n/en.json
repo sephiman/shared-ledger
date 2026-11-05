@@ -500,7 +500,13 @@
     "evolution_from_portfolio": "From portfolio",
     "evolution_from_snapshots": "From snapshots",
     "home_title": "Current wealth",
-    "home_view_all": "View all"
+    "home_view_all": "View all",
+    "refresh_now": "Refresh now",
+    "refresh_cooldown": "Refreshed at {{last}} · next refresh from {{next}}",
+    "refresh_next": "Next refresh from {{next}}",
+    "refresh_failed": "Couldn't start the refresh. Try again in a moment.",
+    "refresh_stale_only_label": "What does Refresh now update?",
+    "refresh_stale_only": "This instance prices stocks and ETFs with a provider that has a daily quota, so Refresh now updates crypto and exchange rates fully but only fetches stocks/ETFs whose price is out of date."
   },
   "networth": {
     "title": "Wealth",

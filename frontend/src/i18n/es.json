@@ -500,7 +500,13 @@
     "evolution_from_portfolio": "De la cartera",
     "evolution_from_snapshots": "De las instantáneas",
     "home_title": "Patrimonio actual",
-    "home_view_all": "Ver todo"
+    "home_view_all": "Ver todo",
+    "refresh_now": "Actualizar ahora",
+    "refresh_cooldown": "Actualizado a las {{last}} · próxima actualización desde las {{next}}",
+    "refresh_next": "Próxima actualización desde las {{next}}",
+    "refresh_failed": "No se pudo iniciar la actualización. Inténtalo de nuevo en un momento.",
+    "refresh_stale_only_label": "¿Qué actualiza «Actualizar ahora»?",
+    "refresh_stale_only": "Esta instancia obtiene los precios de acciones y ETF de un proveedor con cuota diaria, así que «Actualizar ahora» actualiza por completo las criptomonedas y los tipos de cambio, pero de acciones y ETF solo pide las que tienen el precio desactualizado."
   },
   "networth": {
     "title": "Patrimonio",

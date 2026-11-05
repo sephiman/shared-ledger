@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "./client";
 
@@ -223,13 +224,11 @@ function invalidatePortfolio(qc: ReturnType<typeof useQueryClient>, householdId:
   void qc.invalidateQueries({ queryKey: ["portfolio", householdId] });
 }
 
-export function usePortfolioSummary(householdId: string, refetchInterval: number | false = false) {
+export function usePortfolioSummary(householdId: string) {
   return useQuery({
     queryKey: ["portfolio", householdId, "summary"],
     queryFn: async () =>
       (await apiClient.get<PortfolioSummary>(`/households/${householdId}/portfolio/summary`)).data,
-    // While a manual price refresh is in flight, poll so the table updates whenever prices land.
-    refetchInterval,
   });
 }
 
@@ -261,18 +260,47 @@ export function usePortfolioEvolution(householdId: string, filters: EvolutionFil
   });
 }
 
-export interface PriceRefreshTrigger {
-  // False when the cooldown skipped the run (prices were refreshed very recently).
-  started: boolean;
+export interface PriceRefreshStatus {
+  running: boolean;
+  lastFinishedAt: string | null;
+  // Set while the household's cooldown keeps the button shut.
+  nextAllowedAt: string | null;
+  // The stock provider has a daily quota: a refresh only fetches stale stocks/ETFs.
+  equitiesStaleOnly: boolean;
 }
 
+export type PriceRefreshOutcome = "started" | "already_running" | "cooldown";
+
+export interface PriceRefreshTrigger {
+  outcome: PriceRefreshOutcome;
+  status: PriceRefreshStatus;
+}
+
+const refreshStatusKey = (householdId: string) => ["portfolio", householdId, "refresh-status"];
+
+/** Polls every [pollMs] while [poll] or while the server reports a run in flight (e.g. another member's). */
+export function usePriceRefreshStatus(householdId: string, poll: boolean, pollMs: number) {
+  return useQuery({
+    queryKey: refreshStatusKey(householdId),
+    queryFn: async () =>
+      (await apiClient.get<PriceRefreshStatus>(`/households/${householdId}/portfolio/refresh-prices`)).data,
+    refetchInterval: (query) => (poll || query.state.data?.running ? pollMs : false),
+  });
+}
+
+/** The run is asynchronous server-side; the trigger's answer seeds the status query, which the caller polls. */
 export function useRefreshPrices(householdId: string) {
-  // The refresh runs asynchronously server-side; the caller polls the summary (via its
-  // refetchInterval) to reflect prices as they land, so this hook just fires the trigger.
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: async () =>
       (await apiClient.post<PriceRefreshTrigger>(`/households/${householdId}/portfolio/refresh-prices`)).data,
+    onSuccess: (trigger) => qc.setQueryData(refreshStatusKey(householdId), trigger.status),
   });
+}
+
+export function useInvalidatePortfolio(householdId: string) {
+  const qc = useQueryClient();
+  return useCallback(() => invalidatePortfolio(qc, householdId), [qc, householdId]);
 }
 
 export function useBenchmarks(householdId: string) {

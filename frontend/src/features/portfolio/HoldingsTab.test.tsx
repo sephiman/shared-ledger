@@ -26,6 +26,8 @@ vi.mock("@/api/portfolio", async (importOriginal) => {
     useLinkHolding: mutation,
     useUnlinkHolding: mutation,
     useRefreshPrices: mutation,
+    usePriceRefreshStatus: () => ({ data: undefined, refetch: vi.fn() }),
+    useInvalidatePortfolio: () => vi.fn(),
     useAddLot: spied(lotSpies.add),
     useUpdateLot: spied(lotSpies.update),
     useDeleteLot: spied(lotSpies.remove),
@@ -203,6 +205,13 @@ describe("hiding closed and dust holdings", () => {
     show([OPEN, SECOND_OPEN]);
     expect(screen.getByText("2 holdings")).toBeInTheDocument();
     expect(screen.queryByLabelText("Show closed")).not.toBeInTheDocument();
+  });
+
+  it("puts Refresh now in the holdings header, left of Show closed", () => {
+    show([OPEN, CLOSED, DUST]);
+    const refresh = screen.getByRole("button", { name: "Refresh now" });
+    const toggle = screen.getByRole("checkbox", { name: "Show closed" });
+    expect(refresh.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("never hides an unpriced open holding — its value is unknown, not small", () => {

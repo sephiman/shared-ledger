@@ -26,6 +26,10 @@ open class ProviderException(message: String, cause: Throwable? = null) : Runtim
 class SymbolNotFoundException(val symbol: String, message: String, cause: Throwable? = null) :
     ProviderException(message, cause)
 
+/** The provider answered 429: a manual refresh backs off from [provider] instead of carrying on. */
+class RateLimitedException(val provider: String, message: String, cause: Throwable? = null) :
+    ProviderException(message, cause)
+
 interface CryptoPriceProvider {
     fun search(query: String): List<SymbolCandidate>
 

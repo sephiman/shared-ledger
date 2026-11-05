@@ -9,6 +9,7 @@ import com.sephilabs.sharedledger.portfolio.benchmark.BenchmarkDto
 import com.sephilabs.sharedledger.portfolio.benchmark.BenchmarkSeriesResponseDto
 import com.sephilabs.sharedledger.portfolio.benchmark.BenchmarkService
 import com.sephilabs.sharedledger.portfolio.price.ManualPriceRefreshService
+import com.sephilabs.sharedledger.portfolio.price.ManualRefreshOutcome
 import com.sephilabs.sharedledger.portfolio.price.SymbolCandidate
 import jakarta.validation.Valid
 import org.springframework.http.ResponseEntity
@@ -53,13 +54,18 @@ class PortfolioController(
     @GetMapping("/summary")
     fun summary(@PathVariable householdId: UUID): PortfolioSummaryDto = valuation.summary(householdId)
 
-    /** On-demand price gap-fill for stale/missing holdings; 202 when started, 200 when the
-     *  cooldown skipped it. Refreshes the shared price series, so it runs off-thread. */
+    /** "Refresh now" for this household's series; 202 when a run started, 200 when it is already running or
+     *  cooling down. The run is off-thread: poll the GET until `running` clears. */
     @PostMapping("/refresh-prices")
     fun refreshPrices(@PathVariable householdId: UUID): ResponseEntity<PriceRefreshTriggerDto> {
-        val started = manualRefresh.trigger()
-        return ResponseEntity.status(if (started) 202 else 200).body(PriceRefreshTriggerDto(started))
+        val trigger = manualRefresh.trigger(householdId)
+        val status = if (trigger.outcome == ManualRefreshOutcome.STARTED) 202 else 200
+        return ResponseEntity.status(status).body(trigger.toDto())
     }
+
+    @GetMapping("/refresh-prices")
+    fun refreshPricesStatus(@PathVariable householdId: UUID): PriceRefreshStatusDto =
+        manualRefresh.status(householdId).toDto()
 
     @GetMapping("/valuation")
     fun valuationAt(

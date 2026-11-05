@@ -2,6 +2,8 @@ package com.sephilabs.sharedledger.portfolio
 
 import com.fasterxml.jackson.annotation.JsonFormat
 import com.sephilabs.sharedledger.common.validation.ValidCurrency
+import com.sephilabs.sharedledger.portfolio.price.ManualRefreshStatus
+import com.sephilabs.sharedledger.portfolio.price.ManualRefreshTrigger
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
 import java.math.BigDecimal
@@ -249,7 +251,20 @@ data class PortfolioEvolutionDto(
     val points: List<PortfolioEvolutionPointDto>,
 )
 
-/** Result of a user-triggered price refresh: false when skipped by the cooldown. */
-data class PriceRefreshTriggerDto(
-    val started: Boolean,
+/** Where a household's "Refresh now" stands; [equitiesStaleOnly] when the stock provider has a daily quota. */
+data class PriceRefreshStatusDto(
+    val running: Boolean,
+    val lastFinishedAt: Instant?,
+    val nextAllowedAt: Instant?,
+    val equitiesStaleOnly: Boolean,
 )
+
+/** [outcome] is `started`, `already_running` or `cooldown`. */
+data class PriceRefreshTriggerDto(
+    val outcome: String,
+    val status: PriceRefreshStatusDto,
+)
+
+fun ManualRefreshStatus.toDto() = PriceRefreshStatusDto(running, lastFinishedAt, nextAllowedAt, equitiesStaleOnly)
+
+fun ManualRefreshTrigger.toDto() = PriceRefreshTriggerDto(outcome.name.lowercase(), status.toDto())

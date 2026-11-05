@@ -164,9 +164,7 @@ data class AppProperties(
         val benchmarkHistoryLookbackDays: Long = 3650,
         // Bootstrap missing benchmark history at startup (off in tests to avoid provider HTTP).
         val benchmarkBackfillOnStart: Boolean = true,
-        // Minimum gap between user-triggered "refresh prices" runs, so the button can't
-        // hammer providers. A click inside the window is reported as skipped, not re-run.
-        val manualRefreshCooldownSeconds: Long = 60,
+        val manualRefresh: ManualRefresh = ManualRefresh(),
         // Lot-matching method for sells. Only FIFO is implemented; AVERAGE is reserved.
         val costMethod: CostMethod = CostMethod.FIFO,
     ) {
@@ -174,6 +172,16 @@ data class AppProperties(
     }
 
     enum class CostMethod { FIFO, AVERAGE }
+
+    /** Limits on the household "Refresh now" button; the scheduled jobs ignore all of them. */
+    data class ManualRefresh(
+        // Per household, measured from the end of its last run.
+        val cooldownSeconds: Long = 300,
+        // A series fetched this recently (by any run, any household) is skipped.
+        val freshWithinSeconds: Long = 600,
+        // After a provider answers 429, manual runs leave it alone this long, for every household.
+        val rateLimitBackoffSeconds: Long = 900,
+    )
 
     data class PriceProviderConfig(
         val baseUrl: String = "",

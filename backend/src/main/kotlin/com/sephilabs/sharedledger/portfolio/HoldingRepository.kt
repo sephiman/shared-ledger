@@ -31,6 +31,15 @@ interface HoldingRepository : JpaRepository<Holding, UUID> {
     @Query("SELECT DISTINCT h.nativeCurrency FROM Holding h WHERE h.nativeCurrency <> :base AND h.provider IS NOT NULL")
     fun findDistinctLinkedForeignNativeCurrencies(@Param("base") base: String): List<String>
 
+    @Query(
+        "SELECT DISTINCT h.nativeCurrency FROM Holding h " +
+            "WHERE h.householdId = :hid AND h.nativeCurrency <> :base AND h.provider IS NOT NULL"
+    )
+    fun findDistinctLinkedForeignNativeCurrenciesByHousehold(
+        @Param("base") base: String,
+        @Param("hid") householdId: UUID,
+    ): List<String>
+
     // The provider-symbol guard keeps a run that started before a relink from flagging the new symbol.
     @Modifying
     @Query(

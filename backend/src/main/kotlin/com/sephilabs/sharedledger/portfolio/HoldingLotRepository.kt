@@ -19,4 +19,10 @@ interface HoldingLotRepository : JpaRepository<HoldingLot, UUID> {
 
     @Query("SELECT DISTINCT l.currency FROM HoldingLot l WHERE l.currency <> :base")
     fun findDistinctForeignCurrencies(@Param("base") base: String): List<String>
+
+    @Query(
+        "SELECT DISTINCT l.currency FROM HoldingLot l WHERE l.currency <> :base " +
+            "AND l.holdingId IN (SELECT h.id FROM Holding h WHERE h.householdId = :hid)"
+    )
+    fun findDistinctForeignCurrenciesByHousehold(@Param("base") base: String, @Param("hid") householdId: UUID): List<String>
 }

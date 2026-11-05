@@ -9,7 +9,6 @@ import {
   useDeleteLot,
   useLinkHolding,
   usePortfolioSummary,
-  useRefreshPrices,
   useUnlinkHolding,
   useUpdateHolding,
   useUpdateLot,
@@ -27,6 +26,8 @@ import { formatMoney, formatNumber, formatPrice } from "@/lib/money";
 import { formatDate, isoToday } from "@/lib/dates";
 import { useToggleSet } from "@/lib/useToggleSet";
 import { SymbolSearchCombobox } from "./SymbolSearchCombobox";
+import { usePriceRefresh } from "./usePriceRefresh";
+import { RefreshPricesButton } from "./RefreshPricesButton";
 import { DUST_HOLDING_MAX_VALUE_EUR, isDustHolding, partitionDust } from "./dustHoldings";
 import { weightsWithin } from "./holdingWeights";
 import { nextSort, sortHoldings, type HoldingSort, type HoldingSortKey } from "./holdingsSort";
@@ -142,30 +143,12 @@ export function HoldingsTab() {
   const household = useActiveHousehold();
   const { user } = useAuth();
 
-  // The refresh runs asynchronously on the server, so we can't know exactly when prices land.
-  // While refreshing, poll the summary and stop as soon as it reports fresh (or a safety cap).
-  const [refreshing, setRefreshing] = useState(false);
-  const { data: summary } = usePortfolioSummary(household.householdId, refreshing ? 5000 : false);
+  const { data: summary } = usePortfolioSummary(household.householdId);
   const create = useCreateHolding(household.householdId);
   const update = useUpdateHolding(household.householdId);
   const del = useDeleteHolding(household.householdId);
   const unlink = useUnlinkHolding(household.householdId);
-  const refreshPrices = useRefreshPrices(household.householdId);
-
-  const triggerRefresh = () =>
-    refreshPrices.mutate(undefined, {
-      onSuccess: () => {
-        setRefreshing(true);
-        // Safety cap: some holdings may stay legitimately unpriced (unlinked / no provider data),
-        // so `anyStale` would never clear — give up polling after 90s.
-        setTimeout(() => setRefreshing(false), 90000);
-      },
-    });
-
-  // Stop polling the moment prices come back fresh.
-  useEffect(() => {
-    if (refreshing && summary && !summary.anyStale) setRefreshing(false);
-  }, [refreshing, summary]);
+  const refresh = usePriceRefresh(household.householdId);
 
   const [panel, setPanel] = useState<PanelMode>({ kind: "closed" });
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -370,12 +353,10 @@ export function HoldingsTab() {
           <Button
             variant="secondary"
             className="shrink-0"
-            disabled={refreshing || refreshPrices.isPending}
-            onClick={triggerRefresh}
+            disabled={refresh.refreshing || refresh.nextAllowedAt != null}
+            onClick={refresh.start}
           >
-            {refreshing || refreshPrices.isPending
-              ? t("portfolio.refreshing_prices")
-              : t("portfolio.refresh_prices")}
+            {refresh.refreshing ? t("portfolio.refreshing_prices") : t("portfolio.refresh_prices")}
           </Button>
         </div>
       )}
@@ -408,9 +389,12 @@ export function HoldingsTab() {
             >
               {countLabel}
             </p>
-            {anyDust && (
-              <Toggle label={t("portfolio.show_closed")} checked={showClosed} onChange={setShowClosed} />
-            )}
+            <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
+              <RefreshPricesButton householdId={household.householdId} />
+              {anyDust && (
+                <Toggle label={t("portfolio.show_closed")} checked={showClosed} onChange={setShowClosed} />
+              )}
+            </div>
           </CardHeader>
         )}
         <CardBody>

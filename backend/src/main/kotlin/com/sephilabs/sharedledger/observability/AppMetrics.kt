@@ -103,6 +103,13 @@ class AppMetrics(private val registry: MeterRegistry) {
             .increment()
     }
 
+    fun manualPriceRefresh(outcome: String) {
+        Counter.builder("sl_portfolio_manual_refresh_total")
+            .tag("outcome", outcome)
+            .register(registry)
+            .increment()
+    }
+
     fun benchmarkRefreshed(benchmark: String) {
         Counter.builder("sl_benchmark_prices_refreshed_total")
             .tag("benchmark", benchmark)

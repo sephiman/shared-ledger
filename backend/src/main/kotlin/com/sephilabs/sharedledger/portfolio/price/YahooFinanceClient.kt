@@ -138,6 +138,9 @@ class YahooFinanceClient(
         } catch (ex: HttpClientErrorException.NotFound) {
             // Both hosts serve the same listing, so a 404 answers for the symbol and query2 is not retried.
             throw SymbolNotFoundException(symbol, "Yahoo does not list $symbol (404)", ex)
+        } catch (ex: HttpClientErrorException.TooManyRequests) {
+            // The limit is per client, not per host, so query2 is not retried either.
+            throw RateLimitedException(PROVIDER, "Yahoo rate-limited the chart request for $symbol (429)", ex)
         }
 
     /** Runs [block] against query1, retrying once against query2 on transport failure. */

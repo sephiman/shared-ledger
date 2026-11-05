@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.sephilabs.sharedledger.config.AppProperties
 import org.springframework.stereotype.Component
+import org.springframework.web.client.HttpClientErrorException
 import org.springframework.web.client.RestClient
 import java.math.BigDecimal
 import java.time.Instant
@@ -103,6 +104,8 @@ class CoinGeckoClient(
             block()
         } catch (ex: ProviderException) {
             throw ex
+        } catch (ex: HttpClientErrorException.TooManyRequests) {
+            throw RateLimitedException(PROVIDER, "CoinGecko rate-limited $operation (429)", ex)
         } catch (ex: Exception) {
             throw ProviderException("CoinGecko $operation failed: ${ex.message}", ex)
         }

@@ -43,8 +43,8 @@ class PriceRefreshService(
     private val vsCurrency: String get() = props.portfolio.vsCurrency
 
     /** Hourly: gap-fill missed days, then upsert today's row from one batched current-price call. */
-    fun refreshCrypto(today: LocalDate) {
-        val demands = demandsFor(HoldingProvider.coingecko)
+    fun refreshCrypto(today: LocalDate, scope: ManualRefreshScope? = null) {
+        val demands = demandsFor(HoldingProvider.coingecko, today, scope)
         if (demands.isEmpty()) return
 
         for (demand in demands) {
@@ -52,6 +52,7 @@ class PriceRefreshService(
             try {
                 gapFillCrypto(demand, today)
             } catch (ex: ProviderException) {
+                abortIfRateLimited(ex, scope)
                 metrics.priceRefreshFailure(CoinGeckoClient.PROVIDER)
                 log.error("Crypto gap-fill failed for {}: {}; trying Binance fallback", id, ex.message)
                 // Binance covers from the last stored day, or the earliest lot when CoinGecko
@@ -75,6 +76,7 @@ class PriceRefreshService(
             }
             metrics.priceRefreshed(CoinGeckoClient.PROVIDER)
         } catch (ex: ProviderException) {
+            abortIfRateLimited(ex, scope)
             metrics.priceRefreshFailure(CoinGeckoClient.PROVIDER)
             log.error("Crypto current-price refresh failed: {}", ex.message)
         }
@@ -84,11 +86,11 @@ class PriceRefreshService(
      *  open, only up to the close once all are closed. Only holdings on the ACTIVE provider are refreshed; others
      *  keep their stored prices and show stale until relinked. A failing symbol never crashes the job, and one
      *  the provider no longer lists is re-checked weekly instead of nightly. */
-    fun refreshEquities(today: LocalDate) {
+    fun refreshEquities(today: LocalDate, scope: ManualRefreshScope? = null) {
         val active = props.portfolio.equityProvider.asHoldingProvider()
-        for (demand in demandsFor(active)) {
+        for (demand in demandsFor(active, today, scope)) {
             if (inNotFoundBackoff(demand, today)) continue
-            refreshEquityDemand(active, demand, today)
+            refreshEquityDemand(active, demand, today, scope)
             pace(activeEquityConfig().minRequestIntervalMs)
         }
     }
@@ -98,7 +100,7 @@ class PriceRefreshService(
     fun gapFillCoordinateOf(holding: Holding, today: LocalDate = LocalDate.now()) {
         val provider = holding.provider ?: return
         if (!props.portfolio.backfillOnLink) return
-        val demand = demandsFor(provider)
+        val demand = allDemandsFor(provider)
             .firstOrNull { it.providerSymbol == holding.providerSymbol && it.currency == priceCurrencyOf(holding) }
             ?: return
         when (provider) {
@@ -113,7 +115,12 @@ class PriceRefreshService(
         }
     }
 
-    private fun refreshEquityDemand(provider: HoldingProvider, demand: CoordinateDemand, today: LocalDate) {
+    private fun refreshEquityDemand(
+        provider: HoldingProvider,
+        demand: CoordinateDemand,
+        today: LocalDate,
+        scope: ManualRefreshScope? = null,
+    ) {
         try {
             if (refreshEquitySymbol(provider.name, demand, today)) {
                 metrics.priceRefreshed(provider.name)
@@ -124,6 +131,7 @@ class PriceRefreshService(
             log.warn("Equity refresh: {} is not listed by {}; re-checking weekly", demand.providerSymbol, provider)
             markNotFound(demand.holdings, demand.providerSymbol, today)
         } catch (ex: ProviderException) {
+            abortIfRateLimited(ex, scope)
             metrics.priceRefreshFailure(provider.name)
             log.error("Equity refresh failed for {}: {}", demand.providerSymbol, ex.message)
         }
@@ -211,11 +219,8 @@ class PriceRefreshService(
     }
 
     /** Daily, before equities: gap-fill FX for every foreign currency used by holdings or lots. */
-    fun refreshFx(today: LocalDate) {
-        val currencies = (
-            holdings.findDistinctLinkedForeignNativeCurrencies(baseCurrency) +
-                lots.findDistinctForeignCurrencies(baseCurrency)
-            ).distinct()
+    fun refreshFx(today: LocalDate, scope: ManualRefreshScope? = null) {
+        val currencies = foreignCurrencies(scope)
         for (currency in currencies) {
             try {
                 refreshFxCurrency(currency, today)
@@ -447,8 +452,38 @@ class PriceRefreshService(
     private fun priceCurrencyOf(holding: Holding): String =
         if (holding.assetClass == HoldingAssetClass.crypto) baseCurrency else holding.nativeCurrency
 
+    private fun foreignCurrencies(scope: ManualRefreshScope?): List<String> {
+        val linked = scope?.let { holdings.findDistinctLinkedForeignNativeCurrenciesByHousehold(baseCurrency, it.householdId) }
+            ?: holdings.findDistinctLinkedForeignNativeCurrencies(baseCurrency)
+        val traded = scope?.let { lots.findDistinctForeignCurrenciesByHousehold(baseCurrency, it.householdId) }
+            ?: lots.findDistinctForeignCurrencies(baseCurrency)
+        return (linked + traded).distinct()
+    }
+
+    // Built from every household first and only then narrowed, so a coordinate another household still holds
+    // open is never treated as closed (nor flagged as not listed) on this household's say alone.
+    private fun demandsFor(provider: HoldingProvider, today: LocalDate, scope: ManualRefreshScope?): List<CoordinateDemand> {
+        val all = allDemandsFor(provider)
+        return if (scope == null) all else all.filter { inScope(provider, it, today, scope) }
+    }
+
+    private fun inScope(provider: HoldingProvider, demand: CoordinateDemand, today: LocalDate, scope: ManualRefreshScope): Boolean {
+        if (demand.holdings.none { it.householdId == scope.householdId }) return false
+        val lastFetched = prices.findLastFetchedAt(provider.name, demand.providerSymbol, demand.currency)
+        if (lastFetched != null && !lastFetched.isBefore(scope.skipFetchedSince)) return false
+        if (!scope.equitiesStaleOnly || provider == HoldingProvider.coingecko) return true
+        // Same cut-off as the valuation's stale flag, so "stale only" refreshes exactly what the notice reports.
+        val maxStored = prices.findMaxPriceDate(provider.name, demand.providerSymbol, demand.currency) ?: return true
+        return maxStored.isBefore(today.minusDays(props.portfolio.stalePriceThresholdDays))
+    }
+
+    // A scheduled run logs a 429 per symbol as before; a manual one stops so the caller can back off.
+    private fun abortIfRateLimited(ex: ProviderException, scope: ManualRefreshScope?) {
+        if (scope != null && ex is RateLimitedException) throw ex
+    }
+
     /** Linked active holdings on [provider], one demand per price coordinate they share across households. */
-    private fun demandsFor(provider: HoldingProvider): List<CoordinateDemand> {
+    private fun allDemandsFor(provider: HoldingProvider): List<CoordinateDemand> {
         val linked = holdings.findAllLinkedActive().filter { it.provider == provider }
         if (linked.isEmpty()) return emptyList()
         val lotsByHolding = lots.findAllByHoldingIdIn(linked.map { it.id }).groupBy { it.holdingId }

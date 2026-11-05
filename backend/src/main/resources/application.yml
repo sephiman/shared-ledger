@@ -213,8 +213,14 @@ app:
     backfill-on-link: true
     vs-currency: eur
     stale-price-threshold-days: 7
-    # Cooldown between user-triggered price refreshes (the "Refresh prices" button).
-    manual-refresh-cooldown-seconds: 60
+    # Limits on the household "Refresh now" button (Wealth page). Scheduled jobs ignore them.
+    manual-refresh:
+      # Per household, from the end of its previous run.
+      cooldown-seconds: 300
+      # Price series fetched this recently, by any run, are skipped.
+      fresh-within-seconds: 600
+      # After a provider answers 429, manual runs skip it this long, for every household.
+      rate-limit-backoff-seconds: 900
   enable-banking:
     # PSD2 open-banking ingestion (Enable Banking). The API application id and private key are
     # per-household configuration (Settings -> Banks), not env vars. What stays instance-wide is the

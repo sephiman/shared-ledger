@@ -3,6 +3,7 @@ package com.sephilabs.sharedledger.portfolio.price
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
+import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
@@ -53,4 +54,16 @@ interface PricePointRepository : JpaRepository<PricePoint, UUID> {
         @Param("providerSymbol") providerSymbol: String,
         @Param("currency") currency: String,
     ): LocalDate?
+
+    @Query(
+        """
+        SELECT MAX(p.fetchedAt) FROM PricePoint p
+        WHERE p.provider = :provider AND p.providerSymbol = :providerSymbol AND p.currency = :currency
+        """
+    )
+    fun findLastFetchedAt(
+        @Param("provider") provider: String,
+        @Param("providerSymbol") providerSymbol: String,
+        @Param("currency") currency: String,
+    ): Instant?
 }
