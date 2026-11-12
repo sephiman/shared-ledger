@@ -131,6 +131,8 @@ data class FireTierScenarioStats(
     /** Same statistics with contributions stopped today (Coast FIRE). */
     val coastProbabilityOfReachingTarget: Double,
     val coastMedianYearReachingTarget: Int?,
+    /** Amount needed today (nominal) to reach this tier's horizon target at the scenario's mean return with €0 contributions. */
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val coastTargetToday: BigDecimal?,
 )
 
 data class FireScenarioOutput(
@@ -182,6 +184,8 @@ data class FireContributions(
     @JsonFormat(shape = JsonFormat.Shape.STRING) val manualMonthly: BigDecimal,
     /** Trailing-12 average of (income − expenses); null without transactions. */
     @JsonFormat(shape = JsonFormat.Shape.STRING) val savingsMonthly: BigDecimal?,
+    /** Trailing-12 (income − expenses) / income × 100; null without positive income. */
+    val savingsRatePct: Double?,
     /** Trailing-12 average of net contributions into qualifying classes; null without movements. */
     @JsonFormat(shape = JsonFormat.Shape.STRING) val movementsMonthly: BigDecimal?,
     val mode: ContributionMode,
@@ -214,6 +218,8 @@ data class FireGainFraction(
     @JsonFormat(shape = JsonFormat.Shape.STRING) val percent: BigDecimal,
     /** "movements" when derived from recorded net contributions, "manual" for the fallback setting. */
     val source: String,
+    /** Whole months between the first snapshot and the first qualifying movement when > threshold; 0 otherwise. */
+    val uncoveredMonths: Int = 0,
 )
 
 data class FireHistoricalContribution(
@@ -234,6 +240,7 @@ data class FireProjectionResponse(
     val historicalScenario: FireHistoricalScenario?,
     val tiers: List<FireTierOutput>,
     val scenarios: List<FireScenarioOutput>,
+    val historicalWealth: List<FireScenarioYear>,
     val cumulativeContributions: List<FireHistoricalContribution>,
     val monteCarloTrials: Int,
 )

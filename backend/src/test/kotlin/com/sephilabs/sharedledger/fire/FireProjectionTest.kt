@@ -550,6 +550,43 @@ class FireProjectionTest @Autowired constructor(
         assertThat(dto.fatMultiplier).isEqualByComparingTo("1.5")
     }
 
+    @Test
+    fun `projection exposes savings rate, coast target, historical wealth and gain coverage gap`() {
+        val (household, user) = setupHousehold()
+        addSnapshot(household, user, LocalDate.of(2023, 6, 1), "50000.00")
+        addSnapshot(household, user, LocalDate.of(2025, 1, 1), "100000.00")
+        // Movement starts >1 month after the first snapshot -> uncoveredMonths > 0.
+        addMovement(household, user, LocalDate.of(2024, 6, 1), MovementType.contribution, "40000.00")
+
+        val thisMonth = YearMonth.now().atDay(10)
+        addTx(household, user, thisMonth, "income.salary", "4000.00", Direction.income)
+        addTx(household, user, thisMonth, "groceries.groceries", "1000.00", Direction.expense)
+
+        fireService.update(
+            household.id,
+            request(
+                targetAmount = "1000000.00",
+                targetYear = 2035,
+                scenarios = listOf(ReturnScenarioInput(BigDecimal("10.0"), BigDecimal("0.0"))),
+            ),
+            user,
+        )
+
+        val result = fireService.project(household.id)
+        // Savings rate = (4000 - 1000) / 4000 = 75%
+        assertThat(result.contributions.savingsRatePct).isEqualTo(75.0)
+        // Historical wealth has one entry per snapshot year up to startYear (2023 and 2025).
+        assertThat(result.historicalWealth.map { it.year }).containsExactly(2023, 2025)
+        assertThat(result.historicalWealth.first().value).isEqualByComparingTo("50000.00")
+        assertThat(result.historicalWealth.last().value).isEqualByComparingTo("100000.00")
+        // Gain fraction flags uncovered early months.
+        assertThat(result.gainFraction.source).isEqualTo("movements")
+        assertThat(result.gainFraction.uncoveredMonths).isGreaterThan(0)
+        // Coast target for custom 1M over 10 years at 10% = 1_000_000 / 1.1^10 ≈ 385_543.29
+        val customStat = result.scenarios.first().tierStats.single { it.tier == FireTierKey.custom }
+        assertThat(customStat.coastTargetToday!!.toDouble()).isBetween(385540.0, 385550.0)
+    }
+
     // -------------------------------------------------------------------------------------
     // Helpers
 

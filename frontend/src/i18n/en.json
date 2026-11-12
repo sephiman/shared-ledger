@@ -1215,7 +1215,20 @@
     "assumptions_essential_derived": "Essential spending: {{amount}}/month (trailing {{months}} months)",
     "assumptions_essential_manual": "Essential spending: {{amount}}/month (manual)",
     "assumptions_total_derived": "Total spending: {{amount}}/month (trailing {{months}} months)",
-    "assumptions_total_manual": "Total spending: {{amount}}/month (manual)"
+    "assumptions_total_manual": "Total spending: {{amount}}/month (manual)",
+    "assumptions_savings_rate": "Trailing-12 savings rate: {{rate}}",
+    "mode_nominal": "Nominal",
+    "mode_real": "Real (today's value)",
+    "real_note": "All future figures are deflated by {{inflation}}%/year inflation into today's purchasing power.",
+    "historical_wealth": "Historical qualifying wealth",
+    "cumulative_contributions": "Cumulative net contributions",
+    "savings_rate_badge": "Savings rate: {{rate}}",
+    "coast_target": "Coast target today",
+    "coast_target_line": "Coast FIRE ({{mean}}%): {{amount}} ({{pct}} funded)",
+    "stale_snapshot_warning": "Your latest snapshot is {{days}} days old ({{date}}) — projections start from that balance.",
+    "no_snapshot_warning": "No net worth snapshot recorded yet — projections start from 0.",
+    "record_snapshot_link": "Record a snapshot",
+    "gain_fraction_coverage_warning": "Gain share ({{gain}}) is derived from movements, but {{months}} month(s) of early snapshot history have no recorded movements — this may overstate taxable gains and inflate targets."
   },
   "settings": {
     "title": "Settings",

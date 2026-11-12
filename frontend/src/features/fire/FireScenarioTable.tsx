@@ -2,13 +2,15 @@ import { Fragment } from "react";
 import { useTranslation } from "react-i18next";
 import type { FireProjection } from "@/api/fire";
 import { Card, CardBody, CardHeader } from "@/components/ui/primitives";
+import { formatMoney } from "@/lib/money";
 import { Explain } from "./Explain";
 import { formatHitProbability, hitMedianYear, scenarioLabel } from "./fireLabels";
 
 /** Scenario × tier summary: deterministic hit year, Monte Carlo probability and median year, plus the
  *  Coast FIRE counterparts (contributions stopped today). */
-export function FireScenarioTable({ projection }: { projection: FireProjection }) {
-  const { t } = useTranslation();
+export function FireScenarioTable({ projection, currency }: { projection: FireProjection; currency: string }) {
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language;
 
   const hasStats = projection.scenarios.some((s) => s.tierStats.length > 0);
 
@@ -30,6 +32,7 @@ export function FireScenarioTable({ projection }: { projection: FireProjection }
                   <th className="pr-2">{t("fire.target_hit_deterministic")}</th>
                   <th className="pr-2">{t("fire.probability")}</th>
                   <th className="pr-2">{t("fire.median_hit")}</th>
+                  <th className="pr-2">{t("fire.coast_target")}</th>
                   <th className="pr-2">{t("fire.coast_probability")}</th>
                   <th>{t("fire.coast_median")}</th>
                 </tr>
@@ -48,6 +51,7 @@ export function FireScenarioTable({ projection }: { projection: FireProjection }
                         <td className="pr-2">{stat.deterministicHitYear ?? "—"}</td>
                         <td className="pr-2">{formatHitProbability(stat.probabilityOfReachingTarget)}</td>
                         <td className="pr-2">{hitMedianYear(stat.probabilityOfReachingTarget, stat.medianYearReachingTarget)}</td>
+                        <td className="pr-2">{stat.coastTargetToday ? formatMoney(stat.coastTargetToday, currency, locale) : "—"}</td>
                         <td className="pr-2">{formatHitProbability(stat.coastProbabilityOfReachingTarget)}</td>
                         <td>{hitMedianYear(stat.coastProbabilityOfReachingTarget, stat.coastMedianYearReachingTarget)}</td>
                       </tr>

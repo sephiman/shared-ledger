@@ -120,7 +120,7 @@ export function FirePage() {
 
       {projection && <FireTiersCard projection={projection} currency={household.currency} />}
       {projection && <FireChart projection={projection} currency={household.currency} />}
-      {projection && <FireScenarioTable projection={projection} />}
+      {projection && <FireScenarioTable projection={projection} currency={household.currency} />}
 
       {form && (
         <FireSettingsCard

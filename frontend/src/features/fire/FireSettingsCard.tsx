@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import type { FireProjection, FireSettings, FireTierKey, ReturnScenario } from "@/api/fire";
 import { Badge, Button, Card, CardBody, CardHeader, FieldError, Input, Label, Toggle } from "@/components/ui/primitives";
-import { formatMoney, formatNumber } from "@/lib/money";
+import { formatMoney, formatNumber, formatPercent } from "@/lib/money";
 import { TIER_ORDER } from "./fireLabels";
 
 export interface FireFormErrors {
@@ -365,6 +365,9 @@ export function FireSettingsCard({
                   {mode !== "manual" && (
                     <p className="ml-6 mt-1 text-xs text-gray-500 dark:text-gray-400">
                       {t(`fire.contribution_${mode}_explain`)}
+                      {mode === "savings" && derived?.savingsRatePct != null && (
+                        <> ({t("fire.savings_rate_badge", { rate: formatPercent(derived.savingsRatePct, locale, 1) })})</>
+                      )}
                     </p>
                   )}
                   {mode === "manual" && <FieldError message={errors.monthlyContribution} />}
@@ -525,6 +528,14 @@ export function FireSettingsCard({
                     ? t("fire.gain_fraction_movements", { pct: formatNumber(Number(projection.gainFraction.percent), locale, 2) })
                     : t("fire.gain_fraction_manual", { pct: formatNumber(Number(projection.gainFraction.percent), locale, 2) }))}
                 </p>
+                {projection && projection.gainFraction.source === "movements" && projection.gainFraction.uncoveredMonths > 0 && (
+                  <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                    {t("fire.gain_fraction_coverage_warning", {
+                      gain: formatPercent(Number(projection.gainFraction.percent), locale, 2),
+                      months: projection.gainFraction.uncoveredMonths,
+                    })}
+                  </p>
+                )}
               </div>
 
               <div>

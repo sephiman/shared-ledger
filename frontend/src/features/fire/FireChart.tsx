@@ -19,6 +19,8 @@ export function FireChart({ projection, currency }: { projection: FireProjection
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
 
+  const [realMode, setRealMode] = useState(false);
+
   // Clicking a legend entry hides/shows its series, keyed by the series dataKey.
   const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(new Set());
   function toggleSeries(dataKey: unknown) {
@@ -32,38 +34,57 @@ export function FireChart({ projection, currency }: { projection: FireProjection
   }
 
   const activeTiers = projection.tiers.filter((tier) => tier.enabled && tier.targetToday !== null);
+  const hasHistoricalWealth = projection.historicalWealth.length > 0;
+  const hasCumulativeContribs = projection.cumulativeContributions.length > 0;
 
   const { chartData, yTicks } = useMemo(() => {
     const yearSet = new Set<number>();
+    for (const h of projection.historicalWealth) yearSet.add(h.year);
+    for (const c of projection.cumulativeContributions) yearSet.add(c.year);
     for (const s of projection.scenarios) for (const p of s.percentiles) yearSet.add(p.year);
     for (const tier of activeTiers) for (const point of tier.targetCurve) yearSet.add(point.year);
+
+    const inflation = Number(projection.settings.expectedInflationPct) / 100;
+    const deflatorFor = (year: number) =>
+      realMode && year > projection.startYear ? (1 + inflation) ** (year - projection.startYear) : 1;
 
     let maxValue = 0;
     const rows = Array.from(yearSet)
       .sort((a, b) => a - b)
       .map((year) => {
         const row: Record<string, number | string> = { year };
+        const deflator = deflatorFor(year);
+        const hist = projection.historicalWealth.find((x) => x.year === year);
+        if (hist) {
+          row.historical_wealth = Number(hist.value);
+          maxValue = Math.max(maxValue, row.historical_wealth);
+        }
+        const contrib = projection.cumulativeContributions.find((x) => x.year === year);
+        if (contrib) {
+          row.cumulative_contributions = Number(contrib.cumulative);
+          maxValue = Math.max(maxValue, row.cumulative_contributions);
+        }
         for (const s of projection.scenarios) {
           const p = s.percentiles.find((x) => x.year === year);
           if (p) {
             const k = scenarioKey(s);
-            row[`${k}_p50`] = Number(p.p50);
-            row[`${k}_p10`] = Number(p.p10);
-            row[`${k}_p90`] = Number(p.p90);
-            maxValue = Math.max(maxValue, Number(p.p90));
+            row[`${k}_p50`] = Number(p.p50) / deflator;
+            row[`${k}_p10`] = Number(p.p10) / deflator;
+            row[`${k}_p90`] = Number(p.p90) / deflator;
+            maxValue = Math.max(maxValue, row[`${k}_p90`] as number);
           }
         }
         for (const tier of activeTiers) {
           const point = tier.targetCurve.find((x) => x.year === year);
           if (point) {
-            row[`target_${tier.key}`] = Number(point.value);
-            maxValue = Math.max(maxValue, Number(point.value));
+            row[`target_${tier.key}`] = Number(point.value) / deflator;
+            maxValue = Math.max(maxValue, row[`target_${tier.key}`] as number);
           }
         }
         return row;
       });
     return { chartData: rows, yTicks: niceMoneyTicks(maxValue) };
-  }, [projection, activeTiers]);
+  }, [projection, activeTiers, realMode]);
 
   const s = projection.settings;
   const contributionMissing = projection.contributions.activeMonthly === null;
@@ -73,9 +94,27 @@ export function FireChart({ projection, currency }: { projection: FireProjection
     <Card>
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="font-medium">
-            {t("fire.projection")} ({projection.monteCarloTrials.toLocaleString(locale)} {t("fire.trials")})
-          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="font-medium">
+              {t("fire.projection")} ({projection.monteCarloTrials.toLocaleString(locale)} {t("fire.trials")})
+            </p>
+            <div className="inline-flex rounded-md border border-border bg-raised p-0.5 text-xs">
+              <button
+                type="button"
+                onClick={() => setRealMode(false)}
+                className={`rounded px-2 py-1 font-medium ${!realMode ? "bg-surface text-gray-900 shadow-sm dark:text-gray-100" : "text-gray-500 hover:text-gray-700 dark:text-gray-400"}`}
+              >
+                {t("fire.mode_nominal")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setRealMode(true)}
+                className={`rounded px-2 py-1 font-medium ${realMode ? "bg-surface text-gray-900 shadow-sm dark:text-gray-100" : "text-gray-500 hover:text-gray-700 dark:text-gray-400"}`}
+              >
+                {t("fire.mode_real")}
+              </button>
+            </div>
+          </div>
           <ActualReturnBadge projection={projection} />
         </div>
       </CardHeader>
@@ -104,11 +143,13 @@ export function FireChart({ projection, currency }: { projection: FireProjection
                       {...props}
                       formatValue={(v) => {
                         if (Array.isArray(v)) {
+                          if (v[0] == null || v[1] == null) return "—";
                           const lo = formatMoney(String(v[0]), currency, locale);
                           const hi = formatMoney(String(v[1]), currency, locale);
                           return `${lo} – ${hi}`;
                         }
-                        return formatMoney(String(v ?? "0"), currency, locale);
+                        if (v == null) return "—";
+                        return formatMoney(String(v), currency, locale);
                       }}
                     />
                   )}
@@ -123,6 +164,31 @@ export function FireChart({ projection, currency }: { projection: FireProjection
                     </span>
                   )}
                 />
+                {hasHistoricalWealth && (
+                  <Line
+                    type="monotone"
+                    dataKey="historical_wealth"
+                    name={t("fire.historical_wealth")}
+                    stroke="#64748b"
+                    strokeWidth={2}
+                    dot={{ r: 2.5 }}
+                    connectNulls={false}
+                    hide={hiddenSeries.has("historical_wealth")}
+                  />
+                )}
+                {hasCumulativeContribs && (
+                  <Line
+                    type="monotone"
+                    dataKey="cumulative_contributions"
+                    name={t("fire.cumulative_contributions")}
+                    stroke="#14b8a6"
+                    strokeWidth={1.5}
+                    strokeDasharray="4 4"
+                    dot={{ r: 2 }}
+                    connectNulls={false}
+                    hide={hiddenSeries.has("cumulative_contributions")}
+                  />
+                )}
                 {projection.scenarios.map((sc, idx) => {
                   const k = scenarioKey(sc);
                   const color = SCENARIO_PALETTE[idx % SCENARIO_PALETTE.length];
@@ -132,7 +198,11 @@ export function FireChart({ projection, currency }: { projection: FireProjection
                     <Fragment key={k}>
                       <Area
                         type="monotone"
-                        dataKey={(row: Record<string, number>) => [row[`${k}_p10`], row[`${k}_p90`]]}
+                        dataKey={(row: Record<string, number>) =>
+                          row[`${k}_p10`] != null && row[`${k}_p90`] != null
+                            ? [row[`${k}_p10`], row[`${k}_p90`]]
+                            : undefined
+                        }
                         stroke="none"
                         fill={color}
                         fillOpacity={0.12}
@@ -175,6 +245,13 @@ export function FireChart({ projection, currency }: { projection: FireProjection
                   mode: t(`fire.contribution_${projection.contributions.mode}`),
                 })}
               </li>
+              {projection.contributions.savingsRatePct !== null && (
+                <li>
+                  {t("fire.assumptions_savings_rate", {
+                    rate: formatPercent(projection.contributions.savingsRatePct, locale, 1),
+                  })}
+                </li>
+              )}
               <li>
                 {projection.spending.essentialMode === "manual"
                   ? t("fire.assumptions_essential_manual", { amount: money(projection.spending.essentialMonthly) })
@@ -204,7 +281,9 @@ export function FireChart({ projection, currency }: { projection: FireProjection
               </li>
             </ul>
             <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-              {t("fire.nominal_note", { inflation: s.expectedInflationPct })}
+              {realMode
+                ? t("fire.real_note", { inflation: s.expectedInflationPct })
+                : t("fire.nominal_note", { inflation: s.expectedInflationPct })}
             </p>
           </aside>
         </div>

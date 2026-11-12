@@ -1215,7 +1215,20 @@
     "assumptions_essential_derived": "Gasto esencial: {{amount}}/mes (últimos {{months}} meses)",
     "assumptions_essential_manual": "Gasto esencial: {{amount}}/mes (manual)",
     "assumptions_total_derived": "Gasto total: {{amount}}/mes (últimos {{months}} meses)",
-    "assumptions_total_manual": "Gasto total: {{amount}}/mes (manual)"
+    "assumptions_total_manual": "Gasto total: {{amount}}/mes (manual)",
+    "assumptions_savings_rate": "Tasa de ahorro (12 meses): {{rate}}",
+    "mode_nominal": "Nominal",
+    "mode_real": "Real (valor de hoy)",
+    "real_note": "Las cifras futuras se deflactan un {{inflation}}%/año para mostrar el poder adquisitivo de hoy.",
+    "historical_wealth": "Patrimonio cualificado histórico",
+    "cumulative_contributions": "Aportaciones netas acumuladas",
+    "savings_rate_badge": "Tasa de ahorro: {{rate}}",
+    "coast_target": "Objetivo Coast hoy",
+    "coast_target_line": "Coast FIRE ({{mean}}%): {{amount}} ({{pct}} cubierto)",
+    "stale_snapshot_warning": "Tu último snapshot tiene {{days}} días ({{date}}) — las proyecciones parten de ese saldo.",
+    "no_snapshot_warning": "Aún no hay ningún snapshot de patrimonio — las proyecciones parten de 0.",
+    "record_snapshot_link": "Registrar snapshot",
+    "gain_fraction_coverage_warning": "La proporción de ganancia ({{gain}}) se deriva de movimientos, pero hay {{months}} mes(es) iniciales sin movimientos registrados — esto puede sobreestimar las ganancias gravables e inflar los objetivos."
   },
   "settings": {
     "title": "Ajustes",

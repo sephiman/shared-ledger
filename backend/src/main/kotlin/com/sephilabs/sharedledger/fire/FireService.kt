@@ -133,11 +133,12 @@ class FireService(
         val monthlyContribution = (contributions.activeMonthly ?: BigDecimal.ZERO).toDouble()
 
         val orderedSnapshots = snapshots.findAllOrdered(householdId)
-        val (actualReturn, unavailableReason) = computeActualReturn(orderedSnapshots, allMovements, qualifying)
+        val uncoveredMonths = uncoveredMovementMonths(orderedSnapshots, allMovements)
+        val (actualReturn, unavailableReason) = computeActualReturn(orderedSnapshots, allMovements, qualifying, uncoveredMonths)
         val historicalScenario =
             if (actualReturn != null) computeHistoricalScenario(orderedSnapshots, allMovements, qualifying) else null
 
-        val gainFraction = deriveGainFraction(s, startingValue, allMovements)
+        val gainFraction = deriveGainFraction(s, startingValue, allMovements, uncoveredMonths)
         val gainFractionRatio = gainFraction.percent.toDouble() / 100.0
 
         val tiers = buildTiers(
@@ -182,6 +183,7 @@ class FireService(
             historicalScenario = historicalScenario,
             tiers = tiers,
             scenarios = scenarios,
+            historicalWealth = historicalWealth(orderedSnapshots, qualifying, startYear),
             cumulativeContributions = historicalCumulativeContributions(allMovements),
             monteCarloTrials = trials,
         )
@@ -248,7 +250,7 @@ class FireService(
         allMovements: List<NetWorthMovement>,
     ): FireContributions {
         val manual = Money.normalize(s.monthlyContribution)
-        val savings = deriveSavingsMonthly(householdId)
+        val (savings, savingsRatePct) = deriveSavingsMonthly(householdId)
         val fromMovements = deriveMovementsMonthly(allMovements)
         val active = when (s.contributionMode) {
             ContributionMode.manual -> manual
@@ -258,19 +260,20 @@ class FireService(
         return FireContributions(
             manualMonthly = manual,
             savingsMonthly = savings,
+            savingsRatePct = savingsRatePct,
             movementsMonthly = fromMovements,
             mode = s.contributionMode,
             activeMonthly = active,
         )
     }
 
-    /** Trailing-12 monthly average of (income − expenses), same month-count convention as cost of living. */
-    private fun deriveSavingsMonthly(householdId: UUID): BigDecimal? {
+    /** Trailing-12 monthly average of (income − expenses) and savings rate %, same month-count convention as cost of living. */
+    private fun deriveSavingsMonthly(householdId: UUID): Pair<BigDecimal?, Double?> {
         val asOf = YearMonth.now()
-        val minDate = transactions.dateBounds(householdId).minDate ?: return null
+        val minDate = transactions.dateBounds(householdId).minDate ?: return null to null
         val months = (ChronoUnit.MONTHS.between(YearMonth.from(minDate), asOf).toInt() + 1)
             .coerceIn(0, FireDefaults.TRAILING_WINDOW_MONTHS)
-        if (months <= 0) return null
+        if (months <= 0) return null to null
         val from = asOf.minusMonths((FireDefaults.TRAILING_WINDOW_MONTHS - 1).toLong()).atDay(1)
         val rows = transactions.aggregationRows(householdId, from, asOf.atEndOfMonth())
         var income = BigDecimal.ZERO
@@ -281,7 +284,10 @@ class FireService(
                 Direction.expense -> expense += r.amount
             }
         }
-        return Money.normalize((income - expense).divide(months.toBigDecimal(), Money.SCALE, RoundingMode.HALF_EVEN))
+        val net = income - expense
+        val monthly = Money.normalize(net.divide(months.toBigDecimal(), Money.SCALE, RoundingMode.HALF_EVEN))
+        val ratePct = if (income.signum() > 0) (net.toDouble() / income.toDouble()) * 100.0 else null
+        return monthly to ratePct
     }
 
     /** Trailing-12 monthly average of net contributions (contributions − withdrawals) into qualifying classes. */
@@ -303,6 +309,7 @@ class FireService(
         s: FireSettings,
         startingValue: BigDecimal,
         allMovements: List<NetWorthMovement>,
+        uncoveredMonths: Int,
     ): FireGainFraction {
         if (allMovements.isEmpty() || startingValue.signum() <= 0) {
             return FireGainFraction(percent = Money.normalize(s.fallbackGainFractionPct), source = GAIN_FRACTION_SOURCE_MANUAL)
@@ -314,7 +321,21 @@ class FireService(
         return FireGainFraction(
             percent = Money.normalize(ratio.multiply(BigDecimal(100))),
             source = GAIN_FRACTION_SOURCE_MOVEMENTS,
+            uncoveredMonths = uncoveredMonths,
         )
+    }
+
+    private fun uncoveredMovementMonths(
+        orderedSnapshots: List<Snapshot>,
+        allMovements: List<NetWorthMovement>,
+    ): Int {
+        val firstSnap = orderedSnapshots.firstOrNull()?.snapshotDate ?: return 0
+        val firstMovement = allMovements.firstOrNull { it.movementDate.isAfter(firstSnap) }?.movementDate ?: return 0
+        return if (firstMovement.isAfter(firstSnap.plusMonths(FireDefaults.MOVEMENT_COVERAGE_GAP_MONTHS))) {
+            ChronoUnit.MONTHS.between(firstSnap, firstMovement).toInt()
+        } else {
+            0
+        }
     }
 
     private fun NetWorthMovement.signedAmount(): BigDecimal = when (type) {
@@ -333,6 +354,7 @@ class FireService(
         orderedSnapshots: List<Snapshot>,
         allMovements: List<NetWorthMovement>,
         qualifying: Set<String>,
+        uncoveredMonths: Int,
     ): Pair<FireActualReturn?, FireActualReturnUnavailableReason?> {
         if (orderedSnapshots.size < 2) return null to FireActualReturnUnavailableReason.insufficient_snapshots
         val first = orderedSnapshots.first()
@@ -347,12 +369,6 @@ class FireService(
             ?: return null to FireActualReturnUnavailableReason.not_computable
         // inRange preserves allMovements' ascending order, so first() is the earliest covered movement.
         val firstMovementDate = inRange.first().movementDate
-        val uncoveredMonths =
-            if (firstMovementDate.isAfter(first.snapshotDate.plusMonths(FireDefaults.MOVEMENT_COVERAGE_GAP_MONTHS))) {
-                ChronoUnit.MONTHS.between(first.snapshotDate, firstMovementDate).toInt()
-            } else {
-                0
-            }
         return FireActualReturn(
             annualizedPercent = toPercent(rate),
             fromDate = first.snapshotDate,
@@ -418,6 +434,19 @@ class FireService(
 
     private fun toPercent(ratio: Double): BigDecimal =
         BigDecimal(ratio * 100.0).setScale(2, RoundingMode.HALF_EVEN)
+
+    private fun historicalWealth(
+        orderedSnapshots: List<Snapshot>,
+        qualifying: Set<String>,
+        startYear: Int,
+    ): List<FireScenarioYear> =
+        orderedSnapshots
+            .filter { it.snapshotDate.year <= startYear }
+            .groupBy { it.snapshotDate.year }
+            .toSortedMap()
+            .map { (year, snaps) ->
+                FireScenarioYear(year, Money.normalize(qualifyingTotal(snaps.last(), qualifying)))
+            }
 
     private fun historicalCumulativeContributions(allMovements: List<NetWorthMovement>): List<FireHistoricalContribution> {
         var cumulative = BigDecimal.ZERO
@@ -532,6 +561,11 @@ class FireService(
             }
         }
         private val flatTargets: DoubleArray
+        private val horizonTargets: DoubleArray = DoubleArray(simTiers.size) { t ->
+            simTiers[t].targetCurve.lastOrNull()?.value?.toDouble()
+                ?: simTiers[t].targetToday?.toDouble()
+                ?: Double.NaN
+        }
 
         /** With tax off targets don't depend on the path — precomputed once. */
         private val fixedTargets: Array<DoubleArray>?
@@ -649,6 +683,7 @@ class FireService(
             val mc = monteCarlo(scenario, monthlyContribution, trials, rng, collectPercentiles = true)
             val coast = monteCarlo(scenario, 0.0, trials, rng, collectPercentiles = false)
 
+            val growthFactor = (1.0 + mean).pow(years)
             return FireScenarioOutput(
                 meanPercent = scenario.meanPercent,
                 stdDevPercent = scenario.stdDevPercent,
@@ -658,6 +693,12 @@ class FireService(
                 },
                 percentiles = mc.percentiles,
                 tierStats = tierKeys.indices.map { t ->
+                    val horizonTarget = horizonTargets[t]
+                    val coastTarget = if (!horizonTarget.isNaN() && growthFactor > 0.0) {
+                        Money.normalize(BigDecimal(horizonTarget / growthFactor))
+                    } else {
+                        null
+                    }
                     FireTierScenarioStats(
                         tier = tierKeys[t],
                         deterministicHitYear = deterministic.hitYears[t].takeIf { it >= 0 },
@@ -665,6 +706,7 @@ class FireService(
                         medianYearReachingTarget = mc.medianHitYear[t],
                         coastProbabilityOfReachingTarget = coast.probability[t],
                         coastMedianYearReachingTarget = coast.medianHitYear[t],
+                        coastTargetToday = coastTarget,
                     )
                 },
             )

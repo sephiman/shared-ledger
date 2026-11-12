@@ -58,6 +58,7 @@ export interface FireTierScenarioStats {
   medianYearReachingTarget: number | null;
   coastProbabilityOfReachingTarget: number;
   coastMedianYearReachingTarget: number | null;
+  coastTargetToday: string | null;
 }
 
 export interface FireScenarioOutput {
@@ -95,6 +96,7 @@ export interface FireSpendingBasis {
 export interface FireContributions {
   manualMonthly: string;
   savingsMonthly: string | null;
+  savingsRatePct: number | null;
   movementsMonthly: string | null;
   mode: ContributionMode;
   activeMonthly: string | null;
@@ -119,6 +121,7 @@ export interface FireHistoricalScenario {
 export interface FireGainFraction {
   percent: string;
   source: "movements" | "manual";
+  uncoveredMonths: number;
 }
 
 export interface FireProjection {
@@ -134,6 +137,7 @@ export interface FireProjection {
   historicalScenario: FireHistoricalScenario | null;
   tiers: FireTierOutput[];
   scenarios: FireScenarioOutput[];
+  historicalWealth: { year: number; value: string }[];
   cumulativeContributions: { year: number; cumulative: string }[];
   monteCarloTrials: number;
 }

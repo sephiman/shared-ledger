@@ -1,9 +1,29 @@
+import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import type { FireProjection, FireTierOutput } from "@/api/fire";
-import { Card, CardBody, CardHeader } from "@/components/ui/primitives";
+import { Badge, Card, CardBody, CardHeader } from "@/components/ui/primitives";
 import { formatMoney, formatPercent } from "@/lib/money";
 import { Explain } from "./Explain";
 import { TIER_COLORS, TIER_ORDER } from "./fireLabels";
+
+const STALE_SNAPSHOT_DAYS = 45;
+
+function readDismissed(key: string): boolean {
+  try {
+    return window.localStorage.getItem(key) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeDismissed(key: string): void {
+  try {
+    window.localStorage.setItem(key, "1");
+  } catch {
+    // ignore storage quota / private-mode errors
+  }
+}
 
 /** One box per active tier: target today, the spending base it derives from, current coverage, and the
  *  instantiated formula behind it. */
@@ -30,6 +50,22 @@ export function FireTiersCard({ projection, currency }: { projection: FireProjec
     Number(projection.spending.totalMonthly) > 0 &&
     Number(projection.spending.essentialMonthly) > Number(projection.spending.totalMonthly);
 
+  const snapshotKey = `fire-dismissed:snapshot:${projection.snapshotDate ?? "none"}`;
+  const gainKey = `fire-dismissed:gain:${projection.gainFraction.uncoveredMonths}`;
+  const [staleDismissed, setStaleDismissed] = useState(() => readDismissed(snapshotKey));
+  const [gainDismissed, setGainDismissed] = useState(() => readDismissed(gainKey));
+
+  const snapshotAgeDays = projection.snapshotDate
+    ? Math.floor((Date.now() - Date.parse(`${projection.snapshotDate}T00:00:00Z`)) / 86_400_000)
+    : null;
+  const staleSnapshot = !staleDismissed && (snapshotAgeDays === null || snapshotAgeDays > STALE_SNAPSHOT_DAYS);
+  const gainUncovered =
+    !gainDismissed &&
+    taxOn &&
+    projection.gainFraction.source === "movements" &&
+    projection.gainFraction.uncoveredMonths > 0;
+  const savingsRatePct = projection.contributions.savingsRatePct;
+
   if (tiers.length === 0 || tiers.every((tier) => tier.targetToday === null)) {
     return (
       <Card>
@@ -46,7 +82,14 @@ export function FireTiersCard({ projection, currency }: { projection: FireProjec
   return (
     <Card>
       <CardHeader>
-        <p className="font-medium">{t("fire.tiers")}</p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="font-medium">{t("fire.tiers")}</p>
+          {savingsRatePct !== null && (
+            <Badge tone={savingsRatePct >= 0 ? "green" : "amber"}>
+              {t("fire.savings_rate_badge", { rate: formatPercent(savingsRatePct, locale, 1) })}
+            </Badge>
+          )}
+        </div>
         {anyDerivedBase && projection.spending.monthsAvailable > 0 && projection.spending.monthsAvailable < 12 && (
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
             {t("fire.tier_months_note", { months: projection.spending.monthsAvailable })}
@@ -54,6 +97,29 @@ export function FireTiersCard({ projection, currency }: { projection: FireProjec
         )}
       </CardHeader>
       <CardBody>
+        {staleSnapshot && (
+          <div className="mb-3 flex items-start justify-between gap-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+            <p>
+              {snapshotAgeDays === null
+                ? t("fire.no_snapshot_warning")
+                : t("fire.stale_snapshot_warning", { date: projection.snapshotDate, days: snapshotAgeDays })}{" "}
+              <Link to="/networth" className="font-medium underline">
+                {t("fire.record_snapshot_link")}
+              </Link>
+            </p>
+            <button
+              type="button"
+              aria-label={t("common.close")}
+              onClick={() => {
+                writeDismissed(snapshotKey);
+                setStaleDismissed(true);
+              }}
+              className="shrink-0 rounded px-1 text-amber-800/70 hover:bg-amber-200/50 hover:text-amber-900 dark:text-amber-200/70 dark:hover:bg-amber-800/50 dark:hover:text-amber-100"
+            >
+              ×
+            </button>
+          </div>
+        )}
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
           {tiers.map((tier) => (
             <TierBox key={tier.key} tier={tier} projection={projection} currency={currency} />
@@ -63,6 +129,27 @@ export function FireTiersCard({ projection, currency }: { projection: FireProjec
           <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
             {t("fire.spending_coherence_warning")}
           </p>
+        )}
+        {gainUncovered && (
+          <div className="mt-3 flex items-start justify-between gap-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+            <p>
+              {t("fire.gain_fraction_coverage_warning", {
+                gain: formatPercent(Number(projection.gainFraction.percent), locale, 2),
+                months: projection.gainFraction.uncoveredMonths,
+              })}
+            </p>
+            <button
+              type="button"
+              aria-label={t("common.close")}
+              onClick={() => {
+                writeDismissed(gainKey);
+                setGainDismissed(true);
+              }}
+              className="shrink-0 rounded px-1 text-amber-800/70 hover:bg-amber-200/50 hover:text-amber-900 dark:text-amber-200/70 dark:hover:bg-amber-800/50 dark:hover:text-amber-100"
+            >
+              ×
+            </button>
+          </div>
         )}
         {taxOn && (
           <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
@@ -125,6 +212,15 @@ function TierBox({ tier, projection, currency }: { tier: FireTierOutput; project
     }
   })();
 
+  const nonHist = projection.scenarios.filter((sc) => !sc.historical);
+  const scenarioPool = nonHist.length > 0 ? nonHist : projection.scenarios;
+  const refScenario = scenarioPool[Math.floor(scenarioPool.length / 2)];
+  const coastTarget = refScenario?.tierStats.find((st) => st.tier === tier.key)?.coastTargetToday ?? null;
+  const coastFundedPct =
+    coastTarget && Number(coastTarget) > 0
+      ? (Number(projection.startingValue) / Number(coastTarget)) * 100
+      : null;
+
   return (
     <div className="rounded-md border border-border p-3">
       <div className="flex items-center gap-2">
@@ -166,6 +262,15 @@ function TierBox({ tier, projection, currency }: { tier: FireTierOutput; project
                 />
               </div>
             </div>
+          )}
+          {coastTarget !== null && coastFundedPct !== null && refScenario && (
+            <p className="mt-2 text-xs text-gray-600 dark:text-gray-300">
+              {t("fire.coast_target_line", {
+                mean: refScenario.meanPercent,
+                amount: money(coastTarget),
+                pct: formatPercent(coastFundedPct, locale, 0),
+              })}
+            </p>
           )}
           {explain && (
             <Explain>
