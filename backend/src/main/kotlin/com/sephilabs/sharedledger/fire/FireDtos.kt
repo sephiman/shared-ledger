@@ -133,6 +133,19 @@ data class FireTierScenarioStats(
     val coastMedianYearReachingTarget: Int?,
     /** Amount needed today (nominal) to reach this tier's horizon target at the scenario's mean return with €0 contributions. */
     @JsonFormat(shape = JsonFormat.Shape.STRING) val coastTargetToday: BigDecimal?,
+    /** Monthly contribution needed for the deterministic mean-return path to hit this tier by targetYear. */
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val requiredMonthlyToHitTarget: BigDecimal?,
+)
+
+data class FirePreviewRequest(
+    @field:DecimalMin(value = "0.00")
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val monthlyContribution: BigDecimal? = null,
+    val targetYear: Short? = null,
+    @field:DecimalMin(value = "0.01")
+    @field:DecimalMax(value = "100.00")
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val safeWithdrawalRatePct: BigDecimal? = null,
+    @field:DecimalMin(value = "0.00")
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val lumpSum: BigDecimal = BigDecimal.ZERO,
 )
 
 data class FireScenarioOutput(

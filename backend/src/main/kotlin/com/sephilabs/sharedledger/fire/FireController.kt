@@ -6,6 +6,7 @@ import com.sephilabs.sharedledger.observability.AppMetrics
 import jakarta.validation.Valid
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
@@ -34,5 +35,15 @@ class FireController(
     fun projection(@PathVariable householdId: UUID): FireProjectionResponse =
         metrics.analyticsTimer("fire_projection").record<FireProjectionResponse> {
             service.project(householdId)
+        }
+
+    /** Stateless what-if projection for any household member; never mutates saved settings. */
+    @PostMapping("/preview")
+    fun preview(
+        @PathVariable householdId: UUID,
+        @Valid @RequestBody body: FirePreviewRequest,
+    ): FireProjectionResponse =
+        metrics.analyticsTimer("fire_preview").record<FireProjectionResponse> {
+            service.project(householdId, body)
         }
 }

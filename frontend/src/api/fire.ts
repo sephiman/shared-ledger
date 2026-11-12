@@ -59,6 +59,14 @@ export interface FireTierScenarioStats {
   coastProbabilityOfReachingTarget: number;
   coastMedianYearReachingTarget: number | null;
   coastTargetToday: string | null;
+  requiredMonthlyToHitTarget: string | null;
+}
+
+export interface FirePreviewRequest {
+  monthlyContribution?: string | null;
+  targetYear?: number | null;
+  safeWithdrawalRatePct?: string | null;
+  lumpSum?: string;
 }
 
 export interface FireScenarioOutput {
@@ -165,5 +173,12 @@ export function useFireProjection(householdId: string) {
   return useQuery({
     queryKey: ["fire-projection", householdId],
     queryFn: async () => (await apiClient.get<FireProjection>(`/households/${householdId}/fire/projection`)).data,
+  });
+}
+
+export function useFirePreview(householdId: string) {
+  return useMutation({
+    mutationFn: async (input: FirePreviewRequest) =>
+      (await apiClient.post<FireProjection>(`/households/${householdId}/fire/preview`, input)).data,
   });
 }

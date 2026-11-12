@@ -1228,7 +1228,13 @@
     "stale_snapshot_warning": "Your latest snapshot is {{days}} days old ({{date}}) — projections start from that balance.",
     "no_snapshot_warning": "No net worth snapshot recorded yet — projections start from 0.",
     "record_snapshot_link": "Record a snapshot",
-    "gain_fraction_coverage_warning": "Gain share ({{gain}}) is derived from movements, but {{months}} month(s) of early snapshot history have no recorded movements — this may overstate taxable gains and inflate targets."
+    "gain_fraction_coverage_warning": "Gain share ({{gain}}) is derived from movements, but {{months}} month(s) of early snapshot history have no recorded movements — this may overstate taxable gains and inflate targets.",
+    "required_monthly": "Needed /mo",
+    "what_if_title": "What-if sandbox",
+    "what_if_active": "Preview active (not saved)",
+    "what_if_reset": "Reset",
+    "what_if_apply": "Apply to settings",
+    "what_if_lump_sum": "One-time lump sum today"
   },
   "settings": {
     "title": "Settings",

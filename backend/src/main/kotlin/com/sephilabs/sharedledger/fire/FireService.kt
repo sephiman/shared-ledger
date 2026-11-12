@@ -104,20 +104,27 @@ class FireService(
     }
 
     @Transactional(readOnly = true)
-    fun project(householdId: UUID): FireProjectionResponse {
+    fun project(householdId: UUID, preview: FirePreviewRequest? = null): FireProjectionResponse {
         val s = getOrCreate(householdId)
         val brackets = effectiveBrackets(householdId)
         val qualifying = s.qualifyingAssetClasses.toSet()
         val today = LocalDate.now()
 
+        val effectiveTargetYear = preview?.targetYear ?: s.targetYear
+        val effectiveSwrPct = preview?.safeWithdrawalRatePct ?: s.safeWithdrawalRatePct
+        val effectiveMode = if (preview?.monthlyContribution != null) ContributionMode.manual else s.contributionMode
+        val effectiveManualContrib = Money.normalize(preview?.monthlyContribution ?: s.monthlyContribution)
+        val lumpSum = Money.normalize(preview?.lumpSum ?: BigDecimal.ZERO)
+
         val latest = snapshots.findLatest(householdId)
-        val startingValue = qualifyingTotal(latest, qualifying)
+        val rawStartingValue = qualifyingTotal(latest, qualifying)
+        val startingValue = rawStartingValue + lumpSum
         val startYear = latest?.snapshotDate?.year ?: today.year
-        val years = (s.targetYear.toInt() - startYear).coerceAtLeast(0)
+        val years = (effectiveTargetYear.toInt() - startYear).coerceAtLeast(0)
         val trials = props.fire.monteCarloTrials.coerceAtLeast(1)
 
         val inflation = s.expectedInflationPct.toDouble() / 100.0
-        val swr = s.safeWithdrawalRatePct.toDouble() / 100.0
+        val swr = effectiveSwrPct.toDouble() / 100.0
 
         // Spending bases — derived live (same definition as the Cost of living tile) unless
         // a manual override is active; the effective values feed everything downstream.
@@ -129,7 +136,7 @@ class FireService(
             .filter { it.type != MovementType.debt_payment && it.assetClassCode != null && it.assetClassCode in qualifying }
             .sortedBy { it.movementDate }
 
-        val contributions = deriveContributions(householdId, s, allMovements)
+        val contributions = deriveContributions(householdId, effectiveManualContrib, effectiveMode, allMovements)
         val monthlyContribution = (contributions.activeMonthly ?: BigDecimal.ZERO).toDouble()
 
         val orderedSnapshots = snapshots.findAllOrdered(householdId)
@@ -138,7 +145,14 @@ class FireService(
         val historicalScenario =
             if (actualReturn != null) computeHistoricalScenario(orderedSnapshots, allMovements, qualifying) else null
 
-        val gainFraction = deriveGainFraction(s, startingValue, allMovements, uncoveredMonths)
+        val baseGainFraction = deriveGainFraction(s, rawStartingValue, allMovements, uncoveredMonths)
+        val gainFraction = if (lumpSum.signum() > 0 && startingValue.signum() > 0) {
+            val baseGainAmount = rawStartingValue.multiply(baseGainFraction.percent).divide(BigDecimal(100), 6, RoundingMode.HALF_EVEN)
+            val pct = baseGainAmount.divide(startingValue, 6, RoundingMode.HALF_EVEN).multiply(BigDecimal(100))
+            baseGainFraction.copy(percent = Money.normalize(pct.coerceIn(BigDecimal.ZERO, BigDecimal(100))))
+        } else {
+            baseGainFraction
+        }
         val gainFractionRatio = gainFraction.percent.toDouble() / 100.0
 
         val tiers = buildTiers(
@@ -170,11 +184,18 @@ class FireService(
             engine.buildScenarioOutput(scenario, monthlyContribution, trials, rng)
         }
 
+        val effectiveSettings = s.toDto(brackets).copy(
+            targetYear = effectiveTargetYear,
+            safeWithdrawalRatePct = effectiveSwrPct,
+            contributionMode = effectiveMode,
+            monthlyContribution = effectiveManualContrib,
+        )
+
         return FireProjectionResponse(
             startYear = startYear,
             startingValue = Money.normalize(startingValue),
             snapshotDate = latest?.snapshotDate,
-            settings = s.toDto(brackets),
+            settings = effectiveSettings,
             spending = spending,
             contributions = contributions,
             gainFraction = gainFraction,
@@ -246,13 +267,14 @@ class FireService(
 
     private fun deriveContributions(
         householdId: UUID,
-        s: FireSettings,
+        manualMonthly: BigDecimal,
+        mode: ContributionMode,
         allMovements: List<NetWorthMovement>,
     ): FireContributions {
-        val manual = Money.normalize(s.monthlyContribution)
+        val manual = Money.normalize(manualMonthly)
         val (savings, savingsRatePct) = deriveSavingsMonthly(householdId)
         val fromMovements = deriveMovementsMonthly(allMovements)
-        val active = when (s.contributionMode) {
+        val active = when (mode) {
             ContributionMode.manual -> manual
             ContributionMode.savings -> savings
             ContributionMode.movements -> fromMovements
@@ -262,7 +284,7 @@ class FireService(
             savingsMonthly = savings,
             savingsRatePct = savingsRatePct,
             movementsMonthly = fromMovements,
-            mode = s.contributionMode,
+            mode = mode,
             activeMonthly = active,
         )
     }
@@ -707,9 +729,27 @@ class FireService(
                         coastProbabilityOfReachingTarget = coast.probability[t],
                         coastMedianYearReachingTarget = coast.medianHitYear[t],
                         coastTargetToday = coastTarget,
+                        requiredMonthlyToHitTarget = requiredMonthlyFor(t, mean),
                     )
                 },
             )
+        }
+
+        private fun requiredMonthlyFor(tierIdx: Int, mean: Double): BigDecimal? {
+            if (simulatePath(0.0) { mean }.hitYears[tierIdx] != -1) return Money.normalize(BigDecimal.ZERO)
+            if (years <= 0) return null
+            var lo = 0.0
+            var hi = 500.0
+            while (hi < 10_000_000.0 && simulatePath(hi) { mean }.hitYears[tierIdx] == -1) {
+                lo = hi
+                hi *= 2.0
+            }
+            if (simulatePath(hi) { mean }.hitYears[tierIdx] == -1) return null
+            repeat(40) {
+                val mid = (lo + hi) / 2.0
+                if (simulatePath(mid) { mean }.hitYears[tierIdx] != -1) hi = mid else lo = mid
+            }
+            return Money.normalize(BigDecimal(hi))
         }
 
         private fun percentile(sortedAsc: DoubleArray, p: Double): BigDecimal {

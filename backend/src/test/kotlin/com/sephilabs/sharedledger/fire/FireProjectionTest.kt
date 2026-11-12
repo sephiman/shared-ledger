@@ -587,6 +587,41 @@ class FireProjectionTest @Autowired constructor(
         assertThat(customStat.coastTargetToday!!.toDouble()).isBetween(385540.0, 385550.0)
     }
 
+    @Test
+    fun `reverse solver computes required monthly contribution and preview overrides without saving`() {
+        val (household, user) = setupHousehold()
+        addSnapshot(household, user, LocalDate.of(2025, 1, 1), "100000.00")
+
+        fireService.update(
+            household.id,
+            request(
+                targetAmount = "220000.00",
+                targetYear = 2035,
+                monthlyContribution = "500.00",
+            ),
+            user,
+        )
+
+        val saved = fireService.project(household.id)
+        val savedStat = saved.scenarios.first().tierStats.single { it.tier == FireTierKey.custom }
+        // 100k -> 220k in 10 years at 0% return requires exactly 12k/yr = 1000/mo.
+        assertThat(savedStat.requiredMonthlyToHitTarget!!.toDouble()).isBetween(999.9, 1000.1)
+
+        // Preview with a 120k lump sum hits immediately with 0/mo needed, without mutating saved settings.
+        val preview = fireService.project(
+            household.id,
+            FirePreviewRequest(
+                monthlyContribution = BigDecimal("1000.00"),
+                targetYear = 2035,
+                lumpSum = BigDecimal("120000.00"),
+            ),
+        )
+        val previewStat = preview.scenarios.first().tierStats.single { it.tier == FireTierKey.custom }
+        assertThat(previewStat.requiredMonthlyToHitTarget).isEqualByComparingTo("0.00")
+        assertThat(preview.startingValue).isEqualByComparingTo("220000.00")
+        assertThat(fireService.settingsDto(household.id).monthlyContribution).isEqualByComparingTo("500.00")
+    }
+
     // -------------------------------------------------------------------------------------
     // Helpers
 

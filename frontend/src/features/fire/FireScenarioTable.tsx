@@ -30,6 +30,7 @@ export function FireScenarioTable({ projection, currency }: { projection: FirePr
                   <th className="py-2 pr-2">{t("fire.scenario")}</th>
                   <th className="pr-2">{t("fire.tier")}</th>
                   <th className="pr-2">{t("fire.target_hit_deterministic")}</th>
+                  <th className="pr-2">{t("fire.required_monthly")}</th>
                   <th className="pr-2">{t("fire.probability")}</th>
                   <th className="pr-2">{t("fire.median_hit")}</th>
                   <th className="pr-2">{t("fire.coast_target")}</th>
@@ -49,6 +50,7 @@ export function FireScenarioTable({ projection, currency }: { projection: FirePr
                         </td>
                         <td className="pr-2">{t(`fire.tier_${stat.tier}`)}</td>
                         <td className="pr-2">{stat.deterministicHitYear ?? "—"}</td>
+                        <td className="pr-2">{stat.requiredMonthlyToHitTarget ? formatMoney(stat.requiredMonthlyToHitTarget, currency, locale) : "—"}</td>
                         <td className="pr-2">{formatHitProbability(stat.probabilityOfReachingTarget)}</td>
                         <td className="pr-2">{hitMedianYear(stat.probabilityOfReachingTarget, stat.medianYearReachingTarget)}</td>
                         <td className="pr-2">{stat.coastTargetToday ? formatMoney(stat.coastTargetToday, currency, locale) : "—"}</td>

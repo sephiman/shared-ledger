@@ -1228,7 +1228,13 @@
     "stale_snapshot_warning": "Tu último snapshot tiene {{days}} días ({{date}}) — las proyecciones parten de ese saldo.",
     "no_snapshot_warning": "Aún no hay ningún snapshot de patrimonio — las proyecciones parten de 0.",
     "record_snapshot_link": "Registrar snapshot",
-    "gain_fraction_coverage_warning": "La proporción de ganancia ({{gain}}) se deriva de movimientos, pero hay {{months}} mes(es) iniciales sin movimientos registrados — esto puede sobreestimar las ganancias gravables e inflar los objetivos."
+    "gain_fraction_coverage_warning": "La proporción de ganancia ({{gain}}) se deriva de movimientos, pero hay {{months}} mes(es) iniciales sin movimientos registrados — esto puede sobreestimar las ganancias gravables e inflar los objetivos.",
+    "required_monthly": "Necesario /mes",
+    "what_if_title": "Simulador What-if",
+    "what_if_active": "Vista previa activa (sin guardar)",
+    "what_if_reset": "Restablecer",
+    "what_if_apply": "Aplicar a ajustes",
+    "what_if_lump_sum": "Aportación puntual hoy"
   },
   "settings": {
     "title": "Ajustes",

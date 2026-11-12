@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
-import { useFireProjection, useFireSettings, useUpdateFireSettings, type FireSettings } from "@/api/fire";
+import { useFirePreview, useFireProjection, useFireSettings, useUpdateFireSettings, type FireSettings } from "@/api/fire";
 import { useAssetClasses } from "@/api/catalog";
 import { apiErrorMessage } from "@/api/client";
 import { FireChart } from "./FireChart";
 import { FireTiersCard } from "./FireTiersCard";
 import { FireScenarioTable } from "./FireScenarioTable";
 import { FireSettingsCard, type FireFormErrors } from "./FireSettingsCard";
+import { FireWhatIfBar, buildPreviewRequest, initialWhatIfDraft, type WhatIfDraft } from "./FireWhatIfBar";
 
 export function FirePage() {
   const { t } = useTranslation();
@@ -17,12 +18,60 @@ export function FirePage() {
   const { data: projection } = useFireProjection(household.householdId);
   const { data: assetClasses = [] } = useAssetClasses();
   const update = useUpdateFireSettings(household.householdId);
+  const preview = useFirePreview(household.householdId);
 
   const [form, setForm] = useState<FireSettings | null>(null);
   const [errors, setErrors] = useState<FireFormErrors>({});
+  const [whatIfDraft, setWhatIfDraft] = useState<WhatIfDraft | null>(null);
+
   useEffect(() => {
     if (settings) setForm(settings);
   }, [settings]);
+
+  useEffect(() => {
+    if (projection) {
+      setWhatIfDraft(initialWhatIfDraft(projection));
+      preview.reset();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projection]);
+
+  useEffect(() => {
+    if (!projection || !whatIfDraft) return;
+    const req = buildPreviewRequest(whatIfDraft, projection);
+    if (!req) {
+      if (preview.data) preview.reset();
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      preview.mutate(req);
+    }, 250);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [whatIfDraft, projection]);
+
+  const activeProjection = preview.data ?? projection;
+  const isWhatIfActive = Boolean(projection && whatIfDraft && buildPreviewRequest(whatIfDraft, projection));
+
+  function handleResetWhatIf() {
+    if (!projection) return;
+    setWhatIfDraft(initialWhatIfDraft(projection));
+    preview.reset();
+  }
+
+  function handleApplyWhatIf() {
+    if (!form || !projection || !whatIfDraft) return;
+    const baseContrib = projection.contributions.activeMonthly ?? projection.settings.monthlyContribution;
+    const contribChanged = Number(whatIfDraft.monthlyContribution) !== Number(baseContrib);
+    const nextForm: FireSettings = {
+      ...form,
+      targetYear: Number(whatIfDraft.targetYear) || form.targetYear,
+      safeWithdrawalRatePct: whatIfDraft.safeWithdrawalRatePct || form.safeWithdrawalRatePct,
+      ...(contribChanged ? { contributionMode: "manual", monthlyContribution: whatIfDraft.monthlyContribution } : {}),
+    };
+    setForm(nextForm);
+    update.mutate(nextForm);
+  }
 
   function onChange(next: FireSettings, clear?: (keyof FireFormErrors)[]) {
     setForm(next);
@@ -118,9 +167,22 @@ export function FirePage() {
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("fire.description")}</p>
       </div>
 
-      {projection && <FireTiersCard projection={projection} currency={household.currency} />}
-      {projection && <FireChart projection={projection} currency={household.currency} />}
-      {projection && <FireScenarioTable projection={projection} currency={household.currency} />}
+      {activeProjection && <FireTiersCard projection={activeProjection} currency={household.currency} />}
+      {projection && whatIfDraft && (
+        <FireWhatIfBar
+          baseProjection={projection}
+          draft={whatIfDraft}
+          isActive={isWhatIfActive}
+          isLoading={preview.isPending}
+          isOwner={isOwner}
+          currency={household.currency}
+          onChange={setWhatIfDraft}
+          onReset={handleResetWhatIf}
+          onApply={handleApplyWhatIf}
+        />
+      )}
+      {activeProjection && <FireChart projection={activeProjection} currency={household.currency} />}
+      {activeProjection && <FireScenarioTable projection={activeProjection} currency={household.currency} />}
 
       {form && (
         <FireSettingsCard
