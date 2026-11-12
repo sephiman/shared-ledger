@@ -18,6 +18,14 @@ export function FireScenarioTable({ projection, currency }: { projection: FirePr
   const locale = i18n.language;
   const hasStats = projection.scenarios.some((s) => s.tierStats.length > 0);
   const activeMonthly = Number(projection.contributions.activeMonthly ?? 0);
+  const nonHist = projection.scenarios.filter((s) => !s.historical);
+  const pool = nonHist.length > 0 ? nonHist : projection.scenarios;
+  const refScenario = pool[Math.floor(pool.length / 2)];
+  const primaryCoastStat =
+    refScenario?.tierStats.find((st) => st.tier === "fire") ?? refScenario?.tierStats[0] ?? null;
+  const coastTargetNum = primaryCoastStat?.coastTargetToday != null ? Number(primaryCoastStat.coastTargetToday) : null;
+  const startingWealthNum = Number(projection.startingValue);
+  const coastGap = coastTargetNum !== null ? coastTargetNum - startingWealthNum : null;
 
   if (!hasStats) {
     return (
@@ -76,8 +84,13 @@ export function FireScenarioTable({ projection, currency }: { projection: FirePr
                             {req !== null ? (
                               <span className={delta !== null && delta <= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700 dark:text-amber-300"}>
                                 {formatMoney(req, currency, locale)}
-                                {delta !== null && delta > 0.5 && (
-                                  <span className="ml-1 text-xs opacity-80">(+{formatMoney(delta, currency, locale)})</span>
+                                {delta !== null && delta <= 0 ? (
+                                  <span className="ml-1 text-xs opacity-80">({t("fire.on_track")})</span>
+                                ) : (
+                                  delta !== null &&
+                                  delta > 0.5 && (
+                                    <span className="ml-1 text-xs opacity-80">(+{formatMoney(delta, currency, locale)})</span>
+                                  )
                                 )}
                               </span>
                             ) : (
@@ -116,7 +129,16 @@ export function FireScenarioTable({ projection, currency }: { projection: FirePr
 
       <Card>
         <CardHeader>
-          <p className="font-medium">{t("fire.coast_card_title")}</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-medium">{t("fire.coast_card_title")}</p>
+            {coastGap !== null && (
+              <Badge tone={coastGap <= 0 ? "green" : "amber"}>
+                {coastGap <= 0
+                  ? t("fire.coast_reached")
+                  : t("fire.coast_gap", { amount: formatMoney(coastGap, currency, locale) })}
+              </Badge>
+            )}
+          </div>
         </CardHeader>
         <CardBody>
           <div className="overflow-x-auto">

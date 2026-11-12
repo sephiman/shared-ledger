@@ -183,15 +183,18 @@ describe("FIRE components", () => {
 
     expect(screen.getByText("Scenario × tier summary")).toBeInTheDocument();
     expect(screen.getByText("Coast FIRE outlook")).toBeInTheDocument();
-    expect(screen.getByText("Survival (30y)")).toBeInTheDocument();
+    expect(screen.getByText("Lasts 30y")).toBeInTheDocument();
+    expect(screen.getByText(/to Coast FIRE/)).toBeInTheDocument();
     expect(screen.getByText("85%")).toBeInTheDocument();
     expect(screen.getByText("92%")).toBeInTheDocument();
   });
 
-  it("FireHeroStrip displays wealth, savings rate, and projected FIRE year", () => {
+  it("FireHeroStrip displays wealth, savings rate, projected FIRE year, and bottom-line summary", () => {
     render(<FireHeroStrip projection={makeProjection()} currency="EUR" />);
 
     expect(screen.getByText("2039")).toBeInTheDocument();
     expect(screen.getByText("37.5 %")).toBeInTheDocument();
+    expect(screen.getByText(/Bottom line:/)).toBeInTheDocument();
+    expect(screen.getByText(/projected to reach FIRE in 2039/)).toBeInTheDocument();
   });
 });

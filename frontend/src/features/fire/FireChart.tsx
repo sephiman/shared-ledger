@@ -307,12 +307,12 @@ export function FireChart({
                       fillOpacity={0.15}
                       legendType="none"
                       activeDot={false}
-                      name="p10–p90"
+                      name={t("fire.band_unlucky_to_strong")}
                     />
                     <Line
                       type="monotone"
                       dataKey="dd_p50"
-                      name={`${t(`fire.tier_${activeDrawdownTier}`)} (p50)`}
+                      name={t("fire.typical_market_tier", { tier: t(`fire.tier_${activeDrawdownTier}`) })}
                       stroke="#0ea5e9"
                       strokeWidth={2}
                       dot={false}
@@ -388,7 +388,7 @@ export function FireChart({
                             fillOpacity={0.12}
                             legendType="none"
                             activeDot={false}
-                            name={`${label} p10–p90`}
+                            name={t("fire.band_scenario_range", { label })}
                             hide={!showBand}
                           />
                           <Line type="monotone" dataKey={`${k}_p50`} name={label} stroke={color} strokeWidth={2} dot={false} hide={hidden} />
