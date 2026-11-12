@@ -233,27 +233,13 @@ function TierBox({ tier, projection, currency }: { tier: FireTierOutput; project
         </p>
       ) : (
         <>
-          <p className="mt-1 text-xl font-semibold">{money(tier.targetToday)}</p>
+          <p className="mt-1 text-xl font-semibold tabular-nums">{money(tier.targetToday)}</p>
           <p className="text-xs text-gray-500 dark:text-gray-400">{baseLine}</p>
-          {taxOn && tier.estimatedAnnualTax !== null && Number(tier.estimatedAnnualTax) > 0 && (
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              {t("fire.tier_tax_note", {
-                net: money(tier.annualNetSpending),
-                gross: money(tier.annualGrossSpending),
-                tax: money(tier.estimatedAnnualTax),
-                rate: formatPercent(
-                  (Number(tier.estimatedAnnualTax) / Math.max(1e-9, Number(tier.annualGrossSpending))) * 100,
-                  locale,
-                  1,
-                ),
-              })}
-            </p>
-          )}
           {tier.coveragePercent !== null && (
-            <div className="mt-2">
+            <div className="mt-2.5">
               <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-300">
                 <span>{t("fire.coverage")}</span>
-                <span className="font-medium">{formatPercent(tier.coveragePercent, locale, 0)}</span>
+                <span className="font-medium tabular-nums">{formatPercent(tier.coveragePercent, locale, 0)}</span>
               </div>
               <div className="mt-1 h-1.5 w-full overflow-hidden rounded bg-gray-100 dark:bg-raised">
                 <div
@@ -263,14 +249,34 @@ function TierBox({ tier, projection, currency }: { tier: FireTierOutput; project
               </div>
             </div>
           )}
-          {coastTarget !== null && coastFundedPct !== null && refScenario && (
-            <p className="mt-2 text-xs text-gray-600 dark:text-gray-300">
-              {t("fire.coast_target_line", {
-                mean: refScenario.meanPercent,
-                amount: money(coastTarget),
-                pct: formatPercent(coastFundedPct, locale, 0),
-              })}
-            </p>
+          {((coastTarget !== null && coastFundedPct !== null && refScenario) ||
+            (taxOn && tier.estimatedAnnualTax !== null && Number(tier.estimatedAnnualTax) > 0)) && (
+            <dl className="mt-2.5 space-y-1 border-t border-border/60 pt-2 text-xs">
+              {coastTarget !== null && coastFundedPct !== null && refScenario && (
+                <div className="flex items-center justify-between gap-2">
+                  <dt className="text-gray-500 dark:text-gray-400">
+                    {t("fire.coast_short_label", { mean: refScenario.meanPercent })}
+                  </dt>
+                  <dd className="font-medium tabular-nums text-gray-700 dark:text-gray-200">
+                    {money(coastTarget)} · {formatPercent(coastFundedPct, locale, 0)}
+                  </dd>
+                </div>
+              )}
+              {taxOn && tier.estimatedAnnualTax !== null && Number(tier.estimatedAnnualTax) > 0 && (
+                <div className="flex items-center justify-between gap-2">
+                  <dt className="text-gray-500 dark:text-gray-400">{t("fire.est_tax_label")}</dt>
+                  <dd className="font-medium tabular-nums text-gray-700 dark:text-gray-200">
+                    +{money(tier.estimatedAnnualTax)}/yr (
+                    {formatPercent(
+                      (Number(tier.estimatedAnnualTax) / Math.max(1e-9, Number(tier.annualGrossSpending))) * 100,
+                      locale,
+                      1,
+                    )}
+                    )
+                  </dd>
+                </div>
+              )}
+            </dl>
           )}
           {explain && (
             <Explain>

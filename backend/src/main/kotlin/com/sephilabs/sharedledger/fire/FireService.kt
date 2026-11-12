@@ -217,6 +217,7 @@ class FireService(
             actualReturn = actualReturn,
             actualReturnUnavailableReason = unavailableReason,
             historicalScenario = historicalScenario,
+            suggestedScenario = suggestScenarioFromAssetMix(latest, qualifying),
             tiers = tiers,
             scenarios = scenarios,
             historicalWealth = historicalWealth(orderedSnapshots, qualifying, startYear),
@@ -468,6 +469,27 @@ class FireService(
         add(Xirr.CashFlow(endSnap.snapshotDate, qualifyingTotal(endSnap, qualifying).toDouble()))
     }
 
+    private fun suggestScenarioFromAssetMix(latest: Snapshot?, qualifying: Set<String>): ReturnScenarioDto? {
+        val assets = latest?.assetValues
+            ?.filter { it.id.assetClassCode in qualifying && it.value.signum() > 0 }
+            ?: return null
+        val total = assets.fold(BigDecimal.ZERO) { acc, v -> acc + v.value }.toDouble()
+        if (total <= 0.0) return null
+        var weightedMean = 0.0
+        var weightedStd = 0.0
+        for (asset in assets) {
+            val w = asset.value.toDouble() / total
+            val (m, sd) = ASSET_CLASS_ASSUMPTIONS[asset.id.assetClassCode] ?: DEFAULT_ASSET_ASSUMPTION
+            weightedMean += w * m
+            weightedStd += w * sd
+        }
+        return ReturnScenarioDto(
+            meanPercent = BigDecimal(weightedMean).setScale(1, RoundingMode.HALF_EVEN),
+            stdDevPercent = BigDecimal(weightedStd).setScale(1, RoundingMode.HALF_EVEN),
+            historical = false,
+        )
+    }
+
     private fun qualifyingTotal(snapshot: Snapshot?, qualifying: Set<String>): BigDecimal =
         snapshot?.assetValues?.filter { it.id.assetClassCode in qualifying }
             ?.fold(BigDecimal.ZERO) { acc, v -> acc + v.value } ?: BigDecimal.ZERO
@@ -702,18 +724,25 @@ class FireService(
             return Path(values, hit, hitIdx, hitValues, hitCostBases)
         }
 
-        private fun survivesDrawdown(
+        private fun simulateDrawdown(
             tierIdx: Int,
             startIdx: Int,
             hitValue: Double,
             hitCostBasis: Double,
             nextReturn: () -> Double,
+            outPath: DoubleArray,
         ): Boolean {
             var value = hitValue
             var costBasis = hitCostBasis
+            outPath[0] = value
             val customBaseNet = if (!flatTargets[tierIdx].isNaN()) flatTargets[tierIdx] * swr else Double.NaN
+            var survived = true
             for (k in 1..drawdownYears) {
-                if (value <= 0.0) return false
+                if (value <= 0.0) {
+                    survived = false
+                    outPath[k] = 0.0
+                    continue
+                }
                 val y = startIdx + k
                 val netSpending = if (!customBaseNet.isNaN()) {
                     customBaseNet * (1.0 + inflation).pow(k)
@@ -726,12 +755,21 @@ class FireService(
                 } else {
                     netSpending
                 }
-                if (gross >= value) return false
+                if (gross >= value) {
+                    survived = false
+                    value = 0.0
+                    outPath[k] = 0.0
+                    continue
+                }
                 costBasis *= ((value - gross) / value).coerceAtLeast(0.0)
                 value = (value - gross) * (1.0 + nextReturn())
-                if (value <= 0.0) return false
+                if (value <= 0.0) {
+                    survived = false
+                    value = 0.0
+                }
+                outPath[k] = value
             }
-            return true
+            return survived
         }
 
         private class McStats(
@@ -739,6 +777,7 @@ class FireService(
             val probability: DoubleArray,
             val medianHitYear: Array<Int?>,
             val drawdownSurvivalRate: Array<Double?>,
+            val drawdownPercentiles: Array<List<FireScenarioPercentiles>>,
         )
 
         private fun logNormalSampler(mean: Double, stdDev: Double, rng: SplittableRandom): () -> Double {
@@ -768,6 +807,8 @@ class FireService(
             val hitYears = Array(tierKeys.size) { IntArray(trials) }
             val survivedCounts = IntArray(tierKeys.size)
             val hitCounts = IntArray(tierKeys.size)
+            val drawdownPaths = if (collectPercentiles) Array(tierKeys.size) { mutableListOf<DoubleArray>() } else null
+            val scratchDrawdown = DoubleArray(drawdownYears + 1)
 
             for (trial in 0 until trials) {
                 val path = simulatePath(monthlyContribution) { sampleReturn() }
@@ -776,9 +817,10 @@ class FireService(
                     hitYears[t][trial] = path.hitYears[t]
                     if (collectPercentiles && path.hitIdx[t] >= 0) {
                         hitCounts[t]++
-                        if (survivesDrawdown(t, path.hitIdx[t], path.hitValues[t], path.hitCostBases[t], sampleReturn)) {
+                        if (simulateDrawdown(t, path.hitIdx[t], path.hitValues[t], path.hitCostBases[t], sampleReturn, scratchDrawdown)) {
                             survivedCounts[t]++
                         }
+                        drawdownPaths!![t].add(scratchDrawdown.copyOf())
                     }
                 }
             }
@@ -798,6 +840,7 @@ class FireService(
             val probability = DoubleArray(tierKeys.size)
             val medianHitYear = Array<Int?>(tierKeys.size) { null }
             val survivalRate = Array<Double?>(tierKeys.size) { null }
+            val drawdownPercentiles = Array<List<FireScenarioPercentiles>>(tierKeys.size) { emptyList() }
             for (t in tierKeys.indices) {
                 val reachers = hitYears[t].filter { it >= 0 }
                 probability[t] = reachers.size.toDouble() / trials
@@ -807,9 +850,22 @@ class FireService(
                 }
                 if (collectPercentiles && hitCounts[t] > 0) {
                     survivalRate[t] = survivedCounts[t].toDouble() / hitCounts[t]
+                    val paths = drawdownPaths!![t]
+                    drawdownPercentiles[t] = (0..drawdownYears).map { k ->
+                        val col = DoubleArray(paths.size) { idx -> paths[idx][k] }
+                        col.sort()
+                        FireScenarioPercentiles(
+                            year = k,
+                            p10 = percentile(col, 10.0),
+                            p25 = percentile(col, 25.0),
+                            p50 = percentile(col, 50.0),
+                            p75 = percentile(col, 75.0),
+                            p90 = percentile(col, 90.0),
+                        )
+                    }
                 }
             }
-            return McStats(percentiles, probability, medianHitYear, survivalRate)
+            return McStats(percentiles, probability, medianHitYear, survivalRate, drawdownPercentiles)
         }
 
         fun buildScenarioOutput(
@@ -849,6 +905,7 @@ class FireService(
                         coastTargetToday = coastTarget,
                         requiredMonthlyToHitTarget = requiredMonthlyFor(t, mean),
                         drawdownSurvivalRate = mc.drawdownSurvivalRate[t],
+                        drawdownPercentiles = mc.drawdownPercentiles[t],
                     )
                 },
             )
@@ -886,5 +943,19 @@ class FireService(
     companion object {
         const val GAIN_FRACTION_SOURCE_MOVEMENTS = "movements"
         const val GAIN_FRACTION_SOURCE_MANUAL = "manual"
+        private val DEFAULT_ASSET_ASSUMPTION = 6.0 to 12.0
+        private val ASSET_CLASS_ASSUMPTIONS = mapOf(
+            "stocks" to (8.0 to 16.0),
+            "etfs" to (8.0 to 16.0),
+            "fund" to (6.5 to 11.0),
+            "pension" to (6.5 to 11.0),
+            "crypto" to (12.0 to 45.0),
+            "real_estate" to (5.5 to 9.0),
+            "property" to (5.5 to 9.0),
+            "bonds" to (3.5 to 5.0),
+            "fixed_income" to (3.5 to 5.0),
+            "cash" to (2.0 to 1.0),
+            "savings" to (2.0 to 1.0),
+        )
     }
 }

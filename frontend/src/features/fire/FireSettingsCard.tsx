@@ -480,6 +480,18 @@ export function FireSettingsCard({
                   {t("fire.add_historical")}
                 </Button>
               </span>
+              <span title={t("fire.suggest_asset_mix_help")}>
+                <Button
+                  variant="secondary"
+                  disabled={ro || !projection?.suggestedScenario}
+                  onClick={() => {
+                    const sug = projection?.suggestedScenario;
+                    if (sug) addScenario(sug);
+                  }}
+                >
+                  {t("fire.suggest_asset_mix")}
+                </Button>
+              </span>
             </div>
           </div>
         </section>

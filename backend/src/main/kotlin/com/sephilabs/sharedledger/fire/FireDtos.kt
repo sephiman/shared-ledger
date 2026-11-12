@@ -158,6 +158,8 @@ data class FireTierScenarioStats(
     @JsonFormat(shape = JsonFormat.Shape.STRING) val requiredMonthlyToHitTarget: BigDecimal?,
     /** Fraction of FIRE-hitting trials whose portfolio survives `drawdownYears` of inflation-adjusted withdrawals. */
     val drawdownSurvivalRate: Double?,
+    /** Per-retirement-year (year 0..drawdownYears) p10..p90 percentiles across FIRE-hitting trials. */
+    val drawdownPercentiles: List<FireScenarioPercentiles> = emptyList(),
 )
 
 data class FirePreviewRequest(
@@ -274,6 +276,8 @@ data class FireProjectionResponse(
     val actualReturn: FireActualReturn?,
     val actualReturnUnavailableReason: FireActualReturnUnavailableReason?,
     val historicalScenario: FireHistoricalScenario?,
+    /** Expected return/volatility suggested from the household's latest qualifying asset-class mix. */
+    val suggestedScenario: ReturnScenarioDto?,
     val tiers: List<FireTierOutput>,
     val scenarios: List<FireScenarioOutput>,
     val historicalWealth: List<FireScenarioYear>,

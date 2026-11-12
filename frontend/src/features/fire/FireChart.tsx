@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Area, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import type { FireProjection } from "@/api/fire";
+import { Area, CartesianGrid, ComposedChart, Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import type { FireProjection, FireTierKey } from "@/api/fire";
 import { Card, CardBody, CardHeader } from "@/components/ui/primitives";
 import { ChartTooltip } from "@/components/charts/ChartTooltip";
 import { formatCompactMoney, formatMoney, formatPercent } from "@/lib/money";
@@ -15,11 +15,39 @@ function scenarioKey(s: { meanPercent: string; stdDevPercent: string }): string 
   return `${s.meanPercent}_${s.stdDevPercent}`;
 }
 
-export function FireChart({ projection, currency }: { projection: FireProjection; currency: string }) {
+export function FireChart({
+  projection,
+  baselineProjection,
+  currency,
+  whatIfOpen,
+  onToggleWhatIf,
+}: {
+  projection: FireProjection;
+  baselineProjection?: FireProjection;
+  currency: string;
+  whatIfOpen?: boolean;
+  onToggleWhatIf?: () => void;
+}) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
 
   const [realMode, setRealMode] = useState(false);
+  const [chartView, setChartView] = useState<"accumulation" | "drawdown">("accumulation");
+  const defaultBandIdx = useMemo(() => {
+    const nonHistIdx = projection.scenarios
+      .map((s, i) => ({ s, i }))
+      .filter(({ s }) => !s.historical);
+    if (nonHistIdx.length > 0) return String(nonHistIdx[Math.floor(nonHistIdx.length / 2)].i);
+    return projection.scenarios.length > 0 ? "0" : "all";
+  }, [projection.scenarios]);
+  const [bandFocus, setBandFocus] = useState<string>(defaultBandIdx);
+
+  const drawdownTiers = useMemo(() => {
+    const focused = projection.scenarios[Number(bandFocus)] ?? projection.scenarios[Number(defaultBandIdx)] ?? projection.scenarios[0];
+    return focused?.tierStats.filter((st) => st.drawdownPercentiles.length > 0).map((st) => st.tier) ?? [];
+  }, [projection.scenarios, bandFocus, defaultBandIdx]);
+  const [drawdownTier, setDrawdownTier] = useState<FireTierKey>("fire");
+  const activeDrawdownTier = drawdownTiers.includes(drawdownTier) ? drawdownTier : drawdownTiers[0] ?? "fire";
 
   // Clicking a legend entry hides/shows its series, keyed by the series dataKey.
   const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(new Set());
@@ -37,54 +65,90 @@ export function FireChart({ projection, currency }: { projection: FireProjection
   const hasHistoricalWealth = projection.historicalWealth.length > 0;
   const hasCumulativeContribs = projection.cumulativeContributions.length > 0;
 
-  const { chartData, yTicks } = useMemo(() => {
+  const { chartData, yTicks, minYear, maxYear } = useMemo(() => {
+    const inflation = Number(projection.settings.expectedInflationPct) / 100;
+    if (chartView === "drawdown") {
+      const scIdx = bandFocus === "all" ? Number(defaultBandIdx) : Number(bandFocus);
+      const sc = projection.scenarios[scIdx] ?? projection.scenarios[0];
+      const stat = sc?.tierStats.find((st) => st.tier === activeDrawdownTier);
+      const pts = stat?.drawdownPercentiles ?? [];
+      let maxVal = 0;
+      const rows = pts.map((p) => {
+        const defl = realMode && p.year > 0 ? (1 + inflation) ** p.year : 1;
+        const p10 = Number(p.p10) / defl;
+        const p50 = Number(p.p50) / defl;
+        const p90 = Number(p.p90) / defl;
+        maxVal = Math.max(maxVal, p90);
+        return { year: p.year, dd_p10: p10, dd_p50: p50, dd_p90: p90 };
+      });
+      return {
+        chartData: rows,
+        yTicks: niceMoneyTicks(maxVal),
+        minYear: 0,
+        maxYear: pts.length > 0 ? pts[pts.length - 1].year : projection.settings.drawdownYears,
+      };
+    }
+
     const yearSet = new Set<number>();
     for (const h of projection.historicalWealth) yearSet.add(h.year);
     for (const c of projection.cumulativeContributions) yearSet.add(c.year);
     for (const s of projection.scenarios) for (const p of s.percentiles) yearSet.add(p.year);
     for (const tier of activeTiers) for (const point of tier.targetCurve) yearSet.add(point.year);
 
-    const inflation = Number(projection.settings.expectedInflationPct) / 100;
     const deflatorFor = (year: number) =>
       realMode && year > projection.startYear ? (1 + inflation) ** (year - projection.startYear) : 1;
 
+    const baseScIdx = bandFocus === "all" ? Number(defaultBandIdx) : Number(bandFocus);
+    const baseScenario = baselineProjection?.scenarios[baseScIdx] ?? baselineProjection?.scenarios[0];
+
     let maxValue = 0;
-    const rows = Array.from(yearSet)
-      .sort((a, b) => a - b)
-      .map((year) => {
-        const row: Record<string, number | string> = { year };
-        const deflator = deflatorFor(year);
-        const hist = projection.historicalWealth.find((x) => x.year === year);
-        if (hist) {
-          row.historical_wealth = Number(hist.value);
-          maxValue = Math.max(maxValue, row.historical_wealth);
+    const sortedYears = Array.from(yearSet).sort((a, b) => a - b);
+    const rows = sortedYears.map((year) => {
+      const row: Record<string, number | string> = { year };
+      const deflator = deflatorFor(year);
+      const hist = projection.historicalWealth.find((x) => x.year === year);
+      if (hist) {
+        row.historical_wealth = Number(hist.value);
+        maxValue = Math.max(maxValue, row.historical_wealth);
+      }
+      const contrib = projection.cumulativeContributions.find((x) => x.year === year);
+      if (contrib) {
+        row.cumulative_contributions = Number(contrib.cumulative);
+        maxValue = Math.max(maxValue, row.cumulative_contributions);
+      }
+      for (const s of projection.scenarios) {
+        const p = s.percentiles.find((x) => x.year === year);
+        if (p) {
+          const k = scenarioKey(s);
+          row[`${k}_p50`] = Number(p.p50) / deflator;
+          row[`${k}_p10`] = Number(p.p10) / deflator;
+          row[`${k}_p90`] = Number(p.p90) / deflator;
+          maxValue = Math.max(maxValue, row[`${k}_p90`] as number);
         }
-        const contrib = projection.cumulativeContributions.find((x) => x.year === year);
-        if (contrib) {
-          row.cumulative_contributions = Number(contrib.cumulative);
-          maxValue = Math.max(maxValue, row.cumulative_contributions);
+      }
+      if (baseScenario) {
+        const bp = baseScenario.percentiles.find((x) => x.year === year);
+        if (bp) {
+          row.baseline_p50 = Number(bp.p50) / deflator;
+          maxValue = Math.max(maxValue, row.baseline_p50);
         }
-        for (const s of projection.scenarios) {
-          const p = s.percentiles.find((x) => x.year === year);
-          if (p) {
-            const k = scenarioKey(s);
-            row[`${k}_p50`] = Number(p.p50) / deflator;
-            row[`${k}_p10`] = Number(p.p10) / deflator;
-            row[`${k}_p90`] = Number(p.p90) / deflator;
-            maxValue = Math.max(maxValue, row[`${k}_p90`] as number);
-          }
+      }
+      for (const tier of activeTiers) {
+        const point = tier.targetCurve.find((x) => x.year === year);
+        if (point) {
+          row[`target_${tier.key}`] = Number(point.value) / deflator;
+          maxValue = Math.max(maxValue, row[`target_${tier.key}`] as number);
         }
-        for (const tier of activeTiers) {
-          const point = tier.targetCurve.find((x) => x.year === year);
-          if (point) {
-            row[`target_${tier.key}`] = Number(point.value) / deflator;
-            maxValue = Math.max(maxValue, row[`target_${tier.key}`] as number);
-          }
-        }
-        return row;
-      });
-    return { chartData: rows, yTicks: niceMoneyTicks(maxValue) };
-  }, [projection, activeTiers, realMode]);
+      }
+      return row;
+    });
+    return {
+      chartData: rows,
+      yTicks: niceMoneyTicks(maxValue),
+      minYear: sortedYears[0] ?? projection.startYear,
+      maxYear: sortedYears[sortedYears.length - 1] ?? projection.settings.targetYear,
+    };
+  }, [projection, baselineProjection, activeTiers, realMode, chartView, bandFocus, defaultBandIdx, activeDrawdownTier]);
 
   const s = projection.settings;
   const contributionMissing = projection.contributions.activeMonthly === null;
@@ -114,9 +178,76 @@ export function FireChart({ projection, currency }: { projection: FireProjection
                 {t("fire.mode_real")}
               </button>
             </div>
+            {drawdownTiers.length > 0 && (
+              <div className="inline-flex rounded-md border border-border bg-raised p-0.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setChartView("accumulation")}
+                  className={`rounded px-2 py-1 font-medium ${chartView === "accumulation" ? "bg-surface text-gray-900 shadow-sm dark:text-gray-100" : "text-gray-500 hover:text-gray-700 dark:text-gray-400"}`}
+                >
+                  {t("fire.view_accumulation")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChartView("drawdown")}
+                  className={`rounded px-2 py-1 font-medium ${chartView === "drawdown" ? "bg-surface text-gray-900 shadow-sm dark:text-gray-100" : "text-gray-500 hover:text-gray-700 dark:text-gray-400"}`}
+                >
+                  {t("fire.view_drawdown", { years: s.drawdownYears })}
+                </button>
+              </div>
+            )}
+            {onToggleWhatIf && (
+              <button
+                type="button"
+                onClick={onToggleWhatIf}
+                className={`rounded-md border px-2.5 py-1 text-xs font-medium ${whatIfOpen ? "border-sky-400 bg-sky-50 text-sky-700 dark:border-sky-600 dark:bg-sky-900/40 dark:text-sky-300" : "border-border bg-raised text-gray-700 hover:bg-surface dark:text-gray-200"}`}
+              >
+                {t("fire.what_if_title")}
+              </button>
+            )}
           </div>
           <ActualReturnBadge projection={projection} />
         </div>
+        {projection.scenarios.length > 1 && (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="text-gray-500 dark:text-gray-400">{t("fire.band_label")}:</span>
+            {projection.scenarios.map((sc, idx) => {
+              const active = bandFocus === String(idx);
+              return (
+                <button
+                  key={scenarioKey(sc)}
+                  type="button"
+                  onClick={() => setBandFocus(String(idx))}
+                  className={`rounded-full border px-2.5 py-0.5 font-medium ${active ? "border-primary bg-sky-50 text-primary dark:bg-sky-900/40 dark:text-sky-300" : "border-border bg-raised text-gray-600 hover:text-gray-800 dark:text-gray-300"}`}
+                >
+                  {scenarioLabel(sc, t)}
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => setBandFocus("all")}
+              className={`rounded-full border px-2.5 py-0.5 font-medium ${bandFocus === "all" ? "border-primary bg-sky-50 text-primary dark:bg-sky-900/40 dark:text-sky-300" : "border-border bg-raised text-gray-600 hover:text-gray-800 dark:text-gray-300"}`}
+            >
+              {t("fire.band_all")}
+            </button>
+            {chartView === "drawdown" && drawdownTiers.length > 0 && (
+              <>
+                <span className="ml-2 text-gray-500 dark:text-gray-400">{t("fire.tier")}:</span>
+                {drawdownTiers.map((tk) => (
+                  <button
+                    key={tk}
+                    type="button"
+                    onClick={() => setDrawdownTier(tk)}
+                    className={`rounded-full border px-2.5 py-0.5 font-medium ${activeDrawdownTier === tk ? "border-primary bg-sky-50 text-primary dark:bg-sky-900/40 dark:text-sky-300" : "border-border bg-raised text-gray-600 hover:text-gray-800 dark:text-gray-300"}`}
+                  >
+                    {t(`fire.tier_${tk}`)}
+                  </button>
+                ))}
+              </>
+            )}
+          </div>
+        )}
       </CardHeader>
       <CardBody>
         {contributionMissing && (
@@ -164,122 +295,174 @@ export function FireChart({ projection, currency }: { projection: FireProjection
                     </span>
                   )}
                 />
-                {hasHistoricalWealth && (
-                  <Line
-                    type="monotone"
-                    dataKey="historical_wealth"
-                    name={t("fire.historical_wealth")}
-                    stroke="#64748b"
-                    strokeWidth={2}
-                    dot={{ r: 2.5 }}
-                    connectNulls={false}
-                    hide={hiddenSeries.has("historical_wealth")}
-                  />
-                )}
-                {hasCumulativeContribs && (
-                  <Line
-                    type="monotone"
-                    dataKey="cumulative_contributions"
-                    name={t("fire.cumulative_contributions")}
-                    stroke="#14b8a6"
-                    strokeWidth={1.5}
-                    strokeDasharray="4 4"
-                    dot={{ r: 2 }}
-                    connectNulls={false}
-                    hide={hiddenSeries.has("cumulative_contributions")}
-                  />
-                )}
-                {projection.scenarios.map((sc, idx) => {
-                  const k = scenarioKey(sc);
-                  const color = SCENARIO_PALETTE[idx % SCENARIO_PALETTE.length];
-                  const label = scenarioLabel(sc, t);
-                  const hidden = hiddenSeries.has(`${k}_p50`);
-                  return (
-                    <Fragment key={k}>
-                      <Area
+                {chartView === "drawdown" ? (
+                  <>
+                    <Area
+                      type="monotone"
+                      dataKey={(row: Record<string, number>) =>
+                        row.dd_p10 != null && row.dd_p90 != null ? [row.dd_p10, row.dd_p90] : undefined
+                      }
+                      stroke="none"
+                      fill="#0ea5e9"
+                      fillOpacity={0.15}
+                      legendType="none"
+                      activeDot={false}
+                      name="p10–p90"
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="dd_p50"
+                      name={`${t(`fire.tier_${activeDrawdownTier}`)} (p50)`}
+                      stroke="#0ea5e9"
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                  </>
+                ) : (
+                  <>
+                    {hasHistoricalWealth && (
+                      <Line
                         type="monotone"
-                        dataKey={(row: Record<string, number>) =>
-                          row[`${k}_p10`] != null && row[`${k}_p90`] != null
-                            ? [row[`${k}_p10`], row[`${k}_p90`]]
-                            : undefined
-                        }
-                        stroke="none"
-                        fill={color}
-                        fillOpacity={0.12}
-                        legendType="none"
-                        activeDot={false}
-                        name={`${label} p10–p90`}
-                        hide={hidden}
+                        dataKey="historical_wealth"
+                        name={t("fire.historical_wealth")}
+                        stroke="#64748b"
+                        strokeWidth={2}
+                        dot={{ r: 2.5 }}
+                        connectNulls={false}
+                        hide={hiddenSeries.has("historical_wealth")}
                       />
-                      <Line type="monotone" dataKey={`${k}_p50`} name={label} stroke={color} strokeWidth={2} dot={false} hide={hidden} />
-                    </Fragment>
-                  );
-                })}
-                {activeTiers.map((tier) => (
-                  <Line
-                    key={tier.key}
-                    type="monotone"
-                    dataKey={`target_${tier.key}`}
-                    name={tier.key === "custom" ? t("fire.tier_custom") : t("fire.tier_target_name", { tier: t(`fire.tier_${tier.key}`) })}
-                    stroke={TIER_COLORS[tier.key]}
-                    strokeWidth={1.5}
-                    strokeDasharray="6 3"
-                    dot={false}
-                    hide={hiddenSeries.has(`target_${tier.key}`)}
-                  />
-                ))}
+                    )}
+                    {hasCumulativeContribs && (
+                      <Line
+                        type="monotone"
+                        dataKey="cumulative_contributions"
+                        name={t("fire.cumulative_contributions")}
+                        stroke="#14b8a6"
+                        strokeWidth={1.5}
+                        strokeDasharray="4 4"
+                        dot={{ r: 2 }}
+                        connectNulls={false}
+                        hide={hiddenSeries.has("cumulative_contributions")}
+                      />
+                    )}
+                    {baselineProjection && (
+                      <Line
+                        type="monotone"
+                        dataKey="baseline_p50"
+                        name={t("fire.baseline_comparison")}
+                        stroke="#94a3b8"
+                        strokeWidth={1.5}
+                        strokeDasharray="3 3"
+                        dot={false}
+                        hide={hiddenSeries.has("baseline_p50")}
+                      />
+                    )}
+                    {projection.settings.cashFlowEvents
+                      .filter((ev) => ev.year >= minYear && ev.year <= maxYear)
+                      .map((ev, idx) => (
+                        <ReferenceLine
+                          key={`ev_${ev.year}_${idx}`}
+                          x={ev.year}
+                          stroke="#64748b"
+                          strokeDasharray="3 3"
+                          label={{ value: ev.label || t(`fire.event_${ev.kind}`), position: "insideTopRight", fontSize: 10, fill: "#64748b" }}
+                        />
+                      ))}
+                    {projection.scenarios.map((sc, idx) => {
+                      const k = scenarioKey(sc);
+                      const color = SCENARIO_PALETTE[idx % SCENARIO_PALETTE.length];
+                      const label = scenarioLabel(sc, t);
+                      const hidden = hiddenSeries.has(`${k}_p50`);
+                      const showBand = !hidden && (bandFocus === "all" || bandFocus === String(idx));
+                      return (
+                        <Fragment key={k}>
+                          <Area
+                            type="monotone"
+                            dataKey={(row: Record<string, number>) =>
+                              row[`${k}_p10`] != null && row[`${k}_p90`] != null
+                                ? [row[`${k}_p10`], row[`${k}_p90`]]
+                                : undefined
+                            }
+                            stroke="none"
+                            fill={color}
+                            fillOpacity={0.12}
+                            legendType="none"
+                            activeDot={false}
+                            name={`${label} p10–p90`}
+                            hide={!showBand}
+                          />
+                          <Line type="monotone" dataKey={`${k}_p50`} name={label} stroke={color} strokeWidth={2} dot={false} hide={hidden} />
+                        </Fragment>
+                      );
+                    })}
+                    {activeTiers.map((tier) => (
+                      <Line
+                        key={tier.key}
+                        type="monotone"
+                        dataKey={`target_${tier.key}`}
+                        name={tier.key === "custom" ? t("fire.tier_custom") : t("fire.tier_target_name", { tier: t(`fire.tier_${tier.key}`) })}
+                        stroke={TIER_COLORS[tier.key]}
+                        strokeWidth={1.5}
+                        strokeDasharray="6 3"
+                        dot={false}
+                        hide={hiddenSeries.has(`target_${tier.key}`)}
+                      />
+                    ))}
+                  </>
+                )}
               </ComposedChart>
             </ResponsiveContainer>
           </div>
 
-          {/* Assumptions block: the projection must be auditable at a glance. */}
-          <aside className="rounded-md border border-border p-3 text-sm">
-            <p className="mb-2 font-medium">{t("fire.assumptions")}</p>
-            <ul className="space-y-1 text-gray-600 dark:text-gray-300">
-              <li>{t("fire.assumptions_swr", { value: s.safeWithdrawalRatePct })}</li>
-              <li>{t("fire.assumptions_inflation", { value: s.expectedInflationPct })}</li>
-              <li>{s.indexContribution ? t("fire.assumptions_indexed_on") : t("fire.assumptions_indexed_off")}</li>
-              <li>
-                {t("fire.assumptions_contribution", {
-                  amount: money(projection.contributions.activeMonthly ?? "0"),
-                  mode: t(`fire.contribution_${projection.contributions.mode}`),
-                })}
-              </li>
+          {/* Assumptions block: structured key-value summary for quick scanning. */}
+          <aside className="rounded-md border border-border p-3 text-xs">
+            <p className="mb-2.5 text-sm font-medium">{t("fire.assumptions")}</p>
+            <dl className="divide-y divide-border/60">
+              <div className="flex items-baseline justify-between gap-2 py-1.5">
+                <dt className="text-gray-500 dark:text-gray-400">{t("fire.assumptions_wealth_label")}</dt>
+                <dd className="text-right font-medium tabular-nums">
+                  {money(projection.startingValue)} <span className="font-normal text-gray-500">({projection.snapshotDate ?? "—"})</span>
+                </dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-2 py-1.5">
+                <dt className="text-gray-500 dark:text-gray-400">{t("fire.monthly_contribution")}</dt>
+                <dd className="text-right font-medium tabular-nums">
+                  {money(projection.contributions.activeMonthly ?? "0")}
+                  <span className="ml-1 font-normal text-gray-500">
+                    ({t(`fire.contribution_${projection.contributions.mode}`)}
+                    {s.indexContribution ? ` · ${t("fire.indexed_short")}` : ""})
+                  </span>
+                </dd>
+              </div>
               {projection.contributions.savingsRatePct !== null && (
-                <li>
-                  {t("fire.assumptions_savings_rate", {
-                    rate: formatPercent(projection.contributions.savingsRatePct, locale, 1),
-                  })}
-                </li>
+                <div className="flex items-baseline justify-between gap-2 py-1.5">
+                  <dt className="text-gray-500 dark:text-gray-400">{t("fire.savings_rate_label")}</dt>
+                  <dd className="font-medium tabular-nums">
+                    {formatPercent(projection.contributions.savingsRatePct, locale, 1)}
+                  </dd>
+                </div>
               )}
-              <li>
-                {projection.spending.essentialMode === "manual"
-                  ? t("fire.assumptions_essential_manual", { amount: money(projection.spending.essentialMonthly) })
-                  : t("fire.assumptions_essential_derived", {
-                      amount: money(projection.spending.essentialMonthly),
-                      months: projection.spending.monthsAvailable,
-                    })}
-              </li>
-              <li>
-                {projection.spending.totalMode === "manual"
-                  ? t("fire.assumptions_total_manual", { amount: money(projection.spending.totalMonthly) })
-                  : t("fire.assumptions_total_derived", {
-                      amount: money(projection.spending.totalMonthly),
-                      months: projection.spending.monthsAvailable,
-                    })}
-              </li>
-              <li>
-                {s.applyCapitalGainsTax
-                  ? t("fire.assumptions_tax_on", { gain: formatPercent(Number(projection.gainFraction.percent), locale, 2) })
-                  : t("fire.assumptions_tax_off")}
-              </li>
-              <li>
-                {t("fire.assumptions_as_of", {
-                  value: money(projection.startingValue),
-                  date: projection.snapshotDate ?? "—",
-                })}
-              </li>
-            </ul>
+              <div className="flex items-baseline justify-between gap-2 py-1.5">
+                <dt className="text-gray-500 dark:text-gray-400">{t("fire.assumptions_spending_label")}</dt>
+                <dd className="text-right font-medium tabular-nums">
+                  {money(projection.spending.essentialMonthly)} / {money(projection.spending.totalMonthly)}
+                </dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-2 py-1.5">
+                <dt className="text-gray-500 dark:text-gray-400">{t("fire.assumptions_swr_inf_label")}</dt>
+                <dd className="font-medium tabular-nums">
+                  {s.safeWithdrawalRatePct}% / {s.expectedInflationPct}%
+                </dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-2 py-1.5">
+                <dt className="text-gray-500 dark:text-gray-400">{t("fire.tax_title")}</dt>
+                <dd className="font-medium tabular-nums">
+                  {s.applyCapitalGainsTax
+                    ? `${formatPercent(Number(projection.gainFraction.percent), locale, 1)}${s.indexTaxBrackets ? ` · ${t("fire.indexed_short")}` : ""}`
+                    : t("fire.tax_off_short")}
+                </dd>
+              </div>
+            </dl>
             <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
               {realMode
                 ? t("fire.real_note", { inflation: s.expectedInflationPct })

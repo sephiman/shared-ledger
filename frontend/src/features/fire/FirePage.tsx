@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
 import { useFirePreview, useFireProjection, useFireSettings, useUpdateFireSettings, type FireSettings } from "@/api/fire";
 import { useAssetClasses } from "@/api/catalog";
 import { apiErrorMessage } from "@/api/client";
+import { TabBar } from "@/components/ui/TabBar";
 import { FireChart } from "./FireChart";
+import { FireHeroStrip } from "./FireHeroStrip";
 import { FireTiersCard } from "./FireTiersCard";
 import { FireScenarioTable } from "./FireScenarioTable";
 import { FireSettingsCard, type FireFormErrors } from "./FireSettingsCard";
@@ -23,6 +26,13 @@ export function FirePage() {
   const [form, setForm] = useState<FireSettings | null>(null);
   const [errors, setErrors] = useState<FireFormErrors>({});
   const [whatIfDraft, setWhatIfDraft] = useState<WhatIfDraft | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawTab = searchParams.get("tab");
+  const tab: "projection" | "settings" = rawTab === "settings" ? "settings" : "projection";
+  const setTab = (next: "projection" | "settings") => {
+    setSearchParams(next === "projection" ? {} : { tab: next }, { replace: true });
+  };
+  const [whatIfOpen, setWhatIfOpen] = useState(false);
 
   useEffect(() => {
     if (settings) setForm(settings);
@@ -173,24 +183,47 @@ export function FirePage() {
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("fire.description")}</p>
       </div>
 
-      {activeProjection && <FireTiersCard projection={activeProjection} currency={household.currency} />}
-      {projection && whatIfDraft && (
-        <FireWhatIfBar
-          baseProjection={projection}
-          draft={whatIfDraft}
-          isActive={isWhatIfActive}
-          isLoading={preview.isPending}
-          isOwner={isOwner}
-          currency={household.currency}
-          onChange={setWhatIfDraft}
-          onReset={handleResetWhatIf}
-          onApply={handleApplyWhatIf}
-        />
-      )}
-      {activeProjection && <FireChart projection={activeProjection} currency={household.currency} />}
-      {activeProjection && <FireScenarioTable projection={activeProjection} currency={household.currency} />}
+      <TabBar
+        items={[
+          { value: "projection", label: t("fire.tab_projection") },
+          { value: "settings", label: t("nav.settings") },
+        ]}
+        value={tab}
+        onChange={(v) => setTab(v as "projection" | "settings")}
+        ariaLabel={t("fire.title")}
+      />
 
-      {form && (
+      {tab === "projection" && (
+        <>
+          {activeProjection && <FireHeroStrip projection={activeProjection} currency={household.currency} />}
+          {activeProjection && <FireTiersCard projection={activeProjection} currency={household.currency} />}
+          {projection && whatIfDraft && (whatIfOpen || isWhatIfActive) && (
+            <FireWhatIfBar
+              baseProjection={projection}
+              draft={whatIfDraft}
+              isActive={isWhatIfActive}
+              isLoading={preview.isPending}
+              isOwner={isOwner}
+              currency={household.currency}
+              onChange={setWhatIfDraft}
+              onReset={handleResetWhatIf}
+              onApply={handleApplyWhatIf}
+            />
+          )}
+          {activeProjection && (
+            <FireChart
+              projection={activeProjection}
+              baselineProjection={isWhatIfActive ? projection : undefined}
+              currency={household.currency}
+              whatIfOpen={whatIfOpen || isWhatIfActive}
+              onToggleWhatIf={() => setWhatIfOpen((v) => !v)}
+            />
+          )}
+          {activeProjection && <FireScenarioTable projection={activeProjection} currency={household.currency} />}
+        </>
+      )}
+
+      {tab === "settings" && form && (
         <FireSettingsCard
           form={form}
           errors={errors}

@@ -72,6 +72,7 @@ export interface FireTierScenarioStats {
   coastTargetToday: string | null;
   requiredMonthlyToHitTarget: string | null;
   drawdownSurvivalRate: number | null;
+  drawdownPercentiles: ScenarioPercentiles[];
 }
 
 export interface FirePreviewRequest {
@@ -155,6 +156,7 @@ export interface FireProjection {
   actualReturn: FireActualReturn | null;
   actualReturnUnavailableReason: ActualReturnUnavailableReason | null;
   historicalScenario: FireHistoricalScenario | null;
+  suggestedScenario: ReturnScenario | null;
   tiers: FireTierOutput[];
   scenarios: FireScenarioOutput[];
   historicalWealth: { year: number; value: string }[];
