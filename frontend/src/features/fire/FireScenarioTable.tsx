@@ -33,6 +33,7 @@ export function FireScenarioTable({ projection, currency }: { projection: FirePr
                   <th className="pr-2">{t("fire.required_monthly")}</th>
                   <th className="pr-2">{t("fire.probability")}</th>
                   <th className="pr-2">{t("fire.median_hit")}</th>
+                  <th className="pr-2">{t("fire.drawdown_survival", { years: projection.settings.drawdownYears })}</th>
                   <th className="pr-2">{t("fire.coast_target")}</th>
                   <th className="pr-2">{t("fire.coast_probability")}</th>
                   <th>{t("fire.coast_median")}</th>
@@ -53,6 +54,7 @@ export function FireScenarioTable({ projection, currency }: { projection: FirePr
                         <td className="pr-2">{stat.requiredMonthlyToHitTarget ? formatMoney(stat.requiredMonthlyToHitTarget, currency, locale) : "—"}</td>
                         <td className="pr-2">{formatHitProbability(stat.probabilityOfReachingTarget)}</td>
                         <td className="pr-2">{hitMedianYear(stat.probabilityOfReachingTarget, stat.medianYearReachingTarget)}</td>
+                        <td className="pr-2">{stat.drawdownSurvivalRate !== null ? formatHitProbability(stat.drawdownSurvivalRate) : "—"}</td>
                         <td className="pr-2">{stat.coastTargetToday ? formatMoney(stat.coastTargetToday, currency, locale) : "—"}</td>
                         <td className="pr-2">{formatHitProbability(stat.coastProbabilityOfReachingTarget)}</td>
                         <td>{hitMedianYear(stat.coastProbabilityOfReachingTarget, stat.coastMedianYearReachingTarget)}</td>

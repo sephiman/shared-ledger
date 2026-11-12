@@ -5,6 +5,14 @@ export type ContributionMode = "manual" | "savings" | "movements";
 export type SpendingBaseMode = "derived" | "manual";
 export type FireTierKey = "lean" | "fire" | "fat" | "custom";
 export type ActualReturnUnavailableReason = "insufficient_snapshots" | "no_movements" | "not_computable";
+export type CashFlowEventKind = "lump_sum" | "contribution_delta" | "spending_delta";
+
+export interface FireCashFlowEvent {
+  year: number;
+  kind: CashFlowEventKind;
+  amount: string;
+  label: string;
+}
 
 export interface ReturnScenario {
   meanPercent: string;
@@ -38,8 +46,11 @@ export interface FireSettings {
   tierFatEnabled: boolean;
   tierCustomEnabled: boolean;
   applyCapitalGainsTax: boolean;
+  indexTaxBrackets: boolean;
+  drawdownYears: number;
   fallbackGainFractionPct: string;
   taxBrackets: TaxBracket[];
+  cashFlowEvents: FireCashFlowEvent[];
 }
 
 export interface ScenarioPercentiles {
@@ -60,6 +71,7 @@ export interface FireTierScenarioStats {
   coastMedianYearReachingTarget: number | null;
   coastTargetToday: string | null;
   requiredMonthlyToHitTarget: string | null;
+  drawdownSurvivalRate: number | null;
 }
 
 export interface FirePreviewRequest {

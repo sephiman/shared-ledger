@@ -622,6 +622,54 @@ class FireProjectionTest @Autowired constructor(
         assertThat(fireService.settingsDto(household.id).monthlyContribution).isEqualByComparingTo("500.00")
     }
 
+    @Test
+    fun `indexed tax brackets, cash flow events, and drawdown survival rate behave as modeled`() {
+        val (household, user) = setupHousehold()
+        addSnapshot(household, user, LocalDate.of(2025, 1, 1), "500000.00")
+        val thisMonth = YearMonth.now().atDay(10)
+        addTx(household, user, thisMonth, "groceries.groceries", "1000.00", Direction.expense)
+
+        // Frozen brackets vs indexed brackets with 5% inflation and tax on.
+        val baseReq = request(
+            targetYear = 2045,
+            inflation = "5.00",
+            applyCapitalGainsTax = true,
+            fallbackGainFractionPct = "80.00",
+            tierCustomEnabled = false,
+            scenarios = listOf(ReturnScenarioInput(BigDecimal("8.0"), BigDecimal("0.0"))),
+        )
+        fireService.update(household.id, baseReq.copy(indexTaxBrackets = false), user)
+        val frozenTarget = fireService.project(household.id).tiers.single { it.key == FireTierKey.fire }.targetCurve.last().value
+
+        fireService.update(household.id, baseReq.copy(indexTaxBrackets = true), user)
+        val indexedTarget = fireService.project(household.id).tiers.single { it.key == FireTierKey.fire }.targetCurve.last().value
+        assertThat(indexedTarget).isLessThan(frozenTarget)
+
+        // Cash-flow events: lump sum in 2027 + spending_delta (-500/mo in 2030) lowers targetCurve from 2030 onward.
+        fireService.update(
+            household.id,
+            baseReq.copy(
+                indexTaxBrackets = true,
+                drawdownYears = 30,
+                cashFlowEvents = listOf(
+                    FireCashFlowEventInput(2027, CashFlowEventKind.lump_sum, BigDecimal("50000.00"), "Bonus"),
+                    FireCashFlowEventInput(2030, CashFlowEventKind.spending_delta, BigDecimal("-500.00"), "Mortgage paid off"),
+                ),
+            ),
+            user,
+        )
+        val withEvents = fireService.project(household.id)
+        val fireTier = withEvents.tiers.single { it.key == FireTierKey.fire }
+        // In 2030, spending drops by half so target should be lower than in 2029.
+        val y2029 = fireTier.targetCurve.first { it.year == 2029 }.value
+        val y2030 = fireTier.targetCurve.first { it.year == 2030 }.value
+        assertThat(y2030).isLessThan(y2029)
+
+        // With 8% return, 5% inflation, and 4% SWR (plus spending halving in 2030), drawdown survival is 100%.
+        val fireStat = withEvents.scenarios.first().tierStats.single { it.tier == FireTierKey.fire }
+        assertThat(fireStat.drawdownSurvivalRate).isEqualTo(1.0)
+    }
+
     // -------------------------------------------------------------------------------------
     // Helpers
 
@@ -635,6 +683,9 @@ class FireProjectionTest @Autowired constructor(
         tierCustomEnabled: Boolean = true,
         contributionMode: ContributionMode = ContributionMode.manual,
         applyCapitalGainsTax: Boolean = false,
+        indexTaxBrackets: Boolean = false,
+        drawdownYears: Short = 30,
+        cashFlowEvents: List<FireCashFlowEventInput> = emptyList(),
         fallbackGainFractionPct: String = "50.00",
         essentialSpendingMode: SpendingBaseMode = SpendingBaseMode.derived,
         manualEssentialSpending: String = "0.00",
@@ -660,8 +711,11 @@ class FireProjectionTest @Autowired constructor(
         tierFatEnabled = true,
         tierCustomEnabled = tierCustomEnabled,
         applyCapitalGainsTax = applyCapitalGainsTax,
+        indexTaxBrackets = indexTaxBrackets,
+        drawdownYears = drawdownYears,
         fallbackGainFractionPct = BigDecimal(fallbackGainFractionPct),
         taxBrackets = FireDefaults.SPANISH_SAVINGS_TAX_BRACKETS.map { TaxBracketInput(it.lowerBound, it.ratePct) },
+        cashFlowEvents = cashFlowEvents,
     )
 
     private fun setupHousehold(): Pair<Household, User> {

@@ -38,6 +38,21 @@ data class TaxBracketDto(
     @JsonFormat(shape = JsonFormat.Shape.STRING) val ratePct: BigDecimal,
 )
 
+data class FireCashFlowEventInput(
+    @field:NotNull val year: Int,
+    @field:NotNull val kind: CashFlowEventKind,
+    @field:NotNull
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val amount: BigDecimal,
+    val label: String = "",
+)
+
+data class FireCashFlowEventDto(
+    val year: Int,
+    val kind: CashFlowEventKind,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val amount: BigDecimal,
+    val label: String,
+)
+
 data class FireSettingsDto(
     @JsonFormat(shape = JsonFormat.Shape.STRING) val targetAmount: BigDecimal,
     val targetYear: Short,
@@ -58,8 +73,11 @@ data class FireSettingsDto(
     val tierFatEnabled: Boolean,
     val tierCustomEnabled: Boolean,
     val applyCapitalGainsTax: Boolean,
+    val indexTaxBrackets: Boolean,
+    val drawdownYears: Short,
     @JsonFormat(shape = JsonFormat.Shape.STRING) val fallbackGainFractionPct: BigDecimal,
     val taxBrackets: List<TaxBracketDto>,
+    val cashFlowEvents: List<FireCashFlowEventDto>,
 )
 
 data class FireSettingsRequest(
@@ -99,11 +117,14 @@ data class FireSettingsRequest(
     val tierFatEnabled: Boolean = true,
     val tierCustomEnabled: Boolean = false,
     val applyCapitalGainsTax: Boolean = true,
+    val indexTaxBrackets: Boolean = false,
+    val drawdownYears: Short = 30,
     @field:NotNull
     @field:DecimalMin(value = "0.00")
     @field:DecimalMax(value = "100.00")
     @JsonFormat(shape = JsonFormat.Shape.STRING) val fallbackGainFractionPct: BigDecimal,
     @field:NotNull @field:Valid val taxBrackets: List<TaxBracketInput>,
+    @field:Valid val cashFlowEvents: List<FireCashFlowEventInput> = emptyList(),
 )
 
 data class FireScenarioYear(
@@ -135,6 +156,8 @@ data class FireTierScenarioStats(
     @JsonFormat(shape = JsonFormat.Shape.STRING) val coastTargetToday: BigDecimal?,
     /** Monthly contribution needed for the deterministic mean-return path to hit this tier by targetYear. */
     @JsonFormat(shape = JsonFormat.Shape.STRING) val requiredMonthlyToHitTarget: BigDecimal?,
+    /** Fraction of FIRE-hitting trials whose portfolio survives `drawdownYears` of inflation-adjusted withdrawals. */
+    val drawdownSurvivalRate: Double?,
 )
 
 data class FirePreviewRequest(

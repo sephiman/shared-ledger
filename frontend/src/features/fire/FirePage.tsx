@@ -103,6 +103,12 @@ export function FirePage() {
       next.targetAmount = t("errors.amount_positive");
     }
     if (!Number.isFinite(form.targetYear) || form.targetYear <= 0) next.targetYear = t("errors.number_required");
+    if (!Number.isFinite(form.drawdownYears) || form.drawdownYears < 1 || form.drawdownYears > 80) {
+      next.drawdownYears = t("errors.number_required");
+    }
+    if (form.cashFlowEvents.some((ev) => !Number.isInteger(ev.year) || ev.year <= 0 || !isNum(ev.amount))) {
+      next.cashFlowEvents = t("errors.number_required");
+    }
     if (!isNum(form.monthlyContribution) || Number(form.monthlyContribution) < 0) {
       next.monthlyContribution = t("errors.number_required");
     }

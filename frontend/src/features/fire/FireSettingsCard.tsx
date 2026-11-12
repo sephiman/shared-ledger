@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
-import type { FireProjection, FireSettings, FireTierKey, ReturnScenario } from "@/api/fire";
-import { Badge, Button, Card, CardBody, CardHeader, FieldError, Input, Label, Toggle } from "@/components/ui/primitives";
+import type { CashFlowEventKind, FireProjection, FireSettings, FireTierKey, ReturnScenario } from "@/api/fire";
+import { Badge, Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select, Toggle } from "@/components/ui/primitives";
 import { formatMoney, formatNumber, formatPercent } from "@/lib/money";
 import { TIER_ORDER } from "./fireLabels";
 
@@ -16,6 +16,8 @@ export interface FireFormErrors {
   brackets?: string;
   manualEssential?: string;
   manualTotal?: string;
+  drawdownYears?: string;
+  cashFlowEvents?: string;
   scenarios?: Array<{ meanPercent?: string; stdDevPercent?: string }>;
 }
 
@@ -187,18 +189,34 @@ export function FireSettingsCard({
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{fatEffect}</p>
             </div>
           </div>
-          <div className="mt-2 max-w-md">
-            <Toggle
-              checked={form.indexContribution}
-              disabled={ro}
-              onChange={(v) => patch({ indexContribution: v })}
-              label={t("fire.index_contribution")}
-            />
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              {form.indexContribution
-                ? t("fire.index_contribution_effect_on", { inflation: form.expectedInflationPct })
-                : t("fire.index_contribution_effect_off")}
-            </p>
+          <div className="mt-2 flex flex-wrap gap-6">
+            <div className="max-w-md">
+              <Toggle
+                checked={form.indexContribution}
+                disabled={ro}
+                onChange={(v) => patch({ indexContribution: v })}
+                label={t("fire.index_contribution")}
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {form.indexContribution
+                  ? t("fire.index_contribution_effect_on", { inflation: form.expectedInflationPct })
+                  : t("fire.index_contribution_effect_off")}
+              </p>
+            </div>
+            <div className="w-48">
+              <Label>{t("fire.drawdown_years")}</Label>
+              <Input
+                type="number"
+                min="1"
+                max="80"
+                value={form.drawdownYears}
+                disabled={ro}
+                invalid={!!errors.drawdownYears}
+                onChange={(e) => patch({ drawdownYears: Number(e.target.value) }, ["drawdownYears"])}
+              />
+              <FieldError message={errors.drawdownYears} />
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{t("fire.drawdown_years_help")}</p>
+            </div>
           </div>
         </section>
 
@@ -509,6 +527,15 @@ export function FireSettingsCard({
 
           {form.applyCapitalGainsTax && (
             <div className="mt-3 space-y-3">
+              <div className="max-w-xl">
+                <Toggle
+                  checked={form.indexTaxBrackets}
+                  disabled={ro}
+                  onChange={(v) => patch({ indexTaxBrackets: v })}
+                  label={t("fire.index_tax_brackets")}
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400">{t("fire.index_tax_brackets_help")}</p>
+              </div>
               <div className="max-w-xs">
                 <Label>{t("fire.gain_fraction")}</Label>
                 <Input
@@ -603,6 +630,100 @@ export function FireSettingsCard({
               </div>
             </div>
           )}
+        </section>
+
+        {/* Cash-flow events / life phases */}
+        <section>
+          <p className="mb-1 text-sm font-semibold text-gray-700 dark:text-gray-200">{t("fire.cash_flow_events")}</p>
+          <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">{t("fire.cash_flow_events_help")}</p>
+          <div className="space-y-2">
+            {form.cashFlowEvents.map((ev, idx) => (
+              <div key={idx} className="grid grid-cols-1 gap-2 rounded-md border border-border p-2 sm:grid-cols-12 sm:items-end">
+                <div className="sm:col-span-2">
+                  <Label className="text-xs">{t("fire.event_year")}</Label>
+                  <Input
+                    type="number"
+                    value={ev.year}
+                    disabled={ro}
+                    onChange={(e) => {
+                      const next = form.cashFlowEvents.map((x, i) => (i === idx ? { ...x, year: Number(e.target.value) } : x));
+                      patch({ cashFlowEvents: next }, ["cashFlowEvents"]);
+                    }}
+                  />
+                </div>
+                <div className="sm:col-span-3">
+                  <Label className="text-xs">{t("fire.event_kind")}</Label>
+                  <Select
+                    value={ev.kind}
+                    disabled={ro}
+                    onChange={(e) => {
+                      const next = form.cashFlowEvents.map((x, i) =>
+                        i === idx ? { ...x, kind: e.target.value as CashFlowEventKind } : x,
+                      );
+                      patch({ cashFlowEvents: next }, ["cashFlowEvents"]);
+                    }}
+                  >
+                    <option value="lump_sum">{t("fire.event_lump_sum")}</option>
+                    <option value="contribution_delta">{t("fire.event_contribution_delta")}</option>
+                    <option value="spending_delta">{t("fire.event_spending_delta")}</option>
+                  </Select>
+                </div>
+                <div className="sm:col-span-3">
+                  <Label className="text-xs">{t("fire.event_amount")} ({currency})</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={ev.amount}
+                    disabled={ro}
+                    onChange={(e) => {
+                      const next = form.cashFlowEvents.map((x, i) => (i === idx ? { ...x, amount: e.target.value } : x));
+                      patch({ cashFlowEvents: next }, ["cashFlowEvents"]);
+                    }}
+                  />
+                </div>
+                <div className="sm:col-span-3">
+                  <Label className="text-xs">{t("fire.event_label")}</Label>
+                  <Input
+                    type="text"
+                    value={ev.label}
+                    disabled={ro}
+                    placeholder={t("fire.event_label_placeholder")}
+                    onChange={(e) => {
+                      const next = form.cashFlowEvents.map((x, i) => (i === idx ? { ...x, label: e.target.value } : x));
+                      patch({ cashFlowEvents: next }, ["cashFlowEvents"]);
+                    }}
+                  />
+                </div>
+                <div className="sm:col-span-1">
+                  <Button
+                    variant="ghost"
+                    disabled={ro}
+                    onClick={() => patch({ cashFlowEvents: form.cashFlowEvents.filter((_, i) => i !== idx) }, ["cashFlowEvents"])}
+                  >
+                    {t("common.delete")}
+                  </Button>
+                </div>
+              </div>
+            ))}
+            <FieldError message={errors.cashFlowEvents} />
+            <Button
+              variant="secondary"
+              disabled={ro}
+              onClick={() =>
+                patch(
+                  {
+                    cashFlowEvents: [
+                      ...form.cashFlowEvents,
+                      { year: (projection?.startYear ?? 2026) + 5, kind: "contribution_delta", amount: "500.00", label: "" },
+                    ],
+                  },
+                  ["cashFlowEvents"],
+                )
+              }
+            >
+              {t("fire.add_cash_flow_event")}
+            </Button>
+          </div>
         </section>
 
         <div className="flex items-center justify-end gap-3">

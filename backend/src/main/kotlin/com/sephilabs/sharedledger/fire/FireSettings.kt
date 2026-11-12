@@ -30,6 +30,15 @@ enum class SpendingBaseMode { derived, manual }
 
 enum class FireTierKey { lean, fire, fat, custom }
 
+enum class CashFlowEventKind { lump_sum, contribution_delta, spending_delta }
+
+data class FireCashFlowEvent(
+    val year: Int = 2030,
+    val kind: CashFlowEventKind = CashFlowEventKind.lump_sum,
+    val amount: BigDecimal = BigDecimal.ZERO,
+    val label: String = "",
+)
+
 @Entity
 @Table(name = "fire_settings")
 class FireSettings(
@@ -111,6 +120,18 @@ class FireSettings(
     /** Manual estimate of the gain share of withdrawals, used only when movements can't derive it. */
     @Column(name = "fallback_gain_fraction_pct", nullable = false, precision = 5, scale = 2)
     var fallbackGainFractionPct: BigDecimal = FireDefaults.DEFAULT_FALLBACK_GAIN_FRACTION_PCT,
+
+    /** When true, tax bracket lower bounds grow with expected inflation instead of remaining nominal. */
+    @Column(name = "index_tax_brackets", nullable = false)
+    var indexTaxBrackets: Boolean = false,
+
+    /** Number of retirement years simulated after hitting a tier to measure sequence-of-returns survival. */
+    @Column(name = "drawdown_years", nullable = false)
+    var drawdownYears: Short = 30,
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "cash_flow_events", nullable = false, columnDefinition = "jsonb")
+    var cashFlowEvents: List<FireCashFlowEvent> = emptyList(),
 
     @Column(name = "updated_by_user_id")
     var updatedByUserId: UUID? = null,
