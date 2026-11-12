@@ -84,11 +84,16 @@ export function FireTiersCard({ projection, currency }: { projection: FireProjec
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="font-medium">{t("fire.tiers")}</p>
-          {savingsRatePct !== null && (
-            <Badge tone={savingsRatePct >= 0 ? "green" : "amber"}>
-              {t("fire.savings_rate_badge", { rate: formatPercent(savingsRatePct, locale, 1) })}
-            </Badge>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {savingsRatePct !== null && (
+              <Badge tone={savingsRatePct >= 0 ? "green" : "amber"}>
+                {t("fire.savings_rate_badge", { rate: formatPercent(savingsRatePct, locale, 1) })}
+              </Badge>
+            )}
+            <Link to="/fire?tab=settings" className="text-xs font-medium text-sky-600 hover:underline dark:text-sky-400">
+              {t("fire.adjust_spending_link")}
+            </Link>
+          </div>
         </div>
         {anyDerivedBase && projection.spending.monthsAvailable > 0 && projection.spending.monthsAvailable < 12 && (
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -178,15 +183,20 @@ function TierBox({ tier, projection, currency }: { tier: FireTierOutput; project
         ? projection.spending.totalMode === "manual"
         : false;
   const variant = manualBase ? "_manual" : "";
+  const sourceMonths = projection.spending.monthsAvailable || projection.spending.lookbackMonths || 12;
+  const source = t(
+    projection.spending.aggregation === "median" ? "fire.spending_source_median" : "fire.spending_source_mean",
+    { months: sourceMonths },
+  );
 
   const baseLine = (() => {
     switch (tier.key) {
       case "lean":
-        return t(`fire.tier_lean_base${variant}`, { monthly: money(tier.monthlyNetSpending) });
+        return t(`fire.tier_lean_base${variant}`, { monthly: money(tier.monthlyNetSpending), source });
       case "fire":
-        return t(`fire.tier_fire_base${variant}`, { monthly: money(tier.monthlyNetSpending) });
+        return t(`fire.tier_fire_base${variant}`, { monthly: money(tier.monthlyNetSpending), source });
       case "fat":
-        return t(`fire.tier_fat_base${variant}`, { monthly: money(projection.spending.totalMonthly), multiplier: s.fatMultiplier });
+        return t(`fire.tier_fat_base${variant}`, { monthly: money(projection.spending.totalMonthly), multiplier: s.fatMultiplier, source });
       case "custom":
         return t("fire.tier_custom_base");
     }

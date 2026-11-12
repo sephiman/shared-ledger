@@ -36,6 +36,9 @@ function makeProjection(overrides?: Partial<FireProjection>): FireProjection {
       applyCapitalGainsTax: false,
       indexTaxBrackets: false,
       drawdownYears: 30,
+      spendingLookbackMonths: 12,
+      spendingAggregation: "mean",
+      excludeCurrentMonth: false,
       fallbackGainFractionPct: "50.0",
       taxBrackets: [{ lowerBound: "0.00", ratePct: "19.0" }],
       cashFlowEvents: [],
@@ -48,6 +51,9 @@ function makeProjection(overrides?: Partial<FireProjection>): FireProjection {
       essentialMode: "derived",
       totalMode: "derived",
       monthsAvailable: 12,
+      lookbackMonths: 12,
+      aggregation: "mean",
+      excludeCurrentMonth: false,
     },
     contributions: {
       manualMonthly: "1000.00",
@@ -144,6 +150,8 @@ describe("FIRE components", () => {
 
     expect(screen.getByText("Lean FIRE")).toBeInTheDocument();
     expect(screen.getByText("FIRE")).toBeInTheDocument();
+    expect(screen.getByText(/Total:.*12m avg/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Adjust spending" })).toHaveAttribute("href", "/fire?tab=settings");
     expect(screen.getByText(/days old/)).toBeInTheDocument();
 
     const closeBtn = screen.getByRole("button", { name: /close/i });
@@ -172,6 +180,7 @@ describe("FIRE components", () => {
     );
 
     expect(screen.getByText("Preview active (not saved)")).toBeInTheDocument();
+    expect(screen.getByText(/Monthly spending/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Reset" }));
     await user.click(screen.getByRole("button", { name: "Apply to settings" }));
     expect(onReset).toHaveBeenCalledTimes(1);

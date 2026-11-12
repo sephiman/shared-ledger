@@ -805,8 +805,21 @@ class AnalyticsService(
         return ContributionSeriesResponse(hasMovements = true, points = points)
     }
 
+    private fun medianBigDecimal(values: List<BigDecimal>): BigDecimal {
+        if (values.isEmpty()) return BigDecimal.ZERO
+        val sorted = values.sorted()
+        val mid = sorted.size / 2
+        return if (sorted.size % 2 == 1) sorted[mid]
+        else (sorted[mid - 1] + sorted[mid]).divide(BigDecimal(2), 2, RoundingMode.HALF_EVEN)
+    }
+
     @Transactional(readOnly = true)
-    fun costOfLiving(householdId: UUID, asOf: YearMonth, window: MonthWindow? = null): CostOfLivingResponse {
+    fun costOfLiving(
+        householdId: UUID,
+        asOf: YearMonth,
+        window: MonthWindow? = null,
+        useMedian: Boolean = false,
+    ): CostOfLivingResponse {
         // The average generalizes to "per month over the selected range"; trailing 12 is just the default.
         val w = window ?: MonthWindow(asOf.minusMonths(11), asOf)
         val from = w.start.atDay(1)
@@ -817,13 +830,18 @@ class AnalyticsService(
 
         var essentialTotal = BigDecimal.ZERO
         var nonEssentialTotal = BigDecimal.ZERO
+        val monthlyEssential = HashMap<YearMonth, BigDecimal>()
+        val monthlyTotal = HashMap<YearMonth, BigDecimal>()
         val perEssentialCategory = LinkedHashMap<String, BigDecimal>()
         val perNonEssentialCategory = LinkedHashMap<String, BigDecimal>()
         for (r in rows) {
             if (r.direction != Direction.expense) continue
             val meta = catMeta[r.categoryCode] ?: continue
+            val ym = YearMonth.from(r.occurrenceDate)
+            monthlyTotal.merge(ym, r.amount, BigDecimal::add)
             if (meta.first) {
                 essentialTotal += r.amount
+                monthlyEssential.merge(ym, r.amount, BigDecimal::add)
                 perEssentialCategory.merge(r.categoryCode, r.amount) { a, b -> a + b }
             } else {
                 nonEssentialTotal += r.amount
@@ -835,9 +853,19 @@ class AnalyticsService(
         val monthsAvailable = w.monthsCoveredSince(transactions.dateBounds(householdId).minDate)
         val denom = monthsAvailable.coerceAtLeast(1).toBigDecimal()
 
-        val essentialMonthly = essentialTotal.divide(denom, 2, RoundingMode.HALF_EVEN)
-        val nonEssentialMonthly = nonEssentialTotal.divide(denom, 2, RoundingMode.HALF_EVEN)
-        val totalMonthly = allTotal.divide(denom, 2, RoundingMode.HALF_EVEN)
+        val essentialMonthly: BigDecimal
+        val totalMonthly: BigDecimal
+        val nonEssentialMonthly: BigDecimal
+        if (useMedian && monthsAvailable > 0) {
+            val activeMonths = (0 until monthsAvailable).map { offset -> w.end.minusMonths(offset.toLong()) }
+            essentialMonthly = medianBigDecimal(activeMonths.map { monthlyEssential[it] ?: BigDecimal.ZERO })
+            totalMonthly = medianBigDecimal(activeMonths.map { monthlyTotal[it] ?: BigDecimal.ZERO })
+            nonEssentialMonthly = (totalMonthly - essentialMonthly).coerceAtLeast(BigDecimal.ZERO)
+        } else {
+            essentialMonthly = essentialTotal.divide(denom, 2, RoundingMode.HALF_EVEN)
+            nonEssentialMonthly = nonEssentialTotal.divide(denom, 2, RoundingMode.HALF_EVEN)
+            totalMonthly = allTotal.divide(denom, 2, RoundingMode.HALF_EVEN)
+        }
         val essentialShare = if (allTotal.signum() > 0)
             essentialTotal.divide(allTotal, 4, RoundingMode.HALF_EVEN).toDouble() * 100.0
         else 0.0

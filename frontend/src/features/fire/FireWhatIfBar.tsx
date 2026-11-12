@@ -4,6 +4,7 @@ import { Badge, Button, Card, CardBody, Input, Label } from "@/components/ui/pri
 
 export interface WhatIfDraft {
   monthlyContribution: string;
+  monthlySpending: string;
   targetYear: string;
   safeWithdrawalRatePct: string;
   lumpSum: string;
@@ -12,6 +13,7 @@ export interface WhatIfDraft {
 export function initialWhatIfDraft(projection: FireProjection): WhatIfDraft {
   return {
     monthlyContribution: projection.contributions.activeMonthly ?? projection.settings.monthlyContribution,
+    monthlySpending: projection.spending.totalMonthly,
     targetYear: String(projection.settings.targetYear),
     safeWithdrawalRatePct: projection.settings.safeWithdrawalRatePct,
     lumpSum: "0",
@@ -21,16 +23,25 @@ export function initialWhatIfDraft(projection: FireProjection): WhatIfDraft {
 export function buildPreviewRequest(draft: WhatIfDraft, base: FireProjection): FirePreviewRequest | null {
   const baseContrib = base.contributions.activeMonthly ?? base.settings.monthlyContribution;
   const contribChanged = draft.monthlyContribution.trim() !== "" && Number(draft.monthlyContribution) !== Number(baseContrib);
+  const spendVal = Number(draft.monthlySpending);
+  const spendChanged =
+    draft.monthlySpending.trim() !== "" &&
+    Number.isFinite(spendVal) &&
+    spendVal > 0 &&
+    spendVal !== Number(base.spending.totalMonthly);
   const yearChanged = draft.targetYear.trim() !== "" && Number(draft.targetYear) !== base.settings.targetYear;
   const swrChanged = draft.safeWithdrawalRatePct.trim() !== "" && Number(draft.safeWithdrawalRatePct) !== Number(base.settings.safeWithdrawalRatePct);
   const lumpVal = Number(draft.lumpSum);
   const lumpChanged = draft.lumpSum.trim() !== "" && Number.isFinite(lumpVal) && lumpVal > 0;
 
-  if (!contribChanged && !yearChanged && !swrChanged && !lumpChanged) return null;
+  if (!contribChanged && !spendChanged && !yearChanged && !swrChanged && !lumpChanged) return null;
 
   const req: FirePreviewRequest = {};
   if (contribChanged && Number(draft.monthlyContribution) >= 0) {
     req.monthlyContribution = draft.monthlyContribution;
+  }
+  if (spendChanged) {
+    req.monthlySpending = draft.monthlySpending;
   }
   if (yearChanged && Number.isInteger(Number(draft.targetYear)) && Number(draft.targetYear) > 0) {
     req.targetYear = Number(draft.targetYear);
@@ -75,6 +86,7 @@ export function FireWhatIfBar({
     isOwner &&
     isActive &&
     (Number(draft.monthlyContribution) !== Number(baseProjection.contributions.activeMonthly ?? baseProjection.settings.monthlyContribution) ||
+      Number(draft.monthlySpending) !== Number(baseProjection.spending.totalMonthly) ||
       Number(draft.targetYear) !== baseProjection.settings.targetYear ||
       Number(draft.safeWithdrawalRatePct) !== Number(baseProjection.settings.safeWithdrawalRatePct));
 
@@ -100,7 +112,7 @@ export function FireWhatIfBar({
             </div>
           )}
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <div>
             <Label className="text-xs">{t("fire.monthly_contribution")} ({currency})</Label>
             <Input
@@ -109,6 +121,16 @@ export function FireWhatIfBar({
               min="0"
               value={draft.monthlyContribution}
               onChange={(e) => onChange({ ...draft, monthlyContribution: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label className="text-xs">{t("fire.what_if_monthly_spending")} ({currency})</Label>
+            <Input
+              type="number"
+              step="50"
+              min="1"
+              value={draft.monthlySpending}
+              onChange={(e) => onChange({ ...draft, monthlySpending: e.target.value })}
             />
           </div>
           <div>

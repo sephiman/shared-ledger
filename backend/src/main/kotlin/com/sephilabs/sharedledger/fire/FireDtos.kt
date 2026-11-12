@@ -75,6 +75,9 @@ data class FireSettingsDto(
     val applyCapitalGainsTax: Boolean,
     val indexTaxBrackets: Boolean,
     val drawdownYears: Short,
+    val spendingLookbackMonths: Short,
+    val spendingAggregation: SpendingAggregationMode,
+    val excludeCurrentMonth: Boolean,
     @JsonFormat(shape = JsonFormat.Shape.STRING) val fallbackGainFractionPct: BigDecimal,
     val taxBrackets: List<TaxBracketDto>,
     val cashFlowEvents: List<FireCashFlowEventDto>,
@@ -119,6 +122,9 @@ data class FireSettingsRequest(
     val applyCapitalGainsTax: Boolean = true,
     val indexTaxBrackets: Boolean = false,
     val drawdownYears: Short = 30,
+    val spendingLookbackMonths: Short = 12,
+    val spendingAggregation: SpendingAggregationMode = SpendingAggregationMode.mean,
+    val excludeCurrentMonth: Boolean = false,
     @field:NotNull
     @field:DecimalMin(value = "0.00")
     @field:DecimalMax(value = "100.00")
@@ -171,6 +177,8 @@ data class FirePreviewRequest(
     @JsonFormat(shape = JsonFormat.Shape.STRING) val safeWithdrawalRatePct: BigDecimal? = null,
     @field:DecimalMin(value = "0.00")
     @JsonFormat(shape = JsonFormat.Shape.STRING) val lumpSum: BigDecimal = BigDecimal.ZERO,
+    @field:DecimalMin(value = "0.01")
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val monthlySpending: BigDecimal? = null,
 )
 
 data class FireScenarioOutput(
@@ -214,8 +222,11 @@ data class FireSpendingBasis(
     @JsonFormat(shape = JsonFormat.Shape.STRING) val derivedTotalMonthly: BigDecimal,
     val essentialMode: SpendingBaseMode,
     val totalMode: SpendingBaseMode,
-    /** Months backing the derived averages (0–12); irrelevant to a manual base. */
+    /** Months backing the derived averages (0–lookbackMonths); irrelevant to a manual base. */
     val monthsAvailable: Int,
+    val lookbackMonths: Int = 12,
+    val aggregation: SpendingAggregationMode = SpendingAggregationMode.mean,
+    val excludeCurrentMonth: Boolean = false,
 )
 
 data class FireContributions(

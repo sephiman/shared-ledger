@@ -25,8 +25,11 @@ data class ReturnScenario(
 /** Source feeding the projection's monthly contribution. */
 enum class ContributionMode { manual, savings, movements }
 
-/** Source feeding a tier's spending base: live trailing-12 data or a manual monthly amount. */
+/** Source feeding a tier's spending base: live trailing data or a manual monthly amount. */
 enum class SpendingBaseMode { derived, manual }
+
+/** How monthly spending is aggregated across the lookback window. */
+enum class SpendingAggregationMode { mean, median }
 
 enum class FireTierKey { lean, fire, fat, custom }
 
@@ -128,6 +131,18 @@ class FireSettings(
     /** Number of retirement years simulated after hitting a tier to measure sequence-of-returns survival. */
     @Column(name = "drawdown_years", nullable = false)
     var drawdownYears: Short = 30,
+
+    /** Number of months averaged when deriving essential/total spending. */
+    @Column(name = "spending_lookback_months", nullable = false)
+    var spendingLookbackMonths: Short = 12,
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "spending_aggregation", nullable = false, length = 16)
+    var spendingAggregation: SpendingAggregationMode = SpendingAggregationMode.mean,
+
+    /** When true, derived spending ends at the last completed month rather than the current partial month. */
+    @Column(name = "exclude_current_month", nullable = false)
+    var excludeCurrentMonth: Boolean = false,
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "cash_flow_events", nullable = false, columnDefinition = "jsonb")

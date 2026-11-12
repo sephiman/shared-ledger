@@ -691,6 +691,9 @@ class FireProjectionTest @Autowired constructor(
         manualEssentialSpending: String = "0.00",
         totalSpendingMode: SpendingBaseMode = SpendingBaseMode.derived,
         manualTotalSpending: String = "0.00",
+        spendingLookbackMonths: Short = 12,
+        spendingAggregation: SpendingAggregationMode = SpendingAggregationMode.mean,
+        excludeCurrentMonth: Boolean = false,
     ) = FireSettingsRequest(
         targetAmount = BigDecimal(targetAmount),
         targetYear = targetYear,
@@ -713,10 +716,41 @@ class FireProjectionTest @Autowired constructor(
         applyCapitalGainsTax = applyCapitalGainsTax,
         indexTaxBrackets = indexTaxBrackets,
         drawdownYears = drawdownYears,
+        spendingLookbackMonths = spendingLookbackMonths,
+        spendingAggregation = spendingAggregation,
+        excludeCurrentMonth = excludeCurrentMonth,
         fallbackGainFractionPct = BigDecimal(fallbackGainFractionPct),
         taxBrackets = FireDefaults.SPANISH_SAVINGS_TAX_BRACKETS.map { TaxBracketInput(it.lowerBound, it.ratePct) },
         cashFlowEvents = cashFlowEvents,
     )
+
+    @Test
+    fun `spending lookback window, median aggregation, and preview monthlySpending behave as expected`() {
+        val (h, u) = setupHousehold()
+        val now = LocalDate.now().withDayOfMonth(10)
+        // 3 months of expenses: 1000, 1000, and a 7000 spike in the middle month.
+        addTx(h, u, now.minusMonths(2), "groceries.groceries", "1000.00")
+        addTx(h, u, now.minusMonths(1), "groceries.groceries", "7000.00")
+        addTx(h, u, now, "groceries.groceries", "1000.00")
+
+        // 3-month mean = (1000 + 7000 + 1000) / 3 = 3000.00
+        fireService.update(h.id, request(spendingLookbackMonths = 3, spendingAggregation = SpendingAggregationMode.mean), u)
+        val meanProj = fireService.project(h.id)
+        assertThat(meanProj.spending.totalMonthly).isEqualByComparingTo("3000.00")
+        assertThat(meanProj.spending.lookbackMonths).isEqualTo(3)
+        assertThat(meanProj.spending.aggregation).isEqualTo(SpendingAggregationMode.mean)
+
+        // 3-month median = 1000.00 (ignores the 7000 spike)
+        fireService.update(h.id, request(spendingLookbackMonths = 3, spendingAggregation = SpendingAggregationMode.median), u)
+        val medianProj = fireService.project(h.id)
+        assertThat(medianProj.spending.totalMonthly).isEqualByComparingTo("1000.00")
+        assertThat(medianProj.spending.aggregation).isEqualTo(SpendingAggregationMode.median)
+
+        // What-if monthlySpending overrides totalMonthly without mutating saved settings
+        val previewProj = fireService.project(h.id, FirePreviewRequest(monthlySpending = BigDecimal("2500.00")))
+        assertThat(previewProj.spending.totalMonthly).isEqualByComparingTo("2500.00")
+        assertThat(fireService.project(h.id).spending.totalMonthly).isEqualByComparingTo("1000.00")
+    }
 
     private fun setupHousehold(): Pair<Household, User> {
         val user = users.save(User(email = "f${System.nanoTime()}@example.com", passwordHash = "x"))

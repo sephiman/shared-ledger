@@ -2,6 +2,7 @@ package com.sephilabs.sharedledger.fire
 
 import com.sephilabs.sharedledger.analytics.AnalyticsService
 import com.sephilabs.sharedledger.analytics.CostOfLivingResponse
+import com.sephilabs.sharedledger.analytics.MonthWindow
 import com.sephilabs.sharedledger.common.Money
 import com.sephilabs.sharedledger.common.errors.AppException
 import com.sephilabs.sharedledger.config.AppProperties
@@ -85,6 +86,9 @@ class FireService(
         s.applyCapitalGainsTax = request.applyCapitalGainsTax
         s.indexTaxBrackets = request.indexTaxBrackets
         s.drawdownYears = request.drawdownYears.coerceIn(1, 80)
+        s.spendingLookbackMonths = request.spendingLookbackMonths.toInt().coerceIn(1, 120).toShort()
+        s.spendingAggregation = request.spendingAggregation
+        s.excludeCurrentMonth = request.excludeCurrentMonth
         s.fallbackGainFractionPct = request.fallbackGainFractionPct
         s.cashFlowEvents = request.cashFlowEvents.map {
             FireCashFlowEvent(
@@ -138,10 +142,18 @@ class FireService(
         val inflation = s.expectedInflationPct.toDouble() / 100.0
         val swr = effectiveSwrPct.toDouble() / 100.0
 
-        // Spending bases — derived live (same definition as the Cost of living tile) unless
-        // a manual override is active; the effective values feed everything downstream.
-        val col = analytics.costOfLiving(householdId, YearMonth.now())
-        val spending = resolveSpendingBasis(s, col)
+        // Spending bases — derived live over the configured lookback window unless
+        // a manual override (or what-if preview) is active; the effective values feed everything downstream.
+        val endMonth = if (s.excludeCurrentMonth) YearMonth.now().minusMonths(1) else YearMonth.now()
+        val lookback = s.spendingLookbackMonths.toInt().coerceIn(1, 120)
+        val spendingWindow = MonthWindow(endMonth.minusMonths((lookback - 1).toLong()), endMonth)
+        val col = analytics.costOfLiving(
+            householdId,
+            endMonth,
+            spendingWindow,
+            useMedian = s.spendingAggregation == SpendingAggregationMode.median,
+        )
+        val spending = resolveSpendingBasis(s, col, preview)
 
         // Qualifying movements since inception, oldest first (repository returns newest first).
         val allMovements = movements.findInRange(householdId, FireDefaults.EARLIEST_DATA_DATE, today)
@@ -235,24 +247,37 @@ class FireService(
         return rows.map { TaxBracket(it.id.lowerBound, it.ratePct) }
     }
 
-    /** Single definition of the effective spending bases: manual override when active, live trailing-12 otherwise. */
-    private fun resolveSpendingBasis(s: FireSettings, col: CostOfLivingResponse) = FireSpendingBasis(
-        essentialMonthly = if (s.essentialSpendingMode == SpendingBaseMode.manual) {
-            Money.normalize(s.manualEssentialSpending)
-        } else {
-            col.essentialMonthlyAverage
-        },
-        totalMonthly = if (s.totalSpendingMode == SpendingBaseMode.manual) {
+    /** Single definition of the effective spending bases: what-if / manual override when active, live trailing otherwise. */
+    private fun resolveSpendingBasis(
+        s: FireSettings,
+        col: CostOfLivingResponse,
+        preview: FirePreviewRequest? = null,
+    ): FireSpendingBasis {
+        val previewTotal = preview?.monthlySpending?.let { Money.normalize(it) }
+        val totalMonthly = previewTotal ?: if (s.totalSpendingMode == SpendingBaseMode.manual) {
             Money.normalize(s.manualTotalSpending)
         } else {
             col.totalMonthlyAverage
-        },
-        derivedEssentialMonthly = col.essentialMonthlyAverage,
-        derivedTotalMonthly = col.totalMonthlyAverage,
-        essentialMode = s.essentialSpendingMode,
-        totalMode = s.totalSpendingMode,
-        monthsAvailable = col.monthsAvailable,
-    )
+        }
+        val baseEssential = if (s.essentialSpendingMode == SpendingBaseMode.manual) {
+            Money.normalize(s.manualEssentialSpending)
+        } else {
+            col.essentialMonthlyAverage
+        }
+        val essentialMonthly = if (previewTotal != null && baseEssential > totalMonthly) totalMonthly else baseEssential
+        return FireSpendingBasis(
+            essentialMonthly = essentialMonthly,
+            totalMonthly = totalMonthly,
+            derivedEssentialMonthly = col.essentialMonthlyAverage,
+            derivedTotalMonthly = col.totalMonthlyAverage,
+            essentialMode = s.essentialSpendingMode,
+            totalMode = if (previewTotal != null) SpendingBaseMode.manual else s.totalSpendingMode,
+            monthsAvailable = col.monthsAvailable,
+            lookbackMonths = s.spendingLookbackMonths.toInt().coerceIn(1, 120),
+            aggregation = s.spendingAggregation,
+            excludeCurrentMonth = s.excludeCurrentMonth,
+        )
+    }
 
     private fun FireSettings.toDto(brackets: List<TaxBracket>) = FireSettingsDto(
         targetAmount = targetAmount,
@@ -276,6 +301,9 @@ class FireService(
         applyCapitalGainsTax = applyCapitalGainsTax,
         indexTaxBrackets = indexTaxBrackets,
         drawdownYears = drawdownYears,
+        spendingLookbackMonths = spendingLookbackMonths,
+        spendingAggregation = spendingAggregation,
+        excludeCurrentMonth = excludeCurrentMonth,
         fallbackGainFractionPct = fallbackGainFractionPct,
         taxBrackets = brackets.map { TaxBracketDto(it.lowerBound, it.ratePct) },
         cashFlowEvents = cashFlowEvents.map { FireCashFlowEventDto(it.year, it.kind, it.amount, it.label) },

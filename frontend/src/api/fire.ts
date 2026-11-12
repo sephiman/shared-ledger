@@ -3,6 +3,7 @@ import { apiClient } from "./client";
 
 export type ContributionMode = "manual" | "savings" | "movements";
 export type SpendingBaseMode = "derived" | "manual";
+export type SpendingAggregationMode = "mean" | "median";
 export type FireTierKey = "lean" | "fire" | "fat" | "custom";
 export type ActualReturnUnavailableReason = "insufficient_snapshots" | "no_movements" | "not_computable";
 export type CashFlowEventKind = "lump_sum" | "contribution_delta" | "spending_delta";
@@ -48,6 +49,9 @@ export interface FireSettings {
   applyCapitalGainsTax: boolean;
   indexTaxBrackets: boolean;
   drawdownYears: number;
+  spendingLookbackMonths: number;
+  spendingAggregation: SpendingAggregationMode;
+  excludeCurrentMonth: boolean;
   fallbackGainFractionPct: string;
   taxBrackets: TaxBracket[];
   cashFlowEvents: FireCashFlowEvent[];
@@ -80,6 +84,7 @@ export interface FirePreviewRequest {
   targetYear?: number | null;
   safeWithdrawalRatePct?: string | null;
   lumpSum?: string;
+  monthlySpending?: string | null;
 }
 
 export interface FireScenarioOutput {
@@ -112,6 +117,9 @@ export interface FireSpendingBasis {
   essentialMode: SpendingBaseMode;
   totalMode: SpendingBaseMode;
   monthsAvailable: number;
+  lookbackMonths: number;
+  aggregation: SpendingAggregationMode;
+  excludeCurrentMonth: boolean;
 }
 
 export interface FireContributions {

@@ -73,11 +73,15 @@ export function FirePage() {
     if (!form || !projection || !whatIfDraft) return;
     const baseContrib = projection.contributions.activeMonthly ?? projection.settings.monthlyContribution;
     const contribChanged = Number(whatIfDraft.monthlyContribution) !== Number(baseContrib);
+    const spendChanged =
+      Number(whatIfDraft.monthlySpending) > 0 &&
+      Number(whatIfDraft.monthlySpending) !== Number(projection.spending.totalMonthly);
     const nextForm: FireSettings = {
       ...form,
       targetYear: Number(whatIfDraft.targetYear) || form.targetYear,
       safeWithdrawalRatePct: whatIfDraft.safeWithdrawalRatePct || form.safeWithdrawalRatePct,
       ...(contribChanged ? { contributionMode: "manual", monthlyContribution: whatIfDraft.monthlyContribution } : {}),
+      ...(spendChanged ? { totalSpendingMode: "manual", manualTotalSpending: whatIfDraft.monthlySpending } : {}),
     };
     setForm(nextForm);
     update.mutate(nextForm);

@@ -259,6 +259,72 @@ export function FireSettingsCard({
         <section>
           <p className="mb-1 text-sm font-semibold text-gray-700 dark:text-gray-200">{t("fire.spending_bases")}</p>
           <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">{t("fire.spending_bases_help")}</p>
+          <div className="mb-3 grid grid-cols-1 gap-3 rounded-md border border-border bg-raised/40 p-3 sm:grid-cols-3">
+            <div>
+              <Label className="text-xs">{t("fire.spending_lookback_label")}</Label>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                {[3, 6, 12, 24, 36].map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    disabled={ro}
+                    onClick={() => patch({ spendingLookbackMonths: m })}
+                    className={`rounded px-2 py-1 text-xs font-medium ${
+                      form.spendingLookbackMonths === m
+                        ? "bg-primary text-white"
+                        : "border border-border bg-surface text-gray-700 hover:bg-raised dark:text-gray-200"
+                    }`}
+                  >
+                    {m}m
+                  </button>
+                ))}
+                <Input
+                  type="number"
+                  min={1}
+                  max={120}
+                  className="w-16"
+                  value={form.spendingLookbackMonths}
+                  disabled={ro}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    if (Number.isFinite(v)) patch({ spendingLookbackMonths: Math.max(1, Math.min(120, Math.round(v))) });
+                  }}
+                />
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">{t("fire.spending_agg_label")}</Label>
+              <div className="mt-1 flex gap-1.5">
+                {(["mean", "median"] as const).map((agg) => (
+                  <button
+                    key={agg}
+                    type="button"
+                    disabled={ro}
+                    onClick={() => patch({ spendingAggregation: agg })}
+                    className={`rounded px-2.5 py-1 text-xs font-medium ${
+                      form.spendingAggregation === agg
+                        ? "bg-primary text-white"
+                        : "border border-border bg-surface text-gray-700 hover:bg-raised dark:text-gray-200"
+                    }`}
+                  >
+                    {t(`fire.spending_agg_${agg}`)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-end pb-1">
+              <label className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-200">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                  checked={form.excludeCurrentMonth}
+                  disabled={ro}
+                  onChange={(e) => patch({ excludeCurrentMonth: e.target.checked })}
+                />
+                {t("fire.exclude_current_month")}
+              </label>
+            </div>
+          </div>
           {(["essential", "total"] as const).map((base) => {
             const mode = base === "essential" ? form.essentialSpendingMode : form.totalSpendingMode;
             const manualValue = base === "essential" ? form.manualEssentialSpending : form.manualTotalSpending;
