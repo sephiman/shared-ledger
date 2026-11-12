@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMoneyFlowProjection, type MoneyFlowProjectionResponse } from "@/api/analytics";
+import type { ProjectionScenario } from "@/api/questions";
 import { Badge, Button, Card, CardBody, CardHeader, Label, Select } from "@/components/ui/primitives";
 import { formatMoney, formatNumber } from "@/lib/money";
 import { MoneyFlowSankeyChart, MoneyFlowTotals, useMoneyFlowSankey } from "./MoneyFlowChart";
+import { ProjectionAskBox } from "./ProjectionAskBox";
 import { ProjectionModeSettings } from "./ProjectionModeSettings";
 import { FORECAST_WINDOWS, parseForecastWindow, useForecastWindow } from "./forecastWindow";
 import { EXPENSE_GROUPS } from "@/lib/categoryGroup";
@@ -17,7 +19,7 @@ import {
   modeSettingsOrder,
   monthList,
   presentDisabledKeys,
-  withActualsOnly,
+  withProjectionScenario,
 } from "./moneyflowProjection";
 
 type Level = "group" | "category";
@@ -68,6 +70,7 @@ export function MoneyFlowProjectionPanel({ householdId, currency }: { householdI
   // Exploration state, deliberately not remembered: every visit starts from the group view with nothing switched off.
   const [level, setLevel] = useState<Level>("group");
   const [collapsed, setCollapsed] = useState(readCollapsed);
+  const [scenario, setScenario] = useState<ProjectionScenario | null>(null);
   const { data: response, isLoading } = useMoneyFlowProjection(householdId, level, window);
 
   // Cleared on any scope change, not in the selectors' handlers: the window is shared with the Forecast and may
@@ -77,10 +80,41 @@ export function MoneyFlowProjectionPanel({ householdId, currency }: { householdI
   if (actualsOnly.scope !== scope) setActualsOnly({ scope, keys: NONE });
   const disabledKeys = useMemo(() => {
     if (!response || actualsOnly.scope !== scope) return NONE;
-    return presentDisabledKeys(response, actualsOnly.keys);
-  }, [response, actualsOnly, scope]);
-  const data = useMemo(() => response && withActualsOnly(response, disabledKeys), [response, disabledKeys]);
+    const scenarioFreeze = new Set(
+      (scenario?.freeze ?? []).flatMap((f) =>
+        response.components
+          .filter(
+            (c) =>
+              c.id === f.code &&
+              ((f.type === "category" && (response.level === "category" || c.side === "income")) ||
+                (f.type === "group" && response.level === "group" && c.side === "expense")),
+          )
+          .map(nodeKey),
+      ),
+    );
+    return presentDisabledKeys(response, new Set([...actualsOnly.keys, ...scenarioFreeze]));
+  }, [response, actualsOnly, scope, scenario]);
+  const data = useMemo(
+    () => response && withProjectionScenario(response, disabledKeys, scenario?.adjustments ?? []),
+    [response, disabledKeys, scenario],
+  );
   const sankey = useMoneyFlowSankey(householdId, data, true, disabledKeys);
+
+  const applyScenario = (next: ProjectionScenario | null) => {
+    setScenario(next);
+    if (!next) return;
+    if (next.level) {
+      setLevel(next.level);
+    } else if (
+      level === "group" &&
+      (next.freeze.some((f) => f.type === "category") || next.adjustments.some((a) => a.scope.type === "category"))
+    ) {
+      setLevel("category");
+    }
+    if (next.windowMonths != null && (FORECAST_WINDOWS as readonly number[]).includes(next.windowMonths)) {
+      setWindow(parseForecastWindow(String(next.windowMonths)));
+    }
+  };
 
   const toggleNode = (node: SankeyNodeDatum) => {
     const key = nodeKey(node);
@@ -193,6 +227,13 @@ export function MoneyFlowProjectionPanel({ householdId, currency }: { householdI
       </CardHeader>
       {!collapsed && (
         <CardBody id="money-flow-projection-body" className="space-y-4">
+          <ProjectionAskBox
+            householdId={householdId}
+            currency={currency}
+            data={data}
+            activeScenario={scenario}
+            onApplyScenario={applyScenario}
+          />
           {isLoading && <p className="text-gray-500 dark:text-gray-400">{t("common.loading")}</p>}
 
           {!isLoading && data && !hasFlows && (

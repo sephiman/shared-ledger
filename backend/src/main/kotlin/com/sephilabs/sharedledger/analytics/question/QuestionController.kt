@@ -27,4 +27,10 @@ class QuestionController(
         @PathVariable householdId: UUID,
         @Valid @RequestBody body: QuestionRequest,
     ): QuestionAnswerDto = service.ask(householdId, body, currentUser.requireUser())
+
+    @PostMapping("/projection")
+    fun askProjection(
+        @PathVariable householdId: UUID,
+        @Valid @RequestBody body: ProjectionQuestionRequest,
+    ): ProjectionQuestionAnswerDto = service.askProjection(householdId, body, currentUser.requireUser())
 }

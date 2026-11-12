@@ -59,6 +59,43 @@ export function useAskQuestion(householdId: string) {
   });
 }
 
+export interface ProjectionAdjustment {
+  scope: QuestionScope;
+  kind: "amount" | "percent";
+  value: number;
+}
+
+export interface ProjectionScenario {
+  freeze: QuestionScope[];
+  adjustments: ProjectionAdjustment[];
+  level?: "group" | "category" | null;
+  windowMonths?: number | null;
+  modeOverride?: "ENVELOPE" | "PRORATE" | null;
+  savingsTarget?: number | null;
+}
+
+export type ProjectionExplainKind = "node" | "recurring_due" | "top_expenses" | "deficit_drivers" | "outlook";
+
+export interface ProjectionExplain {
+  kind: ProjectionExplainKind;
+  scope?: QuestionScope | null;
+}
+
+export interface ProjectionQuestionAnswer {
+  understood: boolean;
+  scenario?: ProjectionScenario | null;
+  explain?: ProjectionExplain | null;
+  unsupported: UnsupportedFilter[];
+}
+
+export function useAskProjectionQuestion(householdId: string) {
+  return useMutation({
+    mutationFn: async (body: { question: string; language: string }) =>
+      (await apiClient.post<ProjectionQuestionAnswer>(`/households/${householdId}/questions/projection`, body)).data,
+    meta: { silentSuccess: true, silentError: true },
+  });
+}
+
 /** The placeholder's example category. Keyed and kept like the catalogue, so whatever refreshes the catalogue
  *  refreshes it too. */
 export function useQuestionExampleCategory(householdId: string, enabled: boolean) {

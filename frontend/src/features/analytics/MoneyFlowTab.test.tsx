@@ -148,6 +148,11 @@ vi.mock("recharts", async (importOriginal) => {
 });
 
 vi.mock("@/api/catalog", () => ({ useCategories: () => ({ data: [] }) }));
+vi.mock("@/api/aiSuggestions", () => ({ useAiSuggestionsOn: () => null }));
+vi.mock("@/api/questions", () => ({
+  QUESTION_MAX_CHARS: 300,
+  useAskProjectionQuestion: () => ({ isPending: false, error: null, mutateAsync: vi.fn() }),
+}));
 
 vi.mock("@/api/projectionModes", async () => {
   const { useState } = await import("react");

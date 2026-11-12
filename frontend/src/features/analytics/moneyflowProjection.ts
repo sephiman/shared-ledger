@@ -1,5 +1,6 @@
 import Decimal from "decimal.js";
 import type { MoneyFlowLink, MoneyFlowNode, MoneyFlowProjectionResponse, ProjectedFlowComponents } from "@/api/analytics";
+import type { ProjectionAdjustment } from "@/api/questions";
 import { monthName } from "@/lib/dates";
 import { toDecimal } from "@/lib/money";
 import { nodeKey, type MoneyFlowScopeState, type SankeyNodeDatum } from "./moneyflow";
@@ -83,20 +84,54 @@ export function presentDisabledKeys(data: MoneyFlowProjectionResponse, disabled:
  *  (saved = max(I − E, 0), deficit = max(E − I, 0), hub = I + deficit). A disabled node keeps its place and is
  *  drawn at max(actual, 0); the totals keep the exact actual even when refunds pushed it negative. */
 export function withActualsOnly(data: MoneyFlowProjectionResponse, disabled: ReadonlySet<string>): MoneyFlowProjectionResponse {
-  const dropped = new Map(data.components.filter((c) => disabled.has(nodeKey(c))).map((c) => [nodeKey(c), c] as const));
-  if (dropped.size === 0) return data;
+  return withProjectionScenario(data, disabled, []);
+}
 
-  const remainderOf = (side: ProjectedFlowComponents["side"]) =>
-    [...dropped.values()].filter((c) => c.side === side).reduce((acc, c) => acc.plus(estimatedRemainder(c)), toDecimal(0));
-  const income = toDecimal(data.income).minus(remainderOf("income"));
-  const expenses = toDecimal(data.expenses).minus(remainderOf("expense"));
+/** Applies actuals-only toggles and what-if adjustments to the projection, preserving the backend's flow rules
+ *  (saved = max(I − E, 0), deficit = max(E − I, 0), hub = I + deficit). */
+export function withProjectionScenario(
+  data: MoneyFlowProjectionResponse,
+  disabled: ReadonlySet<string>,
+  adjustments: readonly ProjectionAdjustment[],
+): MoneyFlowProjectionResponse {
+  if (disabled.size === 0 && adjustments.length === 0) return data;
+
+  const adjustedByKey = new Map<string, Decimal>();
+  for (const c of data.components) {
+    const key = nodeKey(c);
+    let current = disabled.has(key) ? toDecimal(c.actual) : toDecimal(c.projected);
+    let touched = disabled.has(key);
+
+    for (const adj of adjustments) {
+      const matches =
+        adj.scope.code === c.id &&
+        ((adj.scope.type === "category" && (data.level === "category" || c.side === "income")) ||
+          (adj.scope.type === "group" && data.level === "group" && c.side === "expense"));
+      if (!matches) continue;
+      touched = true;
+      current =
+        adj.kind === "amount"
+          ? Decimal.max(current.plus(adj.value), 0)
+          : Decimal.max(current.times(toDecimal(1).plus(toDecimal(adj.value).div(100))), 0);
+    }
+    if (touched) adjustedByKey.set(key, current);
+  }
+  if (adjustedByKey.size === 0) return data;
+
+  const deltaOf = (side: ProjectedFlowComponents["side"]) =>
+    data.components
+      .filter((c) => c.side === side && adjustedByKey.has(nodeKey(c)))
+      .reduce((acc, c) => acc.plus(adjustedByKey.get(nodeKey(c))!.minus(c.projected)), toDecimal(0));
+
+  const income = toDecimal(data.income).plus(deltaOf("income"));
+  const expenses = toDecimal(data.expenses).plus(deltaOf("expense"));
   const saved = Decimal.max(income.minus(expenses), 0);
   const deficit = Decimal.max(expenses.minus(income), 0);
   const money = (d: Decimal) => d.toFixed(2);
 
   const flowNode = (n: MoneyFlowNode): MoneyFlowNode => {
-    const c = dropped.get(nodeKey(n));
-    return c ? { ...n, amount: money(Decimal.max(toDecimal(c.actual), 0)) } : n;
+    const target = adjustedByKey.get(nodeKey(n));
+    return target ? { ...n, amount: money(Decimal.max(target, 0)) } : n;
   };
   const derived = (side: "hub" | "saved" | "deficit", amount: Decimal): MoneyFlowNode => ({
     id: data.nodes.find((n) => n.side === side)?.id ?? side,

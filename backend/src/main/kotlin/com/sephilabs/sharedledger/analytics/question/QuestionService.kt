@@ -24,6 +24,7 @@ class QuestionService(
     private val settings: AiSuggestionSettingsService,
     private val catalogue: PromptCatalogue,
     private val interpreter: QuestionInterpreter,
+    private val projectionInterpreter: ProjectionQuestionInterpreter,
     private val inFlight: QuestionsInFlight,
     private val categories: CategoryService,
     private val transactions: TransactionRepository,
@@ -50,6 +51,42 @@ class QuestionService(
                 ?.let { QuestionRouting.route(it, request.askedFrom, entries) }
             logOutcome(householdId, by, request, outcome, route, provider.model)
             return outcome.interpretation.toDto(route)
+        } finally {
+            inFlight.end(by.id)
+        }
+    }
+
+    fun askProjection(householdId: UUID, request: ProjectionQuestionRequest, by: User): ProjectionQuestionAnswerDto {
+        val provider = requireOn(householdId, by)
+        if (!inFlight.begin(by.id)) throw rejected(householdId, by, "QUESTION_IN_PROGRESS")
+        try {
+            val entries = catalogue.forHousehold(householdId)
+            val outcome = try {
+                projectionInterpreter.interpret(request.question, request.language, entries, LocalDate.now())
+            } catch (ex: SuggestionModelException) {
+                log.warn(
+                    "ai_projection_question household={} user={} valid=false reason=provider_error " +
+                        "question_chars={} attempts={} model={} prompt={} error={}",
+                    householdId, by.id, request.question.length, ex.attempts, provider.model, ProjectionQuestionPrompt.VERSION, ex.message,
+                )
+                throw AppException(code = "QUESTION_PROVIDER_ERROR", httpStatus = 502)
+            }
+            val understood = outcome.interpretation as? ProjectionInterpretation.Understood
+            log.info(
+                "ai_projection_question household={} user={} valid={} reason={} has_scenario={} explain={} unsupported={} " +
+                    "question_chars={} input_tokens={} output_tokens={} reasoning_tokens={} latency_ms={} attempts={} model={} prompt={}",
+                householdId, by.id,
+                understood != null,
+                (outcome.interpretation as? ProjectionInterpretation.NotUnderstood)?.reason ?: "none",
+                understood?.scenario != null,
+                understood?.explain?.kind ?: "none",
+                understood?.unsupported?.takeIf { it.isNotEmpty() }?.joinToString(",") { it.kind.name } ?: "none",
+                request.question.length,
+                outcome.answer.inputTokens, outcome.answer.outputTokens, outcome.answer.reasoningTokens,
+                outcome.answer.latencyMs, outcome.answer.attempts,
+                provider.model, ProjectionQuestionPrompt.VERSION,
+            )
+            return outcome.interpretation.toDto()
         } finally {
             inFlight.end(by.id)
         }

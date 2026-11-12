@@ -12,7 +12,9 @@ import {
   modeSettingsOrder,
   presentDisabledKeys,
   withActualsOnly,
+  withProjectionScenario,
 } from "./moneyflowProjection";
+import { buildProjectionExplanation } from "./projectionExplain";
 
 function projection(partial: Partial<MoneyFlowProjectionResponse>): MoneyFlowProjectionResponse {
   return {
@@ -279,5 +281,65 @@ describe("modeSettingsOrder", () => {
 
     expect(modeSettingsOrder(nodes, groups).slice(0, 3)).toEqual(["groceries", "home", "transport"]);
     expect(modeSettingsOrder(nodes, groups)).not.toContain("ungrouped");
+  });
+});
+
+describe("withProjectionScenario", () => {
+  it("applies amount and percent adjustments alongside frozen nodes", () => {
+    const base = projection({
+      level: "group",
+      income: "3000.00",
+      expenses: "2000.00",
+      saved: "1000.00",
+      deficit: "0.00",
+      nodes: [
+        { id: "income.salary", side: "income", groupCode: null, amount: "3000.00" },
+        { id: "hub", side: "hub", groupCode: null, amount: "3000.00" },
+        { id: "home", side: "expense", groupCode: "home", amount: "1200.00" },
+        { id: "groceries", side: "expense", groupCode: "groceries", amount: "800.00" },
+        { id: "saved", side: "saved", groupCode: null, amount: "1000.00" },
+      ],
+      components: [
+        { ...components("income", "income.salary"), actual: "3000.00", projected: "3000.00" },
+        { ...components("expense", "home", "200.00"), actual: "1000.00", projected: "1200.00" },
+        { ...components("expense", "groceries", "0.00", "500.00"), actual: "300.00", projected: "800.00" },
+      ],
+    });
+
+    const out = withProjectionScenario(base, new Set(["expense:home"]), [
+      { scope: { type: "group", code: "groceries" }, kind: "percent", value: -25 },
+      { scope: { type: "category", code: "income.salary" }, kind: "amount", value: 500 },
+    ]);
+
+    expect(out.income).toBe("3500.00");
+    expect(out.expenses).toBe("1600.00");
+    expect(out.saved).toBe("1900.00");
+    expect(out.nodes.find((n) => n.id === "home")?.amount).toBe("1000.00");
+    expect(out.nodes.find((n) => n.id === "groceries")?.amount).toBe("600.00");
+  });
+});
+
+describe("buildProjectionExplanation", () => {
+  it("lists recurring items still due in descending order", () => {
+    const base = projection({
+      components: [
+        components("expense", "home", "450.00"),
+        components("expense", "outings", "0.00"),
+        components("expense", "transport", "120.00"),
+      ],
+    });
+
+    const result = buildProjectionExplanation(
+      base,
+      { kind: "recurring_due", scope: null },
+      "EUR",
+      "en",
+      (_side, id) => id.toUpperCase(),
+      (key, opts) => `${key}:${JSON.stringify(opts ?? {})}`,
+    );
+
+    expect(result?.items).toHaveLength(2);
+    expect(result?.items[0]).toContain("HOME");
+    expect(result?.items[1]).toContain("TRANSPORT");
   });
 });
