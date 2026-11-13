@@ -2,19 +2,21 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { FireProjection, FireTierKey } from "@/api/fire";
 import { Badge, Card, CardBody, CardHeader } from "@/components/ui/primitives";
-import { formatMoney } from "@/lib/money";
+import { formatWholeMoney } from "@/lib/money";
 import { Explain } from "./Explain";
 import { formatDeltaValue } from "./FireHeroStrip";
 import { ScenarioInfo } from "./ScenarioInfo";
 import {
   TIER_COLORS,
   TIER_ORDER,
+  estimatedYearText,
   formatHitProbability,
-  hitMedianYear,
   resolveReferenceScenarioIndex,
   resolveReferenceTierKey,
   scenarioDisplayName,
   scenarioMetrics,
+  tierPlainName,
+  tierTechName,
 } from "./fireLabels";
 
 type MatrixMode = "reach" | "lasts" | "coast";
@@ -62,7 +64,12 @@ export function FireScenarioTable({
   const refTierKey = resolveReferenceTierKey(projection);
   const refScenario = projection.scenarios[refScenarioIdx];
   const refStat = refScenario?.tierStats.find((st) => st.tier === refTierKey);
-  const refYear = refStat ? hitMedianYear(refStat.probabilityOfReachingTarget, refStat.medianYearReachingTarget) : "—";
+  const horizon = projection.settings.targetYear;
+  const baseHorizon = baselineProjection?.settings.targetYear ?? horizon;
+  const refYear = refStat?.estimatedYear ?? null;
+  const yearText = (year: number | null) => estimatedYearText(year, horizon, t);
+  const baseYearText = (stat: { estimatedYear: number | null } | undefined) =>
+    stat ? estimatedYearText(stat.estimatedYear, baseHorizon, t) : null;
 
   const modes: { key: MatrixMode; label: string }[] = [
     { key: "reach", label: t("fire.matrix_mode_reach") },
@@ -104,14 +111,14 @@ export function FireScenarioTable({
                     <div className="flex items-center gap-1.5">
                       <span className="h-2 w-2 rounded-full" style={{ backgroundColor: TIER_COLORS[tk] }} />
                       <span className="font-medium text-gray-800 dark:text-gray-200">
-                        {tk === "fat"
-                          ? t("fire.tier_plain_fat", { multiplier: projection.settings.fatMultiplier })
-                          : t(`fire.tier_plain_${tk}`)}
+                        {tierPlainName(tk, projection.settings.fatMultiplier, locale, t)}
                       </span>
                     </div>
-                    <div className="pl-3.5 text-[11px] font-normal text-gray-500 dark:text-gray-400">
-                      {t(`fire.tier_${tk}`)}
-                    </div>
+                    {tierTechName(tk, t) && (
+                      <div className="pl-3.5 text-[11px] font-normal text-gray-500 dark:text-gray-400">
+                        {tierTechName(tk, t)}
+                      </div>
+                    )}
                   </th>
                 ))}
               </tr>
@@ -133,7 +140,7 @@ export function FireScenarioTable({
                         />
                       </div>
                       <div className="text-xs text-gray-500 dark:text-gray-400">
-                        {scenarioMetrics(s, t)}
+                        {scenarioMetrics(s, locale, t)}
                       </div>
                     </td>
                     {activeTiers.map((tk) => {
@@ -153,10 +160,8 @@ export function FireScenarioTable({
                       }
 
                       if (mode === "reach") {
-                        const year = hitMedianYear(stat.probabilityOfReachingTarget, stat.medianYearReachingTarget);
-                        const baseYear = baseStat
-                          ? hitMedianYear(baseStat.probabilityOfReachingTarget, baseStat.medianYearReachingTarget)
-                          : null;
+                        const year = yearText(stat.estimatedYear);
+                        const baseYear = baseYearText(baseStat);
                         const prob = formatHitProbability(stat.probabilityOfReachingTarget);
                         const baseProb = baseStat ? formatHitProbability(baseStat.probabilityOfReachingTarget) : null;
                         const req = stat.requiredMonthlyToHitTarget !== null ? Number(stat.requiredMonthlyToHitTarget) : null;
@@ -166,7 +171,7 @@ export function FireScenarioTable({
                           <td key={tk} className={cellClass}>
                             <div className="flex flex-wrap items-center gap-1.5">
                               <span className="font-semibold text-gray-900 dark:text-gray-100">
-                                {formatDeltaValue(baseYear !== null ? String(baseYear) : null, String(year))}
+                                {formatDeltaValue(baseYear, year)}
                               </span>
                               <span className="text-gray-400">·</span>
                               <Badge tone={probabilityTone(stat.probabilityOfReachingTarget)}>
@@ -175,7 +180,7 @@ export function FireScenarioTable({
                             </div>
                             {shortfall !== null && shortfall > 0.5 && (
                               <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
-                                {t("fire.matrix_needs_monthly", { amount: formatMoney(shortfall, currency, locale) })}
+                                {t("fire.matrix_needs_monthly", { amount: formatWholeMoney(shortfall, currency, locale) })}
                               </p>
                             )}
                           </td>
@@ -183,10 +188,8 @@ export function FireScenarioTable({
                       }
 
                       if (mode === "lasts") {
-                        const year = hitMedianYear(stat.probabilityOfReachingTarget, stat.medianYearReachingTarget);
-                        const baseYear = baseStat
-                          ? hitMedianYear(baseStat.probabilityOfReachingTarget, baseStat.medianYearReachingTarget)
-                          : null;
+                        const year = yearText(stat.estimatedYear);
+                        const baseYear = baseYearText(baseStat);
                         const surv = stat.drawdownSurvivalRate !== null ? formatHitProbability(stat.drawdownSurvivalRate) : "—";
                         const baseSurv =
                           baseStat?.drawdownSurvivalRate != null ? formatHitProbability(baseStat.drawdownSurvivalRate) : null;
@@ -195,7 +198,7 @@ export function FireScenarioTable({
                           <td key={tk} className={cellClass}>
                             <div className="flex flex-wrap items-center gap-1.5">
                               <span className="font-semibold text-gray-900 dark:text-gray-100">
-                                {formatDeltaValue(baseYear !== null ? String(baseYear) : null, String(year))}
+                                {formatDeltaValue(baseYear, year)}
                               </span>
                               <span className="text-gray-400">·</span>
                               {stat.drawdownSurvivalRate !== null ? (
@@ -211,16 +214,13 @@ export function FireScenarioTable({
                       }
 
                       // mode === "coast"
-                      const coastTarget = stat.coastTargetToday ? formatMoney(stat.coastTargetToday, currency, locale) : "—";
+                      const coastTarget = stat.coastTargetToday ? formatWholeMoney(stat.coastTargetToday, currency, locale) : "—";
                       const baseCoastTarget = baseStat?.coastTargetToday
-                        ? formatMoney(baseStat.coastTargetToday, currency, locale)
+                        ? formatWholeMoney(baseStat.coastTargetToday, currency, locale)
                         : null;
                       const coastProb = formatHitProbability(stat.coastProbabilityOfReachingTarget);
                       const baseCoastProb = baseStat ? formatHitProbability(baseStat.coastProbabilityOfReachingTarget) : null;
-                      const coastYear = hitMedianYear(
-                        stat.coastProbabilityOfReachingTarget,
-                        stat.coastMedianYearReachingTarget,
-                      );
+                      const coastYear = yearText(stat.coastEstimatedYear);
 
                       return (
                         <td key={tk} className={cellClass}>
@@ -233,9 +233,7 @@ export function FireScenarioTable({
                               {formatDeltaValue(baseCoastProb, coastProb)}
                             </Badge>
                           </div>
-                          {coastYear !== "—" && (
-                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{coastYear}</p>
-                          )}
+                          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{coastYear}</p>
                         </td>
                       );
                     })}
@@ -247,12 +245,12 @@ export function FireScenarioTable({
         </div>
 
         <Explain>
-          {refScenario && refYear !== "—" && (
+          {refScenario && refYear !== null && (
             <p className="font-medium text-gray-700 dark:text-gray-200">
               {t("fire.matrix_explain_question", { year: refYear })}
             </p>
           )}
-          {refScenario && refYear !== "—" && (
+          {refScenario && refYear !== null && (
             <p>
               {t("fire.matrix_explain_answer", {
                 scenario: scenarioDisplayName(refScenario, refScenarioIdx, t),
@@ -263,6 +261,7 @@ export function FireScenarioTable({
             </p>
           )}
           <p>{mode === "coast" ? t("fire.coast_explain") : t("fire.table_explain")}</p>
+          <p>{t("fire.estimated_year_explain")}</p>
           {projection.settings.applyCapitalGainsTax && <p>{t("fire.table_tax_note")}</p>}
         </Explain>
       </CardBody>

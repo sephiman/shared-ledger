@@ -3,15 +3,18 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import type { FireProjection, FireTierOutput } from "@/api/fire";
 import { Badge, Card, CardBody, CardHeader } from "@/components/ui/primitives";
-import { formatMoney, formatPercent } from "@/lib/money";
+import { formatPercent, formatWholeMoney } from "@/lib/money";
 import { formatDeltaValue } from "./FireHeroStrip";
 import {
   TIER_COLORS,
   TIER_ORDER,
+  estimatedYearText,
   formatHitProbability,
-  hitMedianYear,
+  formatMultiplier,
   resolveReferenceScenario,
   resolveReferenceTierKey,
+  tierPlainName,
+  tierTechName,
 } from "./fireLabels";
 
 const STALE_SNAPSHOT_DAYS = 45;
@@ -45,7 +48,7 @@ export function FireTiersCard({
 }) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
-  const money = (v: string | number | null | undefined) => formatMoney(v ?? 0, currency, locale);
+  const money = (v: string | number | null | undefined) => formatWholeMoney(v ?? 0, currency, locale);
 
   const tiers = TIER_ORDER
     .map((key) => projection.tiers.find((tier) => tier.key === key))
@@ -210,15 +213,12 @@ function TierBox({
 }) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
-  const money = (v: string | number | null | undefined) => formatMoney(v ?? 0, currency, locale);
+  const money = (v: string | number | null | undefined) => formatWholeMoney(v ?? 0, currency, locale);
   const s = projection.settings;
   const taxOn = s.applyCapitalGainsTax;
 
-  const plainLabel =
-    tier.key === "fat"
-      ? t("fire.tier_plain_fat", { multiplier: s.fatMultiplier })
-      : t(`fire.tier_plain_${tier.key}`);
-  const techLabel = t(`fire.tier_${tier.key}`);
+  const plainLabel = tierPlainName(tier.key, s.fatMultiplier, locale, t);
+  const techLabel = tierTechName(tier.key, t);
 
   const manualBase =
     tier.key === "lean"
@@ -232,9 +232,9 @@ function TierBox({
     if (tier.targetToday === null) return null;
     const params = {
       annual: money(taxOn ? tier.annualGrossSpending : tier.annualNetSpending),
-      swr: s.safeWithdrawalRatePct,
+      swr: formatPercent(Number(s.safeWithdrawalRatePct), locale, 2),
       target: money(tier.targetToday),
-      multiplier: s.fatMultiplier,
+      multiplier: formatMultiplier(s.fatMultiplier, locale),
     };
     switch (tier.key) {
       case "lean":
@@ -253,8 +253,11 @@ function TierBox({
   const baseScenario = baselineProjection ? resolveReferenceScenario(baselineProjection).scenario : undefined;
   const baseStat = baseScenario?.tierStats.find((st) => st.tier === tier.key);
 
-  const hitYear = refStat ? hitMedianYear(refStat.probabilityOfReachingTarget, refStat.medianYearReachingTarget) : "—";
-  const baseHitYear = baseStat ? hitMedianYear(baseStat.probabilityOfReachingTarget, baseStat.medianYearReachingTarget) : null;
+  const hitYear = refStat ? estimatedYearText(refStat.estimatedYear, s.targetYear, t) : "—";
+  const baseHitYear =
+    baseStat && baselineProjection
+      ? estimatedYearText(baseStat.estimatedYear, baselineProjection.settings.targetYear, t)
+      : null;
   const hitProb = refStat ? formatHitProbability(refStat.probabilityOfReachingTarget) : "—";
   const baseHitProb = baseStat ? formatHitProbability(baseStat.probabilityOfReachingTarget) : null;
 
@@ -282,7 +285,7 @@ function TierBox({
           <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: TIER_COLORS[tier.key] }} />
           <div>
             <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{plainLabel}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">{techLabel}</p>
+            {techLabel && <p className="text-xs text-gray-500 dark:text-gray-400">{techLabel}</p>}
           </div>
         </div>
         {isReference && <Badge tone="sky">{t("fire.tier_reference_badge")}</Badge>}
@@ -296,9 +299,6 @@ function TierBox({
         <>
           <p className="mt-2 text-xl font-semibold tabular-nums">
             {formatDeltaValue(baseTargetText, targetText)}
-          </p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            {t("fire.tier_target_plain")} · {t("fire.tier_target_tech")}
           </p>
 
           {tier.coveragePercent !== null && (
@@ -320,7 +320,7 @@ function TierBox({
             <div className="mt-2.5 flex items-center justify-between text-xs text-gray-700 dark:text-gray-200">
               <span>{t("fire.photo_year_main")}</span>
               <span className="font-medium tabular-nums">
-                {formatDeltaValue(baseHitYear !== null ? String(baseHitYear) : null, String(hitYear))}
+                {formatDeltaValue(baseHitYear, hitYear)}
                 {" · "}
                 {formatDeltaValue(baseHitProb, hitProb)}
               </span>

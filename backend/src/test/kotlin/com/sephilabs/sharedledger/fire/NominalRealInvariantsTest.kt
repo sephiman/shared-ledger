@@ -176,8 +176,8 @@ class NominalRealInvariantsTest @Autowired constructor(
             val stA = scA.tierStats.first { it.tier == tierKey }
             val stB = scB.tierStats.first { it.tier == tierKey }
             assertThat(stA.deterministicHitYear).describedAs("detHit $tierKey").isEqualTo(stB.deterministicHitYear)
-            assertThat(stA.medianYearReachingTarget).describedAs("medHit $tierKey").isEqualTo(stB.medianYearReachingTarget)
-            assertThat(stA.coastMedianYearReachingTarget).describedAs("coastMedHit $tierKey").isEqualTo(stB.coastMedianYearReachingTarget)
+            assertThat(stA.estimatedYear).describedAs("estimated $tierKey").isEqualTo(stB.estimatedYear)
+            assertThat(stA.coastEstimatedYear).describedAs("coastEstimated $tierKey").isEqualTo(stB.coastEstimatedYear)
             assertRelClose(stA.coastTargetToday!!.toDouble(), stB.coastTargetToday!!.toDouble(), 1e-3, "coastTarget $tierKey")
             assertRelClose(stA.requiredMonthlyToHitTarget!!.toDouble(), stB.requiredMonthlyToHitTarget!!.toDouble(), 1e-3, "reqMonthly $tierKey")
             assertThat(stA.drawdownSurvivalRate).describedAs("survival $tierKey").isEqualTo(stB.drawdownSurvivalRate)
@@ -235,7 +235,7 @@ class NominalRealInvariantsTest @Autowired constructor(
             val s2 = p2.scenarios.single().tierStats.first { it.tier == tierKey }
             val s4 = p4.scenarios.single().tierStats.first { it.tier == tierKey }
             assertThat(s2.deterministicHitYear).isEqualTo(s4.deterministicHitYear)
-            assertThat(s2.medianYearReachingTarget).isEqualTo(s4.medianYearReachingTarget)
+            assertThat(s2.estimatedYear).isEqualTo(s4.estimatedYear)
             assertRelClose(s2.requiredMonthlyToHitTarget!!.toDouble(), s4.requiredMonthlyToHitTarget!!.toDouble(), 1e-3, "reqMonthly $tierKey")
         }
     }

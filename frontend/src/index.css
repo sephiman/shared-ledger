@@ -40,6 +40,7 @@
   --color-chart-grid: #e5e7eb;
   --color-chart-axis: #9ca3af;
   --color-chart-axis-text: #6b7280;
+  --color-chart-marker: #334155;
 }
 
 .dark {
@@ -63,6 +64,7 @@
   --color-chart-grid: #374151;
   --color-chart-axis: #6b7280;
   --color-chart-axis-text: #9ca3af;
+  --color-chart-marker: #cbd5e1;
 }
 
 /* OLED: elevation carried by hairline borders over near-black fills, not by lighter fills. Cards sit at
@@ -113,4 +115,6 @@ html, body, #root { height: 100%; }
   .recharts-cartesian-axis-line,
   .recharts-cartesian-axis-tick-line { stroke: var(--color-chart-axis); }
   .recharts-cartesian-axis-tick-value { fill: var(--color-chart-axis-text); }
+  .chart-marker line { stroke: var(--color-chart-marker); }
+  .chart-marker-label { fill: var(--color-chart-marker); }
 }

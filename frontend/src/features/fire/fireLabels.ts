@@ -1,5 +1,6 @@
 import type { FireProjection, FireScenarioOutput, FireTierKey, FireTierOutput } from "@/api/fire";
 import type { TFunction } from "i18next";
+import { formatPercent } from "@/lib/money";
 
 /** Dashed target-curve colors, one per tier, distinct from the scenario palette. */
 export const TIER_COLORS: Record<FireTierKey, string> = {
@@ -11,8 +12,12 @@ export const TIER_COLORS: Record<FireTierKey, string> = {
 
 export const TIER_ORDER: FireTierKey[] = ["lean", "fire", "fat", "custom"];
 
-export function scenarioMetrics(s: { meanPercent: string; stdDevPercent: string; historical: boolean }, t: TFunction): string {
-  const base = `${s.meanPercent}% ±${s.stdDevPercent}%`;
+export function scenarioMetrics(
+  s: { meanPercent: string; stdDevPercent: string; historical: boolean },
+  locale: string,
+  t: TFunction,
+): string {
+  const base = `${formatPercent(Number(s.meanPercent), locale, 1)} ±${formatPercent(Number(s.stdDevPercent), locale, 1)}`;
   return s.historical ? `${base} ${t("fire.historical_ref")}` : base;
 }
 
@@ -24,13 +29,20 @@ export function scenarioDisplayName(s: { name?: string }, idx: number, t: TFunct
   return t("fire.scenario_default_n", { n: idx + 1 });
 }
 
-export function scenarioLabel(
-  s: { name?: string; meanPercent: string; stdDevPercent: string; historical: boolean },
-  t: TFunction,
-): string {
-  const name = s.name?.trim();
-  const metrics = scenarioMetrics(s, t);
-  return name ? `${name} (${metrics})` : metrics;
+/** The Fat FIRE multiplier as people write it: locale decimal separator, no trailing zeros ("1.50" → "1,5" in es). */
+export function formatMultiplier(value: string | number, locale: string): string {
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(Number(value));
+}
+
+export function tierPlainName(key: FireTierKey, fatMultiplier: string, locale: string, t: TFunction): string {
+  return key === "fat"
+    ? t("fire.tier_plain_fat", { multiplier: formatMultiplier(fatMultiplier, locale) })
+    : t(`fire.tier_plain_${key}`);
+}
+
+/** Technical tier name shown as a secondary label; null for the own target, whose plain name is its only name. */
+export function tierTechName(key: FireTierKey, t: TFunction): string | null {
+  return key === "custom" ? null : t(`fire.tier_${key}`);
 }
 
 export function resolveReferenceScenarioIndex(projection: FireProjection): number {
@@ -73,10 +85,9 @@ export function formatHitProbability(p: number): string {
   return `${Math.round(pct)}%`;
 }
 
-/** Median hit year telling the same story as {@link formatHitProbability}: shown only when some paths
- *  reached the target, "—" when none did. */
-export function hitMedianYear(p: number, median: number | null): number | "—" {
-  return p > 0 && median != null ? median : "—";
+/** The estimated year, or "beyond {horizon}" when fewer than half of all trials reach the target in time. */
+export function estimatedYearText(year: number | null, horizon: number, t: TFunction): string {
+  return year !== null ? String(year) : t("fire.year_beyond", { horizon });
 }
 
 export type SeedPortfolioKind = "bonds" | "balanced" | "equities";

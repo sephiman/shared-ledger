@@ -2,9 +2,9 @@ import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { FireProjection } from "@/api/fire";
 import { Badge, Button, Card, CardBody } from "@/components/ui/primitives";
-import { formatMoney, formatPercent } from "@/lib/money";
+import { formatWholeMoney, formatNumber, formatPercent } from "@/lib/money";
 import { buildHeadline } from "./fireHeadline";
-import { hitMedianYear, resolveReferenceScenario, resolveReferenceTier } from "./fireLabels";
+import { estimatedYearText, resolveReferenceScenario, resolveReferenceTier } from "./fireLabels";
 
 const EXPLAINER_DISMISSED_KEY = "fire-explainer-dismissed";
 
@@ -66,7 +66,7 @@ export function FireHeroStrip({
 }: Props) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
-  const money = (v: string | number | null | undefined) => formatMoney(v ?? 0, currency, locale);
+  const money = (v: string | number | null | undefined) => formatWholeMoney(v ?? 0, currency, locale);
   const [explainerOpen, setExplainerOpen] = useState(() => !readExplainerDismissed());
 
   function toggleExplainer(open: boolean) {
@@ -90,11 +90,12 @@ export function FireHeroStrip({
     baseTier?.coveragePercent != null ? formatPercent(baseTier.coveragePercent, locale, 0) : null;
 
   const estimatedYear = refStat
-    ? hitMedianYear(refStat.probabilityOfReachingTarget, refStat.medianYearReachingTarget)
+    ? estimatedYearText(refStat.estimatedYear, projection.settings.targetYear, t)
     : "—";
-  const baseEstimatedYear = baseStat
-    ? hitMedianYear(baseStat.probabilityOfReachingTarget, baseStat.medianYearReachingTarget)
-    : null;
+  const baseEstimatedYear =
+    baseStat && baselineProjection
+      ? estimatedYearText(baseStat.estimatedYear, baselineProjection.settings.targetYear, t)
+      : null;
 
   const contribText = money(projection.contributions.activeMonthly ?? "0");
   const baseContribText = baselineProjection ? money(baselineProjection.contributions.activeMonthly ?? "0") : null;
@@ -110,8 +111,9 @@ export function FireHeroStrip({
   const savingsRateMainLabel =
     savingsRatePct !== null
       ? t("fire.photo_savings_rate_main", {
-          unit: formatMoney(100, currency, locale),
-          kept: formatMoney(Math.round(savingsRatePct), currency, locale),
+          unit: money(100),
+          keptMoney: money(Math.round(savingsRatePct)),
+          kept: formatNumber(Math.round(savingsRatePct), locale),
         })
       : t("fire.savings_rate_label");
 
@@ -202,10 +204,7 @@ export function FireHeroStrip({
         <Card>
           <CardBody>
             <p className="text-2xl font-semibold tabular-nums">
-              {formatDeltaValue(
-                baseEstimatedYear !== null ? String(baseEstimatedYear) : null,
-                String(estimatedYear),
-              )}
+              {formatDeltaValue(baseEstimatedYear, estimatedYear)}
             </p>
             <p className="mt-1 text-sm text-gray-700 dark:text-gray-200">
               {t("fire.photo_year_main")}

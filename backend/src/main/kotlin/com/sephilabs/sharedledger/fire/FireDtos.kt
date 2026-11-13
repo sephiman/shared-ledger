@@ -160,10 +160,14 @@ data class FireTierScenarioStats(
     val deterministicHitYear: Int?,
     /** Fraction of trials reaching the tier's inflated target at any year ≤ targetYear. */
     val probabilityOfReachingTarget: Double,
-    val medianYearReachingTarget: Int?,
+    /** First year by which at least half of ALL trials have reached the target; null when fewer than half reach it. */
+    val estimatedYear: Int?,
+    /** Median hit year among only the trials that reach — conditional, not the displayed estimate. */
+    val medianYearAmongReaching: Int?,
     /** Same statistics with contributions stopped today (Coast FIRE). */
     val coastProbabilityOfReachingTarget: Double,
-    val coastMedianYearReachingTarget: Int?,
+    val coastEstimatedYear: Int?,
+    val coastMedianYearAmongReaching: Int?,
     /** Amount needed today (nominal) to reach this tier's horizon target at the scenario's mean return with €0 contributions. */
     @JsonFormat(shape = JsonFormat.Shape.STRING) val coastTargetToday: BigDecimal?,
     /** Monthly contribution needed for the deterministic mean-return path to hit this tier by targetYear. */

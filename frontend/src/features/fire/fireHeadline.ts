@@ -1,6 +1,6 @@
 import type { TFunction } from "i18next";
 import type { FireProjection } from "@/api/fire";
-import { formatMoney, formatPercent } from "@/lib/money";
+import { formatPercent, formatWholeMoney } from "@/lib/money";
 import {
   formatHitProbability,
   resolveReferenceScenario,
@@ -8,7 +8,7 @@ import {
   scenarioDisplayName,
 } from "./fireLabels";
 
-export const HEADLINE_TEMPLATE_VERSION = 1;
+export const HEADLINE_TEMPLATE_VERSION = 2;
 export const WHAT_IF_SAVE_MORE_AMOUNT = 500;
 export const WHAT_IF_SPEND_LESS_FACTOR = 0.9;
 
@@ -37,41 +37,43 @@ export function buildProjectionClause(
     return t("fire.headline_no_target");
   }
 
-  const monthly = formatMoney(projection.contributions.activeMonthly ?? "0", currency, locale);
+  const monthly = formatWholeMoney(projection.contributions.activeMonthly ?? "0", currency, locale);
   const scenarioName = scenarioDisplayName(scenario, index, t);
   const hitPct = formatHitProbability(stat.probabilityOfReachingTarget);
-  const projectedYear = stat.medianYearReachingTarget;
+  const year = stat.estimatedYear;
 
-  if (projectedYear !== null && stat.probabilityOfReachingTarget > 0) {
-    const years = Math.max(0, projectedYear - projection.startYear);
-    const survivalPct =
-      stat.drawdownSurvivalRate !== null ? formatHitProbability(stat.drawdownSurvivalRate) : null;
-    if (survivalPct !== null) {
-      return t("fire.headline_reach_full", {
-        monthly,
-        scenario: scenarioName,
-        year: projectedYear,
-        years,
-        hitPct,
-        survivalPct,
-        drawdownYears: projection.settings.drawdownYears,
-      });
-    }
-    return t("fire.headline_reach_no_survival", {
+  if (year === null) {
+    const notBefore = t("fire.headline_not_before_horizon", {
       monthly,
       scenario: scenarioName,
-      year: projectedYear,
-      years,
+      horizon: projection.settings.targetYear,
       hitPct,
     });
+    const extra = extraMonthlyNeeded(projection, stat.requiredMonthlyToHitTarget);
+    if (extra === null) return notBefore;
+    return `${notBefore} ${t("fire.headline_extra_monthly", { amount: formatWholeMoney(extra, currency, locale) })}`;
   }
 
-  return t("fire.headline_beyond_horizon", {
+  const reach = t("fire.headline_reach", {
     monthly,
     scenario: scenarioName,
-    horizon: projection.settings.targetYear,
+    year,
+    years: Math.max(0, year - projection.startYear),
     hitPct,
   });
+  if (stat.drawdownSurvivalRate === null) return reach;
+  const survival = t("fire.headline_survival_if_reached", {
+    survivalPct: formatHitProbability(stat.drawdownSurvivalRate),
+    drawdownYears: projection.settings.drawdownYears,
+  });
+  return `${reach} ${survival}`;
+}
+
+/** Extra monthly saving on top of today's that would reach the target in time; null when unknown or not needed. */
+function extraMonthlyNeeded(projection: FireProjection, requiredMonthly: string | null): number | null {
+  if (requiredMonthly === null) return null;
+  const extra = Number(requiredMonthly) - Number(projection.contributions.activeMonthly ?? 0);
+  return Math.round(extra) > 0 ? extra : null;
 }
 
 export function buildHeadline(

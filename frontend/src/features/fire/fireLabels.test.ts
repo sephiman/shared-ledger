@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import i18n from "@/i18n";
 import {
   formatHitProbability,
-  hitMedianYear,
+  formatMultiplier,
+  estimatedYearText,
   isDefaultScenarioSet,
   realEquivalentPct,
   typicalCompoundReturnPct,
@@ -25,19 +27,16 @@ describe("formatHitProbability", () => {
   });
 });
 
-describe("hitMedianYear", () => {
-  it("hides the year when nobody reaches the target", () => {
-    expect(hitMedianYear(0, 2050)).toBe("—");
-    expect(hitMedianYear(0, null)).toBe("—");
+describe("estimatedYearText", () => {
+  it("shows the year when at least half of all trials reach the target", () => {
+    expect(estimatedYearText(2041, 2050, i18n.t.bind(i18n))).toBe("2041");
   });
 
-  it("shows the year when some paths reach it, even below 1%", () => {
-    expect(hitMedianYear(0.004, 2050)).toBe(2050);
-    expect(hitMedianYear(0.9, 2035)).toBe(2035);
-  });
-
-  it("shows a dash when there is no median despite a positive probability", () => {
-    expect(hitMedianYear(0.5, null)).toBe("—");
+  it("says beyond the horizon when there is no year", async () => {
+    await i18n.changeLanguage("en");
+    expect(estimatedYearText(null, 2050, i18n.t.bind(i18n))).toBe("Beyond 2050");
+    await i18n.changeLanguage("es");
+    expect(estimatedYearText(null, 2050, i18n.t.bind(i18n))).toBe("Más allá de 2050");
   });
 });
 
@@ -60,5 +59,14 @@ describe("default scenario set & typical compound return", () => {
     expect(compound).toBeGreaterThan(6.02);
     expect(compound).toBeLessThan(6.05);
     expect(realEquivalentPct(compound, 2.0)).toBeCloseTo(((1 + compound / 100) / 1.02 - 1) * 100, 6);
+  });
+});
+
+describe("formatMultiplier", () => {
+  it("uses the locale's decimal separator and drops trailing zeros", () => {
+    expect(formatMultiplier("1.50", "es")).toBe("1,5");
+    expect(formatMultiplier("1.50", "en")).toBe("1.5");
+    expect(formatMultiplier("2.00", "es")).toBe("2");
+    expect(formatMultiplier("1.25", "es")).toBe("1,25");
   });
 });

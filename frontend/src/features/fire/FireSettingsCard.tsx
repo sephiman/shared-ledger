@@ -2,15 +2,18 @@ import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { CashFlowEventKind, FireProjection, FireSettings, FireTierKey, ReturnScenario } from "@/api/fire";
 import { Badge, Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select, Toggle } from "@/components/ui/primitives";
-import { formatMoney, formatNumber, formatPercent } from "@/lib/money";
+import { formatNumber, formatPercent, formatWholeMoney } from "@/lib/money";
 import { Explain } from "./Explain";
 import {
   SEED_RETURN_SCENARIOS,
   TIER_ORDER,
+  formatMultiplier,
   isDefaultScenarioSet,
   resolveReferenceScenario,
   resolveReferenceTierKey,
   scenarioDisplayName,
+  tierPlainName,
+  tierTechName,
 } from "./fireLabels";
 import { ScenarioInfo } from "./ScenarioInfo";
 
@@ -88,7 +91,12 @@ export function FireSettingsCard({
 }: Props) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
-  const money = (v: string | number | null | undefined) => formatMoney(v ?? 0, currency, locale);
+  const money = (v: string | number | null | undefined) => formatWholeMoney(v ?? 0, currency, locale);
+  // Help-text percentages keep their own precision: 4 → "4 %", 3.5 → "3,5 %", 4.25 → "4,25 %".
+  const pct = (v: string | number) => {
+    const n = Number(v);
+    return formatPercent(n, locale, Number.isInteger(n) ? 0 : Number.isInteger(n * 10) ? 1 : 2);
+  };
   const ro = !isOwner;
   const [confirmRestoreOpen, setConfirmRestoreOpen] = useState(false);
 
@@ -102,9 +110,9 @@ export function FireSettingsCard({
     const alt = swr > 1 ? swr - 0.5 : swr + 0.5;
     const altTarget = (Number(fireTier.targetToday) * swr) / alt;
     return t("fire.swr_effect", {
-      swr: saved_.safeWithdrawalRatePct,
+      swr: pct(saved_.safeWithdrawalRatePct),
       target: money(fireTier.targetToday),
-      alt: alt.toFixed(1),
+      alt: pct(alt),
       altTarget: money(altTarget),
     });
   })();
@@ -121,7 +129,7 @@ export function FireSettingsCard({
   })();
 
   const fatEffect = fatTier && saved_
-    ? t("fire.fat_multiplier_effect", { multiplier: saved_.fatMultiplier, target: money(fatTier.targetToday) })
+    ? t("fire.fat_multiplier_effect", { multiplier: formatMultiplier(saved_.fatMultiplier, locale), target: money(fatTier.targetToday) })
     : t("fire.fat_multiplier_effect_generic");
 
   const taxEffect = (() => {
@@ -157,6 +165,11 @@ export function FireSettingsCard({
   };
 
   const enabledTierKeys = TIER_ORDER.filter((k) => Boolean(form[tierFlag[k]]));
+  const tierOptionLabel = (key: FireTierKey) => {
+    const tech = tierTechName(key, t);
+    const plain = tierPlainName(key, form.fatMultiplier, locale, t);
+    return tech ? `${plain} (${tech})` : plain;
+  };
 
   // Advanced section summaries
   const effEssentialVal =
@@ -170,18 +183,18 @@ export function FireSettingsCard({
 
   const spendingSummary = t("fire.settings_summary_spending", {
     lookback: form.spendingLookbackMonths,
-    agg: form.spendingAggregation,
+    agg: t(`fire.spending_agg_short_${form.spendingAggregation}`),
     essential: `${money(effEssentialVal)}${form.essentialSpendingMode === "manual" ? ` (${t("fire.settings_manual_tag")})` : ""}`,
     total: `${money(effTotalVal)}${form.totalSpendingMode === "manual" ? ` (${t("fire.settings_manual_tag")})` : ""}`,
   });
 
   const scenariosSummary = `${form.returnScenarios.length} · ${form.returnScenarios
-    .map((sc, idx) => `${scenarioDisplayName(sc, idx, t)} ${sc.meanPercent}%`)
+    .map((sc, idx) => `${scenarioDisplayName(sc, idx, t)} ${pct(sc.meanPercent)}`)
     .join(" · ")}`;
 
   const drawdownFatSummary = t("fire.settings_summary_drawdown_fat", {
     years: form.drawdownYears,
-    multiplier: form.fatMultiplier,
+    multiplier: formatMultiplier(form.fatMultiplier, locale),
   });
 
   const qualifyingSummary = form.qualifyingAssetClasses
@@ -192,16 +205,16 @@ export function FireSettingsCard({
   const maxRate = form.taxBrackets.length > 0 ? Math.max(...form.taxBrackets.map((b) => Number(b.ratePct))) : 0;
   const gainSourceLabel =
     projection?.gainFraction.source === "movements"
-      ? t("fire.settings_derived_tag")
-      : t("fire.settings_manual_tag");
+      ? t("fire.settings_summary_gain_derived")
+      : t("fire.settings_summary_gain_manual");
   const gainPctStr = projection
     ? formatPercent(Number(projection.gainFraction.percent), locale, 0)
-    : `${form.fallbackGainFractionPct}%`;
+    : pct(form.fallbackGainFractionPct);
   const taxSummary = form.applyCapitalGainsTax
     ? t("fire.settings_summary_tax_on", {
         count: form.taxBrackets.length,
-        minRate,
-        maxRate,
+        minRate: formatNumber(minRate, locale, Number.isInteger(minRate) ? 0 : 1),
+        maxRate: pct(maxRate),
         source: gainSourceLabel,
         gain: gainPctStr,
       })
@@ -242,7 +255,7 @@ export function FireSettingsCard({
                 const refTierKey = projection ? resolveReferenceTierKey(projection) : form.referenceTier;
                 const refScenario = projection ? resolveReferenceScenario(projection).scenario : undefined;
                 const refStat = refScenario?.tierStats.find((st) => st.tier === refTierKey);
-                const needsExtend = yearsAway < 10 || (refStat != null && refStat.medianYearReachingTarget === null);
+                const needsExtend = yearsAway < 10 || (refStat != null && refStat.estimatedYear === null);
                 return (
                   <>
                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -308,9 +321,7 @@ export function FireSettingsCard({
               >
                 {enabledTierKeys.map((tk) => (
                   <option key={tk} value={tk}>
-                    {tk === "fat"
-                      ? `${t("fire.tier_plain_fat", { multiplier: form.fatMultiplier })} (${t("fire.tier_fat")})`
-                      : `${t(`fire.tier_plain_${tk}`)} (${t(`fire.tier_${tk}`)})`}
+                    {tierOptionLabel(tk)}
                   </option>
                 ))}
               </Select>
@@ -351,7 +362,12 @@ export function FireSettingsCard({
                         patch(next);
                       }}
                     />
-                    {t(`fire.tier_${key}`)}
+                    <span>
+                      {tierPlainName(key, form.fatMultiplier, locale, t)}
+                      {tierTechName(key, t) && (
+                        <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">({tierTechName(key, t)})</span>
+                      )}
+                    </span>
                   </label>
                 ))}
               </div>
@@ -566,7 +582,11 @@ export function FireSettingsCard({
                       )}
                     </div>
                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      {t(`fire.spending_${base}_derived_explain`)}
+                      {t(`fire.spending_${base}_derived_explain`, {
+                        count: form.spendingLookbackMonths,
+                        method: t(`fire.spending_method_${form.spendingAggregation}`),
+                        window: t(form.excludeCurrentMonth ? "fire.spending_window_excludes_current" : "fire.spending_window_includes_current"),
+                      })}
                     </p>
                     {mode === "manual" && (
                       <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -753,7 +773,7 @@ export function FireSettingsCard({
                   </Button>
                 </span>
                 <Button
-                  variant="ghost"
+                  variant="secondary"
                   disabled={ro}
                   onClick={() => setConfirmRestoreOpen(true)}
                 >
@@ -767,7 +787,7 @@ export function FireSettingsCard({
                   <ul className="list-disc space-y-0.5 pl-4 tabular-nums">
                     {form.returnScenarios.map((sc, idx) => (
                       <li key={idx}>
-                        {scenarioDisplayName(sc, idx, t)} ({sc.meanPercent}% ±{sc.stdDevPercent}%)
+                        {scenarioDisplayName(sc, idx, t)} ({pct(sc.meanPercent)} ±{pct(sc.stdDevPercent)})
                       </li>
                     ))}
                   </ul>
@@ -904,8 +924,8 @@ export function FireSettingsCard({
                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                       {t("fire.gain_fraction_effect")}{" "}
                       {projection && (projection.gainFraction.source === "movements"
-                        ? t("fire.gain_fraction_movements", { pct: formatNumber(Number(projection.gainFraction.percent), locale, 2) })
-                        : t("fire.gain_fraction_manual", { pct: formatNumber(Number(projection.gainFraction.percent), locale, 2) }))}
+                        ? t("fire.gain_fraction_movements", { pct: formatPercent(Number(projection.gainFraction.percent), locale, 2) })
+                        : t("fire.gain_fraction_manual", { pct: formatPercent(Number(projection.gainFraction.percent), locale, 2) }))}
                     </p>
                     {projection && projection.gainFraction.source === "movements" && projection.gainFraction.uncoveredMonths > 0 && (
                       <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">

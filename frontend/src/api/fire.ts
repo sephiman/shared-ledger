@@ -73,9 +73,13 @@ export interface FireTierScenarioStats {
   tier: FireTierKey;
   deterministicHitYear: number | null;
   probabilityOfReachingTarget: number;
-  medianYearReachingTarget: number | null;
+  /** First year by which at least half of ALL trials have reached the target; null when fewer than half do. */
+  estimatedYear: number | null;
+  /** Conditional median among reaching trials only — not the displayed estimate. */
+  medianYearAmongReaching: number | null;
   coastProbabilityOfReachingTarget: number;
-  coastMedianYearReachingTarget: number | null;
+  coastEstimatedYear: number | null;
+  coastMedianYearAmongReaching: number | null;
   coastTargetToday: string | null;
   requiredMonthlyToHitTarget: string | null;
   drawdownSurvivalRate: number | null;

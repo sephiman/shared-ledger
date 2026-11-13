@@ -150,7 +150,7 @@ class FireProjectionTest @Autowired constructor(
         val out = fireService.project(household.id).scenarios.single()
         val custom = out.tierStats.single { it.tier == FireTierKey.custom }
         assertThat(custom.probabilityOfReachingTarget).isGreaterThan(0.95)
-        assertThat(custom.medianYearReachingTarget).isNotNull
+        assertThat(custom.estimatedYear).isNotNull
         // Coast FIRE: 500k at 8% ± 5% for 10 years clears the 2%-inflated 750k target (~914k) in >80% of paths.
         assertThat(custom.coastProbabilityOfReachingTarget).isGreaterThan(0.80)
     }

@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import type { FirePreviewRequest, FireProjection } from "@/api/fire";
 import { Badge, Button, Input, Label } from "@/components/ui/primitives";
-import { formatMoney } from "@/lib/money";
+import { formatWholeMoney } from "@/lib/money";
 import { WHAT_IF_SAVE_MORE_AMOUNT, WHAT_IF_SPEND_LESS_FACTOR } from "./fireHeadline";
 
 export interface WhatIfDraft {
@@ -119,7 +119,7 @@ export function FireWhatIfBar({
             onClick={handleSaveMore}
             className="rounded-full border border-sky-300 bg-sky-50 px-3 py-1 text-xs font-medium text-sky-800 hover:bg-sky-100 dark:border-sky-700 dark:bg-sky-900/40 dark:text-sky-200 dark:hover:bg-sky-900/60"
           >
-            {t("fire.what_if_q_save_more", { amount: formatMoney(WHAT_IF_SAVE_MORE_AMOUNT, currency, locale) })}
+            {t("fire.what_if_q_save_more", { amount: formatWholeMoney(WHAT_IF_SAVE_MORE_AMOUNT, currency, locale) })}
           </button>
           <button
             type="button"
@@ -176,7 +176,10 @@ export function FireWhatIfBar({
           />
         </div>
         <div>
-          <Label className="text-xs">{t("fire.swr")}</Label>
+          <Label className="text-xs">
+            {t("fire.assumptions_swr_plain")}{" "}
+            <span className="font-normal text-gray-500 dark:text-gray-400">({t("fire.assumptions_swr_tech")}, %)</span>
+          </Label>
           <Input
             type="number"
             step="0.1"

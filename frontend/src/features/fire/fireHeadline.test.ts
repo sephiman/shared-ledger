@@ -98,9 +98,11 @@ function baseProjection(): FireProjection {
             tier: "fire",
             deterministicHitYear: 2044,
             probabilityOfReachingTarget: 0.8,
-            medianYearReachingTarget: 2045,
+            estimatedYear: 2045,
+            medianYearAmongReaching: 2045,
             coastProbabilityOfReachingTarget: 0.2,
-            coastMedianYearReachingTarget: null,
+            coastEstimatedYear: null,
+            coastMedianYearAmongReaching: null,
             coastTargetToday: "400000.00",
             requiredMonthlyToHitTarget: "2200.00",
             drawdownSurvivalRate: 0.7,
@@ -120,9 +122,11 @@ function baseProjection(): FireProjection {
             tier: "fire",
             deterministicHitYear: 2040,
             probabilityOfReachingTarget: 0.99,
-            medianYearReachingTarget: 2040,
+            estimatedYear: 2040,
+            medianYearAmongReaching: 2040,
             coastProbabilityOfReachingTarget: 0.35,
-            coastMedianYearReachingTarget: 2044,
+            coastEstimatedYear: null,
+            coastMedianYearAmongReaching: 2044,
             coastTargetToday: "350000.00",
             requiredMonthlyToHitTarget: "1800.00",
             drawdownSurvivalRate: 0.67,
@@ -143,7 +147,7 @@ describe("fireHeadline", () => {
   });
 
   it("exports template version", () => {
-    expect(HEADLINE_TEMPLATE_VERSION).toBe(1);
+    expect(HEADLINE_TEMPLATE_VERSION).toBe(2);
   });
 
   it("builds coverage clause in EN and ES", async () => {
@@ -158,22 +162,60 @@ describe("fireHeadline", () => {
     );
   });
 
-  it("builds reachable projection clause with survival rate", () => {
+  it("builds reachable projection clause with the survival phrased as conditional on getting there", () => {
     const p = baseProjection();
     const clause = buildProjectionClause(p, "EUR", "en", i18n.t.bind(i18n));
-    expect(clause).toContain("Base");
-    expect(clause).toContain("2040 (14 years)");
-    expect(clause).toContain("99% chance of reaching it");
-    expect(clause).toContain("67% that the money lasts 30 years");
+    expect(clause).toBe(
+      "Saving €2,000/month with the Base scenario, you get there in 2040 (14 years), with a 99% chance of reaching it. " +
+        "If you get there, 67% chance the money lasts 30 years.",
+    );
   });
 
-  it("builds beyond-horizon projection clause when median year is null", () => {
+  it("uses the reach template at 51 % odds, where half of all trials have a year", () => {
     const p = baseProjection();
-    p.scenarios[1].tierStats[0].medianYearReachingTarget = null;
-    p.scenarios[1].tierStats[0].probabilityOfReachingTarget = 0.2;
+    Object.assign(p.scenarios[1].tierStats[0], { probabilityOfReachingTarget: 0.51, estimatedYear: 2045, medianYearAmongReaching: 2041 });
     const clause = buildProjectionClause(p, "EUR", "en", i18n.t.bind(i18n));
-    expect(clause).toContain("don't reach it before 2046");
-    expect(clause).toContain("20% chance within the horizon");
+    expect(clause).toContain("you get there in 2045 (19 years), with a 51% chance");
+    expect(clause).not.toContain("2041");
+  });
+
+  it("uses the not-before-horizon template at 49 % odds, even though some trials reach it earlier", () => {
+    const p = baseProjection();
+    Object.assign(p.scenarios[1].tierStats[0], {
+      probabilityOfReachingTarget: 0.49,
+      estimatedYear: null,
+      medianYearAmongReaching: 2041,
+      requiredMonthlyToHitTarget: "2158.40",
+    });
+    const clause = buildProjectionClause(p, "EUR", "en", i18n.t.bind(i18n));
+    expect(clause).toBe(
+      "Saving €2,000/month with the Base scenario, you will most likely not get there before 2046 (49% chance). " +
+        "With €158 more a month you would.",
+    );
+  });
+
+  it("drops the extra-monthly sentence when the required amount is unknown or already covered", () => {
+    const p = baseProjection();
+    Object.assign(p.scenarios[1].tierStats[0], { probabilityOfReachingTarget: 0.39, estimatedYear: null });
+    p.scenarios[1].tierStats[0].requiredMonthlyToHitTarget = null;
+    expect(buildProjectionClause(p, "EUR", "en", i18n.t.bind(i18n))).not.toContain("more a month");
+    p.scenarios[1].tierStats[0].requiredMonthlyToHitTarget = "1990.00";
+    expect(buildProjectionClause(p, "EUR", "en", i18n.t.bind(i18n))).not.toContain("more a month");
+  });
+
+  it("writes the Spanish no-year headline with grouped whole euros", async () => {
+    await i18n.changeLanguage("es");
+    const p = baseProjection();
+    p.contributions.activeMonthly = "1400.00";
+    Object.assign(p.scenarios[1].tierStats[0], {
+      probabilityOfReachingTarget: 0.39,
+      estimatedYear: null,
+      requiredMonthlyToHitTarget: "1558.00",
+    });
+    expect(buildProjectionClause(p, "EUR", "es", i18n.t.bind(i18n)).replace(/\u00a0/g, " ")).toBe(
+      "Ahorrando 1.400 €/mes con el escenario Base, lo más probable es que no llegues antes de 2046 (39% de probabilidad). " +
+        "Con 158 € más al mes, sí llegarías.",
+    );
   });
 
   it("builds no-target clause when tier has no target", () => {

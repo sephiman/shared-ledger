@@ -4,7 +4,7 @@ import { Area, CartesianGrid, ComposedChart, Legend, Line, ReferenceLine, Respon
 import type { FireProjection, FireTierKey } from "@/api/fire";
 import { Card, CardBody, CardHeader } from "@/components/ui/primitives";
 import { ChartTooltip } from "@/components/charts/ChartTooltip";
-import { formatCompactMoney, formatMoney, formatPercent } from "@/lib/money";
+import { formatCompactMoney, formatMoney, formatPercent, formatWholeMoney } from "@/lib/money";
 import { Explain } from "./Explain";
 import { niceMoneyTicks } from "./fireTicks";
 import {
@@ -12,9 +12,28 @@ import {
   resolveReferenceScenarioIndex,
   resolveReferenceTierKey,
   scenarioDisplayName,
+  tierPlainName,
 } from "./fireLabels";
 
 const SCENARIO_PALETTE = ["#0ea5e9", "#22c55e", "#a855f7", "#f97316", "#ef4444"];
+
+/** Two-line label beside a vertical marker, on whichever side has more room, so it never runs off the plot. */
+function MarkerLabel({ viewBox, text, onLeft }: { viewBox?: { x?: number; y?: number }; text: string; onLeft: boolean }) {
+  const x = viewBox?.x ?? 0;
+  const y = viewBox?.y ?? 0;
+  const words = text.split(" ");
+  const half = Math.ceil(words.length / 2);
+  const lines = [words.slice(0, half).join(" "), words.slice(half).join(" ")].filter((line) => line.length > 0);
+  return (
+    <text className="chart-marker-label" x={onLeft ? x - 6 : x + 6} y={y + 14} textAnchor={onLeft ? "end" : "start"} fontSize={11}>
+      {lines.map((line, i) => (
+        <tspan key={line} x={onLeft ? x - 6 : x + 6} dy={i === 0 ? 0 : 13}>
+          {line}
+        </tspan>
+      ))}
+    </text>
+  );
+}
 
 function scenarioKey(s: { meanPercent: string; stdDevPercent: string }): string {
   return `${s.meanPercent}_${s.stdDevPercent}`;
@@ -181,8 +200,12 @@ export function FireChart({
   ]);
 
   const s = projection.settings;
+  // Only the reference cell gets a marker, even with other scenarios toggled on.
+  const estimatedYearMarker =
+    projection.scenarios[refScenarioIdx]?.tierStats.find((st) => st.tier === refTierKey)?.estimatedYear ?? null;
   const contributionMissing = projection.contributions.activeMonthly === null;
-  const money = (v: string | number | null | undefined) => formatMoney(v ?? 0, currency, locale);
+  const money = (v: string | number | null | undefined) => formatWholeMoney(v ?? 0, currency, locale);
+  const pct2 = (v: string) => formatPercent(Number(v), locale, 2);
   const otherScenarios = projection.scenarios
     .map((sc, idx) => ({ sc, idx }))
     .filter(({ idx }) => idx !== refScenarioIdx);
@@ -266,9 +289,7 @@ export function FireChart({
                       onClick={() => toggleOtherTier(tier.key)}
                       className={`rounded-full border px-2.5 py-0.5 font-medium ${active ? "border-primary bg-sky-50 text-primary dark:bg-sky-900/40 dark:text-sky-300" : "border-border bg-raised text-gray-600 hover:text-gray-800 dark:text-gray-300"}`}
                     >
-                      {tier.key === "fat"
-                        ? t("fire.tier_plain_fat", { multiplier: s.fatMultiplier })
-                        : t(`fire.tier_plain_${tier.key}`)}
+                      {tierPlainName(tier.key, s.fatMultiplier, locale, t)}
                     </button>
                   );
                 })}
@@ -399,6 +420,20 @@ export function FireChart({
                           dot={false}
                         />
                       )}
+                      {estimatedYearMarker !== null && (
+                        <ReferenceLine
+                          x={estimatedYearMarker}
+                          className="chart-marker"
+                          strokeWidth={1.5}
+                          label={(props: { viewBox?: { x?: number; y?: number } }) => (
+                            <MarkerLabel
+                              viewBox={props.viewBox}
+                              text={t("fire.chart_estimated_year_marker")}
+                              onLeft={maxYear > minYear && (estimatedYearMarker - minYear) / (maxYear - minYear) > 0.5}
+                            />
+                          )}
+                        />
+                      )}
                       {projection.settings.cashFlowEvents
                         .filter((ev) => ev.year >= minYear && ev.year <= maxYear)
                         .map((ev, idx) => (
@@ -459,7 +494,7 @@ export function FireChart({
                 <>
                   <p>
                     {t("fire.chart_explain_return", {
-                      pct: projection.actualReturn.annualizedPercent,
+                      pct: pct2(projection.actualReturn.annualizedPercent),
                       from: projection.actualReturn.fromDate,
                       to: projection.actualReturn.toDate,
                       movements: projection.actualReturn.movementCount,
@@ -485,6 +520,7 @@ export function FireChart({
               ) : (
                 <p>{t(`fire.no_return_${projection.actualReturnUnavailableReason ?? "not_computable"}`)}</p>
               )}
+              <p>{t("fire.estimated_year_explain")}</p>
             </Explain>
           </div>
 
@@ -510,7 +546,7 @@ export function FireChart({
               </div>
               {projection.contributions.savingsRatePct !== null && (
                 <div className="flex items-baseline justify-between gap-2 py-1.5">
-                  <dt className="text-gray-500 dark:text-gray-400">{t("fire.photo_savings_rate_tech")}</dt>
+                  <dt className="text-gray-500 dark:text-gray-400">{t("fire.savings_rate_label")}</dt>
                   <dd className="font-medium tabular-nums">
                     {formatPercent(projection.contributions.savingsRatePct, locale, 1)}
                   </dd>
@@ -524,25 +560,33 @@ export function FireChart({
               </div>
               <div className="flex items-baseline justify-between gap-2 py-1.5">
                 <dt className="text-gray-500 dark:text-gray-400">
-                  {t("fire.assumptions_swr_plain")} ({t("fire.assumptions_swr_tech")}) / {t("fire.inflation")}
+                  {t("fire.assumptions_swr_plain")} ({t("fire.assumptions_swr_tech")})
                 </dt>
-                <dd className="font-medium tabular-nums">
-                  {s.safeWithdrawalRatePct}% / {s.expectedInflationPct}%
-                </dd>
+                <dd className="whitespace-nowrap font-medium tabular-nums">{pct2(s.safeWithdrawalRatePct)}</dd>
               </div>
               <div className="flex items-baseline justify-between gap-2 py-1.5">
-                <dt className="text-gray-500 dark:text-gray-400">{t("fire.tax_title")}</dt>
-                <dd className="font-medium tabular-nums">
-                  {s.applyCapitalGainsTax
-                    ? `${formatPercent(Number(projection.gainFraction.percent), locale, 1)}${s.indexTaxBrackets ? ` · ${t("fire.indexed_short")}` : ""}`
-                    : t("fire.tax_off_short")}
-                </dd>
+                <dt className="text-gray-500 dark:text-gray-400">{t("fire.assumptions_inflation_label")}</dt>
+                <dd className="whitespace-nowrap font-medium tabular-nums">{pct2(s.expectedInflationPct)}</dd>
               </div>
+              {s.applyCapitalGainsTax ? (
+                <div className="flex items-baseline justify-between gap-2 py-1.5">
+                  <dt className="text-gray-500 dark:text-gray-400">{t("fire.settings_gain_share_plain")}</dt>
+                  <dd className="whitespace-nowrap font-medium tabular-nums">
+                    {formatPercent(Number(projection.gainFraction.percent), locale, 1)}
+                    {s.indexTaxBrackets ? ` · ${t("fire.indexed_short")}` : ""}
+                  </dd>
+                </div>
+              ) : (
+                <div className="flex items-baseline justify-between gap-2 py-1.5">
+                  <dt className="text-gray-500 dark:text-gray-400">{t("fire.tax_title")}</dt>
+                  <dd className="font-medium tabular-nums">{t("fire.tax_off_short")}</dd>
+                </div>
+              )}
             </dl>
             <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
               {realMode
-                ? t("fire.real_note", { inflation: s.expectedInflationPct })
-                : t("fire.nominal_note", { inflation: s.expectedInflationPct })}
+                ? t("fire.real_note", { inflation: pct2(s.expectedInflationPct) })
+                : t("fire.nominal_note", { inflation: pct2(s.expectedInflationPct) })}
             </p>
           </aside>
         </div>

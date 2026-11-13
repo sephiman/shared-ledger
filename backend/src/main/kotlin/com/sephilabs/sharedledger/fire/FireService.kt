@@ -879,7 +879,8 @@ class FireService(
         private class McStats(
             val percentiles: List<FireScenarioPercentiles>,
             val probability: DoubleArray,
-            val medianHitYear: Array<Int?>,
+            val medianHitYearAmongReaching: Array<Int?>,
+            val estimatedYear: Array<Int?>,
             val drawdownSurvivalRate: Array<Double?>,
             val drawdownPercentiles: Array<List<FireScenarioPercentiles>>,
             val drawdownRealPercentiles: Array<List<FireScenarioPercentiles>>,
@@ -943,7 +944,9 @@ class FireService(
             } ?: emptyList()
 
             val probability = DoubleArray(tierKeys.size)
-            val medianHitYear = Array<Int?>(tierKeys.size) { null }
+            val medianHitYearAmongReaching = Array<Int?>(tierKeys.size) { null }
+            val estimatedYear = Array<Int?>(tierKeys.size) { null }
+            val halfOfTrials = (trials + 1) / 2
             val survivalRate = Array<Double?>(tierKeys.size) { null }
             val drawdownPercentiles = Array<List<FireScenarioPercentiles>>(tierKeys.size) { emptyList() }
             val drawdownRealPercentiles = Array<List<FireScenarioPercentiles>>(tierKeys.size) { emptyList() }
@@ -952,7 +955,9 @@ class FireService(
                 probability[t] = reachers.size.toDouble() / trials
                 if (reachers.isNotEmpty()) {
                     val sorted = reachers.sorted()
-                    medianHitYear[t] = sorted[sorted.size / 2]
+                    medianHitYearAmongReaching[t] = sorted[sorted.size / 2]
+                    // The halfOfTrials-th earliest hit is the first year by which half of ALL trials have reached.
+                    if (sorted.size >= halfOfTrials) estimatedYear[t] = sorted[halfOfTrials - 1]
                 }
                 if (collectPercentiles && hitCounts[t] > 0) {
                     survivalRate[t] = survivedCounts[t].toDouble() / hitCounts[t]
@@ -960,7 +965,7 @@ class FireService(
                     drawdownRealPercentiles[t] = computeDrawdownPercentiles(drawdownRealPaths!![t])
                 }
             }
-            return McStats(percentiles, probability, medianHitYear, survivalRate, drawdownPercentiles, drawdownRealPercentiles)
+            return McStats(percentiles, probability, medianHitYearAmongReaching, estimatedYear, survivalRate, drawdownPercentiles, drawdownRealPercentiles)
         }
 
         private fun computeDrawdownPercentiles(paths: List<DoubleArray>): List<FireScenarioPercentiles> =
@@ -1009,9 +1014,11 @@ class FireService(
                         tier = tierKeys[t],
                         deterministicHitYear = deterministic.hitYears[t].takeIf { it >= 0 },
                         probabilityOfReachingTarget = mc.probability[t],
-                        medianYearReachingTarget = mc.medianHitYear[t],
+                        estimatedYear = mc.estimatedYear[t],
+                        medianYearAmongReaching = mc.medianHitYearAmongReaching[t],
                         coastProbabilityOfReachingTarget = coast.probability[t],
-                        coastMedianYearReachingTarget = coast.medianHitYear[t],
+                        coastEstimatedYear = coast.estimatedYear[t],
+                        coastMedianYearAmongReaching = coast.medianHitYearAmongReaching[t],
                         coastTargetToday = coastTarget,
                         requiredMonthlyToHitTarget = requiredMonthlyFor(t, mean),
                         drawdownSurvivalRate = mc.drawdownSurvivalRate[t],

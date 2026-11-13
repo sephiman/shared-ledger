@@ -17,6 +17,17 @@ export function formatMoney(value: string | number | Decimal | null | undefined,
   }).format(d.toNumber());
 }
 
+/** Whole-unit money with a thousands separator even on four digits (Spanish Intl skips it: "1400 €" → "1.400 €"). */
+export function formatWholeMoney(value: string | number | Decimal | null | undefined, currency: string, locale: string): string {
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+    useGrouping: "always",
+  }).format(toDecimal(value).toNumber());
+}
+
 /** Per-unit price. €1 and above show the standard 2 decimals; only sub-unit prices expand to their full
  *  stored precision so tiny coins don't collapse to 0.00 (PEPE keeps all 12 decimals, no rounding and no
  *  significant-figure truncation). Unit prices only — EUR aggregates stay at 2dp via {@link formatMoney}. */
