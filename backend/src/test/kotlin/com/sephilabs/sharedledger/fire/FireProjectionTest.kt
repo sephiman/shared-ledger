@@ -47,9 +47,9 @@ class FireProjectionTest @Autowired constructor(
 
         val result = fireService.project(household.id)
         val series = result.scenarios.first().series
-        // 0% return, 0% inflation, 12k/year contributions, starting 100k, 10 years => 220k.
+        // 0% return, 2% inflation (indexed 12k/year contributions), starting 100k, 10 years => 100k + 12k * (1.02^10 - 1)/0.02 = 231,396.65.
         assertThat(series.first().value).isEqualByComparingTo("100000.00")
-        assertThat(series.last().value).isEqualByComparingTo("220000.00")
+        assertThat(series.last().value).isEqualByComparingTo("231396.65")
     }
 
     @Test
@@ -151,8 +151,8 @@ class FireProjectionTest @Autowired constructor(
         val custom = out.tierStats.single { it.tier == FireTierKey.custom }
         assertThat(custom.probabilityOfReachingTarget).isGreaterThan(0.95)
         assertThat(custom.medianYearReachingTarget).isNotNull
-        // Coast FIRE: 500k at 8% for 10 years comfortably clears 750k with no contributions.
-        assertThat(custom.coastProbabilityOfReachingTarget).isGreaterThan(0.9)
+        // Coast FIRE: 500k at 8% ± 5% for 10 years clears the 2%-inflated 750k target (~914k) in >80% of paths.
+        assertThat(custom.coastProbabilityOfReachingTarget).isGreaterThan(0.80)
     }
 
     @Test
@@ -582,9 +582,9 @@ class FireProjectionTest @Autowired constructor(
         // Gain fraction flags uncovered early months.
         assertThat(result.gainFraction.source).isEqualTo("movements")
         assertThat(result.gainFraction.uncoveredMonths).isGreaterThan(0)
-        // Coast target for custom 1M over 10 years at 10% = 1_000_000 / 1.1^10 ≈ 385_543.29
+        // Coast target for 2%-inflated custom 1M over 10 years at 10% = 1_000_000 * 1.02^10 / 1.1^10 ≈ 469_975.15
         val customStat = result.scenarios.first().tierStats.single { it.tier == FireTierKey.custom }
-        assertThat(customStat.coastTargetToday!!.toDouble()).isBetween(385540.0, 385550.0)
+        assertThat(customStat.coastTargetToday!!.toDouble()).isBetween(469970.0, 469980.0)
     }
 
     @Test
@@ -604,8 +604,8 @@ class FireProjectionTest @Autowired constructor(
 
         val saved = fireService.project(household.id)
         val savedStat = saved.scenarios.first().tierStats.single { it.tier == FireTierKey.custom }
-        // 100k -> 220k in 10 years at 0% return requires exactly 12k/yr = 1000/mo.
-        assertThat(savedStat.requiredMonthlyToHitTarget!!.toDouble()).isBetween(999.9, 1000.1)
+        // 100k -> 220k * 1.02^10 (268,178.77) in 10 years at 0% return with 2% indexed contributions requires ~1279.93/mo.
+        assertThat(savedStat.requiredMonthlyToHitTarget!!.toDouble()).isBetween(1279.8, 1280.1)
 
         // Preview with a 120k lump sum hits immediately with 0/mo needed, without mutating saved settings.
         val preview = fireService.project(
@@ -678,7 +678,7 @@ class FireProjectionTest @Autowired constructor(
         targetYear: Short = 2035,
         monthlyContribution: String = "0.00",
         scenarios: List<ReturnScenarioInput> = listOf(ReturnScenarioInput(BigDecimal("0.0"), BigDecimal("0.0"))),
-        inflation: String = "0.00",
+        inflation: String = FireDefaults.DEFAULT_EXPECTED_INFLATION_PCT.toPlainString(),
         indexContribution: Boolean = true,
         tierCustomEnabled: Boolean = true,
         contributionMode: ContributionMode = ContributionMode.manual,

@@ -334,7 +334,7 @@ describe("FIRE components", () => {
     expect(screen.getByText(/Other scenarios:/)).toBeInTheDocument();
     expect(screen.getByText(/Other targets:/)).toBeInTheDocument();
     expect(screen.getByText(/How is the projection calculated\?/)).toBeInTheDocument();
-    expect(screen.getByText(/historical real annualized return is 7\.50%/)).toBeInTheDocument();
+    expect(screen.getByText(/historical actual annualized return is 7\.50%/)).toBeInTheDocument();
   });
 
   it("FireSettingsCard renders Plan questions, Advanced summaries, and supports manual spending override toggle", async () => {
@@ -379,5 +379,89 @@ describe("FIRE components", () => {
       }),
       undefined,
     );
+  });
+
+  it("shows section-level default badge only for current seeds, per-row ⓘ, restore confirmation, and Part C horizon/inflation polish", async () => {
+    const user = userEvent.setup();
+    const proj = makeProjection();
+    proj.settings.targetYear = 2033; // 7 years from 2026 => triggers <10y horizon hint
+    const onChange = vi.fn();
+
+    const { rerender } = render(
+      <FireSettingsCard
+        form={proj.settings}
+        errors={{}}
+        isOwner={true}
+        saving={false}
+        saved={false}
+        serverError={null}
+        projection={proj}
+        assetClasses={[{ code: "etfs" }]}
+        currency="EUR"
+        onChange={onChange}
+        onScenarioErrorClear={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+
+    // Part C: inflation question label without SWR in secondary label
+    expect(screen.getByText("How much do prices rise each year?")).toBeInTheDocument();
+    expect(screen.getByText("Expected inflation (%/year)")).toBeInTheDocument();
+
+    // Part C: horizon distance & +10 years action
+    expect(screen.getByText(/7 years from now\./)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "+10 years" }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ targetYear: 2043 }), ["targetYear"]);
+
+    // Part B: non-default scenario set has NO default badge
+    expect(screen.queryByText("default")).not.toBeInTheDocument();
+
+    // Part B: Restore defaults opens confirmation listing current scenarios and restores seeds + referenceScenarioIndex=1
+    await user.click(screen.getByRole("button", { name: "Restore defaults" }));
+    expect(screen.getByText("Replace current scenarios with defaults?")).toBeInTheDocument();
+    expect(screen.getAllByText(/Conservative \(4\.0% ±5\.0%\)/).length).toBeGreaterThanOrEqual(1);
+    await user.click(screen.getByRole("button", { name: "Replace scenarios" }));
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        referenceScenarioIndex: 1,
+        returnScenarios: [
+          { name: "Conservative", meanPercent: "4.0", stdDevPercent: "5.0", historical: false },
+          { name: "Base", meanPercent: "6.5", stdDevPercent: "10.0", historical: false },
+          { name: "Optimistic", meanPercent: "8.5", stdDevPercent: "15.0", historical: false },
+        ],
+      }),
+      undefined,
+    );
+
+    // Rerender with current seeds => section-level default badge appears and per-row ⓘ shows portfolio note
+    const seededSettings = {
+      ...proj.settings,
+      returnScenarios: [
+        { name: "Conservative", meanPercent: "4.0", stdDevPercent: "5.0", historical: false },
+        { name: "Base", meanPercent: "6.5", stdDevPercent: "10.0", historical: false },
+        { name: "Optimistic", meanPercent: "8.5", stdDevPercent: "15.0", historical: false },
+      ],
+    };
+    rerender(
+      <FireSettingsCard
+        form={seededSettings}
+        errors={{}}
+        isOwner={true}
+        saving={false}
+        saved={false}
+        serverError={null}
+        projection={proj}
+        assetClasses={[{ code: "etfs" }]}
+        currency="EUR"
+        onChange={onChange}
+        onScenarioErrorClear={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("default")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Details for Base" }));
+    expect(screen.getByText(/Nominal arithmetic mean: 6\.5%\/yr/)).toBeInTheDocument();
+    expect(screen.getByText(/Typical compound growth: 6\.03%\/yr/)).toBeInTheDocument();
+    expect(screen.getByText(/Resembles a mixed 60\/40 portfolio\./)).toBeInTheDocument();
   });
 });

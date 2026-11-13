@@ -87,13 +87,14 @@ export function FireChart({
     if (chartView === "drawdown") {
       const sc = projection.scenarios[refScenarioIdx] ?? projection.scenarios[0];
       const stat = sc?.tierStats.find((st) => st.tier === activeDrawdownTier);
-      const pts = stat?.drawdownPercentiles ?? [];
+      const pts = realMode
+        ? (stat?.drawdownRealPercentiles ?? stat?.drawdownPercentiles ?? [])
+        : (stat?.drawdownPercentiles ?? []);
       let maxVal = 0;
       const rows = pts.map((p) => {
-        const defl = realMode && p.year > 0 ? (1 + inflation) ** p.year : 1;
-        const p10 = Number(p.p10) / defl;
-        const p50 = Number(p.p50) / defl;
-        const p90 = Number(p.p90) / defl;
+        const p10 = Number(p.p10);
+        const p50 = Number(p.p50);
+        const p90 = Number(p.p90);
         maxVal = Math.max(maxVal, p90);
         return { year: p.year, dd_p10: p10, dd_p50: p50, dd_p90: p90 };
       });

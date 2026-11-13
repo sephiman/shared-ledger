@@ -80,6 +80,7 @@ export interface FireTierScenarioStats {
   requiredMonthlyToHitTarget: string | null;
   drawdownSurvivalRate: number | null;
   drawdownPercentiles: ScenarioPercentiles[];
+  drawdownRealPercentiles?: ScenarioPercentiles[];
 }
 
 export interface FirePreviewRequest {

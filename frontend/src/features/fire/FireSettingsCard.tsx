@@ -1,9 +1,18 @@
-import { type ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { CashFlowEventKind, FireProjection, FireSettings, FireTierKey, ReturnScenario } from "@/api/fire";
 import { Badge, Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select, Toggle } from "@/components/ui/primitives";
 import { formatMoney, formatNumber, formatPercent } from "@/lib/money";
-import { TIER_ORDER, scenarioDisplayName } from "./fireLabels";
+import { Explain } from "./Explain";
+import {
+  SEED_RETURN_SCENARIOS,
+  TIER_ORDER,
+  isDefaultScenarioSet,
+  resolveReferenceScenario,
+  resolveReferenceTierKey,
+  scenarioDisplayName,
+} from "./fireLabels";
+import { ScenarioInfo } from "./ScenarioInfo";
 
 export interface FireFormErrors {
   targetAmount?: string;
@@ -39,17 +48,22 @@ interface Props {
 
 function AdvancedSection({
   title,
+  badge,
   summary,
   children,
 }: {
   title: string;
+  badge?: ReactNode;
   summary: string;
   children: ReactNode;
 }) {
   return (
     <details className="rounded-md border border-border bg-surface">
       <summary className="flex cursor-pointer select-none flex-wrap items-center justify-between gap-2 px-3 py-2.5 text-sm font-medium text-gray-800 hover:bg-raised/60 dark:text-gray-200">
-        <span>{title}</span>
+        <span className="flex items-center gap-2">
+          <span>{title}</span>
+          {badge}
+        </span>
         <span className="text-xs font-normal text-gray-500 dark:text-gray-400">{summary}</span>
       </summary>
       <div className="border-t border-border/60 p-3">{children}</div>
@@ -76,6 +90,7 @@ export function FireSettingsCard({
   const locale = i18n.language;
   const money = (v: string | number | null | undefined) => formatMoney(v ?? 0, currency, locale);
   const ro = !isOwner;
+  const [confirmRestoreOpen, setConfirmRestoreOpen] = useState(false);
 
   const saved_ = projection?.settings;
   const fireTier = projection?.tiers.find((x) => x.key === "fire" && x.targetToday !== null);
@@ -98,7 +113,10 @@ export function FireSettingsCard({
     if (!fireTier || !saved_ || !projection) return t("fire.inflation_effect_generic");
     const n = Math.max(0, Number(saved_.targetYear) - projection.startYear);
     if (n <= 0) return t("fire.inflation_effect_generic");
-    const projected = Number(fireTier.targetToday) * (1 + Number(saved_.expectedInflationPct) / 100) ** n;
+    const curveLast = fireTier.targetCurve[fireTier.targetCurve.length - 1];
+    const projected = curveLast
+      ? Number(curveLast.value)
+      : Number(fireTier.targetToday) * (1 + Number(saved_.expectedInflationPct) / 100) ** n;
     return t("fire.inflation_effect", { target: money(projected), year: saved_.targetYear });
   })();
 
@@ -218,7 +236,34 @@ export function FireSettingsCard({
                 onChange={(e) => patch({ targetYear: Number(e.target.value) }, ["targetYear"])}
               />
               <FieldError message={errors.targetYear} />
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{t("fire.target_year_effect")}</p>
+              {(() => {
+                const startYear = projection?.startYear ?? new Date().getFullYear();
+                const yearsAway = form.targetYear - startYear;
+                const refTierKey = projection ? resolveReferenceTierKey(projection) : form.referenceTier;
+                const refScenario = projection ? resolveReferenceScenario(projection).scenario : undefined;
+                const refStat = refScenario?.tierStats.find((st) => st.tier === refTierKey);
+                const needsExtend = yearsAway < 10 || (refStat != null && refStat.medianYearReachingTarget === null);
+                return (
+                  <>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      {yearsAway > 0 ? `${t("fire.target_year_distance", { count: yearsAway })} ` : ""}
+                      {t("fire.target_year_effect")}
+                    </p>
+                    {needsExtend && (
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2 rounded-md bg-amber-50/80 px-2.5 py-1.5 text-xs text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
+                        <span>{t("fire.horizon_extend_hint")}</span>
+                        <Button
+                          variant="secondary"
+                          disabled={ro}
+                          onClick={() => patch({ targetYear: form.targetYear + 10 }, ["targetYear"])}
+                        >
+                          {t("fire.horizon_plus_10")}
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
 
             <div>
@@ -238,8 +283,8 @@ export function FireSettingsCard({
             </div>
 
             <div>
-              <Label>{t("fire.inflation")}</Label>
-              <p className="mb-1 text-xs text-gray-500 dark:text-gray-400">{t("fire.assumptions_swr_inf_label")}</p>
+              <Label>{t("fire.settings_inflation_q")}</Label>
+              <p className="mb-1 text-xs text-gray-500 dark:text-gray-400">{t("fire.settings_inflation_tech")}</p>
               <Input
                 type="number"
                 step="0.1"
@@ -566,18 +611,35 @@ export function FireSettingsCard({
           </AdvancedSection>
 
           {/* 2. Return scenarios (names editable here) */}
-          <AdvancedSection title={t("fire.scenarios")} summary={scenariosSummary}>
+          <AdvancedSection
+            title={t("fire.scenarios")}
+            badge={isDefaultScenarioSet(form.returnScenarios) ? <Badge tone="neutral">{t("fire.scenarios_default_badge")}</Badge> : undefined}
+            summary={scenariosSummary}
+          >
             <div className="space-y-2">
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                {t("fire.scenarios_help")} {t("fire.scenarios_nominal_note")}
+              <p className="text-xs text-gray-600 dark:text-gray-300">
+                {t("fire.scenarios_intro")}
               </p>
+              <Explain>
+                <p>{t("fire.scenarios_help")}</p>
+              </Explain>
               {form.returnScenarios.map((sc, idx) => {
                 const meanErr = errors.scenarios?.[idx]?.meanPercent;
                 const stdErr = errors.scenarios?.[idx]?.stdDevPercent;
+                const displayName = scenarioDisplayName(sc, idx, t);
                 return (
                   <div key={idx} className="grid grid-cols-1 items-start gap-2 sm:grid-cols-12">
                     <div className="sm:col-span-4">
-                      <Label className="text-xs">{t("fire.scenario_name")}</Label>
+                      <div className="flex items-center gap-1.5">
+                        <Label className="text-xs">{t("fire.scenario_name")}</Label>
+                        <ScenarioInfo
+                          name={displayName}
+                          meanPercent={sc.meanPercent}
+                          stdDevPercent={sc.stdDevPercent}
+                          historical={sc.historical}
+                          inflationPct={Number(form.expectedInflationPct)}
+                        />
+                      </div>
                       <Input
                         type="text"
                         value={sc.name}
@@ -690,7 +752,50 @@ export function FireSettingsCard({
                     {t("fire.suggest_asset_mix")}
                   </Button>
                 </span>
+                <Button
+                  variant="ghost"
+                  disabled={ro}
+                  onClick={() => setConfirmRestoreOpen(true)}
+                >
+                  {t("fire.scenarios_restore_defaults")}
+                </Button>
               </div>
+              {confirmRestoreOpen && (
+                <div className="mt-2 space-y-2 rounded-md border border-amber-300 bg-amber-50/80 p-3 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
+                  <p className="font-medium">{t("fire.scenarios_restore_confirm_title")}</p>
+                  <p>{t("fire.scenarios_restore_confirm_body")}</p>
+                  <ul className="list-disc space-y-0.5 pl-4 tabular-nums">
+                    {form.returnScenarios.map((sc, idx) => (
+                      <li key={idx}>
+                        {scenarioDisplayName(sc, idx, t)} ({sc.meanPercent}% ±{sc.stdDevPercent}%)
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <Button
+                      variant="secondary"
+                      disabled={ro}
+                      onClick={() => {
+                        patch({
+                          returnScenarios: SEED_RETURN_SCENARIOS.map((seed) => ({
+                            name: t(seed.defaultNameKey),
+                            meanPercent: seed.meanPercent,
+                            stdDevPercent: seed.stdDevPercent,
+                            historical: false,
+                          })),
+                          referenceScenarioIndex: 1,
+                        });
+                        setConfirmRestoreOpen(false);
+                      }}
+                    >
+                      {t("fire.scenarios_restore_confirm_cta")}
+                    </Button>
+                    <Button variant="ghost" onClick={() => setConfirmRestoreOpen(false)}>
+                      {t("common.cancel")}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           </AdvancedSection>
 

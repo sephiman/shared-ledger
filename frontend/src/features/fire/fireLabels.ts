@@ -78,3 +78,62 @@ export function formatHitProbability(p: number): string {
 export function hitMedianYear(p: number, median: number | null): number | "—" {
   return p > 0 && median != null ? median : "—";
 }
+
+export type SeedPortfolioKind = "bonds" | "balanced" | "equities";
+
+export interface SeedScenarioSpec {
+  meanPercent: string;
+  stdDevPercent: string;
+  defaultNameKey: "fire.scenario_default_1" | "fire.scenario_default_2" | "fire.scenario_default_3";
+  portfolio: SeedPortfolioKind;
+}
+
+/** Nominal arithmetic annual mean & std dev seeds matching FireDefaults.DEFAULT_RETURN_SCENARIOS. */
+export const SEED_RETURN_SCENARIOS: readonly SeedScenarioSpec[] = [
+  { meanPercent: "4.0", stdDevPercent: "5.0", defaultNameKey: "fire.scenario_default_1", portfolio: "bonds" },
+  { meanPercent: "6.5", stdDevPercent: "10.0", defaultNameKey: "fire.scenario_default_2", portfolio: "balanced" },
+  { meanPercent: "8.5", stdDevPercent: "15.0", defaultNameKey: "fire.scenario_default_3", portfolio: "equities" },
+];
+
+function samePair(
+  a: { meanPercent: string; stdDevPercent: string },
+  b: { meanPercent: string; stdDevPercent: string },
+): boolean {
+  return (
+    Math.abs(Number(a.meanPercent) - Number(b.meanPercent)) < 1e-6 &&
+    Math.abs(Number(a.stdDevPercent) - Number(b.stdDevPercent)) < 1e-6
+  );
+}
+
+/** True only when the complete scenario set equals the current seeds (same count, same values in order). */
+export function isDefaultScenarioSet(
+  scenarios: readonly { meanPercent: string; stdDevPercent: string; historical?: boolean }[],
+): boolean {
+  if (scenarios.length !== SEED_RETURN_SCENARIOS.length) return false;
+  return SEED_RETURN_SCENARIOS.every((seed, idx) => !scenarios[idx].historical && samePair(scenarios[idx], seed));
+}
+
+export function findMatchingSeedPortfolio(
+  scenario: { meanPercent: string; stdDevPercent: string; historical?: boolean },
+): SeedPortfolioKind | null {
+  if (scenario.historical) return null;
+  return SEED_RETURN_SCENARIOS.find((seed) => samePair(scenario, seed))?.portfolio ?? null;
+}
+
+/** Exact typical compound (median geometric) annual return % = (exp(mu_ln) - 1) * 100, matching FireDefaults.typicalCompoundReturn. */
+export function typicalCompoundReturnPct(meanPercent: number, stdDevPercent: number): number {
+  const mean = meanPercent / 100;
+  const stdDev = stdDevPercent / 100;
+  if (stdDev === 0 || 1 + mean <= 0) return Math.max(mean, -0.9999) * 100;
+  const onePlusMean = 1 + mean;
+  const varianceRatio = (stdDev / onePlusMean) ** 2;
+  const sigmaLn = Math.sqrt(Math.log(1 + varianceRatio));
+  const muLn = Math.log(onePlusMean) - 0.5 * sigmaLn * sigmaLn;
+  return (Math.exp(muLn) - 1) * 100;
+}
+
+export function realEquivalentPct(nominalCompoundPct: number, inflationPct: number): number {
+  const r = nominalCompoundPct / 100;
+  const i = inflationPct / 100;
+  return ((1 + r) / (1 + i) - 1) * 100;
+}

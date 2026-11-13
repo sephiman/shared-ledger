@@ -23,10 +23,8 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.temporal.ChronoUnit
-import java.util.SplittableRandom
-import java.util.UUID
+import java.util.*
 import kotlin.math.exp
-import kotlin.math.ln
 import kotlin.math.pow
 import kotlin.math.sqrt
 
@@ -549,6 +547,7 @@ class FireService(
         add(Xirr.CashFlow(endSnap.snapshotDate, qualifyingTotal(endSnap, qualifying).toDouble()))
     }
 
+    /** Weighted long-term nominal annual return & volatility estimate from the latest qualifying snapshot. */
     private fun suggestScenarioFromAssetMix(latest: Snapshot?, qualifying: Set<String>): ReturnScenarioDto? {
         val assets = latest?.assetValues
             ?.filter { it.id.assetClassCode in qualifying && it.value.signum() > 0 }
@@ -653,7 +652,13 @@ class FireService(
             if (target.signum() <= 0) {
                 FireTierOutput(FireTierKey.custom, s.tierCustomEnabled, null, null, null, null, null, null, emptyList())
             } else {
-                // The custom target is the user's own nominal figure: it neither inflates nor grosses up.
+                // Custom target is entered in today's money and inflates year by year like every other tier (no tax gross-up).
+                val curve = (0..years).map { y ->
+                    FireScenarioYear(
+                        startYear + y,
+                        Money.normalize(BigDecimal(target.toDouble() * (1.0 + inflation).pow(y))),
+                    )
+                }
                 FireTierOutput(
                     key = FireTierKey.custom,
                     enabled = s.tierCustomEnabled,
@@ -663,7 +668,7 @@ class FireService(
                     estimatedAnnualTax = null,
                     targetToday = target,
                     coveragePercent = if (target.signum() > 0) startingValueD / target.toDouble() * 100.0 else null,
-                    targetCurve = (0..years).map { y -> FireScenarioYear(startYear + y, target) },
+                    targetCurve = curve,
                 )
             }
         }
@@ -706,9 +711,14 @@ class FireService(
         }
 
         private val lumpSumByYear: DoubleArray = DoubleArray(years + 1) { y ->
-            val calYear = startYear + y
-            cashFlowEvents.filter { it.kind == CashFlowEventKind.lump_sum && it.year == calYear }
-                .sumOf { it.amount.toDouble() }
+            if (y == 0) {
+                0.0
+            } else {
+                val calYear = startYear + y
+                val base = cashFlowEvents.filter { it.kind == CashFlowEventKind.lump_sum && it.year == calYear }
+                    .sumOf { it.amount.toDouble() }
+                base * (1.0 + inflation).pow(y - 1)
+            }
         }
 
         private val contribDeltaByYear: DoubleArray = DoubleArray(years + 1) { y ->
@@ -733,7 +743,16 @@ class FireService(
                 }
             }
         }
-        private val flatTargets: DoubleArray
+        /** Custom tier targets inflated per year across the full accumulation + drawdown span; null for spending tiers. */
+        private val customTargetByYear: Array<DoubleArray?> = Array(simTiers.size) { t ->
+            if (simTiers[t].annualNetSpending == null) {
+                simTiers[t].targetToday?.toDouble()?.let { base ->
+                    DoubleArray(totalSpan + 1) { y -> base * (1.0 + inflation).pow(y) }
+                }
+            } else {
+                null
+            }
+        }
         private val horizonTargets: DoubleArray = DoubleArray(simTiers.size) { t ->
             simTiers[t].targetCurve.lastOrNull()?.value?.toDouble()
                 ?: simTiers[t].targetToday?.toDouble()
@@ -741,21 +760,18 @@ class FireService(
         }
 
         /** With tax off targets don't depend on the path — precomputed once. */
-        private val fixedTargets: Array<DoubleArray>?
-
-        init {
-            flatTargets = DoubleArray(simTiers.size) { t ->
-                simTiers[t].targetToday?.toDouble() ?: Double.NaN
-            }
-            fixedTargets = if (taxOn) null else Array(simTiers.size) { t ->
+        private val fixedTargets: Array<DoubleArray>? = if (taxOn) {
+            null
+        } else {
+            Array(simTiers.size) { t ->
                 DoubleArray(years + 1) { y ->
-                    if (!flatTargets[t].isNaN()) flatTargets[t] else netAnnualByYear[t][y] / swr
+                    customTargetByYear[t]?.get(y) ?: (netAnnualByYear[t][y] / swr)
                 }
             }
         }
 
         private fun targetFor(tier: Int, yearIdx: Int, gainFraction: Double): Double {
-            if (!flatTargets[tier].isNaN()) return flatTargets[tier]
+            customTargetByYear[tier]?.let { return it[yearIdx] }
             fixedTargets?.let { return it[tier][yearIdx] }
             return compiledBrackets.grossUp(netAnnualByYear[tier][yearIdx], gainFraction, bracketScales[yearIdx]) / swr
         }
@@ -810,35 +826,42 @@ class FireService(
             hitValue: Double,
             hitCostBasis: Double,
             nextReturn: () -> Double,
-            outPath: DoubleArray,
+            outNominal: DoubleArray,
+            outReal: DoubleArray,
         ): Boolean {
             var value = hitValue
             var costBasis = hitCostBasis
-            outPath[0] = value
-            val customBaseNet = if (!flatTargets[tierIdx].isNaN()) flatTargets[tierIdx] * swr else Double.NaN
+            outNominal[0] = value
+            outReal[0] = value / (1.0 + inflation).pow(startIdx)
+            val customTargets = customTargetByYear[tierIdx]
             var survived = true
             for (k in 1..drawdownYears) {
+                val defl = (1.0 + inflation).pow(startIdx + k)
                 if (value <= 0.0) {
                     survived = false
-                    outPath[k] = 0.0
+                    outNominal[k] = 0.0
+                    outReal[k] = 0.0
                     continue
                 }
-                val y = startIdx + k
-                val netSpending = if (!customBaseNet.isNaN()) {
-                    customBaseNet * (1.0 + inflation).pow(k)
+                // First withdrawal (k=1) is in hit-year money (startIdx = h), matching the contribution timing convention.
+                val wIdx = startIdx + k - 1
+                val gross = if (customTargets != null) {
+                    // Custom tier is a wealth target, not a net-spending base: no tax gross-up.
+                    customTargets[wIdx] * swr
                 } else {
-                    netAnnualByYear[tierIdx][y]
-                }
-                val gainFraction = ((value - costBasis) / value).coerceIn(0.0, 1.0)
-                val gross = if (taxOn) {
-                    compiledBrackets.grossUp(netSpending, gainFraction, bracketScales[y])
-                } else {
-                    netSpending
+                    val netSpending = netAnnualByYear[tierIdx][wIdx]
+                    if (taxOn) {
+                        val gainFraction = ((value - costBasis) / value).coerceIn(0.0, 1.0)
+                        compiledBrackets.grossUp(netSpending, gainFraction, bracketScales[wIdx])
+                    } else {
+                        netSpending
+                    }
                 }
                 if (gross >= value) {
                     survived = false
                     value = 0.0
-                    outPath[k] = 0.0
+                    outNominal[k] = 0.0
+                    outReal[k] = 0.0
                     continue
                 }
                 costBasis *= ((value - gross) / value).coerceAtLeast(0.0)
@@ -847,7 +870,8 @@ class FireService(
                     survived = false
                     value = 0.0
                 }
-                outPath[k] = value
+                outNominal[k] = value
+                outReal[k] = value / defl
             }
             return survived
         }
@@ -858,14 +882,12 @@ class FireService(
             val medianHitYear: Array<Int?>,
             val drawdownSurvivalRate: Array<Double?>,
             val drawdownPercentiles: Array<List<FireScenarioPercentiles>>,
+            val drawdownRealPercentiles: Array<List<FireScenarioPercentiles>>,
         )
 
         private fun logNormalSampler(mean: Double, stdDev: Double, rng: SplittableRandom): () -> Double {
             if (stdDev == 0.0 || 1.0 + mean <= 0.0) return { mean.coerceAtLeast(-0.9999) }
-            val onePlusMean = 1.0 + mean
-            val varianceRatio = (stdDev / onePlusMean) * (stdDev / onePlusMean)
-            val sigmaLn = sqrt(ln(1.0 + varianceRatio))
-            val muLn = ln(onePlusMean) - 0.5 * sigmaLn * sigmaLn
+            val (muLn, sigmaLn) = FireDefaults.logNormalParams(mean, stdDev)
             val clamp = FireDefaults.RETURN_CLAMP_STDDEVS
             return {
                 val z = rng.nextGaussian().coerceIn(-clamp, clamp)
@@ -888,7 +910,9 @@ class FireService(
             val survivedCounts = IntArray(tierKeys.size)
             val hitCounts = IntArray(tierKeys.size)
             val drawdownPaths = if (collectPercentiles) Array(tierKeys.size) { mutableListOf<DoubleArray>() } else null
+            val drawdownRealPaths = if (collectPercentiles) Array(tierKeys.size) { mutableListOf<DoubleArray>() } else null
             val scratchDrawdown = DoubleArray(drawdownYears + 1)
+            val scratchDrawdownReal = DoubleArray(drawdownYears + 1)
 
             for (trial in 0 until trials) {
                 val path = simulatePath(monthlyContribution) { sampleReturn() }
@@ -897,10 +921,11 @@ class FireService(
                     hitYears[t][trial] = path.hitYears[t]
                     if (collectPercentiles && path.hitIdx[t] >= 0) {
                         hitCounts[t]++
-                        if (simulateDrawdown(t, path.hitIdx[t], path.hitValues[t], path.hitCostBases[t], sampleReturn, scratchDrawdown)) {
+                        if (simulateDrawdown(t, path.hitIdx[t], path.hitValues[t], path.hitCostBases[t], sampleReturn, scratchDrawdown, scratchDrawdownReal)) {
                             survivedCounts[t]++
                         }
                         drawdownPaths!![t].add(scratchDrawdown.copyOf())
+                        drawdownRealPaths!![t].add(scratchDrawdownReal.copyOf())
                     }
                 }
             }
@@ -921,6 +946,7 @@ class FireService(
             val medianHitYear = Array<Int?>(tierKeys.size) { null }
             val survivalRate = Array<Double?>(tierKeys.size) { null }
             val drawdownPercentiles = Array<List<FireScenarioPercentiles>>(tierKeys.size) { emptyList() }
+            val drawdownRealPercentiles = Array<List<FireScenarioPercentiles>>(tierKeys.size) { emptyList() }
             for (t in tierKeys.indices) {
                 val reachers = hitYears[t].filter { it >= 0 }
                 probability[t] = reachers.size.toDouble() / trials
@@ -930,23 +956,26 @@ class FireService(
                 }
                 if (collectPercentiles && hitCounts[t] > 0) {
                     survivalRate[t] = survivedCounts[t].toDouble() / hitCounts[t]
-                    val paths = drawdownPaths!![t]
-                    drawdownPercentiles[t] = (0..drawdownYears).map { k ->
-                        val col = DoubleArray(paths.size) { idx -> paths[idx][k] }
-                        col.sort()
-                        FireScenarioPercentiles(
-                            year = k,
-                            p10 = percentile(col, 10.0),
-                            p25 = percentile(col, 25.0),
-                            p50 = percentile(col, 50.0),
-                            p75 = percentile(col, 75.0),
-                            p90 = percentile(col, 90.0),
-                        )
-                    }
+                    drawdownPercentiles[t] = computeDrawdownPercentiles(drawdownPaths!![t])
+                    drawdownRealPercentiles[t] = computeDrawdownPercentiles(drawdownRealPaths!![t])
                 }
             }
-            return McStats(percentiles, probability, medianHitYear, survivalRate, drawdownPercentiles)
+            return McStats(percentiles, probability, medianHitYear, survivalRate, drawdownPercentiles, drawdownRealPercentiles)
         }
+
+        private fun computeDrawdownPercentiles(paths: List<DoubleArray>): List<FireScenarioPercentiles> =
+            (0..drawdownYears).map { k ->
+                val col = DoubleArray(paths.size) { idx -> paths[idx][k] }
+                col.sort()
+                FireScenarioPercentiles(
+                    year = k,
+                    p10 = percentile(col, 10.0),
+                    p25 = percentile(col, 25.0),
+                    p50 = percentile(col, 50.0),
+                    p75 = percentile(col, 75.0),
+                    p90 = percentile(col, 90.0),
+                )
+            }
 
         fun buildScenarioOutput(
             scenario: ReturnScenario,
@@ -987,6 +1016,7 @@ class FireService(
                         requiredMonthlyToHitTarget = requiredMonthlyFor(t, mean),
                         drawdownSurvivalRate = mc.drawdownSurvivalRate[t],
                         drawdownPercentiles = mc.drawdownPercentiles[t],
+                        drawdownRealPercentiles = mc.drawdownRealPercentiles[t],
                     )
                 },
             )
@@ -1024,6 +1054,7 @@ class FireService(
     companion object {
         const val GAIN_FRACTION_SOURCE_MOVEMENTS = "movements"
         const val GAIN_FRACTION_SOURCE_MANUAL = "manual"
+        /** Nominal long-term annual arithmetic mean & std dev assumptions (%) per asset class. */
         private val DEFAULT_ASSET_ASSUMPTION = 6.0 to 12.0
         private val ASSET_CLASS_ASSUMPTIONS = mapOf(
             "stocks" to (8.0 to 16.0),

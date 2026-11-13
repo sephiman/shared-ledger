@@ -5,6 +5,7 @@ import { Badge, Card, CardBody, CardHeader } from "@/components/ui/primitives";
 import { formatMoney } from "@/lib/money";
 import { Explain } from "./Explain";
 import { formatDeltaValue } from "./FireHeroStrip";
+import { ScenarioInfo } from "./ScenarioInfo";
 import {
   TIER_COLORS,
   TIER_ORDER,
@@ -121,8 +122,15 @@ export function FireScenarioTable({
                 return (
                   <tr key={`${s.meanPercent}_${s.stdDevPercent}_${sIdx}`} className="border-t border-border">
                     <td className="py-2.5 pr-3 align-top">
-                      <div className="font-medium text-gray-900 dark:text-gray-100" title={s.historical ? t("fire.historical_tooltip") : undefined}>
-                        {scenarioDisplayName(s, sIdx, t)}
+                      <div className="flex items-center gap-1.5 font-medium text-gray-900 dark:text-gray-100" title={s.historical ? t("fire.historical_tooltip") : undefined}>
+                        <span>{scenarioDisplayName(s, sIdx, t)}</span>
+                        <ScenarioInfo
+                          name={scenarioDisplayName(s, sIdx, t)}
+                          meanPercent={s.meanPercent}
+                          stdDevPercent={s.stdDevPercent}
+                          historical={s.historical}
+                          inflationPct={Number(projection.settings.expectedInflationPct)}
+                        />
                       </div>
                       <div className="text-xs text-gray-500 dark:text-gray-400">
                         {scenarioMetrics(s, t)}

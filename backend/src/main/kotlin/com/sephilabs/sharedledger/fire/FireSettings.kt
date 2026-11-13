@@ -56,18 +56,14 @@ class FireSettings(
 
     /** Projection horizon: simulations run from the latest snapshot's year up to this year. */
     @Column(name = "target_year", nullable = false)
-    var targetYear: Short = 2050,
+    var targetYear: Short = FireDefaults.defaultTargetYear(),
 
     @Column(name = "monthly_contribution", nullable = false, precision = 15, scale = 2)
     var monthlyContribution: BigDecimal = BigDecimal.ZERO,
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "return_scenarios", nullable = false, columnDefinition = "jsonb")
-    var returnScenarios: List<ReturnScenario> = listOf(
-        ReturnScenario(BigDecimal("4.0"), BigDecimal("5.0"), name = "Conservative"),
-        ReturnScenario(BigDecimal("6.0"), BigDecimal("12.0"), name = "Base"),
-        ReturnScenario(BigDecimal("8.0"), BigDecimal("18.0"), name = "Optimistic"),
-    ),
+    var returnScenarios: List<ReturnScenario> = FireDefaults.DEFAULT_RETURN_SCENARIOS,
 
     @Column(name = "qualifying_asset_classes", nullable = false, columnDefinition = "text[]")
     @JdbcTypeCode(SqlTypes.ARRAY)

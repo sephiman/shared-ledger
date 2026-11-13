@@ -2,6 +2,9 @@ package com.sephilabs.sharedledger.fire
 
 import java.math.BigDecimal
 import java.time.LocalDate
+import kotlin.math.exp
+import kotlin.math.ln
+import kotlin.math.sqrt
 
 /** Seeds and fixed conventions for the FIRE projection; anything a household can override lives in
  *  `fire_settings`. */
@@ -37,10 +40,43 @@ object FireDefaults {
     /** A sub-period must span at least this many days before its annualized return joins the historical sample. */
     const val MIN_HISTORICAL_PERIOD_DAYS: Long = 90
 
-    /** The real (XIRR) return is only trustworthy if movements cover contributions since the first snapshot in
+    /** The actual (XIRR) return is only trustworthy if movements cover contributions since the first snapshot in
      *  range. A larger lag flags the uncovered history as possibly overstating the return. */
     const val MOVEMENT_COVERAGE_GAP_MONTHS: Long = 1
 
     /** Lower bound used when scanning history "since inception" (predates any real data). */
     val EARLIEST_DATA_DATE: LocalDate = LocalDate.of(2000, 1, 1)
+
+    /** Nominal arithmetic annual mean & std dev (%) for new households: history-anchored with a modest haircut;
+     *  volatilities match bonds-heavy (5%), 60/40 mixed (10%), and all-equity (15%) portfolios. */
+    val DEFAULT_RETURN_SCENARIOS: List<ReturnScenario> = listOf(
+        ReturnScenario(BigDecimal("4.0"), BigDecimal("5.0"), name = "Conservative"),
+        ReturnScenario(BigDecimal("6.5"), BigDecimal("10.0"), name = "Base"),
+        ReturnScenario(BigDecimal("8.5"), BigDecimal("15.0"), name = "Optimistic"),
+    )
+
+    const val DEFAULT_HORIZON_YEARS_AHEAD: Int = 25
+    const val DEFAULT_HORIZON_ROUNDING_YEARS: Int = 5
+
+    fun defaultTargetYear(currentYear: Int = LocalDate.now().year): Short {
+        val raw = currentYear + DEFAULT_HORIZON_YEARS_AHEAD
+        val r = DEFAULT_HORIZON_ROUNDING_YEARS
+        return (((raw + r / 2) / r) * r).toShort()
+    }
+
+    /** Exact log-normal parameters (muLn, sigmaLn) for an arithmetic annual mean and std dev (both decimal). */
+    fun logNormalParams(mean: Double, stdDev: Double): Pair<Double, Double> {
+        val onePlusMean = 1.0 + mean
+        val varianceRatio = (stdDev / onePlusMean) * (stdDev / onePlusMean)
+        val sigmaLn = sqrt(ln(1.0 + varianceRatio))
+        val muLn = ln(onePlusMean) - 0.5 * sigmaLn * sigmaLn
+        return muLn to sigmaLn
+    }
+
+    /** Exact typical compound (median geometric) annual return exp(mu_ln) - 1 matching the Monte Carlo sampler. */
+    fun typicalCompoundReturn(mean: Double, stdDev: Double): Double {
+        if (stdDev == 0.0 || 1.0 + mean <= 0.0) return mean.coerceAtLeast(-0.9999)
+        val (muLn, _) = logNormalParams(mean, stdDev)
+        return exp(muLn) - 1.0
+    }
 }

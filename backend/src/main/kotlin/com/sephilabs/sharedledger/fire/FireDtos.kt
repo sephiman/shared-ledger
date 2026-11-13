@@ -170,8 +170,10 @@ data class FireTierScenarioStats(
     @JsonFormat(shape = JsonFormat.Shape.STRING) val requiredMonthlyToHitTarget: BigDecimal?,
     /** Fraction of FIRE-hitting trials whose portfolio survives `drawdownYears` of inflation-adjusted withdrawals. */
     val drawdownSurvivalRate: Double?,
-    /** Per-retirement-year (year 0..drawdownYears) p10..p90 percentiles across FIRE-hitting trials. */
+    /** Per-retirement-year (year 0..drawdownYears) p10..p90 percentiles across FIRE-hitting trials (nominal). */
     val drawdownPercentiles: List<FireScenarioPercentiles> = emptyList(),
+    /** Per-retirement-year (year 0..drawdownYears) p10..p90 percentiles deflated per trial by (1+i)^(h+k) into today's buying power. */
+    val drawdownRealPercentiles: List<FireScenarioPercentiles> = emptyList(),
 )
 
 data class FirePreviewRequest(

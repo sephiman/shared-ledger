@@ -45,6 +45,18 @@ class FireReferenceAndNamesTest @Autowired constructor(
         assertThat(dto.referenceTier).isEqualTo(FireTierKey.fire)
         assertThat(dto.referenceScenarioIndex).isEqualTo(1)
         assertThat(dto.returnScenarios.map { it.name }).containsExactly("Conservative", "Base", "Optimistic")
+        assertThat(dto.returnScenarios.map { it.meanPercent.toDouble() to it.stdDevPercent.toDouble() })
+            .containsExactly(4.0 to 5.0, 6.5 to 10.0, 8.5 to 15.0)
+        assertThat(dto.targetYear).isEqualTo(FireDefaults.defaultTargetYear())
+    }
+
+    @Test
+    fun `default horizon rounds current year plus 25 to nearest multiple of 5 and typical compound return matches exp(mu_ln) - 1`() {
+        assertThat(FireDefaults.defaultTargetYear(2026)).isEqualTo(2050.toShort())
+        assertThat(FireDefaults.defaultTargetYear(2028)).isEqualTo(2055.toShort())
+        // 6.5% arithmetic mean, 10% std dev => varianceRatio = (0.10/1.065)^2, exp(muLn) - 1 ≈ 6.03%
+        val compound = FireDefaults.typicalCompoundReturn(0.065, 0.10)
+        assertThat(compound).isBetween(0.0600, 0.0607)
     }
 
     @Test
