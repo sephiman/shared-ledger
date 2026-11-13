@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { type ComponentProps, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
-import { useFireHistory, useFireLevers, useFirePreview, useFireProjection, useFireSettings, useUpdateFireSettings, type FirePreviewRequest, type FireSettings } from "@/api/fire";
+import { useFireHistory, useFireLevers, useFirePreview, useFireProjection, useFireSettings, useUpdateFireSettings, type FirePreviewRequest, type FireProjection, type FireSettings } from "@/api/fire";
 import { useAssetClasses } from "@/api/catalog";
 import { apiErrorMessage } from "@/api/client";
 import { TabBar } from "@/components/ui/TabBar";
@@ -12,10 +12,12 @@ import { FireTiersCard } from "./FireTiersCard";
 import { FireHistoryCard } from "./FireHistoryCard";
 import { FireAttributionCard } from "./FireAttributionCard";
 import { FireScenarioTable } from "./FireScenarioTable";
-import { FireSettingsCard, type FireFormErrors } from "./FireSettingsCard";
+import { FireSettingsCard } from "./FireSettingsCard";
+import { fireFormErrors, type FireFormErrors } from "./fireFormValidation";
+import { useFireSettingsSource } from "./useFireSettingsSource";
+import { unsavedSections } from "./fireUnsavedSections";
 import { FireWhatIfBar, buildPreviewRequest, draftFromPreview, initialWhatIfDraft, type WhatIfDraft } from "./FireWhatIfBar";
 import { FireLeversSection } from "./FireLeversSection";
-import { cashFlowEventProblems } from "./fireTemplates";
 import { resolveReferenceScenarioIndex, scenarioDisplayName } from "./fireLabels";
 
 const PHOTO_ANCHOR_ID = "fire-photo";
@@ -25,7 +27,8 @@ export function FirePage() {
   const household = useActiveHousehold();
   const isOwner = household.role === "owner";
   const { data: settings } = useFireSettings(household.householdId);
-  const { data: projection } = useFireProjection(household.householdId);
+  const projectionQuery = useFireProjection(household.householdId);
+  const projection = projectionQuery.data;
   const { data: assetClasses = [] } = useAssetClasses();
   const update = useUpdateFireSettings(household.householdId);
   const preview = useFirePreview(household.householdId);
@@ -140,75 +143,7 @@ export function FirePage() {
 
   function validateAndSave() {
     if (!form) return;
-    const next: FireFormErrors = {};
-    const isNum = (v: string) => v.trim() !== "" && Number.isFinite(Number(v));
-
-    if (form.tierCustomEnabled && (!isNum(form.targetAmount) || Number(form.targetAmount) <= 0)) {
-      next.targetAmount = t("errors.amount_positive");
-    }
-    if (!Number.isFinite(form.targetYear) || form.targetYear <= 0) next.targetYear = t("errors.number_required");
-    if (!Number.isFinite(form.drawdownYears) || form.drawdownYears < 1 || form.drawdownYears > 80) {
-      next.drawdownYears = t("errors.number_required");
-    }
-    if (form.cashFlowEvents.some((ev) => !Number.isInteger(ev.year) || ev.year <= 0 || !isNum(ev.amount))) {
-      next.cashFlowEvents = t("errors.number_required");
-    } else if (projection) {
-      // Never save a one-off amount the projection would silently ignore.
-      const notSimulated = cashFlowEventProblems(form.cashFlowEvents, projection.startYear, form.targetYear)
-        .find((p) => p.problem === "not_simulated");
-      if (notSimulated) {
-        next.cashFlowEvents = t("fire.event_lump_not_simulated", { year: notSimulated.firstYear - 1, firstYear: notSimulated.firstYear });
-      }
-    }
-    if (!isNum(form.monthlyContribution) || Number(form.monthlyContribution) < 0) {
-      next.monthlyContribution = t("errors.number_required");
-    }
-    if (!isNum(form.safeWithdrawalRatePct) || Number(form.safeWithdrawalRatePct) <= 0 || Number(form.safeWithdrawalRatePct) > 100) {
-      next.swr = t("errors.number_required");
-    }
-    if (!isNum(form.expectedInflationPct) || Number(form.expectedInflationPct) < 0 || Number(form.expectedInflationPct) > 50) {
-      next.inflation = t("errors.number_required");
-    }
-    if (!isNum(form.fatMultiplier) || Number(form.fatMultiplier) < 1 || Number(form.fatMultiplier) > 100) {
-      next.fatMultiplier = t("errors.number_required");
-    }
-    if (!isNum(form.fallbackGainFractionPct) || Number(form.fallbackGainFractionPct) < 0 || Number(form.fallbackGainFractionPct) > 100) {
-      next.gainFraction = t("errors.number_required");
-    }
-    if (form.qualifyingAssetClasses.length === 0) next.qualifying = t("errors.select_at_least_one");
-    if (form.essentialSpendingMode === "manual" && (!isNum(form.manualEssentialSpending) || Number(form.manualEssentialSpending) <= 0)) {
-      next.manualEssential = t("errors.amount_positive");
-    }
-    if (form.totalSpendingMode === "manual" && (!isNum(form.manualTotalSpending) || Number(form.manualTotalSpending) <= 0)) {
-      next.manualTotal = t("errors.amount_positive");
-    }
-
-    const scenarioErrs: Array<{ meanPercent?: string; stdDevPercent?: string }> = [];
-    let anyScenarioErr = false;
-    form.returnScenarios.forEach((sc, idx) => {
-      const row: { meanPercent?: string; stdDevPercent?: string } = {};
-      if (!isNum(sc.meanPercent)) {
-        row.meanPercent = t("errors.number_required");
-        anyScenarioErr = true;
-      }
-      if (!isNum(sc.stdDevPercent) || Number(sc.stdDevPercent) < 0) {
-        row.stdDevPercent = t("errors.number_required");
-        anyScenarioErr = true;
-      }
-      scenarioErrs[idx] = row;
-    });
-    if (anyScenarioErr) next.scenarios = scenarioErrs;
-
-    const bracketNumbersOk = form.taxBrackets.every(
-      (b) => isNum(b.lowerBound) && Number(b.lowerBound) >= 0 && isNum(b.ratePct) && Number(b.ratePct) >= 0 && Number(b.ratePct) <= 100,
-    );
-    const bracketOrderOk = form.taxBrackets.every(
-      (b, i) => i === 0 || Number(b.lowerBound) > Number(form.taxBrackets[i - 1].lowerBound),
-    );
-    if (form.taxBrackets.length === 0 || !bracketNumbersOk || !bracketOrderOk) {
-      next.brackets = t("fire.tax_brackets_invalid");
-    }
-
+    const next = fireFormErrors(form, projection?.startYear, t);
     if (Object.keys(next).length > 0) {
       setErrors(next);
       return;
@@ -316,15 +251,16 @@ export function FirePage() {
       )}
 
       {tab === "settings" && form && (
-        <FireSettingsCard
+        <FireSettingsTab
           householdId={household.householdId}
           form={form}
+          savedSettings={settings}
+          savedProjection={projectionQuery}
           errors={errors}
           isOwner={isOwner}
           saving={update.isPending}
           saved={update.isSuccess}
           serverError={update.isError ? apiErrorMessage(update.error, t) : null}
-          projection={projection}
           assetClasses={assetClasses}
           currency={household.currency}
           onChange={onChange}
@@ -333,5 +269,23 @@ export function FirePage() {
         />
       )}
     </div>
+  );
+}
+
+type FireSettingsTabProps = Omit<ComponentProps<typeof FireSettingsCard>, "projection" | "source" | "unsaved"> & {
+  savedSettings: FireSettings | undefined;
+  savedProjection: { data: FireProjection | undefined; isFetching: boolean };
+};
+
+/** The settings card fed from the projection of the form as it stands, not of what was last saved. */
+function FireSettingsTab({ savedSettings, savedProjection, ...card }: FireSettingsTabProps) {
+  const source = useFireSettingsSource(card.householdId, card.form, savedSettings, savedProjection);
+  return (
+    <FireSettingsCard
+      {...card}
+      projection={savedProjection.data}
+      source={source}
+      unsaved={unsavedSections(card.form, savedSettings)}
+    />
   );
 }

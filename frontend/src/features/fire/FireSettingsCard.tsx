@@ -20,24 +20,11 @@ import {
 import { ScenarioInfo } from "./ScenarioInfo";
 import { FireEventTemplates } from "./FireEventTemplates";
 import { cashFlowEventProblems, eventsSummary } from "./fireTemplates";
+import type { FireFormErrors } from "./fireFormValidation";
+import type { FireSettingsSource } from "./useFireSettingsSource";
+import type { FireSettingsSection } from "./fireUnsavedSections";
+import { StaleSpendingNotice } from "./StaleSpendingNotice";
 import { cn } from "@/lib/cn";
-
-export interface FireFormErrors {
-  targetAmount?: string;
-  targetYear?: string;
-  monthlyContribution?: string;
-  qualifying?: string;
-  swr?: string;
-  inflation?: string;
-  fatMultiplier?: string;
-  gainFraction?: string;
-  brackets?: string;
-  manualEssential?: string;
-  manualTotal?: string;
-  drawdownYears?: string;
-  cashFlowEvents?: string;
-  scenarios?: Array<{ meanPercent?: string; stdDevPercent?: string }>;
-}
 
 interface Props {
   householdId: string;
@@ -47,7 +34,11 @@ interface Props {
   saving: boolean;
   saved: boolean;
   serverError: string | null;
+  /** The saved projection; the life-event templates compare unsaved events against it. */
   projection: FireProjection | undefined;
+  /** Where every derived figure and the text describing it come from: the form's own projection once it arrives. */
+  source: FireSettingsSource;
+  unsaved: ReadonlySet<FireSettingsSection>;
   assetClasses: { code: string }[];
   currency: string;
   onChange: (next: FireSettings, clear?: (keyof FireFormErrors)[]) => void;
@@ -55,15 +46,29 @@ interface Props {
   onSave: () => void;
 }
 
+function NotSavedBadge({ show }: { show: boolean }) {
+  const { t } = useTranslation();
+  return show ? <Badge tone="sky">{t("fire.settings_not_saved")}</Badge> : null;
+}
+
+/** Marks a derived figure that was not computed from the form as it stands yet. */
+function pendingProps(pending: boolean, className?: string) {
+  return { className: cn(className, pending && "opacity-50"), "aria-busy": pending || undefined };
+}
+
 function AdvancedSection({
   title,
   badge,
+  unsaved = false,
   summary,
+  summaryPending = false,
   children,
 }: {
   title: string;
   badge?: ReactNode;
+  unsaved?: boolean;
   summary: string;
+  summaryPending?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -72,8 +77,9 @@ function AdvancedSection({
         <span className="flex items-center gap-2">
           <span>{title}</span>
           {badge}
+          <NotSavedBadge show={unsaved} />
         </span>
-        <span className="text-xs font-normal text-gray-500 dark:text-gray-400">{summary}</span>
+        <span {...pendingProps(summaryPending, "text-xs font-normal text-gray-500 dark:text-gray-400")}>{summary}</span>
       </summary>
       <div className="border-t border-border/60 p-3">{children}</div>
     </details>
@@ -90,6 +96,8 @@ export function FireSettingsCard({
   saved,
   serverError,
   projection,
+  source,
+  unsaved,
   assetClasses,
   currency,
   onChange,
@@ -107,17 +115,20 @@ export function FireSettingsCard({
   const ro = !isOwner;
   const [confirmRestoreOpen, setConfirmRestoreOpen] = useState(false);
 
-  const saved_ = projection?.settings;
-  const fireTier = projection?.tiers.find((x) => x.key === "fire" && x.targetToday !== null);
-  const fatTier = projection?.tiers.find((x) => x.key === "fat" && x.targetToday !== null);
+  // Derived figures and the parameters their texts name both come from `basis`, so they can never disagree.
+  const basis = source.projection;
+  const pending = source.pending;
+  const basisSettings = basis?.settings;
+  const fireTier = basis?.tiers.find((x) => x.key === "fire" && x.targetToday !== null);
+  const fatTier = basis?.tiers.find((x) => x.key === "fat" && x.targetToday !== null);
 
   const swrEffect = (() => {
-    if (!fireTier || !saved_) return t("fire.swr_effect_generic");
-    const swr = Number(saved_.safeWithdrawalRatePct);
+    if (!fireTier || !basisSettings) return t("fire.swr_effect_generic");
+    const swr = Number(basisSettings.safeWithdrawalRatePct);
     const alt = swr > 1 ? swr - 0.5 : swr + 0.5;
     const altTarget = (Number(fireTier.targetToday) * swr) / alt;
     return t("fire.swr_effect", {
-      swr: pct(saved_.safeWithdrawalRatePct),
+      swr: pct(basisSettings.safeWithdrawalRatePct),
       target: money(fireTier.targetToday),
       alt: pct(alt),
       altTarget: money(altTarget),
@@ -125,22 +136,22 @@ export function FireSettingsCard({
   })();
 
   const inflationEffect = (() => {
-    if (!fireTier || !saved_ || !projection) return t("fire.inflation_effect_generic");
-    const n = Math.max(0, Number(saved_.targetYear) - projection.startYear);
+    if (!fireTier || !basisSettings || !basis) return t("fire.inflation_effect_generic");
+    const n = Math.max(0, Number(basisSettings.targetYear) - basis.startYear);
     if (n <= 0) return t("fire.inflation_effect_generic");
     const curveLast = fireTier.targetCurve[fireTier.targetCurve.length - 1];
     const projected = curveLast
       ? Number(curveLast.value)
-      : Number(fireTier.targetToday) * (1 + Number(saved_.expectedInflationPct) / 100) ** n;
-    return t("fire.inflation_effect", { target: money(projected), year: saved_.targetYear });
+      : Number(fireTier.targetToday) * (1 + Number(basisSettings.expectedInflationPct) / 100) ** n;
+    return t("fire.inflation_effect", { target: money(projected), year: basisSettings.targetYear });
   })();
 
-  const fatEffect = fatTier && saved_
-    ? t("fire.fat_multiplier_effect", { multiplier: formatMultiplier(saved_.fatMultiplier, locale), target: money(fatTier.targetToday) })
+  const fatEffect = fatTier && basisSettings
+    ? t("fire.fat_multiplier_effect", { multiplier: formatMultiplier(basisSettings.fatMultiplier, locale), target: money(fatTier.targetToday) })
     : t("fire.fat_multiplier_effect_generic");
 
   const taxEffect = (() => {
-    if (!saved_?.applyCapitalGainsTax || !fireTier || fireTier.estimatedAnnualTax === null) {
+    if (!basisSettings?.applyCapitalGainsTax || !fireTier || fireTier.estimatedAnnualTax === null) {
       return t("fire.tax_apply_effect_generic");
     }
     return t("fire.tax_apply_effect", {
@@ -179,21 +190,22 @@ export function FireSettingsCard({
   };
 
   // Advanced section summaries
-  const effEssentialVal =
-    form.essentialSpendingMode === "manual"
-      ? form.manualEssentialSpending
-      : projection?.spending.derivedEssentialMonthly ?? "0";
-  const effTotalVal =
-    form.totalSpendingMode === "manual"
-      ? form.manualTotalSpending
-      : projection?.spending.derivedTotalMonthly ?? "0";
-
-  const spendingSummary = t("fire.settings_summary_spending", {
-    lookback: form.spendingLookbackMonths,
-    agg: t(`fire.spending_agg_short_${form.spendingAggregation}`),
-    essential: `${money(effEssentialVal)}${form.essentialSpendingMode === "manual" ? ` (${t("fire.settings_manual_tag")})` : ""}`,
-    total: `${money(effTotalVal)}${form.totalSpendingMode === "manual" ? ` (${t("fire.settings_manual_tag")})` : ""}`,
-  });
+  const spending = basis?.spending;
+  const manualTag = ` (${t("fire.settings_manual_tag")})`;
+  const spendingSummary = spending
+    ? t("fire.settings_summary_spending", {
+        lookback: spending.lookbackMonths,
+        agg: t(`fire.spending_agg_short_${spending.aggregation}`),
+        essential: `${money(spending.essentialMonthly)}${spending.essentialMode === "manual" ? manualTag : ""}`,
+        total: `${money(spending.totalMonthly)}${spending.totalMode === "manual" ? manualTag : ""}`,
+      })
+    : "";
+  // Without any projection yet there is no figure, so the help text can only describe the form.
+  const spendingWindow = spending ?? {
+    lookbackMonths: form.spendingLookbackMonths,
+    aggregation: form.spendingAggregation,
+    excludeCurrentMonth: form.excludeCurrentMonth,
+  };
 
   const scenariosSummary = `${form.returnScenarios.length} · ${form.returnScenarios
     .map((sc, idx) => `${scenarioDisplayName(form.returnScenarios, idx, t)} ${pct(sc.meanPercent)}`)
@@ -208,18 +220,19 @@ export function FireSettingsCard({
     .map((code) => t(`asset.${code}`))
     .join(", ");
 
-  const minRate = form.taxBrackets.length > 0 ? Math.min(...form.taxBrackets.map((b) => Number(b.ratePct))) : 0;
-  const maxRate = form.taxBrackets.length > 0 ? Math.max(...form.taxBrackets.map((b) => Number(b.ratePct))) : 0;
+  const taxSettings = basisSettings ?? form;
+  const minRate = taxSettings.taxBrackets.length > 0 ? Math.min(...taxSettings.taxBrackets.map((b) => Number(b.ratePct))) : 0;
+  const maxRate = taxSettings.taxBrackets.length > 0 ? Math.max(...taxSettings.taxBrackets.map((b) => Number(b.ratePct))) : 0;
   const gainSourceLabel =
-    projection?.gainFraction.source === "movements"
+    basis?.gainFraction.source === "movements"
       ? t("fire.settings_summary_gain_derived")
       : t("fire.settings_summary_gain_manual");
-  const gainPctStr = projection
-    ? formatFirePercent(Number(projection.gainFraction.percent), locale, 0)
-    : pct(form.fallbackGainFractionPct);
-  const taxSummary = form.applyCapitalGainsTax
+  const gainPctStr = basis
+    ? formatFirePercent(Number(basis.gainFraction.percent), locale, 0)
+    : pct(taxSettings.fallbackGainFractionPct);
+  const taxSummary = taxSettings.applyCapitalGainsTax
     ? t("fire.settings_summary_tax_on", {
-        count: form.taxBrackets.length,
+        count: taxSettings.taxBrackets.length,
         minRate: formatNumber(minRate, locale, Number.isInteger(minRate) ? 0 : 1),
         maxRate: pct(maxRate),
         source: gainSourceLabel,
@@ -240,7 +253,10 @@ export function FireSettingsCard({
       <CardBody className="space-y-6">
         {/* Layer 1: Plan (always visible, plain-language questions) */}
         <section className="space-y-4">
-          <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{t("fire.settings_plan_title")}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{t("fire.settings_plan_title")}</p>
+            <NotSavedBadge show={unsaved.has("plan")} />
+          </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             <div>
@@ -255,10 +271,10 @@ export function FireSettingsCard({
               />
               <FieldError message={errors.targetYear} />
               {(() => {
-                const startYear = projection?.startYear ?? new Date().getFullYear();
+                const startYear = basis?.startYear ?? new Date().getFullYear();
                 const yearsAway = form.targetYear - startYear;
-                const refTierKey = projection ? resolveReferenceTierKey(projection) : form.referenceTier;
-                const refScenario = projection ? resolveReferenceScenario(projection).scenario : undefined;
+                const refTierKey = basis ? resolveReferenceTierKey(basis) : form.referenceTier;
+                const refScenario = basis ? resolveReferenceScenario(basis).scenario : undefined;
                 const refStat = refScenario?.tierStats.find((st) => st.tier === refTierKey);
                 const needsExtend = yearsAway < 10 || (refStat != null && refStat.estimatedYear === null);
                 return (
@@ -297,7 +313,7 @@ export function FireSettingsCard({
                 onChange={(e) => patch({ safeWithdrawalRatePct: e.target.value }, ["swr"])}
               />
               <FieldError message={errors.swr} />
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{swrEffect}</p>
+              <p {...pendingProps(pending, "mt-1 text-xs text-gray-500 dark:text-gray-400")}>{swrEffect}</p>
             </div>
 
             <div>
@@ -313,7 +329,7 @@ export function FireSettingsCard({
                 onChange={(e) => patch({ expectedInflationPct: e.target.value }, ["inflation"])}
               />
               <FieldError message={errors.inflation} />
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{inflationEffect}</p>
+              <p {...pendingProps(pending, "mt-1 text-xs text-gray-500 dark:text-gray-400")}>{inflationEffect}</p>
             </div>
 
             <div>
@@ -399,7 +415,7 @@ export function FireSettingsCard({
             <Label>{t("fire.settings_contrib_q")}</Label>
             <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
               {(["savings", "movements", "manual"] as const).map((mode) => {
-                const derived = projection?.contributions;
+                const derived = basis?.contributions;
                 const value =
                   mode === "manual" ? form.monthlyContribution
                   : mode === "savings" ? derived?.savingsMonthly ?? null
@@ -427,7 +443,7 @@ export function FireSettingsCard({
                           onChange={(e) => patch({ monthlyContribution: e.target.value }, ["monthlyContribution"])}
                         />
                       ) : (
-                        <span className="font-medium tabular-nums">
+                        <span {...pendingProps(pending, "font-medium tabular-nums")}>
                           {value !== null ? money(value) : t("fire.contribution_no_data")}
                         </span>
                       )}
@@ -450,12 +466,12 @@ export function FireSettingsCard({
                 label={t("fire.index_contribution")}
               />
             </div>
-            {projection?.contributions.savingsMonthly != null && projection.contributions.movementsMonthly != null &&
+            {basis?.contributions.savingsMonthly != null && basis.contributions.movementsMonthly != null &&
               form.contributionMode !== "manual" && (
-              <p className="text-xs text-amber-700 dark:text-amber-300">
+              <p {...pendingProps(pending, "text-xs text-amber-700 dark:text-amber-300")}>
                 {t("fire.contribution_gap", {
-                  savings: money(projection.contributions.savingsMonthly),
-                  movements: money(projection.contributions.movementsMonthly),
+                  savings: money(basis.contributions.savingsMonthly),
+                  movements: money(basis.contributions.movementsMonthly),
                 })}
               </p>
             )}
@@ -467,7 +483,12 @@ export function FireSettingsCard({
           <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{t("fire.settings_advanced_title")}</p>
 
           {/* 1. Spending bases */}
-          <AdvancedSection title={t("fire.spending_bases")} summary={spendingSummary}>
+          <AdvancedSection
+            title={t("fire.spending_bases")}
+            unsaved={unsaved.has("spending")}
+            summary={spendingSummary}
+            summaryPending={pending}
+          >
             <div className="space-y-3">
               <p className="text-xs text-gray-500 dark:text-gray-400">{t("fire.spending_bases_help")}</p>
               <div className="grid grid-cols-1 gap-3 rounded-md border border-border bg-raised/40 p-3 sm:grid-cols-3">
@@ -540,10 +561,8 @@ export function FireSettingsCard({
               {(["essential", "total"] as const).map((base) => {
                 const mode = base === "essential" ? form.essentialSpendingMode : form.totalSpendingMode;
                 const manualValue = base === "essential" ? form.manualEssentialSpending : form.manualTotalSpending;
-                const derived = base === "essential"
-                  ? projection?.spending.derivedEssentialMonthly
-                  : projection?.spending.derivedTotalMonthly;
-                const hasDerivedData = (projection?.spending.monthsAvailable ?? 0) > 0;
+                const derived = base === "essential" ? spending?.derivedEssentialMonthly : spending?.derivedTotalMonthly;
+                const hasDerivedData = (spending?.monthsAvailable ?? 0) > 0;
                 const modeField = base === "essential" ? "essentialSpendingMode" : "totalSpendingMode";
                 const valueField = base === "essential" ? "manualEssentialSpending" : "manualTotalSpending";
                 const errKey = (base === "essential" ? "manualEssential" : "manualTotal") as keyof FireFormErrors;
@@ -554,7 +573,7 @@ export function FireSettingsCard({
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
                         <span className="text-sm font-medium">{t(`fire.spending_${base}`)}</span>
-                        <span className="ml-2 text-sm tabular-nums text-gray-700 dark:text-gray-200">
+                        <span {...pendingProps(pending, "ml-2 text-sm tabular-nums text-gray-700 dark:text-gray-200")}>
                           {hasDerivedData ? money(derived) : t("fire.contribution_no_data")}
                         </span>
                         {mode === "manual" && (
@@ -586,11 +605,11 @@ export function FireSettingsCard({
                         )
                       )}
                     </div>
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    <p {...pendingProps(pending, "mt-1 text-xs text-gray-500 dark:text-gray-400")}>
                       {t(`fire.spending_${base}_derived_explain`, {
-                        count: form.spendingLookbackMonths,
-                        method: t(`fire.spending_method_${form.spendingAggregation}`),
-                        window: t(form.excludeCurrentMonth ? "fire.spending_window_excludes_current" : "fire.spending_window_includes_current"),
+                        count: spendingWindow.lookbackMonths,
+                        method: t(`fire.spending_method_${spendingWindow.aggregation}`),
+                        window: t(spendingWindow.excludeCurrentMonth ? "fire.spending_window_excludes_current" : "fire.spending_window_includes_current"),
                       })}
                     </p>
                     {mode === "manual" && (
@@ -608,7 +627,7 @@ export function FireSettingsCard({
                         />
                         <FieldError message={error} />
                         {hasDerivedData && (
-                          <span className="text-xs text-amber-700 dark:text-amber-300">
+                          <span {...pendingProps(pending, "text-xs text-amber-700 dark:text-amber-300")}>
                             {t(`fire.spending_${base}_gap`, { derived: money(derived), manual: money(manualValue) })}
                           </span>
                         )}
@@ -618,16 +637,16 @@ export function FireSettingsCard({
                 );
               })}
 
+              <div {...pendingProps(pending)}>
+                <StaleSpendingNotice since={spending?.noSpendingSince ?? null} />
+              </div>
+
               {(() => {
-                const effEssential = form.essentialSpendingMode === "manual"
-                  ? Number(form.manualEssentialSpending)
-                  : Number(projection?.spending.derivedEssentialMonthly ?? 0);
-                const effTotal = form.totalSpendingMode === "manual"
-                  ? Number(form.manualTotalSpending)
-                  : Number(projection?.spending.derivedTotalMonthly ?? 0);
+                const effEssential = Number(spending?.essentialMonthly ?? 0);
+                const effTotal = Number(spending?.totalMonthly ?? 0);
                 const incoherent = Number.isFinite(effEssential) && Number.isFinite(effTotal) && effTotal > 0 && effEssential > effTotal;
                 return incoherent ? (
-                  <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                  <p {...pendingProps(pending, "rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/40 dark:text-amber-200")}>
                     {t("fire.spending_coherence_warning")}
                   </p>
                 ) : null;
@@ -639,6 +658,7 @@ export function FireSettingsCard({
           <AdvancedSection
             title={t("fire.scenarios")}
             badge={isDefaultScenarioSet(form.returnScenarios) ? <Badge tone="neutral">{t("fire.scenarios_default_badge")}</Badge> : undefined}
+            unsaved={unsaved.has("scenarios")}
             summary={scenariosSummary}
           >
             <div className="space-y-2">
@@ -701,7 +721,7 @@ export function FireSettingsCard({
                     <div className="flex items-center gap-2 sm:col-span-2 sm:mt-6">
                       {sc.historical && (
                         <Badge tone="sky" className="whitespace-nowrap">
-                          <span title={t("fire.historical_tooltip", { years: projection?.historicalScenario?.yearsOfData ?? 0 })}>
+                          <span title={t("fire.historical_tooltip", { years: basis?.historicalScenario?.yearsOfData ?? 0 })}>
                             {t("fire.historical_ref")}
                           </span>
                         </Badge>
@@ -741,12 +761,12 @@ export function FireSettingsCard({
                 >
                   {t("fire.add_scenario")}
                 </Button>
-                <span title={projection?.historicalScenario ? t("fire.historical_tooltip", { years: projection.historicalScenario.yearsOfData }) : t("fire.add_historical_disabled")}>
+                <span title={basis?.historicalScenario ? t("fire.historical_tooltip", { years: basis.historicalScenario.yearsOfData }) : t("fire.add_historical_disabled")}>
                   <Button
                     variant="secondary"
-                    disabled={ro || !projection?.historicalScenario}
+                    disabled={ro || !basis?.historicalScenario}
                     onClick={() => {
-                      const h = projection?.historicalScenario;
+                      const h = basis?.historicalScenario;
                       if (h) {
                         addScenario({
                           name: t("fire.historical_ref"),
@@ -763,9 +783,9 @@ export function FireSettingsCard({
                 <span title={t("fire.suggest_asset_mix_help")}>
                   <Button
                     variant="secondary"
-                    disabled={ro || !projection?.suggestedScenario}
+                    disabled={ro || !basis?.suggestedScenario}
                     onClick={() => {
-                      const sug = projection?.suggestedScenario;
+                      const sug = basis?.suggestedScenario;
                       if (sug) {
                         addScenario({
                           ...sug,
@@ -825,7 +845,7 @@ export function FireSettingsCard({
           </AdvancedSection>
 
           {/* 3. Retirement drawdown years and Fat FIRE multiplier */}
-          <AdvancedSection title={t("fire.settings_drawdown_fat_title")} summary={drawdownFatSummary}>
+          <AdvancedSection title={t("fire.settings_drawdown_fat_title")} unsaved={unsaved.has("drawdownFat")} summary={drawdownFatSummary}>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <Label>{t("fire.drawdown_years")}</Label>
@@ -853,13 +873,13 @@ export function FireSettingsCard({
                   onChange={(e) => patch({ fatMultiplier: e.target.value }, ["fatMultiplier"])}
                 />
                 <FieldError message={errors.fatMultiplier} />
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{fatEffect}</p>
+                <p {...pendingProps(pending, "mt-1 text-xs text-gray-500 dark:text-gray-400")}>{fatEffect}</p>
               </div>
             </div>
           </AdvancedSection>
 
           {/* 4. What counts as investment (qualifying classes) */}
-          <AdvancedSection title={t("fire.settings_qualifying_plain")} summary={qualifyingSummary}>
+          <AdvancedSection title={t("fire.settings_qualifying_plain")} unsaved={unsaved.has("qualifying")} summary={qualifyingSummary}>
             <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
               {t("fire.settings_qualifying_tech")} · {t("fire.qualifying_help")}
             </p>
@@ -888,7 +908,7 @@ export function FireSettingsCard({
           </AdvancedSection>
 
           {/* 5. Capital-gains tax */}
-          <AdvancedSection title={t("fire.tax_title")} summary={taxSummary}>
+          <AdvancedSection title={t("fire.tax_title")} unsaved={unsaved.has("tax")} summary={taxSummary} summaryPending={pending}>
             <div className="space-y-3">
               <div className="max-w-xl">
                 <Toggle
@@ -897,7 +917,7 @@ export function FireSettingsCard({
                   onChange={(v) => patch({ applyCapitalGainsTax: v })}
                   label={t("fire.tax_apply")}
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400">{taxEffect}</p>
+                <p {...pendingProps(pending, "text-xs text-gray-500 dark:text-gray-400")}>{taxEffect}</p>
               </div>
 
               {form.applyCapitalGainsTax && (
@@ -926,17 +946,17 @@ export function FireSettingsCard({
                       onChange={(e) => patch({ fallbackGainFractionPct: e.target.value }, ["gainFraction"])}
                     />
                     <FieldError message={errors.gainFraction} />
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    <p {...pendingProps(pending, "mt-1 text-xs text-gray-500 dark:text-gray-400")}>
                       {t("fire.gain_fraction_effect")}{" "}
-                      {projection && (projection.gainFraction.source === "movements"
-                        ? t("fire.gain_fraction_movements", { pct: formatFirePercent(Number(projection.gainFraction.percent), locale, 2) })
-                        : t("fire.gain_fraction_manual", { pct: formatFirePercent(Number(projection.gainFraction.percent), locale, 2) }))}
+                      {basis && (basis.gainFraction.source === "movements"
+                        ? t("fire.gain_fraction_movements", { pct: formatFirePercent(Number(basis.gainFraction.percent), locale, 2) })
+                        : t("fire.gain_fraction_manual", { pct: formatFirePercent(Number(basis.gainFraction.percent), locale, 2) }))}
                     </p>
-                    {projection && projection.gainFraction.source === "movements" && projection.gainFraction.uncoveredMonths > 0 && (
-                      <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                    {basis && basis.gainFraction.source === "movements" && basis.gainFraction.uncoveredMonths > 0 && (
+                      <p {...pendingProps(pending, "mt-1 text-xs text-amber-700 dark:text-amber-300")}>
                         {t("fire.gain_fraction_coverage_warning", {
-                          gain: formatFirePercent(Number(projection.gainFraction.percent), locale, 2),
-                          months: projection.gainFraction.uncoveredMonths,
+                          gain: formatFirePercent(Number(basis.gainFraction.percent), locale, 2),
+                          months: basis.gainFraction.uncoveredMonths,
                         })}
                       </p>
                     )}
@@ -1011,7 +1031,7 @@ export function FireSettingsCard({
           </AdvancedSection>
 
           {/* 6. Cash-flow events & life phases */}
-          <AdvancedSection title={t("fire.cash_flow_events")} summary={eventsSummaryText}>
+          <AdvancedSection title={t("fire.cash_flow_events")} unsaved={unsaved.has("events")} summary={eventsSummaryText}>
             <div className="space-y-2">
               <p className="text-xs text-gray-500 dark:text-gray-400">{t("fire.cash_flow_events_help")}</p>
               {form.cashFlowEvents.map((ev, idx) => (

@@ -55,51 +55,9 @@ class FireService(
 
     @Transactional
     fun update(householdId: UUID, request: FireSettingsRequest, by: User): FireSettingsDto {
-        if (request.returnScenarios.isEmpty()) throw AppException.badRequest("FIRE_SCENARIOS_REQUIRED")
-        val bounds = request.taxBrackets.map { it.lowerBound }
-        if (request.taxBrackets.isEmpty() || bounds.zipWithNext().any { (a, b) -> a >= b }) {
-            throw AppException.badRequest("FIRE_TAX_BRACKETS_INVALID")
-        }
+        requireValidSettings(householdId, request)
         val s = getOrCreate(householdId)
-        s.targetAmount = Money.normalize(request.targetAmount)
-        s.targetYear = request.targetYear
-        s.monthlyContribution = Money.normalize(request.monthlyContribution)
-        s.returnScenarios = withoutDefaultNames(
-            request.returnScenarios.map {
-                ReturnScenario(
-                    meanPercent = it.meanPercent,
-                    stdDevPercent = it.stdDevPercent,
-                    historical = it.historical,
-                    name = it.name.trim(),
-                )
-            },
-        )
-        s.referenceTier = resolveReferenceTier(request.referenceTier, request)
-        s.referenceScenarioIndex = resolveReferenceScenarioIndex(request.referenceScenarioIndex, s.returnScenarios).toShort()
-        s.qualifyingAssetClasses = request.qualifyingAssetClasses.toTypedArray()
-        s.expectedInflationPct = request.expectedInflationPct
-        s.safeWithdrawalRatePct = request.safeWithdrawalRatePct
-        s.fatMultiplier = request.fatMultiplier
-        s.contributionMode = request.contributionMode
-        s.indexContribution = request.indexContribution
-        s.essentialSpendingMode = request.essentialSpendingMode
-        s.manualEssentialSpending = Money.normalize(request.manualEssentialSpending)
-        s.totalSpendingMode = request.totalSpendingMode
-        s.manualTotalSpending = Money.normalize(request.manualTotalSpending)
-        s.tierLeanEnabled = request.tierLeanEnabled
-        s.tierFireEnabled = request.tierFireEnabled
-        s.tierFatEnabled = request.tierFatEnabled
-        s.tierCustomEnabled = request.tierCustomEnabled
-        s.applyCapitalGainsTax = request.applyCapitalGainsTax
-        s.indexTaxBrackets = request.indexTaxBrackets
-        s.drawdownYears = request.drawdownYears.coerceIn(1, 80)
-        s.spendingLookbackMonths = request.spendingLookbackMonths.toInt().coerceIn(1, 120).toShort()
-        s.spendingAggregation = request.spendingAggregation
-        s.excludeCurrentMonth = request.excludeCurrentMonth
-        s.fallbackGainFractionPct = request.fallbackGainFractionPct
-        val events = request.cashFlowEvents.map { it.toEvent() }
-        requireSimulatedLumpSums(events, snapshots.findLatest(householdId)?.snapshotDate?.year ?: LocalDate.now(clock).year)
-        s.cashFlowEvents = events
+        s.applyRequest(request)
         s.updatedByUserId = by.id
         s.updatedAt = Instant.now()
 
@@ -118,7 +76,68 @@ class FireService(
             request.returnScenarios.size, request.taxBrackets.size, tiers.joinToString(","), s.contributionMode,
             s.applyCapitalGainsTax,
         )
-        return s.toDto(request.taxBrackets.map { TaxBracket(Money.normalize(it.lowerBound), it.ratePct) })
+        return s.toDto(requestBrackets(request))
+    }
+
+    /** The one check behind both Save and a preview of the unsaved form, so both refuse the same forms with the same codes. */
+    private fun requireValidSettings(householdId: UUID, request: FireSettingsRequest) {
+        if (request.returnScenarios.isEmpty()) throw AppException.badRequest("FIRE_SCENARIOS_REQUIRED")
+        val bounds = request.taxBrackets.map { it.lowerBound }
+        if (request.taxBrackets.isEmpty() || bounds.zipWithNext().any { (a, b) -> a >= b }) {
+            throw AppException.badRequest("FIRE_TAX_BRACKETS_INVALID")
+        }
+        val startYear = snapshots.findLatest(householdId)?.snapshotDate?.year ?: LocalDate.now(clock).year
+        requireSimulatedLumpSums(request.cashFlowEvents.map { it.toEvent() }, startYear)
+    }
+
+    private fun requestBrackets(request: FireSettingsRequest): List<TaxBracket> =
+        request.taxBrackets.map { TaxBracket(Money.normalize(it.lowerBound), it.ratePct) }
+
+    /** The saved settings, or a preview's unsaved form — never persisted, projected exactly as a save would be. */
+    private fun settingsFor(householdId: UUID, preview: FirePreviewRequest?): FireSettings {
+        val request = preview?.settings ?: return getOrCreate(householdId)
+        requireValidSettings(householdId, request)
+        return FireSettings(householdId = householdId).also { it.applyRequest(request) }
+    }
+
+    private fun FireSettings.applyRequest(request: FireSettingsRequest) {
+        targetAmount = Money.normalize(request.targetAmount)
+        targetYear = request.targetYear
+        monthlyContribution = Money.normalize(request.monthlyContribution)
+        returnScenarios = withoutDefaultNames(
+            request.returnScenarios.map {
+                ReturnScenario(
+                    meanPercent = it.meanPercent,
+                    stdDevPercent = it.stdDevPercent,
+                    historical = it.historical,
+                    name = it.name.trim(),
+                )
+            },
+        )
+        referenceTier = resolveReferenceTier(request.referenceTier, request)
+        referenceScenarioIndex = resolveReferenceScenarioIndex(request.referenceScenarioIndex, returnScenarios).toShort()
+        qualifyingAssetClasses = request.qualifyingAssetClasses.toTypedArray()
+        expectedInflationPct = request.expectedInflationPct
+        safeWithdrawalRatePct = request.safeWithdrawalRatePct
+        fatMultiplier = request.fatMultiplier
+        contributionMode = request.contributionMode
+        indexContribution = request.indexContribution
+        essentialSpendingMode = request.essentialSpendingMode
+        manualEssentialSpending = Money.normalize(request.manualEssentialSpending)
+        totalSpendingMode = request.totalSpendingMode
+        manualTotalSpending = Money.normalize(request.manualTotalSpending)
+        tierLeanEnabled = request.tierLeanEnabled
+        tierFireEnabled = request.tierFireEnabled
+        tierFatEnabled = request.tierFatEnabled
+        tierCustomEnabled = request.tierCustomEnabled
+        applyCapitalGainsTax = request.applyCapitalGainsTax
+        indexTaxBrackets = request.indexTaxBrackets
+        drawdownYears = request.drawdownYears.coerceIn(1, 80)
+        spendingLookbackMonths = request.spendingLookbackMonths.toInt().coerceIn(1, 120).toShort()
+        spendingAggregation = request.spendingAggregation
+        excludeCurrentMonth = request.excludeCurrentMonth
+        fallbackGainFractionPct = request.fallbackGainFractionPct
+        cashFlowEvents = request.cashFlowEvents.map { it.toEvent() }
     }
 
     private fun FireCashFlowEventInput.toEvent() = FireCashFlowEvent(
@@ -139,14 +158,14 @@ class FireService(
 
     @Transactional(readOnly = true)
     fun project(householdId: UUID, preview: FirePreviewRequest? = null): FireProjectionResponse {
-        val s = getOrCreate(householdId)
+        val s = settingsFor(householdId, preview)
         return photoAsOf(s, liveMoment(householdId), preview)
     }
 
     /** The reference tier under the reference scenario in today's photo, optionally with a what-if applied. */
     @Transactional(readOnly = true)
     fun referenceReachLive(householdId: UUID, preview: FirePreviewRequest? = null): FireReferenceReach {
-        val s = getOrCreate(householdId)
+        val s = settingsFor(householdId, preview)
         return referenceReach(s, photoInputs(s, liveMoment(householdId), preview), simulateIncompleteWindow = true)
     }
 
@@ -257,7 +276,7 @@ class FireService(
     /** Everything a projection is built from, as seen on `moment.date`, with today's settings and any what-if applied. */
     private fun photoInputs(s: FireSettings, moment: PhotoMoment, preview: FirePreviewRequest?): PhotoInputs {
         val householdId = s.householdId
-        val brackets = effectiveBrackets(householdId)
+        val brackets = preview?.settings?.let { requestBrackets(it) } ?: effectiveBrackets(householdId)
         val qualifying = s.qualifyingAssetClasses.toSet()
         val asOf = moment.date
 

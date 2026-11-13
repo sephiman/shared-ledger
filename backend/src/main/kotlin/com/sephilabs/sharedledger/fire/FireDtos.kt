@@ -203,6 +203,8 @@ data class FirePreviewRequest(
     @JsonFormat(shape = JsonFormat.Shape.STRING) val returnShiftPct: BigDecimal? = null,
     /** Replaces the saved cash-flow events for this preview only (life-event templates preview with it). */
     @field:Valid val cashFlowEvents: List<FireCashFlowEventInput>? = null,
+    /** The unsaved settings form, projected in place of the saved settings; the other fields still apply on top. */
+    @field:Valid val settings: FireSettingsRequest? = null,
 )
 
 data class FireScenarioOutput(

@@ -1244,6 +1244,7 @@
     "gain_fraction_coverage_warning": "Gain share ({{gain}}) is derived from movements, but {{months}} month(s) of early snapshot history have no recorded movements — this may overstate taxable gains and inflate targets.",
     "required_monthly": "Monthly needed",
     "what_if_title": "What-if sandbox",
+    "settings_not_saved": "Not saved yet",
     "what_if_active": "Preview active (not saved)",
     "what_if_reset": "Reset",
     "what_if_apply": "Apply to settings",

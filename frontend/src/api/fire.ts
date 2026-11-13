@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "./client";
 
 export type ContributionMode = "manual" | "savings" | "movements";
@@ -98,6 +98,8 @@ export interface FirePreviewRequest {
   monthlyEssentialSpending?: string | null;
   returnShiftPct?: string | null;
   cashFlowEvents?: FireCashFlowEvent[] | null;
+  /** The unsaved settings form, projected in place of the saved settings. */
+  settings?: FireSettings | null;
 }
 
 export interface FireScenarioOutput {
@@ -223,6 +225,17 @@ export function useFirePreview(householdId: string) {
       (await apiClient.post<FireProjection>(`/households/${householdId}/fire/preview`, input)).data,
     // A what-if saves nothing, so it must not say "Saved".
     meta: { silentSuccess: true },
+  });
+}
+
+/** The projection the unsaved settings form would have once saved; keeps the last answer while the next one loads. */
+export function useFireFormPreview(householdId: string, form: FireSettings, enabled: boolean) {
+  return useQuery({
+    queryKey: ["fire-form-preview", householdId, form],
+    queryFn: async () =>
+      (await apiClient.post<FireProjection>(`/households/${householdId}/fire/preview`, { settings: form })).data,
+    enabled,
+    placeholderData: keepPreviousData,
   });
 }
 

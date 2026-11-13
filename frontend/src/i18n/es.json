@@ -1244,6 +1244,7 @@
     "gain_fraction_coverage_warning": "La proporción de ganancia ({{gain}}) se deriva de movimientos, pero hay {{months}} mes(es) iniciales sin movimientos registrados — esto puede sobreestimar las ganancias gravables e inflar los objetivos.",
     "required_monthly": "Aporte /mes",
     "what_if_title": "Simulador What-if",
+    "settings_not_saved": "Sin guardar todavía",
     "what_if_active": "Vista previa activa (sin guardar)",
     "what_if_reset": "Restablecer",
     "what_if_apply": "Aplicar a ajustes",

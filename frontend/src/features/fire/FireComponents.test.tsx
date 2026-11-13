@@ -184,6 +184,8 @@ describe("FIRE components", () => {
         saved={false}
         serverError={null}
         projection={proj}
+        source={{ projection: proj, pending: false }}
+        unsaved={new Set()}
         assetClasses={[{ code: "etfs" }, { code: "stocks" }]}
         currency="EUR"
         onChange={onChange}
@@ -230,6 +232,8 @@ describe("FIRE components", () => {
         saved={false}
         serverError={null}
         projection={proj}
+        source={{ projection: proj, pending: false }}
+        unsaved={new Set()}
         assetClasses={[{ code: "etfs" }]}
         currency="EUR"
         onChange={onChange}
@@ -288,6 +292,8 @@ describe("FIRE components", () => {
         saved={false}
         serverError={null}
         projection={proj}
+        source={{ projection: proj, pending: false }}
+        unsaved={new Set()}
         assetClasses={[{ code: "etfs" }]}
         currency="EUR"
         onChange={onChange}
@@ -326,6 +332,8 @@ function renderSettings(proj: FireProjection, form = proj.settings) {
       saved={false}
       serverError={null}
       projection={proj}
+      source={{ projection: proj, pending: false }}
+      unsaved={new Set()}
       assetClasses={[{ code: "etfs" }]}
       currency="EUR"
       onChange={vi.fn()}
@@ -447,6 +455,7 @@ describe("FIRE formatting and labels", () => {
   it("settings: plain tier names first, translated summary, and feminine gain source", () => {
     const p = makeProjection();
     p.settings.spendingAggregation = "median";
+    p.spending.aggregation = "median";
     p.settings.applyCapitalGainsTax = true;
     renderSettings(p);
     expect(screen.getByText("(Lean FIRE)")).toBeInTheDocument();
@@ -456,9 +465,14 @@ describe("FIRE formatting and labels", () => {
     expect(screen.getByText("Años de retiro")).toBeInTheDocument();
   });
 
-  it("spending help is instantiated with the configured window, method and current-month rule", () => {
-    const p = makeProjection();
-    renderSettings(p, { ...p.settings, spendingLookbackMonths: 3, spendingAggregation: "median", excludeCurrentMonth: true });
+  it("spending help is instantiated with the window, method and current-month rule its figures were computed with", () => {
+    const base = makeProjection();
+    const settings = { ...base.settings, spendingLookbackMonths: 3, spendingAggregation: "median" as const, excludeCurrentMonth: true };
+    const p = makeProjection({
+      settings,
+      spending: { ...base.spending, lookbackMonths: 3, aggregation: "median", excludeCurrentMonth: true },
+    });
+    renderSettings(p);
     expect(
       screen.getByText("Mediana mensual de los últimos 3 meses del gasto en categorías esenciales, sin contar el mes en curso."),
     ).toBeInTheDocument();
