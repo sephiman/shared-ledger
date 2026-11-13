@@ -1,16 +1,18 @@
 import type { TFunction } from "i18next";
 import type { FireProjection } from "@/api/fire";
-import { formatPercent, formatWholeMoney } from "@/lib/money";
+import { formatWholeMoney } from "@/lib/money";
 import {
   formatHitProbability,
   resolveReferenceScenario,
   resolveReferenceTier,
   scenarioDisplayName,
+  formatFirePercent,
 } from "./fireLabels";
 
 export const HEADLINE_TEMPLATE_VERSION = 2;
-export const WHAT_IF_SAVE_MORE_AMOUNT = 500;
-export const WHAT_IF_SPEND_LESS_FACTOR = 0.9;
+// The question buttons are the first two levers of "What moves your year most"; keep in step with FireLeverValues.
+export const WHAT_IF_SAVE_MORE_AMOUNT = 100;
+export const WHAT_IF_SPEND_LESS_PCT = 5;
 
 export function buildCoverageClause(
   projection: FireProjection,
@@ -19,7 +21,7 @@ export function buildCoverageClause(
 ): string | null {
   const tier = resolveReferenceTier(projection);
   if (!tier || tier.coveragePercent === null) return null;
-  const pct = formatPercent(tier.coveragePercent, locale, 0);
+  const pct = formatFirePercent(tier.coveragePercent, locale, 0);
   return t("fire.headline_coverage_clause", { pct });
 }
 
@@ -38,8 +40,8 @@ export function buildProjectionClause(
   }
 
   const monthly = formatWholeMoney(projection.contributions.activeMonthly ?? "0", currency, locale);
-  const scenarioName = scenarioDisplayName(scenario, index, t);
-  const hitPct = formatHitProbability(stat.probabilityOfReachingTarget);
+  const scenarioName = scenarioDisplayName(projection.scenarios, index, t);
+  const hitPct = formatHitProbability(stat.probabilityOfReachingTarget, locale);
   const year = stat.estimatedYear;
 
   if (year === null) {
@@ -63,7 +65,7 @@ export function buildProjectionClause(
   });
   if (stat.drawdownSurvivalRate === null) return reach;
   const survival = t("fire.headline_survival_if_reached", {
-    survivalPct: formatHitProbability(stat.drawdownSurvivalRate),
+    survivalPct: formatHitProbability(stat.drawdownSurvivalRate, locale),
     drawdownYears: projection.settings.drawdownYears,
   });
   return `${reach} ${survival}`;

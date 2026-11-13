@@ -44,16 +44,30 @@ object FireDefaults {
      *  range. A larger lag flags the uncovered history as possibly overstating the return. */
     const val MOVEMENT_COVERAGE_GAP_MONTHS: Long = 1
 
+    /** With no expense at all in this many latest complete months of the spending window, the photo warns that
+     *  spending data has stopped coming in. */
+    const val STALE_SPENDING_MONTHS: Int = 2
+
     /** Lower bound used when scanning history "since inception" (predates any real data). */
     val EARLIEST_DATA_DATE: LocalDate = LocalDate.of(2000, 1, 1)
 
     /** Nominal arithmetic annual mean & std dev (%) for new households: history-anchored with a modest haircut;
      *  volatilities match bonds-heavy (5%), 60/40 mixed (10%), and all-equity (15%) portfolios. */
     val DEFAULT_RETURN_SCENARIOS: List<ReturnScenario> = listOf(
-        ReturnScenario(BigDecimal("4.0"), BigDecimal("5.0"), name = "Conservative"),
-        ReturnScenario(BigDecimal("6.5"), BigDecimal("10.0"), name = "Base"),
-        ReturnScenario(BigDecimal("8.5"), BigDecimal("15.0"), name = "Optimistic"),
+        ReturnScenario(BigDecimal("4.0"), BigDecimal("5.0")),
+        ReturnScenario(BigDecimal("6.5"), BigDecimal("10.0")),
+        ReturnScenario(BigDecimal("8.5"), BigDecimal("15.0")),
     )
+
+    /** The names the UI gives unnamed scenarios, in every language it speaks (lower case). A stored name equal to one
+     *  of them is a leftover of when defaults were stored as text, so it counts as no name at all. */
+    private val DEFAULT_SCENARIO_NAMES: Set<String> = setOf("conservative", "base", "optimistic", "conservador", "optimista")
+    private val DEFAULT_NUMBERED_SCENARIO_NAME = Regex("^(scenario|escenario) \\d+$")
+
+    fun isDefaultScenarioName(name: String): Boolean {
+        val n = name.trim().lowercase()
+        return n in DEFAULT_SCENARIO_NAMES || DEFAULT_NUMBERED_SCENARIO_NAME.matches(n)
+    }
 
     const val DEFAULT_HORIZON_YEARS_AHEAD: Int = 25
     const val DEFAULT_HORIZON_ROUNDING_YEARS: Int = 5

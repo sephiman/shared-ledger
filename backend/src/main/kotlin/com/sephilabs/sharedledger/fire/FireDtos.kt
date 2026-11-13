@@ -7,6 +7,7 @@ import jakarta.validation.constraints.DecimalMin
 import jakarta.validation.constraints.NotNull
 import java.math.BigDecimal
 import java.time.LocalDate
+import java.time.YearMonth
 
 data class ReturnScenarioInput(
     @field:NotNull
@@ -46,6 +47,8 @@ data class FireCashFlowEventInput(
     @field:NotNull
     @JsonFormat(shape = JsonFormat.Shape.STRING) val amount: BigDecimal,
     val label: String = "",
+    /** The life-event template the event was created from, if any; display only, the engine ignores it. */
+    val template: String? = null,
 )
 
 data class FireCashFlowEventDto(
@@ -53,6 +56,7 @@ data class FireCashFlowEventDto(
     val kind: CashFlowEventKind,
     @JsonFormat(shape = JsonFormat.Shape.STRING) val amount: BigDecimal,
     val label: String,
+    val template: String? = null,
 )
 
 data class FireSettingsDto(
@@ -191,6 +195,14 @@ data class FirePreviewRequest(
     @JsonFormat(shape = JsonFormat.Shape.STRING) val lumpSum: BigDecimal = BigDecimal.ZERO,
     @field:DecimalMin(value = "0.01")
     @JsonFormat(shape = JsonFormat.Shape.STRING) val monthlySpending: BigDecimal? = null,
+    @field:DecimalMin(value = "0.01")
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val monthlyEssentialSpending: BigDecimal? = null,
+    /** Percentage points added to every scenario's mean return (the "returns one point higher/lower" lever). */
+    @field:DecimalMin(value = "-20.00")
+    @field:DecimalMax(value = "20.00")
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val returnShiftPct: BigDecimal? = null,
+    /** Replaces the saved cash-flow events for this preview only (life-event templates preview with it). */
+    @field:Valid val cashFlowEvents: List<FireCashFlowEventInput>? = null,
 )
 
 data class FireScenarioOutput(
@@ -240,6 +252,9 @@ data class FireSpendingBasis(
     val lookbackMonths: Int = 12,
     val aggregation: SpendingAggregationMode = SpendingAggregationMode.mean,
     val excludeCurrentMonth: Boolean = false,
+    /** The last month with any expense when the window's latest complete months have none (data stopped coming in,
+     *  so the derived target is probably understated); null otherwise. A notice only — the averages are unchanged. */
+    val noSpendingSince: YearMonth? = null,
 )
 
 data class FireContributions(
@@ -307,4 +322,31 @@ data class FireProjectionResponse(
     val historicalWealth: List<FireScenarioYear>,
     val cumulativeContributions: List<FireHistoricalContribution>,
     val monteCarloTrials: Int,
+)
+
+/** The reference tier under the reference scenario at one moment: what a history point or a lever reports. */
+data class FireReferenceReach(
+    val tier: FireTierKey,
+    val horizonYear: Int,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val wealth: BigDecimal,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val target: BigDecimal?,
+    val coveragePercent: Double?,
+    val estimatedYear: Int?,
+    /** Null when the reference tier has no target to simulate. */
+    val probability: Double?,
+    val spendingDerived: Boolean,
+    val spendingMonthsAvailable: Int,
+    val spendingLookbackMonths: Int,
+    val contributionMode: ContributionMode,
+    /** The inputs a what-if starts from: the contribution actually used, both spending bases and the SWR. */
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val monthlyContribution: BigDecimal,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val totalMonthlySpending: BigDecimal,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val essentialMonthlySpending: BigDecimal,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val safeWithdrawalRatePct: BigDecimal,
+)
+
+data class FireQualifyingFlows(
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val net: BigDecimal,
+    val count: Int,
+    val firstMovementDate: LocalDate?,
 )

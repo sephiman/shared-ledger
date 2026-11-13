@@ -1,10 +1,11 @@
 import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { StaleSpendingNotice } from "./StaleSpendingNotice";
 import type { FireProjection } from "@/api/fire";
 import { Badge, Button, Card, CardBody } from "@/components/ui/primitives";
-import { formatWholeMoney, formatNumber, formatPercent } from "@/lib/money";
+import { formatWholeMoney, formatNumber } from "@/lib/money";
 import { buildHeadline } from "./fireHeadline";
-import { estimatedYearText, resolveReferenceScenario, resolveReferenceTier } from "./fireLabels";
+import { estimatedYearText, resolveReferenceScenario, resolveReferenceTier, formatFirePercent } from "./fireLabels";
 
 const EXPLAINER_DISMISSED_KEY = "fire-explainer-dismissed";
 
@@ -85,9 +86,9 @@ export function FireHeroStrip({
     baseScenario && baseTier ? baseScenario.tierStats.find((st) => st.tier === baseTier.key) ?? null : null;
 
   const coverageText =
-    refTier?.coveragePercent != null ? formatPercent(refTier.coveragePercent, locale, 0) : "—";
+    refTier?.coveragePercent != null ? formatFirePercent(refTier.coveragePercent, locale, 0) : "—";
   const baseCoverageText =
-    baseTier?.coveragePercent != null ? formatPercent(baseTier.coveragePercent, locale, 0) : null;
+    baseTier?.coveragePercent != null ? formatFirePercent(baseTier.coveragePercent, locale, 0) : null;
 
   const estimatedYear = refStat
     ? estimatedYearText(refStat.estimatedYear, projection.settings.targetYear, t)
@@ -102,10 +103,10 @@ export function FireHeroStrip({
   const contribSourceLabel = t(`fire.photo_contrib_source_${projection.contributions.mode}`);
 
   const savingsRatePct = projection.contributions.savingsRatePct;
-  const savingsRateText = savingsRatePct !== null ? formatPercent(savingsRatePct, locale, 0) : "—";
+  const savingsRateText = savingsRatePct !== null ? formatFirePercent(savingsRatePct, locale, 0) : "—";
   const baseSavingsRateText =
     baselineProjection?.contributions.savingsRatePct != null
-      ? formatPercent(baselineProjection.contributions.savingsRatePct, locale, 0)
+      ? formatFirePercent(baselineProjection.contributions.savingsRatePct, locale, 0)
       : null;
 
   const savingsRateMainLabel =
@@ -165,6 +166,7 @@ export function FireHeroStrip({
               <p className="text-base font-medium leading-relaxed text-gray-900 dark:text-gray-100 sm:text-lg">
                 {headline}
               </p>
+              <StaleSpendingNotice since={projection.spending.noSpendingSince} />
             </div>
             {onToggleWhatIf && (
               <div className="flex shrink-0 items-center gap-2">

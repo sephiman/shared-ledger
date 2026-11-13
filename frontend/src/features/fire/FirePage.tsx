@@ -2,16 +2,23 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
-import { useFirePreview, useFireProjection, useFireSettings, useUpdateFireSettings, type FireSettings } from "@/api/fire";
+import { useFireHistory, useFireLevers, useFirePreview, useFireProjection, useFireSettings, useUpdateFireSettings, type FirePreviewRequest, type FireSettings } from "@/api/fire";
 import { useAssetClasses } from "@/api/catalog";
 import { apiErrorMessage } from "@/api/client";
 import { TabBar } from "@/components/ui/TabBar";
 import { FireChart } from "./FireChart";
 import { FireHeroStrip } from "./FireHeroStrip";
 import { FireTiersCard } from "./FireTiersCard";
+import { FireHistoryCard } from "./FireHistoryCard";
+import { FireAttributionCard } from "./FireAttributionCard";
 import { FireScenarioTable } from "./FireScenarioTable";
 import { FireSettingsCard, type FireFormErrors } from "./FireSettingsCard";
-import { FireWhatIfBar, buildPreviewRequest, initialWhatIfDraft, type WhatIfDraft } from "./FireWhatIfBar";
+import { FireWhatIfBar, buildPreviewRequest, draftFromPreview, initialWhatIfDraft, type WhatIfDraft } from "./FireWhatIfBar";
+import { FireLeversSection } from "./FireLeversSection";
+import { cashFlowEventProblems } from "./fireTemplates";
+import { resolveReferenceScenarioIndex, scenarioDisplayName } from "./fireLabels";
+
+const PHOTO_ANCHOR_ID = "fire-photo";
 
 export function FirePage() {
   const { t } = useTranslation();
@@ -22,6 +29,9 @@ export function FirePage() {
   const { data: assetClasses = [] } = useAssetClasses();
   const update = useUpdateFireSettings(household.householdId);
   const preview = useFirePreview(household.householdId);
+  // Fetched only once the photo is on screen, so the photo never waits for it.
+  const history = useFireHistory(household.householdId, Boolean(projection));
+  const levers = useFireLevers(household.householdId, Boolean(projection));
 
   const [form, setForm] = useState<FireSettings | null>(null);
   const [errors, setErrors] = useState<FireFormErrors>({});
@@ -81,15 +91,30 @@ export function FirePage() {
     const spendChanged =
       Number(whatIfDraft.monthlySpending) > 0 &&
       Number(whatIfDraft.monthlySpending) !== Number(projection.spending.totalMonthly);
+    const essentialChanged =
+      Number(whatIfDraft.monthlyEssentialSpending) > 0 &&
+      Number(whatIfDraft.monthlyEssentialSpending) !== Number(projection.spending.essentialMonthly);
     const nextForm: FireSettings = {
       ...form,
       targetYear: Number(whatIfDraft.targetYear) || form.targetYear,
       safeWithdrawalRatePct: whatIfDraft.safeWithdrawalRatePct || form.safeWithdrawalRatePct,
       ...(contribChanged ? { contributionMode: "manual", monthlyContribution: whatIfDraft.monthlyContribution } : {}),
       ...(spendChanged ? { totalSpendingMode: "manual", manualTotalSpending: whatIfDraft.monthlySpending } : {}),
+      ...(essentialChanged
+        ? { essentialSpendingMode: "manual", manualEssentialSpending: whatIfDraft.monthlyEssentialSpending }
+        : {}),
     };
     setForm(nextForm);
     update.mutate(nextForm);
+  }
+
+  /** A lever row (or question) opens the what-if with exactly the values it was computed with. */
+  function handleOpenLever(leverPreview: FirePreviewRequest) {
+    if (!projection) return;
+    setWhatIfDraft(draftFromPreview(leverPreview, projection));
+    setWhatIfOpen(true);
+    // The page scrolls inside the layout, not the window: bring the photo (and its what-if) into view.
+    document.getElementById(PHOTO_ANCHOR_ID)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function onChange(next: FireSettings, clear?: (keyof FireFormErrors)[]) {
@@ -127,6 +152,13 @@ export function FirePage() {
     }
     if (form.cashFlowEvents.some((ev) => !Number.isInteger(ev.year) || ev.year <= 0 || !isNum(ev.amount))) {
       next.cashFlowEvents = t("errors.number_required");
+    } else if (projection) {
+      // Never save a one-off amount the projection would silently ignore.
+      const notSimulated = cashFlowEventProblems(form.cashFlowEvents, projection.startYear, form.targetYear)
+        .find((p) => p.problem === "not_simulated");
+      if (notSimulated) {
+        next.cashFlowEvents = t("fire.event_lump_not_simulated", { year: notSimulated.firstYear - 1, firstYear: notSimulated.firstYear });
+      }
     }
     if (!isNum(form.monthlyContribution) || Number(form.monthlyContribution) < 0) {
       next.monthlyContribution = t("errors.number_required");
@@ -205,6 +237,7 @@ export function FirePage() {
       {tab === "projection" && (
         <>
           {activeProjection && (
+            <div id={PHOTO_ANCHOR_ID} className="scroll-mt-4">
             <FireHeroStrip
               projection={activeProjection}
               baselineProjection={isWhatIfActive ? projection : undefined}
@@ -229,12 +262,40 @@ export function FirePage() {
                 ) : undefined
               }
             />
+            </div>
           )}
           {activeProjection && (
             <FireTiersCard
               projection={activeProjection}
               baselineProjection={isWhatIfActive ? projection : undefined}
               currency={household.currency}
+            />
+          )}
+          {projection && (
+            <FireHistoryCard
+              history={history.data}
+              isLoading={history.isLoading}
+              isError={history.isError}
+              projection={projection}
+              currency={household.currency}
+            />
+          )}
+          {history.data && (
+            <FireAttributionCard
+              householdId={household.householdId}
+              history={history.data}
+              currency={household.currency}
+              noSpendingSince={projection?.spending.noSpendingSince ?? null}
+            />
+          )}
+          {projection && (
+            <FireLeversSection
+              levers={levers.data}
+              scenarioName={scenarioDisplayName(projection.scenarios, resolveReferenceScenarioIndex(projection), t)}
+              isLoading={levers.isLoading}
+              isError={levers.isError}
+              currency={household.currency}
+              onOpen={handleOpenLever}
             />
           )}
           {activeProjection && (
@@ -256,6 +317,7 @@ export function FirePage() {
 
       {tab === "settings" && form && (
         <FireSettingsCard
+          householdId={household.householdId}
           form={form}
           errors={errors}
           isOwner={isOwner}

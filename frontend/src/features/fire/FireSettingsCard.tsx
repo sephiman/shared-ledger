@@ -2,7 +2,7 @@ import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { CashFlowEventKind, FireProjection, FireSettings, FireTierKey, ReturnScenario } from "@/api/fire";
 import { Badge, Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select, Toggle } from "@/components/ui/primitives";
-import { formatNumber, formatPercent, formatWholeMoney } from "@/lib/money";
+import { formatNumber, formatWholeMoney } from "@/lib/money";
 import { Explain } from "./Explain";
 import {
   SEED_RETURN_SCENARIOS,
@@ -11,11 +11,16 @@ import {
   isDefaultScenarioSet,
   resolveReferenceScenario,
   resolveReferenceTierKey,
+  defaultScenarioName,
   scenarioDisplayName,
   tierPlainName,
   tierTechName,
+  formatFirePercent,
 } from "./fireLabels";
 import { ScenarioInfo } from "./ScenarioInfo";
+import { FireEventTemplates } from "./FireEventTemplates";
+import { cashFlowEventProblems, eventsSummary } from "./fireTemplates";
+import { cn } from "@/lib/cn";
 
 export interface FireFormErrors {
   targetAmount?: string;
@@ -35,6 +40,7 @@ export interface FireFormErrors {
 }
 
 interface Props {
+  householdId: string;
   form: FireSettings;
   errors: FireFormErrors;
   isOwner: boolean;
@@ -76,6 +82,7 @@ function AdvancedSection({
 
 /** Two-layer FIRE settings: Plan (always visible, plain questions) and Advanced (collapsed sections with live summaries). */
 export function FireSettingsCard({
+  householdId,
   form,
   errors,
   isOwner,
@@ -95,7 +102,7 @@ export function FireSettingsCard({
   // Help-text percentages keep their own precision: 4 → "4 %", 3.5 → "3,5 %", 4.25 → "4,25 %".
   const pct = (v: string | number) => {
     const n = Number(v);
-    return formatPercent(n, locale, Number.isInteger(n) ? 0 : Number.isInteger(n * 10) ? 1 : 2);
+    return formatFirePercent(n, locale, Number.isInteger(n) ? 0 : Number.isInteger(n * 10) ? 1 : 2);
   };
   const ro = !isOwner;
   const [confirmRestoreOpen, setConfirmRestoreOpen] = useState(false);
@@ -189,7 +196,7 @@ export function FireSettingsCard({
   });
 
   const scenariosSummary = `${form.returnScenarios.length} · ${form.returnScenarios
-    .map((sc, idx) => `${scenarioDisplayName(sc, idx, t)} ${pct(sc.meanPercent)}`)
+    .map((sc, idx) => `${scenarioDisplayName(form.returnScenarios, idx, t)} ${pct(sc.meanPercent)}`)
     .join(" · ")}`;
 
   const drawdownFatSummary = t("fire.settings_summary_drawdown_fat", {
@@ -208,7 +215,7 @@ export function FireSettingsCard({
       ? t("fire.settings_summary_gain_derived")
       : t("fire.settings_summary_gain_manual");
   const gainPctStr = projection
-    ? formatPercent(Number(projection.gainFraction.percent), locale, 0)
+    ? formatFirePercent(Number(projection.gainFraction.percent), locale, 0)
     : pct(form.fallbackGainFractionPct);
   const taxSummary = form.applyCapitalGainsTax
     ? t("fire.settings_summary_tax_on", {
@@ -220,10 +227,8 @@ export function FireSettingsCard({
       })
     : t("fire.settings_summary_tax_off");
 
-  const eventsSummary =
-    form.cashFlowEvents.length > 0
-      ? t("fire.settings_summary_events_count", { count: form.cashFlowEvents.length })
-      : t("fire.settings_summary_events_none");
+  const eventsSummaryText = eventsSummary(form.cashFlowEvents, t);
+  const eventProblems = projection ? cashFlowEventProblems(form.cashFlowEvents, projection.startYear, form.targetYear) : [];
 
   return (
     <Card>
@@ -337,7 +342,7 @@ export function FireSettingsCard({
               >
                 {form.returnScenarios.map((sc, idx) => (
                   <option key={idx} value={String(idx)}>
-                    {scenarioDisplayName(sc, idx, t)} ({sc.meanPercent}% ±{sc.stdDevPercent}%)
+                    {scenarioDisplayName(form.returnScenarios, idx, t)} ({pct(sc.meanPercent)} ±{pct(sc.stdDevPercent)})
                   </option>
                 ))}
               </Select>
@@ -646,7 +651,7 @@ export function FireSettingsCard({
               {form.returnScenarios.map((sc, idx) => {
                 const meanErr = errors.scenarios?.[idx]?.meanPercent;
                 const stdErr = errors.scenarios?.[idx]?.stdDevPercent;
-                const displayName = scenarioDisplayName(sc, idx, t);
+                const displayName = scenarioDisplayName(form.returnScenarios, idx, t);
                 return (
                   <div key={idx} className="grid grid-cols-1 items-start gap-2 sm:grid-cols-12">
                     <div className="sm:col-span-4">
@@ -664,7 +669,7 @@ export function FireSettingsCard({
                         type="text"
                         value={sc.name}
                         disabled={ro}
-                        placeholder={scenarioDisplayName({ name: "" }, idx, t)}
+                        placeholder={defaultScenarioName(form.returnScenarios, idx, t)}
                         onChange={(e) => setScenarioField(idx, "name", e.target.value)}
                       />
                     </div>
@@ -787,7 +792,7 @@ export function FireSettingsCard({
                   <ul className="list-disc space-y-0.5 pl-4 tabular-nums">
                     {form.returnScenarios.map((sc, idx) => (
                       <li key={idx}>
-                        {scenarioDisplayName(sc, idx, t)} ({pct(sc.meanPercent)} ±{pct(sc.stdDevPercent)})
+                        {scenarioDisplayName(form.returnScenarios, idx, t)} ({pct(sc.meanPercent)} ±{pct(sc.stdDevPercent)})
                       </li>
                     ))}
                   </ul>
@@ -798,7 +803,7 @@ export function FireSettingsCard({
                       onClick={() => {
                         patch({
                           returnScenarios: SEED_RETURN_SCENARIOS.map((seed) => ({
-                            name: t(seed.defaultNameKey),
+                            name: "",
                             meanPercent: seed.meanPercent,
                             stdDevPercent: seed.stdDevPercent,
                             historical: false,
@@ -924,13 +929,13 @@ export function FireSettingsCard({
                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                       {t("fire.gain_fraction_effect")}{" "}
                       {projection && (projection.gainFraction.source === "movements"
-                        ? t("fire.gain_fraction_movements", { pct: formatPercent(Number(projection.gainFraction.percent), locale, 2) })
-                        : t("fire.gain_fraction_manual", { pct: formatPercent(Number(projection.gainFraction.percent), locale, 2) }))}
+                        ? t("fire.gain_fraction_movements", { pct: formatFirePercent(Number(projection.gainFraction.percent), locale, 2) })
+                        : t("fire.gain_fraction_manual", { pct: formatFirePercent(Number(projection.gainFraction.percent), locale, 2) }))}
                     </p>
                     {projection && projection.gainFraction.source === "movements" && projection.gainFraction.uncoveredMonths > 0 && (
                       <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
                         {t("fire.gain_fraction_coverage_warning", {
-                          gain: formatPercent(Number(projection.gainFraction.percent), locale, 2),
+                          gain: formatFirePercent(Number(projection.gainFraction.percent), locale, 2),
                           months: projection.gainFraction.uncoveredMonths,
                         })}
                       </p>
@@ -1006,7 +1011,7 @@ export function FireSettingsCard({
           </AdvancedSection>
 
           {/* 6. Cash-flow events & life phases */}
-          <AdvancedSection title={t("fire.cash_flow_events")} summary={eventsSummary}>
+          <AdvancedSection title={t("fire.cash_flow_events")} summary={eventsSummaryText}>
             <div className="space-y-2">
               <p className="text-xs text-gray-500 dark:text-gray-400">{t("fire.cash_flow_events_help")}</p>
               {form.cashFlowEvents.map((ev, idx) => (
@@ -1075,9 +1080,35 @@ export function FireSettingsCard({
                       {t("common.delete")}
                     </Button>
                   </div>
+                  {eventProblems
+                    .filter((p) => p.index === idx)
+                    .map((p) => (
+                      <p
+                        key={p.problem}
+                        className={cn(
+                          "text-xs sm:col-span-12",
+                          p.problem === "not_simulated" ? "text-red-600 dark:text-red-400" : "text-amber-700 dark:text-amber-300",
+                        )}
+                      >
+                        {p.problem === "not_simulated"
+                          ? t("fire.event_lump_not_simulated", { year: p.firstYear - 1, firstYear: p.firstYear })
+                          : t("fire.event_lump_after_horizon", { horizon: form.targetYear })}
+                      </p>
+                    ))}
                 </div>
               ))}
               <FieldError message={errors.cashFlowEvents} />
+              <div className="flex flex-wrap gap-2">
+              {projection && (
+                <FireEventTemplates
+                  householdId={householdId}
+                  projection={projection}
+                  events={form.cashFlowEvents}
+                  currency={currency}
+                  disabled={ro}
+                  onAdd={(added) => patch({ cashFlowEvents: [...form.cashFlowEvents, ...added] }, ["cashFlowEvents"])}
+                />
+              )}
               <Button
                 variant="secondary"
                 disabled={ro}
@@ -1095,6 +1126,7 @@ export function FireSettingsCard({
               >
                 {t("fire.add_cash_flow_event")}
               </Button>
+              </div>
             </div>
           </AdvancedSection>
         </section>

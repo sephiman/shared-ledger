@@ -32,7 +32,7 @@ describe("FIRE components", () => {
     expect(screen.getByText("Reference")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Adjust spending" })).toHaveAttribute("href", "/fire?tab=settings");
     expect(screen.getByText(/days old/)).toBeInTheDocument();
-    expect(screen.getByText(/Starting from.*2020-01-01/)).toBeInTheDocument();
+    expect(screen.getByText(/Starting from.*1 Jan 2020/)).toBeInTheDocument();
 
     const closeBtn = screen.getByRole("button", { name: /close/i });
     await user.click(closeBtn);
@@ -63,11 +63,14 @@ describe("FIRE components", () => {
     expect(screen.getByText("Preview active (not saved)")).toBeInTheDocument();
     expect(screen.getByText(/Monthly spending/)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /save.*500.*more/i }));
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ monthlyContribution: "1500.00" }));
+    // Same values as the first two rows of "What moves your year most": +€100 a month, 5 % less spending.
+    await user.click(screen.getByRole("button", { name: /save.*100.*more/i }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ monthlyContribution: "1100.00" }));
 
-    await user.click(screen.getByRole("button", { name: /spend 10% less/i }));
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ monthlySpending: "1800.00" }));
+    await user.click(screen.getByRole("button", { name: /spend 5% less/i }));
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ monthlySpending: "1900.00", monthlyEssentialSpending: "1140.00" }),
+    );
 
     await user.click(screen.getByRole("button", { name: "Reset" }));
     await user.click(screen.getByRole("button", { name: "Apply to settings" }));
@@ -127,9 +130,9 @@ describe("FIRE components", () => {
     );
 
     expect(screen.getByText(/What is this page\?/)).toBeInTheDocument();
-    expect(screen.getByText(/You have 25 % of what you need to live off your investments/)).toBeInTheDocument();
+    expect(screen.getByText(/You have 25% of what you need to live off your investments/)).toBeInTheDocument();
     expect(screen.getByText("2039")).toBeInTheDocument();
-    expect(screen.getByText("38 %")).toBeInTheDocument();
+    expect(screen.getByText("38%")).toBeInTheDocument();
     expect(screen.getByText("manual")).toBeInTheDocument();
 
     // Dismiss explainer and check persistence
@@ -153,7 +156,7 @@ describe("FIRE components", () => {
     expect(screen.getByRole("button", { name: "Back to my plan" })).toBeInTheDocument();
     expect(screen.getByText("2039")).toBeInTheDocument();
     expect(screen.getByText("2037")).toBeInTheDocument();
-    expect(screen.getByText("28 %")).toBeInTheDocument();
+    expect(screen.getByText("28%")).toBeInTheDocument();
   });
 
   it("FireChart hides uncertainty band selector, shows toggle groups, and keeps annualized return in How is this calculated?", () => {
@@ -163,7 +166,7 @@ describe("FIRE components", () => {
     expect(screen.getByText(/Other scenarios:/)).toBeInTheDocument();
     expect(screen.getByText(/Other targets:/)).toBeInTheDocument();
     expect(screen.getByText(/How is the projection calculated\?/)).toBeInTheDocument();
-    expect(screen.getByText(/historical actual annualized return is 7\.50 %/)).toBeInTheDocument();
+    expect(screen.getByText(/historical actual annualized return is 7\.50%/)).toBeInTheDocument();
   });
 
   it("FireSettingsCard renders Plan questions, Advanced summaries, and supports manual spending override toggle", async () => {
@@ -173,6 +176,7 @@ describe("FIRE components", () => {
 
     render(
       <FireSettingsCard
+        householdId="h1"
         form={proj.settings}
         errors={{}}
         isOwner={true}
@@ -194,7 +198,7 @@ describe("FIRE components", () => {
     expect(screen.getByText("Which return scenario is your baseline?")).toBeInTheDocument();
 
     // Advanced section summaries
-    expect(screen.getByText("2 · Conservative 4 % · Base 6 %")).toBeInTheDocument();
+    expect(screen.getByText("2 · Conservative 4% · Base 6%")).toBeInTheDocument();
     expect(screen.getByText("30y · ×1.5")).toBeInTheDocument();
     expect(screen.getByText("none")).toBeInTheDocument();
 
@@ -218,6 +222,7 @@ describe("FIRE components", () => {
 
     const { rerender } = render(
       <FireSettingsCard
+        householdId="h1"
         form={proj.settings}
         errors={{}}
         isOwner={true}
@@ -248,15 +253,17 @@ describe("FIRE components", () => {
     // Part B: Restore defaults opens confirmation listing current scenarios and restores seeds + referenceScenarioIndex=1
     await user.click(screen.getByRole("button", { name: "Restore defaults" }));
     expect(screen.getByText("Replace current scenarios with defaults?")).toBeInTheDocument();
-    expect(screen.getByText("Conservative (4 % ±5 %)")).toBeInTheDocument();
+    // The reference-scenario dropdown writes the same text; the confirmation lists it outside an <option>.
+    expect(screen.getAllByText("Conservative (4% ±5%)").some((el) => el.tagName !== "OPTION")).toBe(true);
     await user.click(screen.getByRole("button", { name: "Replace scenarios" }));
     expect(onChange).toHaveBeenCalledWith(
       expect.objectContaining({
         referenceScenarioIndex: 1,
+        // Restored seeds carry no name: the viewer's language supplies it.
         returnScenarios: [
-          { name: "Conservative", meanPercent: "4.0", stdDevPercent: "5.0", historical: false },
-          { name: "Base", meanPercent: "6.5", stdDevPercent: "10.0", historical: false },
-          { name: "Optimistic", meanPercent: "8.5", stdDevPercent: "15.0", historical: false },
+          { name: "", meanPercent: "4.0", stdDevPercent: "5.0", historical: false },
+          { name: "", meanPercent: "6.5", stdDevPercent: "10.0", historical: false },
+          { name: "", meanPercent: "8.5", stdDevPercent: "15.0", historical: false },
         ],
       }),
       undefined,
@@ -273,6 +280,7 @@ describe("FIRE components", () => {
     };
     rerender(
       <FireSettingsCard
+        householdId="h1"
         form={seededSettings}
         errors={{}}
         isOwner={true}
@@ -289,8 +297,8 @@ describe("FIRE components", () => {
     );
     expect(screen.getByText("default")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Details for Base" }));
-    expect(screen.getByText(/Nominal arithmetic mean: 6\.5 %\/yr/)).toBeInTheDocument();
-    expect(screen.getByText(/Typical compound growth: 6\.03 %\/yr/)).toBeInTheDocument();
+    expect(screen.getByText(/Nominal arithmetic mean: 6\.5%\/yr/)).toBeInTheDocument();
+    expect(screen.getByText(/Typical compound growth: 6\.03%\/yr/)).toBeInTheDocument();
     expect(screen.getByText(/Resembles a mixed 60\/40 portfolio\./)).toBeInTheDocument();
   });
 });
@@ -310,6 +318,7 @@ function belowHalfProjection(): FireProjection {
 function renderSettings(proj: FireProjection, form = proj.settings) {
   return render(
     <FireSettingsCard
+      householdId="h1"
       form={form}
       errors={{}}
       isOwner={true}
@@ -390,7 +399,7 @@ describe("FIRE formatting and labels", () => {
   it("photo uses whole euros with a thousands separator and the savings-rate sentence", () => {
     render(<FireHeroStrip projection={makeProjection()} currency="EUR" />);
     expect(screen.getByText("1.000 €")).toBeInTheDocument();
-    expect(screen.getByText("De cada 100 € que entran, guardáis 38")).toBeInTheDocument();
+    expect(screen.getByText("De cada 100 € que entran, guardas 38")).toBeInTheDocument();
   });
 
   it("tier strip shows whole euros and no repeated FIRE-target line", () => {

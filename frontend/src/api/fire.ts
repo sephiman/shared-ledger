@@ -13,6 +13,8 @@ export interface FireCashFlowEvent {
   kind: CashFlowEventKind;
   amount: string;
   label: string;
+  /** The life-event template the event was created from; display only. */
+  template?: string | null;
 }
 
 export interface ReturnScenario {
@@ -93,6 +95,9 @@ export interface FirePreviewRequest {
   safeWithdrawalRatePct?: string | null;
   lumpSum?: string;
   monthlySpending?: string | null;
+  monthlyEssentialSpending?: string | null;
+  returnShiftPct?: string | null;
+  cashFlowEvents?: FireCashFlowEvent[] | null;
 }
 
 export interface FireScenarioOutput {
@@ -129,6 +134,8 @@ export interface FireSpendingBasis {
   lookbackMonths: number;
   aggregation: SpendingAggregationMode;
   excludeCurrentMonth: boolean;
+  /** "YYYY-MM" of the last month with any expense when the window's latest complete months have none. */
+  noSpendingSince: string | null;
 }
 
 export interface FireContributions {
@@ -196,6 +203,9 @@ export function useUpdateFireSettings(householdId: string) {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["fire-settings", householdId] });
       void qc.invalidateQueries({ queryKey: ["fire-projection", householdId] });
+      void qc.invalidateQueries({ queryKey: ["fire-history", householdId] });
+      void qc.invalidateQueries({ queryKey: ["fire-attribution", householdId] });
+      void qc.invalidateQueries({ queryKey: ["fire-levers", householdId] });
     },
   });
 }
@@ -211,5 +221,117 @@ export function useFirePreview(householdId: string) {
   return useMutation({
     mutationFn: async (input: FirePreviewRequest) =>
       (await apiClient.post<FireProjection>(`/households/${householdId}/fire/preview`, input)).data,
+    // A what-if saves nothing, so it must not say "Saved".
+    meta: { silentSuccess: true },
+  });
+}
+
+export type FireLeverKey = "contribute_more" | "spend_less" | "lump_sum" | "safer_withdrawal" | "returns_up" | "returns_down";
+
+export interface FireLeverRow {
+  key: FireLeverKey;
+  outOfYourHands: boolean;
+  /** False when the lever cannot change the reference target (spending levers on an own target). */
+  applicable: boolean;
+  /** The what-if to load when the row is opened. */
+  preview: FirePreviewRequest | null;
+  estimatedYear: number | null;
+  probability: number | null;
+  yearChange: number | null;
+  probabilityChangePoints: number | null;
+  amount: string | null;
+  percent: string | null;
+  withdrawalFromPct: string | null;
+  withdrawalToPct: string | null;
+}
+
+export interface FireLevers {
+  tier: FireTierKey;
+  horizonYear: number;
+  baselineYear: number | null;
+  baselineProbability: number | null;
+  rows: FireLeverRow[];
+}
+
+/** Six sandbox runs, fetched in the background once the photo is on screen; cached by the backend. */
+export function useFireLevers(householdId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["fire-levers", householdId],
+    queryFn: async () => (await apiClient.get<FireLevers>(`/households/${householdId}/fire/levers`)).data,
+    enabled,
+  });
+}
+
+export interface FireTemplateSuggestions {
+  mortgageMonthly: string | null;
+  windowMonths: number;
+}
+
+export function useFireTemplateSuggestions(householdId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["fire-template-suggestions", householdId],
+    queryFn: async () =>
+      (await apiClient.get<FireTemplateSuggestions>(`/households/${householdId}/fire/templates/suggestions`)).data,
+    enabled,
+  });
+}
+
+export type FireHistoryOmissionReason = "insufficient_spending_history" | "no_target" | "beyond_point_limit";
+
+/** The photo as if looked at on `date`: that day's wealth and spending window, today's settings. */
+export interface FireHistoryPoint {
+  date: string;
+  snapshotDate: string;
+  current: boolean;
+  coveragePercent: number;
+  estimatedYear: number | null;
+  probability: number | null;
+  wealth: string;
+  target: string;
+}
+
+/** A change in coverage (percentage points) split into causes that add up exactly. */
+export interface FireAttribution {
+  fromDate: string;
+  toDate: string;
+  merged: boolean;
+  totalPoints: string;
+  contributedPoints: string | null;
+  marketPoints: string | null;
+  wealthPoints: string;
+  needPoints: string;
+  wealthFrom: string;
+  wealthTo: string;
+  targetFrom: string;
+  targetTo: string;
+  contributedAmount: string | null;
+  marketAmount: string | null;
+}
+
+export interface FireHistory {
+  tier: FireTierKey;
+  horizonYear: number;
+  points: FireHistoryPoint[];
+  omitted: { reason: FireHistoryOmissionReason; count: number }[];
+  manualContribution: boolean;
+  manualSpending: boolean;
+  attribution: FireAttribution | null;
+}
+
+/** Computed after the photo, in the background; the backend caches it per settings and data. */
+export function useFireHistory(householdId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["fire-history", householdId],
+    queryFn: async () => (await apiClient.get<FireHistory>(`/households/${householdId}/fire/history`)).data,
+    enabled,
+  });
+}
+
+export function useFireAttribution(householdId: string, from: string | null) {
+  return useQuery({
+    queryKey: ["fire-attribution", householdId, from],
+    queryFn: async () =>
+      (await apiClient.get<FireAttribution>(`/households/${householdId}/fire/history/attribution`, { params: { from } })).data,
+    enabled: from !== null,
   });
 }

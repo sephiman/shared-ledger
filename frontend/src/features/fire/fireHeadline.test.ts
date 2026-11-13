@@ -58,6 +58,7 @@ function baseProjection(): FireProjection {
       lookbackMonths: 12,
       aggregation: "mean",
       excludeCurrentMonth: false,
+      noSpendingSince: null,
     },
     contributions: {
       manualMonthly: "2000.00",
@@ -153,7 +154,7 @@ describe("fireHeadline", () => {
   it("builds coverage clause in EN and ES", async () => {
     const p = baseProjection();
     expect(buildCoverageClause(p, "en", i18n.t.bind(i18n))).toBe(
-      "You have 21 % of what you need to live off your investments.",
+      "You have 21% of what you need to live off your investments.",
     );
 
     await i18n.changeLanguage("es");
@@ -213,7 +214,7 @@ describe("fireHeadline", () => {
       requiredMonthlyToHitTarget: "1558.00",
     });
     expect(buildProjectionClause(p, "EUR", "es", i18n.t.bind(i18n)).replace(/\u00a0/g, " ")).toBe(
-      "Ahorrando 1.400 €/mes con el escenario Base, lo más probable es que no llegues antes de 2046 (39% de probabilidad). " +
+      "Ahorrando 1.400 €/mes con el escenario Base, lo más probable es que no llegues antes de 2046 (39 % de probabilidad). " +
         "Con 158 € más al mes, sí llegarías.",
     );
   });

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { formatPercent } from "@/lib/money";
-import { findMatchingSeedPortfolio, realEquivalentPct, typicalCompoundReturnPct } from "./fireLabels";
+
+import { findMatchingSeedPortfolio, realEquivalentPct, typicalCompoundReturnPct, formatFirePercent } from "./fireLabels";
 
 interface Props {
   name: string;
@@ -41,9 +41,9 @@ export function ScenarioInfo({ name, meanPercent, stdDevPercent, historical, inf
           aria-label={name}
           className="mt-1.5 w-64 rounded-md border border-border bg-surface p-2.5 text-xs font-normal text-gray-700 shadow-sm dark:text-gray-200"
         >
-          <p>{t("fire.scenario_info_nominal_mean", { pct: formatPercent(meanNum, locale, 1) })}</p>
-          <p>{t("fire.scenario_info_compound", { pct: formatPercent(compound, locale, 2) })}</p>
-          <p>{t("fire.scenario_info_real", { inflation: formatPercent(inflationPct, locale, 1), pct: formatPercent(realEq, locale, 2) })}</p>
+          <p>{t("fire.scenario_info_nominal_mean", { pct: formatFirePercent(meanNum, locale, 1) })}</p>
+          <p>{t("fire.scenario_info_compound", { pct: formatFirePercent(compound, locale, 2) })}</p>
+          <p>{t("fire.scenario_info_real", { inflation: formatFirePercent(inflationPct, locale, 1), pct: formatFirePercent(realEq, locale, 2) })}</p>
           {seedPortfolio && (
             <p className="mt-1.5 border-t border-border/60 pt-1.5 text-gray-500 dark:text-gray-400">
               {t(`fire.scenario_seed_portfolio_${seedPortfolio}`)} {t("fire.scenario_seed_convention")}

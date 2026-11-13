@@ -142,6 +142,14 @@ class AppMetrics(private val registry: MeterRegistry) {
             .tag("endpoint", endpoint)
             .register(registry)
 
+    fun fireSectionCache(section: String, outcome: String) {
+        Counter.builder("sl_fire_section_cache_total")
+            .tag("section", section)
+            .tag("outcome", outcome)
+            .register(registry)
+            .increment()
+    }
+
     fun registerActiveSessionsGauge(supplier: () -> Number) {
         io.micrometer.core.instrument.Gauge
             .builder("sl_active_sessions") { supplier().toDouble() }

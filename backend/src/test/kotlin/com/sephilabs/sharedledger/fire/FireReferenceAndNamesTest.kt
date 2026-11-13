@@ -38,13 +38,15 @@ class FireReferenceAndNamesTest @Autowired constructor(
 ) : IntegrationTestBase() {
 
     @Test
-    fun `unsaved household defaults to FIRE tier, middle scenario, and named scenarios`() {
+    fun `unsaved household defaults to FIRE tier, middle scenario, and unnamed scenarios`() {
         val (h, _) = setupHousehold()
         val dto = fireService.settingsDto(h.id)
 
         assertThat(dto.referenceTier).isEqualTo(FireTierKey.fire)
         assertThat(dto.referenceScenarioIndex).isEqualTo(1)
-        assertThat(dto.returnScenarios.map { it.name }).containsExactly("Conservative", "Base", "Optimistic")
+        // Seeds carry no name: the viewer's language supplies Conservative/Base/Optimistic by ascending mean.
+        assertThat(dto.returnScenarios.map { it.name }).containsExactly("", "", "")
+        assertThat(FireDefaults.DEFAULT_RETURN_SCENARIOS.map { it.name }).containsOnly("")
         assertThat(dto.returnScenarios.map { it.meanPercent.toDouble() to it.stdDevPercent.toDouble() })
             .containsExactly(4.0 to 5.0, 6.5 to 10.0, 8.5 to 15.0)
         assertThat(dto.targetYear).isEqualTo(FireDefaults.defaultTargetYear())
@@ -234,6 +236,57 @@ class FireReferenceAndNamesTest @Autowired constructor(
         referenceTier = referenceTier,
         referenceScenarioIndex = referenceScenarioIndex,
     )
+
+    @Test
+    fun `default names in either language are saved as unnamed while a renamed scenario keeps its name`() {
+        val (h, u) = setupHousehold()
+        addSnapshot(h, u, LocalDate.now(), "100000.00")
+        val names = listOf("Conservador", " base ", "OPTIMISTIC", "Escenario 4", "Scenario 5", "Cautious")
+        fireService.update(
+            h.id,
+            baseRequest(
+                scenarios = names.mapIndexed { i, name -> ReturnScenarioInput(BigDecimal(3 + i), BigDecimal("5.0"), name = name) },
+                referenceScenarioIndex = 0,
+            ),
+            u,
+        )
+
+        val unnamed = listOf("", "", "", "", "", "Cautious")
+        assertThat(storedNames(h)).containsExactlyElementsOf(unnamed)
+        assertThat(fireService.settingsDto(h.id).returnScenarios.map { it.name }).containsExactlyElementsOf(unnamed)
+        assertThat(fireService.project(h.id).scenarios.map { it.name }).containsExactlyElementsOf(unnamed)
+    }
+
+    @Test
+    fun `rows stored with a default name read as unnamed and are normalised on the next save`() {
+        val (h, u) = setupHousehold()
+        fireService.update(h.id, baseRequest(scenarios = listOf(ReturnScenarioInput(BigDecimal("4.0"), BigDecimal("5.0")))), u)
+        // A row written before names stopped being stored: no migration touches it.
+        jdbc.update(
+            """UPDATE fire_settings SET return_scenarios = '[
+                {"meanPercent":4.0,"stdDevPercent":5.0,"historical":false,"name":"Conservative"},
+                {"meanPercent":6.5,"stdDevPercent":10.0,"historical":false,"name":"Base"},
+                {"meanPercent":8.5,"stdDevPercent":15.0,"historical":false,"name":"Optimista"}]'::jsonb
+               WHERE household_id = ?""",
+            h.id,
+        )
+
+        assertThat(fireService.settingsDto(h.id).returnScenarios.map { it.name }).containsExactly("", "", "")
+        assertThat(storedNames(h)).containsExactly("Conservative", "Base", "Optimista")
+
+        val dto = fireService.settingsDto(h.id)
+        fireService.update(
+            h.id,
+            baseRequest(scenarios = dto.returnScenarios.map { ReturnScenarioInput(it.meanPercent, it.stdDevPercent, it.historical, it.name) }),
+            u,
+        )
+        assertThat(storedNames(h)).containsExactly("", "", "")
+    }
+
+    private fun storedNames(h: Household): List<String> =
+        objectMapper.readTree(
+            jdbc.queryForObject("SELECT return_scenarios::text FROM fire_settings WHERE household_id = ?", String::class.java, h.id),
+        ).toList().map { it["name"]?.asString() ?: "" }
 
     private fun setupHousehold(): Pair<Household, User> {
         val user = users.save(User(email = "fr${System.nanoTime()}@example.com", passwordHash = "x"))

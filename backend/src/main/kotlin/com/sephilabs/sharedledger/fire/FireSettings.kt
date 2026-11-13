@@ -41,6 +41,8 @@ data class FireCashFlowEvent(
     val kind: CashFlowEventKind = CashFlowEventKind.lump_sum,
     val amount: BigDecimal = BigDecimal.ZERO,
     val label: String = "",
+    /** The life-event template the event came from; display only. */
+    val template: String? = null,
 )
 
 @Entity

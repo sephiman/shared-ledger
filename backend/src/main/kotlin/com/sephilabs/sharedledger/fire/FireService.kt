@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
@@ -37,11 +38,10 @@ class FireService(
     private val transactions: TransactionRepository,
     private val analytics: AnalyticsService,
     private val props: AppProperties,
+    private val clock: Clock,
 ) {
 
     private val log = LoggerFactory.getLogger(javaClass)
-
-    private val rng: SplittableRandom = SplittableRandom()
 
     @Transactional
     fun getOrCreate(householdId: UUID): FireSettings =
@@ -64,7 +64,7 @@ class FireService(
         s.targetAmount = Money.normalize(request.targetAmount)
         s.targetYear = request.targetYear
         s.monthlyContribution = Money.normalize(request.monthlyContribution)
-        s.returnScenarios = normalizeScenarioNames(
+        s.returnScenarios = withoutDefaultNames(
             request.returnScenarios.map {
                 ReturnScenario(
                     meanPercent = it.meanPercent,
@@ -97,14 +97,9 @@ class FireService(
         s.spendingAggregation = request.spendingAggregation
         s.excludeCurrentMonth = request.excludeCurrentMonth
         s.fallbackGainFractionPct = request.fallbackGainFractionPct
-        s.cashFlowEvents = request.cashFlowEvents.map {
-            FireCashFlowEvent(
-                year = it.year,
-                kind = it.kind,
-                amount = Money.normalize(it.amount),
-                label = it.label.trim(),
-            )
-        }
+        val events = request.cashFlowEvents.map { it.toEvent() }
+        requireSimulatedLumpSums(events, snapshots.findLatest(householdId)?.snapshotDate?.year ?: LocalDate.now(clock).year)
+        s.cashFlowEvents = events
         s.updatedByUserId = by.id
         s.updatedAt = Instant.now()
 
@@ -126,12 +121,145 @@ class FireService(
         return s.toDto(request.taxBrackets.map { TaxBracket(Money.normalize(it.lowerBound), it.ratePct) })
     }
 
+    private fun FireCashFlowEventInput.toEvent() = FireCashFlowEvent(
+        year = year,
+        kind = kind,
+        amount = Money.normalize(amount),
+        label = label.trim(),
+        template = template?.trim()?.takeIf { it.isNotEmpty() },
+    )
+
+    /** The engine starts adding one-off amounts the year after the snapshot year, so one dated earlier would be
+     *  saved yet do nothing. */
+    private fun requireSimulatedLumpSums(events: List<FireCashFlowEvent>, startYear: Int) {
+        if (events.any { it.kind == CashFlowEventKind.lump_sum && it.year <= startYear }) {
+            throw AppException.badRequest("FIRE_LUMP_SUM_NOT_SIMULATED", startYear + 1)
+        }
+    }
+
     @Transactional(readOnly = true)
     fun project(householdId: UUID, preview: FirePreviewRequest? = null): FireProjectionResponse {
         val s = getOrCreate(householdId)
+        return photoAsOf(s, liveMoment(householdId), preview)
+    }
+
+    /** The reference tier under the reference scenario in today's photo, optionally with a what-if applied. */
+    @Transactional(readOnly = true)
+    fun referenceReachLive(householdId: UUID, preview: FirePreviewRequest? = null): FireReferenceReach {
+        val s = getOrCreate(householdId)
+        return referenceReach(s, photoInputs(s, liveMoment(householdId), preview), simulateIncompleteWindow = true)
+    }
+
+    /** The same figures as if looked at on `snapshot`'s date: its wealth, windows ending then, today's settings. */
+    @Transactional(readOnly = true)
+    fun referenceReachAt(householdId: UUID, snapshot: Snapshot, snapshotsUpTo: List<Snapshot>): FireReferenceReach {
+        val s = getOrCreate(householdId)
+        val inputs = photoInputs(s, PhotoMoment(snapshot.snapshotDate, snapshot, snapshotsUpTo), null)
+        return referenceReach(s, inputs, simulateIncompleteWindow = false)
+    }
+
+    /** Net qualifying contributions in (after, upTo], and the date recording of qualifying movements began. */
+    @Transactional(readOnly = true)
+    fun qualifyingFlows(householdId: UUID, after: LocalDate, upTo: LocalDate): FireQualifyingFlows {
+        val qualifying = getOrCreate(householdId).qualifyingAssetClasses.toSet()
+        val all = movements.findInRange(householdId, FireDefaults.EARLIEST_DATA_DATE, upTo)
+            .filter { it.type != MovementType.debt_payment && it.assetClassCode != null && it.assetClassCode in qualifying }
+        val inRange = all.filter { it.movementDate.isAfter(after) }
+        return FireQualifyingFlows(
+            net = Money.normalize(inRange.fold(BigDecimal.ZERO) { acc, m -> acc + m.signedAmount() }),
+            count = inRange.size,
+            firstMovementDate = all.minOfOrNull { it.movementDate },
+        )
+    }
+
+    private fun referenceReach(s: FireSettings, inputs: PhotoInputs, simulateIncompleteWindow: Boolean): FireReferenceReach {
+        val tier = inputs.tiers.first { it.key == s.referenceTier }
+        val scenarioIndex = resolveReferenceScenarioIndex(s.referenceScenarioIndex.toInt(), inputs.scenarios)
+        val scenario = inputs.scenarios.getOrNull(scenarioIndex)
+        val spendingMode = when (tier.key) {
+            FireTierKey.lean -> inputs.spending.essentialMode
+            FireTierKey.fire, FireTierKey.fat -> inputs.spending.totalMode
+            FireTierKey.custom -> SpendingBaseMode.manual
+        }
+        val spendingDerived = spendingMode == SpendingBaseMode.derived
+        val windowComplete = !spendingDerived || inputs.spending.monthsAvailable >= inputs.spending.lookbackMonths
+        val simulate = scenario != null && tier.enabled && tier.targetToday != null && (windowComplete || simulateIncompleteWindow)
+        val reach = scenario?.takeIf { simulate }?.let {
+            inputs.engine.reach(it, inputs.monthlyContribution, inputs.trials, ScenarioRandomStreams(scenarioIndex))[tier.key]
+        }
+        return FireReferenceReach(
+            tier = tier.key,
+            horizonYear = inputs.targetYear.toInt(),
+            wealth = Money.normalize(inputs.startingValue),
+            target = tier.targetToday,
+            coveragePercent = tier.coveragePercent,
+            estimatedYear = reach?.estimatedYear,
+            probability = reach?.probability,
+            spendingDerived = spendingDerived,
+            spendingMonthsAvailable = inputs.spending.monthsAvailable,
+            spendingLookbackMonths = inputs.spending.lookbackMonths,
+            contributionMode = inputs.contributions.mode,
+            monthlyContribution = inputs.contributions.activeMonthly ?: Money.normalize(BigDecimal.ZERO),
+            totalMonthlySpending = inputs.spending.totalMonthly,
+            essentialMonthlySpending = inputs.spending.essentialMonthly,
+            safeWithdrawalRatePct = inputs.swrPct,
+        )
+    }
+
+    /** The photo taken today: windows end now and wealth is the latest snapshot. */
+    private fun liveMoment(householdId: UUID): PhotoMoment =
+        PhotoMoment(
+            date = LocalDate.now(clock),
+            snapshot = snapshots.findLatest(householdId),
+            snapshotsUpTo = snapshots.findAllOrdered(householdId),
+        )
+
+    private fun photoAsOf(s: FireSettings, moment: PhotoMoment, preview: FirePreviewRequest?): FireProjectionResponse {
+        val inputs = photoInputs(s, moment, preview)
+        val qualifying = inputs.qualifying
+        val orderedSnapshots = moment.snapshotsUpTo
+        val (actualReturn, unavailableReason) =
+            computeActualReturn(orderedSnapshots, inputs.movements, qualifying, inputs.uncoveredMonths)
+        val historicalScenario =
+            if (actualReturn != null) computeHistoricalScenario(orderedSnapshots, inputs.movements, qualifying) else null
+
+        val scenarios = inputs.scenarios.mapIndexed { index, scenario ->
+            inputs.engine.buildScenarioOutput(scenario, inputs.monthlyContribution, inputs.trials, ScenarioRandomStreams(index))
+        }
+
+        val effectiveSettings = s.toDto(inputs.brackets).copy(
+            targetYear = inputs.targetYear,
+            safeWithdrawalRatePct = inputs.swrPct,
+            contributionMode = inputs.contributions.mode,
+            monthlyContribution = inputs.contributions.manualMonthly,
+        )
+
+        return FireProjectionResponse(
+            startYear = inputs.startYear,
+            startingValue = Money.normalize(inputs.startingValue),
+            snapshotDate = moment.snapshot?.snapshotDate,
+            settings = effectiveSettings,
+            spending = inputs.spending,
+            contributions = inputs.contributions,
+            gainFraction = inputs.gainFraction,
+            actualReturn = actualReturn,
+            actualReturnUnavailableReason = unavailableReason,
+            historicalScenario = historicalScenario,
+            suggestedScenario = suggestScenarioFromAssetMix(moment.snapshot, qualifying),
+            tiers = inputs.tiers,
+            scenarios = scenarios,
+            historicalWealth = historicalWealth(orderedSnapshots, qualifying, inputs.startYear),
+            cumulativeContributions = historicalCumulativeContributions(inputs.movements),
+            monteCarloTrials = inputs.trials,
+        )
+    }
+
+    /** Everything a projection is built from, as seen on `moment.date`, with today's settings and any what-if applied. */
+    private fun photoInputs(s: FireSettings, moment: PhotoMoment, preview: FirePreviewRequest?): PhotoInputs {
+        val householdId = s.householdId
         val brackets = effectiveBrackets(householdId)
         val qualifying = s.qualifyingAssetClasses.toSet()
-        val today = LocalDate.now()
+        val asOf = moment.date
 
         val effectiveTargetYear = preview?.targetYear ?: s.targetYear
         val effectiveSwrPct = preview?.safeWithdrawalRatePct ?: s.safeWithdrawalRatePct
@@ -139,43 +267,31 @@ class FireService(
         val effectiveManualContrib = Money.normalize(preview?.monthlyContribution ?: s.monthlyContribution)
         val lumpSum = Money.normalize(preview?.lumpSum ?: BigDecimal.ZERO)
 
-        val latest = snapshots.findLatest(householdId)
-        val rawStartingValue = qualifyingTotal(latest, qualifying)
+        val snapshot = moment.snapshot
+        val rawStartingValue = qualifyingTotal(snapshot, qualifying)
         val startingValue = rawStartingValue + lumpSum
-        val startYear = latest?.snapshotDate?.year ?: today.year
+        val startYear = snapshot?.snapshotDate?.year ?: asOf.year
         val years = (effectiveTargetYear.toInt() - startYear).coerceAtLeast(0)
         val trials = props.fire.monteCarloTrials.coerceAtLeast(1)
 
         val inflation = s.expectedInflationPct.toDouble() / 100.0
         val swr = effectiveSwrPct.toDouble() / 100.0
 
-        // Spending bases — derived live over the configured lookback window unless
+        // Spending bases — derived over the configured lookback window ending at the moment's month unless
         // a manual override (or what-if preview) is active; the effective values feed everything downstream.
-        val endMonth = if (s.excludeCurrentMonth) YearMonth.now().minusMonths(1) else YearMonth.now()
-        val lookback = s.spendingLookbackMonths.toInt().coerceIn(1, 120)
-        val spendingWindow = MonthWindow(endMonth.minusMonths((lookback - 1).toLong()), endMonth)
-        val col = analytics.costOfLiving(
-            householdId,
-            endMonth,
-            spendingWindow,
-            useMedian = s.spendingAggregation == SpendingAggregationMode.median,
-        )
-        val spending = resolveSpendingBasis(s, col, preview)
+        val spending = resolveSpendingBasis(s, spendingAsOf(s, YearMonth.from(asOf)), preview)
+            .copy(noSpendingSince = noSpendingSince(s, YearMonth.from(asOf)))
 
         // Qualifying movements since inception, oldest first (repository returns newest first).
-        val allMovements = movements.findInRange(householdId, FireDefaults.EARLIEST_DATA_DATE, today)
+        val allMovements = movements.findInRange(householdId, FireDefaults.EARLIEST_DATA_DATE, asOf)
             .filter { it.type != MovementType.debt_payment && it.assetClassCode != null && it.assetClassCode in qualifying }
             .sortedBy { it.movementDate }
 
-        val contributions = deriveContributions(householdId, effectiveManualContrib, effectiveMode, allMovements)
+        val asOfMonth = YearMonth.from(asOf)
+        val contributions = deriveContributions(householdId, effectiveManualContrib, effectiveMode, allMovements, asOfMonth)
         val monthlyContribution = (contributions.activeMonthly ?: BigDecimal.ZERO).toDouble()
 
-        val orderedSnapshots = snapshots.findAllOrdered(householdId)
-        val uncoveredMonths = uncoveredMovementMonths(orderedSnapshots, allMovements)
-        val (actualReturn, unavailableReason) = computeActualReturn(orderedSnapshots, allMovements, qualifying, uncoveredMonths)
-        val historicalScenario =
-            if (actualReturn != null) computeHistoricalScenario(orderedSnapshots, allMovements, qualifying) else null
-
+        val uncoveredMonths = uncoveredMovementMonths(moment.snapshotsUpTo, allMovements)
         val baseGainFraction = deriveGainFraction(s, rawStartingValue, allMovements, uncoveredMonths)
         val gainFraction = if (lumpSum.signum() > 0 && startingValue.signum() > 0) {
             val baseGainAmount = rawStartingValue.multiply(baseGainFraction.percent).divide(BigDecimal(100), 6, RoundingMode.HALF_EVEN)
@@ -186,8 +302,10 @@ class FireService(
         }
         val gainFractionRatio = gainFraction.percent.toDouble() / 100.0
 
+        val cashFlowEvents = preview?.cashFlowEvents?.map { it.toEvent() } ?: s.cashFlowEvents
         val tiers = buildTiers(
             s = s,
+            cashFlowEvents = cashFlowEvents,
             spending = spending,
             startingValue = startingValue,
             brackets = brackets,
@@ -211,40 +329,88 @@ class FireService(
             indexContribution = s.indexContribution,
             indexTaxBrackets = s.indexTaxBrackets,
             drawdownYears = s.drawdownYears.toInt().coerceIn(1, 80),
-            cashFlowEvents = s.cashFlowEvents,
+            cashFlowEvents = cashFlowEvents,
         )
 
-        val namedScenarios = normalizeScenarioNames(s.returnScenarios)
-        val scenarios = namedScenarios.map { scenario ->
-            engine.buildScenarioOutput(scenario, monthlyContribution, trials, rng)
-        }
-
-        val effectiveSettings = s.toDto(brackets).copy(
+        val returnShift = preview?.returnShiftPct ?: BigDecimal.ZERO
+        return PhotoInputs(
+            brackets = brackets,
+            qualifying = qualifying,
             targetYear = effectiveTargetYear,
-            safeWithdrawalRatePct = effectiveSwrPct,
-            contributionMode = effectiveMode,
-            monthlyContribution = effectiveManualContrib,
-        )
-
-        return FireProjectionResponse(
+            swrPct = effectiveSwrPct,
+            startingValue = startingValue,
             startYear = startYear,
-            startingValue = Money.normalize(startingValue),
-            snapshotDate = latest?.snapshotDate,
-            settings = effectiveSettings,
+            trials = trials,
             spending = spending,
+            movements = allMovements,
             contributions = contributions,
+            monthlyContribution = monthlyContribution,
+            uncoveredMonths = uncoveredMonths,
             gainFraction = gainFraction,
-            actualReturn = actualReturn,
-            actualReturnUnavailableReason = unavailableReason,
-            historicalScenario = historicalScenario,
-            suggestedScenario = suggestScenarioFromAssetMix(latest, qualifying),
             tiers = tiers,
-            scenarios = scenarios,
-            historicalWealth = historicalWealth(orderedSnapshots, qualifying, startYear),
-            cumulativeContributions = historicalCumulativeContributions(allMovements),
-            monteCarloTrials = trials,
+            engine = engine,
+            scenarios = withoutDefaultNames(s.returnScenarios).map {
+                if (returnShift.signum() == 0) it else it.copy(meanPercent = it.meanPercent + returnShift)
+            },
         )
     }
+
+    /** Today's spending window as the photo uses it, category by category. */
+    @Transactional(readOnly = true)
+    fun currentSpendingWindow(householdId: UUID): CostOfLivingResponse =
+        spendingAsOf(getOrCreate(householdId), YearMonth.now(clock))
+
+    /** The last month with any expense when the window's latest STALE_SPENDING_MONTHS complete months have none:
+     *  transactions stopped coming in, so a derived target counts empty months and is probably understated. */
+    private fun noSpendingSince(s: FireSettings, asOfMonth: YearMonth): YearMonth? {
+        val derived = s.totalSpendingMode == SpendingBaseMode.derived || s.essentialSpendingMode == SpendingBaseMode.derived
+        if (!derived) return null
+        val windowEnd = if (s.excludeCurrentMonth) asOfMonth.minusMonths(1) else asOfMonth
+        // The month the moment falls in is still open, so it neither proves nor disproves anything — unless it has spending.
+        val lastComplete = if (windowEnd == asOfMonth) asOfMonth.minusMonths(1) else windowEnd
+        val firstChecked = lastComplete.minusMonths(FireDefaults.STALE_SPENDING_MONTHS - 1L)
+        val lastExpense = transactions.lastDateOf(s.householdId, Direction.expense, windowEnd.atEndOfMonth()) ?: return null
+        return YearMonth.from(lastExpense).takeIf { it.isBefore(firstChecked) }
+    }
+
+    /** Derived cost of living over the configured window ending at `asOfMonth` (or the month before it). */
+    private fun spendingAsOf(s: FireSettings, asOfMonth: YearMonth): CostOfLivingResponse {
+        val endMonth = if (s.excludeCurrentMonth) asOfMonth.minusMonths(1) else asOfMonth
+        val lookback = s.spendingLookbackMonths.toInt().coerceIn(1, 120)
+        val spendingWindow = MonthWindow(endMonth.minusMonths((lookback - 1).toLong()), endMonth)
+        return analytics.costOfLiving(
+            s.householdId,
+            endMonth,
+            spendingWindow,
+            useMedian = s.spendingAggregation == SpendingAggregationMode.median,
+        )
+    }
+
+    /** When a photo is taken: the date its windows end at, its snapshot, and the snapshots known by then (oldest first). */
+    private class PhotoMoment(
+        val date: LocalDate,
+        val snapshot: Snapshot?,
+        val snapshotsUpTo: List<Snapshot>,
+    )
+
+    private class PhotoInputs(
+        val brackets: List<TaxBracket>,
+        val qualifying: Set<String>,
+        val targetYear: Short,
+        val swrPct: BigDecimal,
+        val startingValue: BigDecimal,
+        val startYear: Int,
+        val trials: Int,
+        val spending: FireSpendingBasis,
+        val movements: List<NetWorthMovement>,
+        val contributions: FireContributions,
+        val monthlyContribution: Double,
+        val uncoveredMonths: Int,
+        val gainFraction: FireGainFraction,
+        val tiers: List<FireTierOutput>,
+        val engine: SimulationEngine,
+        val scenarios: List<ReturnScenario>,
+    )
 
     // ---------------------------------------------------------------------------------------
     // Settings helpers
@@ -267,7 +433,8 @@ class FireService(
         } else {
             col.totalMonthlyAverage
         }
-        val baseEssential = if (s.essentialSpendingMode == SpendingBaseMode.manual) {
+        val previewEssential = preview?.monthlyEssentialSpending?.let { Money.normalize(it) }
+        val baseEssential = previewEssential ?: if (s.essentialSpendingMode == SpendingBaseMode.manual) {
             Money.normalize(s.manualEssentialSpending)
         } else {
             col.essentialMonthlyAverage
@@ -278,7 +445,7 @@ class FireService(
             totalMonthly = totalMonthly,
             derivedEssentialMonthly = col.essentialMonthlyAverage,
             derivedTotalMonthly = col.totalMonthlyAverage,
-            essentialMode = s.essentialSpendingMode,
+            essentialMode = if (previewEssential != null) SpendingBaseMode.manual else s.essentialSpendingMode,
             totalMode = if (previewTotal != null) SpendingBaseMode.manual else s.totalSpendingMode,
             monthsAvailable = col.monthsAvailable,
             lookbackMonths = s.spendingLookbackMonths.toInt().coerceIn(1, 120),
@@ -288,7 +455,7 @@ class FireService(
     }
 
     private fun FireSettings.toDto(brackets: List<TaxBracket>): FireSettingsDto {
-        val named = normalizeScenarioNames(returnScenarios)
+        val named = withoutDefaultNames(returnScenarios)
         return FireSettingsDto(
             targetAmount = targetAmount,
             targetYear = targetYear,
@@ -316,28 +483,19 @@ class FireService(
             excludeCurrentMonth = excludeCurrentMonth,
             fallbackGainFractionPct = fallbackGainFractionPct,
             taxBrackets = brackets.map { TaxBracketDto(it.lowerBound, it.ratePct) },
-            cashFlowEvents = cashFlowEvents.map { FireCashFlowEventDto(it.year, it.kind, it.amount, it.label) },
+            cashFlowEvents = cashFlowEvents.map { FireCashFlowEventDto(it.year, it.kind, it.amount, it.label, it.template) },
             referenceTier = referenceTier,
             referenceScenarioIndex = resolveReferenceScenarioIndex(referenceScenarioIndex.toInt(), named),
         )
     }
 
-    private fun normalizeScenarioNames(scenarios: List<ReturnScenario>): List<ReturnScenario> {
-        if (scenarios.all { it.name.isNotBlank() }) return scenarios
-        val sortedIndices = scenarios.indices.sortedWith(compareBy({ scenarios[it].meanPercent }, { it }))
-        val rankByIndex = IntArray(scenarios.size)
-        sortedIndices.forEachIndexed { rank, origIdx -> rankByIndex[origIdx] = rank + 1 }
-        return scenarios.mapIndexed { idx, sc ->
-            if (sc.name.isNotBlank()) sc else sc.copy(name = defaultScenarioName(rankByIndex[idx]))
+    /** Only a custom name is a name: blank, or a default name in any language, means "unnamed" and the UI shows the
+     *  localized default for the scenario's rank by mean. Applied on read and on save, so old rows normalise lazily. */
+    private fun withoutDefaultNames(scenarios: List<ReturnScenario>): List<ReturnScenario> =
+        scenarios.map { sc ->
+            val name = sc.name.trim().takeUnless { FireDefaults.isDefaultScenarioName(it) }.orEmpty()
+            if (name == sc.name) sc else sc.copy(name = name)
         }
-    }
-
-    private fun defaultScenarioName(rank: Int): String = when (rank) {
-        1 -> "Conservative"
-        2 -> "Base"
-        3 -> "Optimistic"
-        else -> "Scenario $rank"
-    }
 
     private fun resolveReferenceScenarioIndex(requested: Int, scenarios: List<ReturnScenario>): Int {
         if (requested in scenarios.indices) return requested
@@ -367,10 +525,11 @@ class FireService(
         manualMonthly: BigDecimal,
         mode: ContributionMode,
         allMovements: List<NetWorthMovement>,
+        asOf: YearMonth,
     ): FireContributions {
         val manual = Money.normalize(manualMonthly)
-        val (savings, savingsRatePct) = deriveSavingsMonthly(householdId)
-        val fromMovements = deriveMovementsMonthly(allMovements)
+        val (savings, savingsRatePct) = deriveSavingsMonthly(householdId, asOf)
+        val fromMovements = deriveMovementsMonthly(allMovements, asOf)
         val active = when (mode) {
             ContributionMode.manual -> manual
             ContributionMode.savings -> savings
@@ -387,8 +546,7 @@ class FireService(
     }
 
     /** Trailing-12 monthly average of (income − expenses) and savings rate %, same month-count convention as cost of living. */
-    private fun deriveSavingsMonthly(householdId: UUID): Pair<BigDecimal?, Double?> {
-        val asOf = YearMonth.now()
+    private fun deriveSavingsMonthly(householdId: UUID, asOf: YearMonth): Pair<BigDecimal?, Double?> {
         val minDate = transactions.dateBounds(householdId).minDate ?: return null to null
         val months = (ChronoUnit.MONTHS.between(YearMonth.from(minDate), asOf).toInt() + 1)
             .coerceIn(0, FireDefaults.TRAILING_WINDOW_MONTHS)
@@ -410,9 +568,8 @@ class FireService(
     }
 
     /** Trailing-12 monthly average of net contributions (contributions − withdrawals) into qualifying classes. */
-    private fun deriveMovementsMonthly(allMovements: List<NetWorthMovement>): BigDecimal? {
+    private fun deriveMovementsMonthly(allMovements: List<NetWorthMovement>, asOf: YearMonth): BigDecimal? {
         if (allMovements.isEmpty()) return null
-        val asOf = YearMonth.now()
         val firstMonth = YearMonth.from(allMovements.first().movementDate)
         val months = (ChronoUnit.MONTHS.between(firstMonth, asOf).toInt() + 1)
             .coerceIn(1, FireDefaults.TRAILING_WINDOW_MONTHS)
@@ -602,6 +759,7 @@ class FireService(
 
     private fun buildTiers(
         s: FireSettings,
+        cashFlowEvents: List<FireCashFlowEvent>,
         spending: FireSpendingBasis,
         startingValue: BigDecimal,
         brackets: List<TaxBracket>,
@@ -625,7 +783,7 @@ class FireService(
             val annualNetD = annualNet.toDouble()
             val annualGrossD = if (taxOn) compiled.grossUp(annualNetD, gainFractionRatio) else annualNetD
             val targetTodayD = annualGrossD / swr
-            val spendingDeltas = s.cashFlowEvents.filter { it.kind == CashFlowEventKind.spending_delta }
+            val spendingDeltas = cashFlowEvents.filter { it.kind == CashFlowEventKind.spending_delta }
             val curve = (0..years).map { y ->
                 val calYear = startYear + y
                 val deltaAnnual = spendingDeltas.filter { it.year <= calYear }.sumOf { it.amount.toDouble() * 12.0 }
@@ -900,12 +1058,15 @@ class FireService(
             scenario: ReturnScenario,
             monthlyContribution: Double,
             trials: Int,
-            rng: SplittableRandom,
+            returnsRng: SplittableRandom,
+            drawdownRng: SplittableRandom,
             collectPercentiles: Boolean,
         ): McStats {
             val mean = scenario.meanPercent.toDouble() / 100.0
             val stdDev = scenario.stdDevPercent.toDouble() / 100.0
-            val sampleReturn = logNormalSampler(mean, stdDev, rng)
+            val sampleReturn = logNormalSampler(mean, stdDev, returnsRng)
+            // Drawdown draws come from their own stream, so a run without drawdown sees identical accumulation paths.
+            val sampleDrawdownReturn = logNormalSampler(mean, stdDev, drawdownRng)
             val columns = if (collectPercentiles) Array(years + 1) { DoubleArray(trials) } else null
             val hitYears = Array(tierKeys.size) { IntArray(trials) }
             val survivedCounts = IntArray(tierKeys.size)
@@ -922,7 +1083,7 @@ class FireService(
                     hitYears[t][trial] = path.hitYears[t]
                     if (collectPercentiles && path.hitIdx[t] >= 0) {
                         hitCounts[t]++
-                        if (simulateDrawdown(t, path.hitIdx[t], path.hitValues[t], path.hitCostBases[t], sampleReturn, scratchDrawdown, scratchDrawdownReal)) {
+                        if (simulateDrawdown(t, path.hitIdx[t], path.hitValues[t], path.hitCostBases[t], sampleDrawdownReturn, scratchDrawdown, scratchDrawdownReal)) {
                             survivedCounts[t]++
                         }
                         drawdownPaths!![t].add(scratchDrawdown.copyOf())
@@ -968,6 +1129,19 @@ class FireService(
             return McStats(percentiles, probability, medianHitYearAmongReaching, estimatedYear, survivalRate, drawdownPercentiles, drawdownRealPercentiles)
         }
 
+        /** Odds and estimated year per tier only — same draws as `buildScenarioOutput`'s accumulation run. */
+        fun reach(
+            scenario: ReturnScenario,
+            monthlyContribution: Double,
+            trials: Int,
+            streams: ScenarioRandomStreams,
+        ): Map<FireTierKey, TierReach> {
+            val mc = monteCarlo(scenario, monthlyContribution, trials, streams.returns(), streams.drawdown(), collectPercentiles = false)
+            return tierKeys.indices.associate { t -> tierKeys[t] to TierReach(mc.probability[t], mc.estimatedYear[t]) }
+        }
+
+        class TierReach(val probability: Double, val estimatedYear: Int?)
+
         private fun computeDrawdownPercentiles(paths: List<DoubleArray>): List<FireScenarioPercentiles> =
             (0..drawdownYears).map { k ->
                 val col = DoubleArray(paths.size) { idx -> paths[idx][k] }
@@ -986,12 +1160,12 @@ class FireService(
             scenario: ReturnScenario,
             monthlyContribution: Double,
             trials: Int,
-            rng: SplittableRandom,
+            streams: ScenarioRandomStreams,
         ): FireScenarioOutput {
             val mean = scenario.meanPercent.toDouble() / 100.0
             val deterministic = simulatePath(monthlyContribution) { mean }
-            val mc = monteCarlo(scenario, monthlyContribution, trials, rng, collectPercentiles = true)
-            val coast = monteCarlo(scenario, 0.0, trials, rng, collectPercentiles = false)
+            val mc = monteCarlo(scenario, monthlyContribution, trials, streams.returns(), streams.drawdown(), collectPercentiles = true)
+            val coast = monteCarlo(scenario, 0.0, trials, streams.coast(), streams.drawdown(), collectPercentiles = false)
 
             val growthFactor = (1.0 + mean).pow(years)
             return FireScenarioOutput(

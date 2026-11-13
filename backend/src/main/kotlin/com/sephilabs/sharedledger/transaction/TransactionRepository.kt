@@ -129,6 +129,17 @@ interface TransactionRepository :
     """)
     fun dateBounds(@Param("hid") householdId: UUID): MinMaxDateRow
 
+    @Query("""
+        SELECT MAX(t.occurrenceDate)
+        FROM Transaction t
+        WHERE t.householdId = :hid AND t.direction = :direction AND t.occurrenceDate <= :upTo
+    """)
+    fun lastDateOf(
+        @Param("hid") householdId: UUID,
+        @Param("direction") direction: Direction,
+        @Param("upTo") upTo: LocalDate,
+    ): LocalDate?
+
     /** Latest occurrence date actually produced by each template — the ground truth for "last fired". A
      *  template that scanned forward without generating anything simply has no row here. */
     @Query("""

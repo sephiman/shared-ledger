@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import i18n from "@/i18n";
 import {
+  scenarioDisplayName,
+  formatFirePercent,
   formatHitProbability,
   formatMultiplier,
   estimatedYearText,
@@ -9,21 +11,32 @@ import {
   typicalCompoundReturnPct,
 } from "./fireLabels";
 
+describe("formatFirePercent", () => {
+  it("follows the locale's spacing: 65% in English, 65 % in Spanish", () => {
+    expect(formatFirePercent(65, "en")).toBe("65%");
+    expect(formatFirePercent(65, "es")).toBe("65 %");
+    expect(formatFirePercent(3.5, "en", 1)).toBe("3.5%");
+    expect(formatFirePercent(3.5, "es", 1)).toBe("3,5 %");
+  });
+});
+
 describe("formatHitProbability", () => {
   it("shows 0% only when nobody reaches the target", () => {
-    expect(formatHitProbability(0)).toBe("0%");
+    expect(formatHitProbability(0, "en")).toBe("0%");
   });
 
   it("shows <1% for a positive probability that rounds below 1%", () => {
-    expect(formatHitProbability(0.004)).toBe("<1%"); // 0.4%
-    expect(formatHitProbability(0.0001)).toBe("<1%"); // 0.01%
+    expect(formatHitProbability(0.004, "en")).toBe("<1%"); // 0.4%
+    expect(formatHitProbability(0.0001, "en")).toBe("<1%"); // 0.01%
+    expect(formatHitProbability(0.004, "es")).toBe("<1 %");
   });
 
   it("rounds to an integer percent from 0.5% up", () => {
-    expect(formatHitProbability(0.005)).toBe("1%"); // 0.5% rounds up
-    expect(formatHitProbability(0.006)).toBe("1%");
-    expect(formatHitProbability(0.5)).toBe("50%");
-    expect(formatHitProbability(1)).toBe("100%");
+    expect(formatHitProbability(0.005, "en")).toBe("1%"); // 0.5% rounds up
+    expect(formatHitProbability(0.006, "en")).toBe("1%");
+    expect(formatHitProbability(0.5, "en")).toBe("50%");
+    expect(formatHitProbability(1, "en")).toBe("100%");
+    expect(formatHitProbability(0.65, "es")).toBe("65 %");
   });
 });
 
@@ -68,5 +81,37 @@ describe("formatMultiplier", () => {
     expect(formatMultiplier("1.50", "en")).toBe("1.5");
     expect(formatMultiplier("2.00", "es")).toBe("2");
     expect(formatMultiplier("1.25", "es")).toBe("1,25");
+  });
+});
+
+describe("scenarioDisplayName", () => {
+  const unnamed = (mean: string) => ({ name: "", meanPercent: mean, stdDevPercent: "10.0", historical: false });
+  // Listed out of order: defaults follow the ascending mean, not the position.
+  const scenarios = [unnamed("8.5"), unnamed("4.0"), unnamed("6.5"), unnamed("10.0")];
+
+  it("names unnamed scenarios by ascending mean in the viewer's language", async () => {
+    await i18n.changeLanguage("en");
+    expect(scenarios.map((_, i) => scenarioDisplayName(scenarios, i, i18n.t))).toEqual([
+      "Optimistic",
+      "Conservative",
+      "Base",
+      "Scenario 4",
+    ]);
+    await i18n.changeLanguage("es");
+    expect(scenarios.map((_, i) => scenarioDisplayName(scenarios, i, i18n.t))).toEqual([
+      "Optimista",
+      "Conservador",
+      "Base",
+      "Escenario 4",
+    ]);
+  });
+
+  it("keeps a name the household gave, in every language", async () => {
+    const renamed = [{ ...scenarios[0], name: " Mi cartera " }, ...scenarios.slice(1)];
+    await i18n.changeLanguage("en");
+    expect(scenarioDisplayName(renamed, 0, i18n.t)).toBe("Mi cartera");
+    expect(scenarioDisplayName(renamed, 2, i18n.t)).toBe("Base");
+    await i18n.changeLanguage("es");
+    expect(scenarioDisplayName(renamed, 0, i18n.t)).toBe("Mi cartera");
   });
 });

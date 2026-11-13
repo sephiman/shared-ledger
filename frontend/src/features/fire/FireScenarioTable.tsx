@@ -130,9 +130,9 @@ export function FireScenarioTable({
                   <tr key={`${s.meanPercent}_${s.stdDevPercent}_${sIdx}`} className="border-t border-border">
                     <td className="py-2.5 pr-3 align-top">
                       <div className="flex items-center gap-1.5 font-medium text-gray-900 dark:text-gray-100" title={s.historical ? t("fire.historical_tooltip") : undefined}>
-                        <span>{scenarioDisplayName(s, sIdx, t)}</span>
+                        <span>{scenarioDisplayName(projection.scenarios, sIdx, t)}</span>
                         <ScenarioInfo
-                          name={scenarioDisplayName(s, sIdx, t)}
+                          name={scenarioDisplayName(projection.scenarios, sIdx, t)}
                           meanPercent={s.meanPercent}
                           stdDevPercent={s.stdDevPercent}
                           historical={s.historical}
@@ -162,8 +162,8 @@ export function FireScenarioTable({
                       if (mode === "reach") {
                         const year = yearText(stat.estimatedYear);
                         const baseYear = baseYearText(baseStat);
-                        const prob = formatHitProbability(stat.probabilityOfReachingTarget);
-                        const baseProb = baseStat ? formatHitProbability(baseStat.probabilityOfReachingTarget) : null;
+                        const prob = formatHitProbability(stat.probabilityOfReachingTarget, locale);
+                        const baseProb = baseStat ? formatHitProbability(baseStat.probabilityOfReachingTarget, locale) : null;
                         const req = stat.requiredMonthlyToHitTarget !== null ? Number(stat.requiredMonthlyToHitTarget) : null;
                         const shortfall = req !== null ? req - activeMonthly : null;
 
@@ -190,9 +190,9 @@ export function FireScenarioTable({
                       if (mode === "lasts") {
                         const year = yearText(stat.estimatedYear);
                         const baseYear = baseYearText(baseStat);
-                        const surv = stat.drawdownSurvivalRate !== null ? formatHitProbability(stat.drawdownSurvivalRate) : "—";
+                        const surv = stat.drawdownSurvivalRate !== null ? formatHitProbability(stat.drawdownSurvivalRate, locale) : "—";
                         const baseSurv =
-                          baseStat?.drawdownSurvivalRate != null ? formatHitProbability(baseStat.drawdownSurvivalRate) : null;
+                          baseStat?.drawdownSurvivalRate != null ? formatHitProbability(baseStat.drawdownSurvivalRate, locale) : null;
 
                         return (
                           <td key={tk} className={cellClass}>
@@ -218,8 +218,8 @@ export function FireScenarioTable({
                       const baseCoastTarget = baseStat?.coastTargetToday
                         ? formatWholeMoney(baseStat.coastTargetToday, currency, locale)
                         : null;
-                      const coastProb = formatHitProbability(stat.coastProbabilityOfReachingTarget);
-                      const baseCoastProb = baseStat ? formatHitProbability(baseStat.coastProbabilityOfReachingTarget) : null;
+                      const coastProb = formatHitProbability(stat.coastProbabilityOfReachingTarget, locale);
+                      const baseCoastProb = baseStat ? formatHitProbability(baseStat.coastProbabilityOfReachingTarget, locale) : null;
                       const coastYear = yearText(stat.coastEstimatedYear);
 
                       return (
@@ -253,7 +253,7 @@ export function FireScenarioTable({
           {refScenario && refYear !== null && (
             <p>
               {t("fire.matrix_explain_answer", {
-                scenario: scenarioDisplayName(refScenario, refScenarioIdx, t),
+                scenario: scenarioDisplayName(projection.scenarios, refScenarioIdx, t),
                 trials: projection.monteCarloTrials.toLocaleString(locale),
                 tier: t(`fire.tier_${refTierKey}`),
                 year: refYear,

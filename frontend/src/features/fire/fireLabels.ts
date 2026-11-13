@@ -1,6 +1,5 @@
 import type { FireProjection, FireScenarioOutput, FireTierKey, FireTierOutput } from "@/api/fire";
 import type { TFunction } from "i18next";
-import { formatPercent } from "@/lib/money";
 
 /** Dashed target-curve colors, one per tier, distinct from the scenario palette. */
 export const TIER_COLORS: Record<FireTierKey, string> = {
@@ -17,16 +16,29 @@ export function scenarioMetrics(
   locale: string,
   t: TFunction,
 ): string {
-  const base = `${formatPercent(Number(s.meanPercent), locale, 1)} ±${formatPercent(Number(s.stdDevPercent), locale, 1)}`;
+  const base = `${formatFirePercent(Number(s.meanPercent), locale, 1)} ±${formatFirePercent(Number(s.stdDevPercent), locale, 1)}`;
   return s.historical ? `${base} ${t("fire.historical_ref")}` : base;
 }
 
-export function scenarioDisplayName(s: { name?: string }, idx: number, t: TFunction): string {
-  if (s.name && s.name.trim().length > 0) return s.name.trim();
-  if (idx === 0) return t("fire.scenario_default_1");
-  if (idx === 1) return t("fire.scenario_default_2");
-  if (idx === 2) return t("fire.scenario_default_3");
-  return t("fire.scenario_default_n", { n: idx + 1 });
+/** The localized default name of an unnamed scenario: Conservative/Base/Optimistic by ascending mean (ties by
+ *  position), "Scenario N" from the fourth. Same ranking as the backend's reference-scenario fallback. */
+export function defaultScenarioName(scenarios: readonly { meanPercent: string }[], idx: number, t: TFunction): string {
+  const rank = scenarios
+    .map((s, i) => ({ mean: Number(s.meanPercent), i }))
+    .sort((a, b) => a.mean - b.mean || a.i - b.i)
+    .findIndex((s) => s.i === idx) + 1;
+  if (rank >= 1 && rank <= 3) return t(`fire.scenario_default_${rank}`);
+  return t("fire.scenario_default_n", { n: rank });
+}
+
+/** A scenario's own name when the household gave one, otherwise its localized default. */
+export function scenarioDisplayName(
+  scenarios: readonly { name?: string; meanPercent: string }[],
+  idx: number,
+  t: TFunction,
+): string {
+  const own = scenarios[idx]?.name?.trim();
+  return own ? own : defaultScenarioName(scenarios, idx, t);
 }
 
 /** The Fat FIRE multiplier as people write it: locale decimal separator, no trailing zeros ("1.50" → "1,5" in es). */
@@ -76,13 +88,25 @@ export function resolveReferenceTier(projection: FireProjection): FireTierOutput
   return projection.tiers.find((tier) => tier.key === key);
 }
 
+/** The FIRE page's one percentage format, `value` already scaled (65 → "65%"): the locale's own spacing ("65%" in
+ *  English, "65 %" in Spanish), so two styles never meet in one sentence. A plain space, as elsewhere in the app. */
+export function formatFirePercent(value: number, locale: string, fractionDigits = 0): string {
+  return new Intl.NumberFormat(locale, {
+    style: "percent",
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  })
+    .format(value / 100)
+    .replace(/[\u00a0\u202f]/g, " ");
+}
+
 /** P(hit) as an integer percent, but never a misleading "0%": strictly positive yet rounding below 1%
  *  reads as "<1%" so it agrees with a non-dash median year. */
-export function formatHitProbability(p: number): string {
-  if (p <= 0) return "0%";
+export function formatHitProbability(p: number, locale: string): string {
+  if (p <= 0) return formatFirePercent(0, locale);
   const pct = p * 100;
-  if (pct < 0.5) return "<1%";
-  return `${Math.round(pct)}%`;
+  if (pct < 0.5) return `<${formatFirePercent(1, locale)}`;
+  return formatFirePercent(Math.round(pct), locale);
 }
 
 /** The estimated year, or "beyond {horizon}" when fewer than half of all trials reach the target in time. */
@@ -95,15 +119,14 @@ export type SeedPortfolioKind = "bonds" | "balanced" | "equities";
 export interface SeedScenarioSpec {
   meanPercent: string;
   stdDevPercent: string;
-  defaultNameKey: "fire.scenario_default_1" | "fire.scenario_default_2" | "fire.scenario_default_3";
   portfolio: SeedPortfolioKind;
 }
 
 /** Nominal arithmetic annual mean & std dev seeds matching FireDefaults.DEFAULT_RETURN_SCENARIOS. */
 export const SEED_RETURN_SCENARIOS: readonly SeedScenarioSpec[] = [
-  { meanPercent: "4.0", stdDevPercent: "5.0", defaultNameKey: "fire.scenario_default_1", portfolio: "bonds" },
-  { meanPercent: "6.5", stdDevPercent: "10.0", defaultNameKey: "fire.scenario_default_2", portfolio: "balanced" },
-  { meanPercent: "8.5", stdDevPercent: "15.0", defaultNameKey: "fire.scenario_default_3", portfolio: "equities" },
+  { meanPercent: "4.0", stdDevPercent: "5.0", portfolio: "bonds" },
+  { meanPercent: "6.5", stdDevPercent: "10.0", portfolio: "balanced" },
+  { meanPercent: "8.5", stdDevPercent: "15.0", portfolio: "equities" },
 ];
 
 function samePair(

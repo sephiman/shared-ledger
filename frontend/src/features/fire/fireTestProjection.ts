@@ -51,6 +51,7 @@ export function makeProjection(overrides?: Partial<FireProjection>): FireProject
       lookbackMonths: 12,
       aggregation: "mean",
       excludeCurrentMonth: false,
+      noSpendingSince: null,
     },
     contributions: {
       manualMonthly: "1000.00",

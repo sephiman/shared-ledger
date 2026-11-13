@@ -1,10 +1,11 @@
 import { Fragment, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { formatDayMonthYear } from "@/lib/dates";
 import { Area, CartesianGrid, ComposedChart, Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { FireProjection, FireTierKey } from "@/api/fire";
 import { Card, CardBody, CardHeader } from "@/components/ui/primitives";
 import { ChartTooltip } from "@/components/charts/ChartTooltip";
-import { formatCompactMoney, formatMoney, formatPercent, formatWholeMoney } from "@/lib/money";
+import { formatCompactMoney, formatMoney, formatWholeMoney } from "@/lib/money";
 import { Explain } from "./Explain";
 import { niceMoneyTicks } from "./fireTicks";
 import {
@@ -13,6 +14,7 @@ import {
   resolveReferenceTierKey,
   scenarioDisplayName,
   tierPlainName,
+  formatFirePercent,
 } from "./fireLabels";
 
 const SCENARIO_PALETTE = ["#0ea5e9", "#22c55e", "#a855f7", "#f97316", "#ef4444"];
@@ -205,7 +207,7 @@ export function FireChart({
     projection.scenarios[refScenarioIdx]?.tierStats.find((st) => st.tier === refTierKey)?.estimatedYear ?? null;
   const contributionMissing = projection.contributions.activeMonthly === null;
   const money = (v: string | number | null | undefined) => formatWholeMoney(v ?? 0, currency, locale);
-  const pct2 = (v: string) => formatPercent(Number(v), locale, 2);
+  const pct2 = (v: string) => formatFirePercent(Number(v), locale, 2);
   const otherScenarios = projection.scenarios
     .map((sc, idx) => ({ sc, idx }))
     .filter(({ idx }) => idx !== refScenarioIdx);
@@ -271,7 +273,7 @@ export function FireChart({
                       onClick={() => toggleOtherScenario(idx)}
                       className={`rounded-full border px-2.5 py-0.5 font-medium ${active ? "border-primary bg-sky-50 text-primary dark:bg-sky-900/40 dark:text-sky-300" : "border-border bg-raised text-gray-600 hover:text-gray-800 dark:text-gray-300"}`}
                     >
-                      {scenarioDisplayName(sc, idx, t)}
+                      {scenarioDisplayName(projection.scenarios, idx, t)}
                     </button>
                   );
                 })}
@@ -448,7 +450,7 @@ export function FireChart({
                       {visibleScenarios.map(({ sc, idx }) => {
                         const k = scenarioKey(sc);
                         const color = SCENARIO_PALETTE[idx % SCENARIO_PALETTE.length];
-                        const label = scenarioDisplayName(sc, idx, t);
+                        const label = scenarioDisplayName(projection.scenarios, idx, t);
                         return (
                           <Fragment key={`${k}_${idx}`}>
                             <Area
@@ -495,15 +497,15 @@ export function FireChart({
                   <p>
                     {t("fire.chart_explain_return", {
                       pct: pct2(projection.actualReturn.annualizedPercent),
-                      from: projection.actualReturn.fromDate,
-                      to: projection.actualReturn.toDate,
+                      from: formatDayMonthYear(projection.actualReturn.fromDate, locale),
+                      to: formatDayMonthYear(projection.actualReturn.toDate, locale),
                       movements: projection.actualReturn.movementCount,
                     })}
                   </p>
                   <p>
                     {t("fire.actual_return_explain", {
-                      from: projection.actualReturn.fromDate,
-                      to: projection.actualReturn.toDate,
+                      from: formatDayMonthYear(projection.actualReturn.fromDate, locale),
+                      to: formatDayMonthYear(projection.actualReturn.toDate, locale),
                       movements: projection.actualReturn.movementCount,
                     })}
                   </p>
@@ -511,7 +513,7 @@ export function FireChart({
                     <p className="text-amber-700 dark:text-amber-300">
                       {t("fire.actual_return_coverage_warning", { months: projection.actualReturn.uncoveredMonths })}{" "}
                       {t("fire.actual_return_gap_explain", {
-                        first: projection.actualReturn.firstMovementDate,
+                        first: formatDayMonthYear(projection.actualReturn.firstMovementDate, locale),
                         months: projection.actualReturn.uncoveredMonths,
                       })}
                     </p>
@@ -531,7 +533,7 @@ export function FireChart({
               <div className="flex items-baseline justify-between gap-2 py-1.5">
                 <dt className="text-gray-500 dark:text-gray-400">{t("fire.assumptions_wealth_label")}</dt>
                 <dd className="text-right font-medium tabular-nums">
-                  {money(projection.startingValue)} <span className="font-normal text-gray-500">({projection.snapshotDate ?? "—"})</span>
+                  {money(projection.startingValue)} <span className="font-normal text-gray-500">({projection.snapshotDate ? formatDayMonthYear(projection.snapshotDate, locale) : "—"})</span>
                 </dd>
               </div>
               <div className="flex items-baseline justify-between gap-2 py-1.5">
@@ -548,7 +550,7 @@ export function FireChart({
                 <div className="flex items-baseline justify-between gap-2 py-1.5">
                   <dt className="text-gray-500 dark:text-gray-400">{t("fire.savings_rate_label")}</dt>
                   <dd className="font-medium tabular-nums">
-                    {formatPercent(projection.contributions.savingsRatePct, locale, 1)}
+                    {formatFirePercent(projection.contributions.savingsRatePct, locale, 1)}
                   </dd>
                 </div>
               )}
@@ -572,7 +574,7 @@ export function FireChart({
                 <div className="flex items-baseline justify-between gap-2 py-1.5">
                   <dt className="text-gray-500 dark:text-gray-400">{t("fire.settings_gain_share_plain")}</dt>
                   <dd className="whitespace-nowrap font-medium tabular-nums">
-                    {formatPercent(Number(projection.gainFraction.percent), locale, 1)}
+                    {formatFirePercent(Number(projection.gainFraction.percent), locale, 1)}
                     {s.indexTaxBrackets ? ` · ${t("fire.indexed_short")}` : ""}
                   </dd>
                 </div>

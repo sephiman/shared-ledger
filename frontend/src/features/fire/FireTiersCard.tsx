@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { formatDayMonthYear } from "@/lib/dates";
 import type { FireProjection, FireTierOutput } from "@/api/fire";
 import { Badge, Card, CardBody, CardHeader } from "@/components/ui/primitives";
-import { formatPercent, formatWholeMoney } from "@/lib/money";
+import { formatWholeMoney } from "@/lib/money";
 import { formatDeltaValue } from "./FireHeroStrip";
 import {
   TIER_COLORS,
@@ -15,6 +16,7 @@ import {
   resolveReferenceTierKey,
   tierPlainName,
   tierTechName,
+  formatFirePercent,
 } from "./fireLabels";
 
 const STALE_SNAPSHOT_DAYS = 45;
@@ -49,6 +51,7 @@ export function FireTiersCard({
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const money = (v: string | number | null | undefined) => formatWholeMoney(v ?? 0, currency, locale);
+  const day = (iso: string | null) => (iso ? formatDayMonthYear(iso, locale) : "—");
 
   const tiers = TIER_ORDER
     .map((key) => projection.tiers.find((tier) => tier.key === key))
@@ -119,7 +122,7 @@ export function FireTiersCard({
             <p>
               {snapshotAgeDays === null
                 ? t("fire.no_snapshot_warning")
-                : t("fire.stale_snapshot_warning", { date: projection.snapshotDate, days: snapshotAgeDays })}{" "}
+                : t("fire.stale_snapshot_warning", { date: day(projection.snapshotDate), days: snapshotAgeDays })}{" "}
               <Link to="/networth" className="font-medium underline">
                 {t("fire.record_snapshot_link")}
               </Link>
@@ -161,7 +164,7 @@ export function FireTiersCard({
           <div className="mt-3 flex items-start justify-between gap-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
             <p>
               {t("fire.gain_fraction_coverage_warning", {
-                gain: formatPercent(Number(projection.gainFraction.percent), locale, 2),
+                gain: formatFirePercent(Number(projection.gainFraction.percent), locale, 2),
                 months: projection.gainFraction.uncoveredMonths,
               })}
             </p>
@@ -182,13 +185,13 @@ export function FireTiersCard({
         <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
           {taxOn
             ? t("fire.tier_footnote_tax", {
-                gain: formatPercent(Number(projection.gainFraction.percent), locale, 2),
+                gain: formatFirePercent(Number(projection.gainFraction.percent), locale, 2),
                 value: money(projection.startingValue),
-                date: projection.snapshotDate ?? "—",
+                date: day(projection.snapshotDate),
               })
             : t("fire.tier_footnote_no_tax", {
                 value: money(projection.startingValue),
-                date: projection.snapshotDate ?? "—",
+                date: day(projection.snapshotDate),
               })}
         </p>
       </CardBody>
@@ -232,7 +235,7 @@ function TierBox({
     if (tier.targetToday === null) return null;
     const params = {
       annual: money(taxOn ? tier.annualGrossSpending : tier.annualNetSpending),
-      swr: formatPercent(Number(s.safeWithdrawalRatePct), locale, 2),
+      swr: formatFirePercent(Number(s.safeWithdrawalRatePct), locale, 2),
       target: money(tier.targetToday),
       multiplier: formatMultiplier(s.fatMultiplier, locale),
     };
@@ -258,8 +261,8 @@ function TierBox({
     baseStat && baselineProjection
       ? estimatedYearText(baseStat.estimatedYear, baselineProjection.settings.targetYear, t)
       : null;
-  const hitProb = refStat ? formatHitProbability(refStat.probabilityOfReachingTarget) : "—";
-  const baseHitProb = baseStat ? formatHitProbability(baseStat.probabilityOfReachingTarget) : null;
+  const hitProb = refStat ? formatHitProbability(refStat.probabilityOfReachingTarget, locale) : "—";
+  const baseHitProb = baseStat ? formatHitProbability(baseStat.probabilityOfReachingTarget, locale) : null;
 
   const coastTarget = refStat?.coastTargetToday ?? null;
   const coastFundedPct =
@@ -269,8 +272,8 @@ function TierBox({
 
   const targetText = tier.targetToday !== null ? money(tier.targetToday) : "—";
   const baseTargetText = baseTier?.targetToday != null ? money(baseTier.targetToday) : null;
-  const covText = tier.coveragePercent !== null ? formatPercent(tier.coveragePercent, locale, 0) : "—";
-  const baseCovText = baseTier?.coveragePercent != null ? formatPercent(baseTier.coveragePercent, locale, 0) : null;
+  const covText = tier.coveragePercent !== null ? formatFirePercent(tier.coveragePercent, locale, 0) : "—";
+  const baseCovText = baseTier?.coveragePercent != null ? formatFirePercent(baseTier.coveragePercent, locale, 0) : null;
 
   return (
     <div
@@ -337,7 +340,7 @@ function TierBox({
                 <div>
                   <p className="text-gray-700 dark:text-gray-200">{t("fire.tier_coast_plain")}</p>
                   <p className="tabular-nums">
-                    {t("fire.tier_coast_tech")}: {money(coastTarget)} · {formatPercent(coastFundedPct, locale, 0)}
+                    {t("fire.tier_coast_tech")}: {money(coastTarget)} · {formatFirePercent(coastFundedPct, locale, 0)}
                   </p>
                 </div>
               )}
@@ -346,7 +349,7 @@ function TierBox({
                   <span>{t("fire.est_tax_label")}</span>
                   <span className="font-medium tabular-nums text-gray-700 dark:text-gray-200">
                     +{money(tier.estimatedAnnualTax)}/yr (
-                    {formatPercent(
+                    {formatFirePercent(
                       (Number(tier.estimatedAnnualTax) / Math.max(1e-9, Number(tier.annualGrossSpending))) * 100,
                       locale,
                       1,
