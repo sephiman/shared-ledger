@@ -16,6 +16,7 @@ export interface FireCashFlowEvent {
 }
 
 export interface ReturnScenario {
+  name: string;
   meanPercent: string;
   stdDevPercent: string;
   /** Marks the "(historical — reference)" scenario derived from the household's own returns. */
@@ -55,6 +56,8 @@ export interface FireSettings {
   fallbackGainFractionPct: string;
   taxBrackets: TaxBracket[];
   cashFlowEvents: FireCashFlowEvent[];
+  referenceTier: FireTierKey;
+  referenceScenarioIndex: number;
 }
 
 export interface ScenarioPercentiles {
@@ -88,6 +91,7 @@ export interface FirePreviewRequest {
 }
 
 export interface FireScenarioOutput {
+  name: string;
   meanPercent: string;
   stdDevPercent: string;
   historical: boolean;

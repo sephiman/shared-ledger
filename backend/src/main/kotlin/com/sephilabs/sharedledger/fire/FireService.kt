@@ -66,9 +66,18 @@ class FireService(
         s.targetAmount = Money.normalize(request.targetAmount)
         s.targetYear = request.targetYear
         s.monthlyContribution = Money.normalize(request.monthlyContribution)
-        s.returnScenarios = request.returnScenarios.map {
-            ReturnScenario(meanPercent = it.meanPercent, stdDevPercent = it.stdDevPercent, historical = it.historical)
-        }
+        s.returnScenarios = normalizeScenarioNames(
+            request.returnScenarios.map {
+                ReturnScenario(
+                    meanPercent = it.meanPercent,
+                    stdDevPercent = it.stdDevPercent,
+                    historical = it.historical,
+                    name = it.name.trim(),
+                )
+            },
+        )
+        s.referenceTier = resolveReferenceTier(request.referenceTier, request)
+        s.referenceScenarioIndex = resolveReferenceScenarioIndex(request.referenceScenarioIndex, s.returnScenarios).toShort()
         s.qualifyingAssetClasses = request.qualifyingAssetClasses.toTypedArray()
         s.expectedInflationPct = request.expectedInflationPct
         s.safeWithdrawalRatePct = request.safeWithdrawalRatePct
@@ -207,7 +216,8 @@ class FireService(
             cashFlowEvents = s.cashFlowEvents,
         )
 
-        val scenarios = s.returnScenarios.map { scenario ->
+        val namedScenarios = normalizeScenarioNames(s.returnScenarios)
+        val scenarios = namedScenarios.map { scenario ->
             engine.buildScenarioOutput(scenario, monthlyContribution, trials, rng)
         }
 
@@ -279,35 +289,77 @@ class FireService(
         )
     }
 
-    private fun FireSettings.toDto(brackets: List<TaxBracket>) = FireSettingsDto(
-        targetAmount = targetAmount,
-        targetYear = targetYear,
-        monthlyContribution = monthlyContribution,
-        returnScenarios = returnScenarios.map { ReturnScenarioDto(it.meanPercent, it.stdDevPercent, it.historical) },
-        qualifyingAssetClasses = qualifyingAssetClasses.toList(),
-        expectedInflationPct = expectedInflationPct,
-        safeWithdrawalRatePct = safeWithdrawalRatePct,
-        fatMultiplier = fatMultiplier,
-        contributionMode = contributionMode,
-        indexContribution = indexContribution,
-        essentialSpendingMode = essentialSpendingMode,
-        manualEssentialSpending = manualEssentialSpending,
-        totalSpendingMode = totalSpendingMode,
-        manualTotalSpending = manualTotalSpending,
-        tierLeanEnabled = tierLeanEnabled,
-        tierFireEnabled = tierFireEnabled,
-        tierFatEnabled = tierFatEnabled,
-        tierCustomEnabled = tierCustomEnabled,
-        applyCapitalGainsTax = applyCapitalGainsTax,
-        indexTaxBrackets = indexTaxBrackets,
-        drawdownYears = drawdownYears,
-        spendingLookbackMonths = spendingLookbackMonths,
-        spendingAggregation = spendingAggregation,
-        excludeCurrentMonth = excludeCurrentMonth,
-        fallbackGainFractionPct = fallbackGainFractionPct,
-        taxBrackets = brackets.map { TaxBracketDto(it.lowerBound, it.ratePct) },
-        cashFlowEvents = cashFlowEvents.map { FireCashFlowEventDto(it.year, it.kind, it.amount, it.label) },
-    )
+    private fun FireSettings.toDto(brackets: List<TaxBracket>): FireSettingsDto {
+        val named = normalizeScenarioNames(returnScenarios)
+        return FireSettingsDto(
+            targetAmount = targetAmount,
+            targetYear = targetYear,
+            monthlyContribution = monthlyContribution,
+            returnScenarios = named.map { ReturnScenarioDto(it.meanPercent, it.stdDevPercent, it.historical, it.name) },
+            qualifyingAssetClasses = qualifyingAssetClasses.toList(),
+            expectedInflationPct = expectedInflationPct,
+            safeWithdrawalRatePct = safeWithdrawalRatePct,
+            fatMultiplier = fatMultiplier,
+            contributionMode = contributionMode,
+            indexContribution = indexContribution,
+            essentialSpendingMode = essentialSpendingMode,
+            manualEssentialSpending = manualEssentialSpending,
+            totalSpendingMode = totalSpendingMode,
+            manualTotalSpending = manualTotalSpending,
+            tierLeanEnabled = tierLeanEnabled,
+            tierFireEnabled = tierFireEnabled,
+            tierFatEnabled = tierFatEnabled,
+            tierCustomEnabled = tierCustomEnabled,
+            applyCapitalGainsTax = applyCapitalGainsTax,
+            indexTaxBrackets = indexTaxBrackets,
+            drawdownYears = drawdownYears,
+            spendingLookbackMonths = spendingLookbackMonths,
+            spendingAggregation = spendingAggregation,
+            excludeCurrentMonth = excludeCurrentMonth,
+            fallbackGainFractionPct = fallbackGainFractionPct,
+            taxBrackets = brackets.map { TaxBracketDto(it.lowerBound, it.ratePct) },
+            cashFlowEvents = cashFlowEvents.map { FireCashFlowEventDto(it.year, it.kind, it.amount, it.label) },
+            referenceTier = referenceTier,
+            referenceScenarioIndex = resolveReferenceScenarioIndex(referenceScenarioIndex.toInt(), named),
+        )
+    }
+
+    private fun normalizeScenarioNames(scenarios: List<ReturnScenario>): List<ReturnScenario> {
+        if (scenarios.all { it.name.isNotBlank() }) return scenarios
+        val sortedIndices = scenarios.indices.sortedWith(compareBy({ scenarios[it].meanPercent }, { it }))
+        val rankByIndex = IntArray(scenarios.size)
+        sortedIndices.forEachIndexed { rank, origIdx -> rankByIndex[origIdx] = rank + 1 }
+        return scenarios.mapIndexed { idx, sc ->
+            if (sc.name.isNotBlank()) sc else sc.copy(name = defaultScenarioName(rankByIndex[idx]))
+        }
+    }
+
+    private fun defaultScenarioName(rank: Int): String = when (rank) {
+        1 -> "Conservative"
+        2 -> "Base"
+        3 -> "Optimistic"
+        else -> "Scenario $rank"
+    }
+
+    private fun resolveReferenceScenarioIndex(requested: Int, scenarios: List<ReturnScenario>): Int {
+        if (requested in scenarios.indices) return requested
+        if (scenarios.isEmpty()) return 0
+        val sorted = scenarios.indices.sortedWith(compareBy({ scenarios[it].meanPercent }, { it }))
+        val middleMean = scenarios[sorted[sorted.size / 2]].meanPercent
+        return scenarios.indexOfFirst { it.meanPercent.compareTo(middleMean) == 0 }.coerceAtLeast(0)
+    }
+
+    private fun resolveReferenceTier(requested: FireTierKey, request: FireSettingsRequest): FireTierKey {
+        val enabled = mapOf(
+            FireTierKey.lean to request.tierLeanEnabled,
+            FireTierKey.fire to request.tierFireEnabled,
+            FireTierKey.fat to request.tierFatEnabled,
+            FireTierKey.custom to request.tierCustomEnabled,
+        )
+        if (enabled[requested] == true) return requested
+        if (enabled[FireTierKey.fire] == true) return FireTierKey.fire
+        return enabled.entries.firstOrNull { it.value }?.key ?: FireTierKey.fire
+    }
 
     // ---------------------------------------------------------------------------------------
     // Derived inputs (never persisted — recomputed live from their sources)
@@ -909,6 +961,7 @@ class FireService(
 
             val growthFactor = (1.0 + mean).pow(years)
             return FireScenarioOutput(
+                name = scenario.name,
                 meanPercent = scenario.meanPercent,
                 stdDevPercent = scenario.stdDevPercent,
                 historical = scenario.historical,

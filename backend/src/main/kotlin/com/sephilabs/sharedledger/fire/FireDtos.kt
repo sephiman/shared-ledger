@@ -15,12 +15,14 @@ data class ReturnScenarioInput(
     @field:DecimalMin(value = "0.00")
     @JsonFormat(shape = JsonFormat.Shape.STRING) val stdDevPercent: BigDecimal,
     val historical: Boolean = false,
+    val name: String = "",
 )
 
 data class ReturnScenarioDto(
     @JsonFormat(shape = JsonFormat.Shape.STRING) val meanPercent: BigDecimal,
     @JsonFormat(shape = JsonFormat.Shape.STRING) val stdDevPercent: BigDecimal,
     val historical: Boolean,
+    val name: String = "",
 )
 
 data class TaxBracketInput(
@@ -81,6 +83,8 @@ data class FireSettingsDto(
     @JsonFormat(shape = JsonFormat.Shape.STRING) val fallbackGainFractionPct: BigDecimal,
     val taxBrackets: List<TaxBracketDto>,
     val cashFlowEvents: List<FireCashFlowEventDto>,
+    val referenceTier: FireTierKey = FireTierKey.fire,
+    val referenceScenarioIndex: Int = 1,
 )
 
 data class FireSettingsRequest(
@@ -131,6 +135,8 @@ data class FireSettingsRequest(
     @JsonFormat(shape = JsonFormat.Shape.STRING) val fallbackGainFractionPct: BigDecimal,
     @field:NotNull @field:Valid val taxBrackets: List<TaxBracketInput>,
     @field:Valid val cashFlowEvents: List<FireCashFlowEventInput> = emptyList(),
+    val referenceTier: FireTierKey = FireTierKey.fire,
+    val referenceScenarioIndex: Int = 1,
 )
 
 data class FireScenarioYear(
@@ -182,6 +188,7 @@ data class FirePreviewRequest(
 )
 
 data class FireScenarioOutput(
+    val name: String,
     @JsonFormat(shape = JsonFormat.Shape.STRING) val meanPercent: BigDecimal,
     @JsonFormat(shape = JsonFormat.Shape.STRING) val stdDevPercent: BigDecimal,
     val historical: Boolean,

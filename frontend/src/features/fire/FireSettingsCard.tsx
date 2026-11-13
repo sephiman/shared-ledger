@@ -1,8 +1,9 @@
+import { type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { CashFlowEventKind, FireProjection, FireSettings, FireTierKey, ReturnScenario } from "@/api/fire";
 import { Badge, Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select, Toggle } from "@/components/ui/primitives";
 import { formatMoney, formatNumber, formatPercent } from "@/lib/money";
-import { TIER_ORDER } from "./fireLabels";
+import { TIER_ORDER, scenarioDisplayName } from "./fireLabels";
 
 export interface FireFormErrors {
   targetAmount?: string;
@@ -36,8 +37,27 @@ interface Props {
   onSave: () => void;
 }
 
-/** Every FIRE parameter lives here (not general Settings) and persists per household. Each setting carries
- *  a terse repercussion line instantiated with the household's own numbers when the projection has them. */
+function AdvancedSection({
+  title,
+  summary,
+  children,
+}: {
+  title: string;
+  summary: string;
+  children: ReactNode;
+}) {
+  return (
+    <details className="rounded-md border border-border bg-surface">
+      <summary className="flex cursor-pointer select-none flex-wrap items-center justify-between gap-2 px-3 py-2.5 text-sm font-medium text-gray-800 hover:bg-raised/60 dark:text-gray-200">
+        <span>{title}</span>
+        <span className="text-xs font-normal text-gray-500 dark:text-gray-400">{summary}</span>
+      </summary>
+      <div className="border-t border-border/60 p-3">{children}</div>
+    </details>
+  );
+}
+
+/** Two-layer FIRE settings: Plan (always visible, plain questions) and Advanced (collapsed sections with live summaries). */
 export function FireSettingsCard({
   form,
   errors,
@@ -76,10 +96,6 @@ export function FireSettingsCard({
 
   const inflationEffect = (() => {
     if (!fireTier || !saved_ || !projection) return t("fire.inflation_effect_generic");
-    // Compound today's FIRE target over whole years from the latest-snapshot year, so the
-    // figure is hand-reproducible: targetToday × (1 + inflation)^N. (The chart's dashed curve
-    // additionally re-grosses-up the tax per year; this headline "grows at inflation" line
-    // deliberately does not, keeping it verifiable from the two on-screen numbers.)
     const n = Math.max(0, Number(saved_.targetYear) - projection.startYear);
     if (n <= 0) return t("fire.inflation_effect_generic");
     const projected = Number(fireTier.targetToday) * (1 + Number(saved_.expectedInflationPct) / 100) ** n;
@@ -105,10 +121,10 @@ export function FireSettingsCard({
     onChange({ ...form, ...next }, clear);
   }
 
-  function setScenarioField(idx: number, field: "meanPercent" | "stdDevPercent", value: string) {
+  function setScenarioField(idx: number, field: "name" | "meanPercent" | "stdDevPercent", value: string) {
     const next = form.returnScenarios.map((s, i) => (i === idx ? { ...s, [field]: value } : s));
     patch({ returnScenarios: next });
-    onScenarioErrorClear(idx, field);
+    if (field !== "name") onScenarioErrorClear(idx, field);
   }
 
   function addScenario(scenario: ReturnScenario) {
@@ -122,6 +138,62 @@ export function FireSettingsCard({
     custom: "tierCustomEnabled",
   };
 
+  const enabledTierKeys = TIER_ORDER.filter((k) => Boolean(form[tierFlag[k]]));
+
+  // Advanced section summaries
+  const effEssentialVal =
+    form.essentialSpendingMode === "manual"
+      ? form.manualEssentialSpending
+      : projection?.spending.derivedEssentialMonthly ?? "0";
+  const effTotalVal =
+    form.totalSpendingMode === "manual"
+      ? form.manualTotalSpending
+      : projection?.spending.derivedTotalMonthly ?? "0";
+
+  const spendingSummary = t("fire.settings_summary_spending", {
+    lookback: form.spendingLookbackMonths,
+    agg: form.spendingAggregation,
+    essential: `${money(effEssentialVal)}${form.essentialSpendingMode === "manual" ? ` (${t("fire.settings_manual_tag")})` : ""}`,
+    total: `${money(effTotalVal)}${form.totalSpendingMode === "manual" ? ` (${t("fire.settings_manual_tag")})` : ""}`,
+  });
+
+  const scenariosSummary = `${form.returnScenarios.length} · ${form.returnScenarios
+    .map((sc, idx) => `${scenarioDisplayName(sc, idx, t)} ${sc.meanPercent}%`)
+    .join(" · ")}`;
+
+  const drawdownFatSummary = t("fire.settings_summary_drawdown_fat", {
+    years: form.drawdownYears,
+    multiplier: form.fatMultiplier,
+  });
+
+  const qualifyingSummary = form.qualifyingAssetClasses
+    .map((code) => t(`asset.${code}`))
+    .join(", ");
+
+  const minRate = form.taxBrackets.length > 0 ? Math.min(...form.taxBrackets.map((b) => Number(b.ratePct))) : 0;
+  const maxRate = form.taxBrackets.length > 0 ? Math.max(...form.taxBrackets.map((b) => Number(b.ratePct))) : 0;
+  const gainSourceLabel =
+    projection?.gainFraction.source === "movements"
+      ? t("fire.settings_derived_tag")
+      : t("fire.settings_manual_tag");
+  const gainPctStr = projection
+    ? formatPercent(Number(projection.gainFraction.percent), locale, 0)
+    : `${form.fallbackGainFractionPct}%`;
+  const taxSummary = form.applyCapitalGainsTax
+    ? t("fire.settings_summary_tax_on", {
+        count: form.taxBrackets.length,
+        minRate,
+        maxRate,
+        source: gainSourceLabel,
+        gain: gainPctStr,
+      })
+    : t("fire.settings_summary_tax_off");
+
+  const eventsSummary =
+    form.cashFlowEvents.length > 0
+      ? t("fire.settings_summary_events_count", { count: form.cashFlowEvents.length })
+      : t("fire.settings_summary_events_none");
+
   return (
     <Card>
       <CardHeader>
@@ -130,12 +202,14 @@ export function FireSettingsCard({
         {ro && <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">{t("fire.owners_only")}</p>}
       </CardHeader>
       <CardBody className="space-y-6">
-        {/* Framework: horizon, SWR, inflation, indexation, Fat multiplier */}
-        <section>
-          <p className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-200">{t("fire.framework")}</p>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {/* Layer 1: Plan (always visible, plain-language questions) */}
+        <section className="space-y-4">
+          <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{t("fire.settings_plan_title")}</p>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             <div>
-              <Label>{t("fire.target_year")}</Label>
+              <Label>{t("fire.settings_horizon_q")}</Label>
+              <p className="mb-1 text-xs text-gray-500 dark:text-gray-400">{t("fire.settings_horizon_tech")}</p>
               <Input
                 type="number"
                 value={form.targetYear}
@@ -146,8 +220,10 @@ export function FireSettingsCard({
               <FieldError message={errors.targetYear} />
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{t("fire.target_year_effect")}</p>
             </div>
+
             <div>
-              <Label>{t("fire.swr")}</Label>
+              <Label>{t("fire.settings_swr_q")}</Label>
+              <p className="mb-1 text-xs text-gray-500 dark:text-gray-400">{t("fire.settings_swr_tech")}</p>
               <Input
                 type="number"
                 step="0.1"
@@ -160,8 +236,10 @@ export function FireSettingsCard({
               <FieldError message={errors.swr} />
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{swrEffect}</p>
             </div>
+
             <div>
               <Label>{t("fire.inflation")}</Label>
+              <p className="mb-1 text-xs text-gray-500 dark:text-gray-400">{t("fire.assumptions_swr_inf_label")}</p>
               <Input
                 type="number"
                 step="0.1"
@@ -174,644 +252,734 @@ export function FireSettingsCard({
               <FieldError message={errors.inflation} />
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{inflationEffect}</p>
             </div>
+
             <div>
-              <Label>{t("fire.fat_multiplier")}</Label>
-              <Input
-                type="number"
-                step="0.1"
-                min="1"
-                value={form.fatMultiplier}
+              <Label>{t("fire.settings_reference_tier_q")}</Label>
+              <p className="mb-1 text-xs text-gray-500 dark:text-gray-400">{t("fire.settings_reference_tier_tech")}</p>
+              <Select
+                value={form.referenceTier}
                 disabled={ro}
-                invalid={!!errors.fatMultiplier}
-                onChange={(e) => patch({ fatMultiplier: e.target.value }, ["fatMultiplier"])}
-              />
-              <FieldError message={errors.fatMultiplier} />
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{fatEffect}</p>
+                onChange={(e) => patch({ referenceTier: e.target.value as FireTierKey })}
+              >
+                {enabledTierKeys.map((tk) => (
+                  <option key={tk} value={tk}>
+                    {tk === "fat"
+                      ? `${t("fire.tier_plain_fat", { multiplier: form.fatMultiplier })} (${t("fire.tier_fat")})`
+                      : `${t(`fire.tier_plain_${tk}`)} (${t(`fire.tier_${tk}`)})`}
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            <div>
+              <Label>{t("fire.settings_reference_scenario_q")}</Label>
+              <p className="mb-1 text-xs text-gray-500 dark:text-gray-400">{t("fire.settings_reference_scenario_tech")}</p>
+              <Select
+                value={String(form.referenceScenarioIndex)}
+                disabled={ro}
+                onChange={(e) => patch({ referenceScenarioIndex: Number(e.target.value) })}
+              >
+                {form.returnScenarios.map((sc, idx) => (
+                  <option key={idx} value={String(idx)}>
+                    {scenarioDisplayName(sc, idx, t)} ({sc.meanPercent}% ±{sc.stdDevPercent}%)
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            <div>
+              <Label>{t("fire.settings_tiers_shown_q")}</Label>
+              <div className="mt-1.5 flex flex-wrap gap-3">
+                {TIER_ORDER.map((key) => (
+                  <label key={key} className="flex items-center gap-1.5 text-sm">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                      checked={Boolean(form[tierFlag[key]])}
+                      disabled={ro}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        const next: Partial<FireSettings> = { [tierFlag[key]]: checked } as Partial<FireSettings>;
+                        if (!checked && form.referenceTier === key) {
+                          next.referenceTier = "fire";
+                        }
+                        patch(next);
+                      }}
+                    />
+                    {t(`fire.tier_${key}`)}
+                  </label>
+                ))}
+              </div>
+              {form.tierCustomEnabled && (
+                <div className="mt-2">
+                  <Label className="text-xs">{t("fire.target_amount")}</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={form.targetAmount}
+                    disabled={ro}
+                    invalid={!!errors.targetAmount}
+                    onChange={(e) => patch({ targetAmount: e.target.value }, ["targetAmount"])}
+                  />
+                  <FieldError message={errors.targetAmount} />
+                </div>
+              )}
             </div>
           </div>
-          <div className="mt-2 flex flex-wrap gap-6">
-            <div className="max-w-md">
+
+          {/* Monthly contribution */}
+          <div className="space-y-2">
+            <Label>{t("fire.settings_contrib_q")}</Label>
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+              {(["savings", "movements", "manual"] as const).map((mode) => {
+                const derived = projection?.contributions;
+                const value =
+                  mode === "manual" ? form.monthlyContribution
+                  : mode === "savings" ? derived?.savingsMonthly ?? null
+                  : derived?.movementsMonthly ?? null;
+                return (
+                  <div key={mode} className="rounded-md border border-border p-2.5">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="radio"
+                        name="fire-contribution-mode"
+                        className="h-4 w-4 border-border text-primary focus:ring-primary"
+                        checked={form.contributionMode === mode}
+                        disabled={ro}
+                        onChange={() => patch({ contributionMode: mode })}
+                      />
+                      <span className="flex-1 font-medium">{t(`fire.contribution_${mode}`)}</span>
+                      {mode === "manual" ? (
+                        <Input
+                          type="number"
+                          step="0.01"
+                          className="w-28"
+                          value={form.monthlyContribution}
+                          disabled={ro}
+                          invalid={!!errors.monthlyContribution}
+                          onChange={(e) => patch({ monthlyContribution: e.target.value }, ["monthlyContribution"])}
+                        />
+                      ) : (
+                        <span className="font-medium tabular-nums">
+                          {value !== null ? money(value) : t("fire.contribution_no_data")}
+                        </span>
+                      )}
+                    </label>
+                    {mode !== "manual" && (
+                      <p className="ml-6 mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        {t(`fire.contribution_${mode}_explain`)}
+                      </p>
+                    )}
+                    {mode === "manual" && <FieldError message={errors.monthlyContribution} />}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="pt-1">
               <Toggle
                 checked={form.indexContribution}
                 disabled={ro}
                 onChange={(v) => patch({ indexContribution: v })}
                 label={t("fire.index_contribution")}
               />
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                {form.indexContribution
-                  ? t("fire.index_contribution_effect_on", { inflation: form.expectedInflationPct })
-                  : t("fire.index_contribution_effect_off")}
+            </div>
+            {projection?.contributions.savingsMonthly != null && projection.contributions.movementsMonthly != null &&
+              form.contributionMode !== "manual" && (
+              <p className="text-xs text-amber-700 dark:text-amber-300">
+                {t("fire.contribution_gap", {
+                  savings: money(projection.contributions.savingsMonthly),
+                  movements: money(projection.contributions.movementsMonthly),
+                })}
               </p>
-            </div>
-            <div className="w-48">
-              <Label>{t("fire.drawdown_years")}</Label>
-              <Input
-                type="number"
-                min="1"
-                max="80"
-                value={form.drawdownYears}
-                disabled={ro}
-                invalid={!!errors.drawdownYears}
-                onChange={(e) => patch({ drawdownYears: Number(e.target.value) }, ["drawdownYears"])}
-              />
-              <FieldError message={errors.drawdownYears} />
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{t("fire.drawdown_years_help")}</p>
-            </div>
+            )}
           </div>
         </section>
 
-        {/* Tiers shown + custom target */}
-        <section>
-          <p className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-200">{t("fire.tier_toggles")}</p>
-          <div className="flex flex-wrap gap-4">
-            {TIER_ORDER.map((key) => (
-              <label key={key} className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
-                  checked={Boolean(form[tierFlag[key]])}
-                  disabled={ro}
-                  onChange={(e) => patch({ [tierFlag[key]]: e.target.checked } as Partial<FireSettings>)}
-                />
-                {t(`fire.tier_${key}`)}
-              </label>
-            ))}
-          </div>
-          {form.tierCustomEnabled && (
-            <div className="mt-2 max-w-xs">
-              <Label>{t("fire.target_amount")}</Label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                value={form.targetAmount}
-                disabled={ro}
-                invalid={!!errors.targetAmount}
-                onChange={(e) => patch({ targetAmount: e.target.value }, ["targetAmount"])}
-              />
-              <FieldError message={errors.targetAmount} />
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{t("fire.custom_target_help")}</p>
-            </div>
-          )}
-        </section>
+        {/* Layer 2: Advanced (collapsed sections in required order, each with a one-line summary) */}
+        <section className="space-y-2">
+          <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{t("fire.settings_advanced_title")}</p>
 
-        {/* Spending bases: derived from data by default, manually overridable, both always visible */}
-        <section>
-          <p className="mb-1 text-sm font-semibold text-gray-700 dark:text-gray-200">{t("fire.spending_bases")}</p>
-          <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">{t("fire.spending_bases_help")}</p>
-          <div className="mb-3 grid grid-cols-1 gap-3 rounded-md border border-border bg-raised/40 p-3 sm:grid-cols-3">
-            <div>
-              <Label className="text-xs">{t("fire.spending_lookback_label")}</Label>
-              <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                {[3, 6, 12, 24, 36].map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    disabled={ro}
-                    onClick={() => patch({ spendingLookbackMonths: m })}
-                    className={`rounded px-2 py-1 text-xs font-medium ${
-                      form.spendingLookbackMonths === m
-                        ? "bg-primary text-white"
-                        : "border border-border bg-surface text-gray-700 hover:bg-raised dark:text-gray-200"
-                    }`}
-                  >
-                    {m}m
-                  </button>
-                ))}
-                <Input
-                  type="number"
-                  min={1}
-                  max={120}
-                  className="w-16"
-                  value={form.spendingLookbackMonths}
-                  disabled={ro}
-                  onChange={(e) => {
-                    const v = Number(e.target.value);
-                    if (Number.isFinite(v)) patch({ spendingLookbackMonths: Math.max(1, Math.min(120, Math.round(v))) });
-                  }}
-                />
-              </div>
-            </div>
-            <div>
-              <Label className="text-xs">{t("fire.spending_agg_label")}</Label>
-              <div className="mt-1 flex gap-1.5">
-                {(["mean", "median"] as const).map((agg) => (
-                  <button
-                    key={agg}
-                    type="button"
-                    disabled={ro}
-                    onClick={() => patch({ spendingAggregation: agg })}
-                    className={`rounded px-2.5 py-1 text-xs font-medium ${
-                      form.spendingAggregation === agg
-                        ? "bg-primary text-white"
-                        : "border border-border bg-surface text-gray-700 hover:bg-raised dark:text-gray-200"
-                    }`}
-                  >
-                    {t(`fire.spending_agg_${agg}`)}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="flex items-end pb-1">
-              <label className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-200">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
-                  checked={form.excludeCurrentMonth}
-                  disabled={ro}
-                  onChange={(e) => patch({ excludeCurrentMonth: e.target.checked })}
-                />
-                {t("fire.exclude_current_month")}
-              </label>
-            </div>
-          </div>
-          {(["essential", "total"] as const).map((base) => {
-            const mode = base === "essential" ? form.essentialSpendingMode : form.totalSpendingMode;
-            const manualValue = base === "essential" ? form.manualEssentialSpending : form.manualTotalSpending;
-            const derived = base === "essential"
-              ? projection?.spending.derivedEssentialMonthly
-              : projection?.spending.derivedTotalMonthly;
-            const hasDerivedData = (projection?.spending.monthsAvailable ?? 0) > 0;
-            const modeField = base === "essential" ? "essentialSpendingMode" : "totalSpendingMode";
-            const valueField = base === "essential" ? "manualEssentialSpending" : "manualTotalSpending";
-            const errKey = (base === "essential" ? "manualEssential" : "manualTotal") as keyof FireFormErrors;
-            const error = errors[errKey] as string | undefined;
-            return (
-              <div key={base} className="mb-3">
-                <Label>{t(`fire.spending_${base}`)}</Label>
-                <div className="space-y-2">
-                  <div className="rounded-md border border-border p-2">
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="radio"
-                        name={`fire-spending-${base}`}
-                        className="h-4 w-4 border-border text-primary focus:ring-primary"
-                        checked={mode === "derived"}
+          {/* 1. Spending bases */}
+          <AdvancedSection title={t("fire.spending_bases")} summary={spendingSummary}>
+            <div className="space-y-3">
+              <p className="text-xs text-gray-500 dark:text-gray-400">{t("fire.spending_bases_help")}</p>
+              <div className="grid grid-cols-1 gap-3 rounded-md border border-border bg-raised/40 p-3 sm:grid-cols-3">
+                <div>
+                  <Label className="text-xs">{t("fire.spending_lookback_label")}</Label>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    {[3, 6, 12, 24, 36].map((m) => (
+                      <button
+                        key={m}
+                        type="button"
                         disabled={ro}
-                        onChange={() => patch({ [modeField]: "derived" } as Partial<FireSettings>)}
-                      />
-                      <span className="flex-1">{t("fire.spending_derived")}</span>
-                      <span className="font-medium">
-                        {hasDerivedData ? money(derived) : t("fire.contribution_no_data")}
-                      </span>
-                    </label>
-                    <p className="ml-6 mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        onClick={() => patch({ spendingLookbackMonths: m })}
+                        className={`rounded px-2 py-1 text-xs font-medium ${
+                          form.spendingLookbackMonths === m
+                            ? "bg-primary text-white"
+                            : "border border-border bg-surface text-gray-700 hover:bg-raised dark:text-gray-200"
+                        }`}
+                      >
+                        {m}m
+                      </button>
+                    ))}
+                    <Input
+                      type="number"
+                      min={1}
+                      max={120}
+                      className="w-16"
+                      value={form.spendingLookbackMonths}
+                      disabled={ro}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        if (Number.isFinite(v)) patch({ spendingLookbackMonths: Math.max(1, Math.min(120, Math.round(v))) });
+                      }}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-xs">{t("fire.spending_agg_label")}</Label>
+                  <div className="mt-1 flex gap-1.5">
+                    {(["mean", "median"] as const).map((agg) => (
+                      <button
+                        key={agg}
+                        type="button"
+                        disabled={ro}
+                        onClick={() => patch({ spendingAggregation: agg })}
+                        className={`rounded px-2.5 py-1 text-xs font-medium ${
+                          form.spendingAggregation === agg
+                            ? "bg-primary text-white"
+                            : "border border-border bg-surface text-gray-700 hover:bg-raised dark:text-gray-200"
+                        }`}
+                      >
+                        {t(`fire.spending_agg_${agg}`)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-end pb-1">
+                  <label className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-200">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                      checked={form.excludeCurrentMonth}
+                      disabled={ro}
+                      onChange={(e) => patch({ excludeCurrentMonth: e.target.checked })}
+                    />
+                    {t("fire.exclude_current_month")}
+                  </label>
+                </div>
+              </div>
+
+              {(["essential", "total"] as const).map((base) => {
+                const mode = base === "essential" ? form.essentialSpendingMode : form.totalSpendingMode;
+                const manualValue = base === "essential" ? form.manualEssentialSpending : form.manualTotalSpending;
+                const derived = base === "essential"
+                  ? projection?.spending.derivedEssentialMonthly
+                  : projection?.spending.derivedTotalMonthly;
+                const hasDerivedData = (projection?.spending.monthsAvailable ?? 0) > 0;
+                const modeField = base === "essential" ? "essentialSpendingMode" : "totalSpendingMode";
+                const valueField = base === "essential" ? "manualEssentialSpending" : "manualTotalSpending";
+                const errKey = (base === "essential" ? "manualEssential" : "manualTotal") as keyof FireFormErrors;
+                const error = errors[errKey] as string | undefined;
+
+                return (
+                  <div key={base} className="rounded-md border border-border p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <span className="text-sm font-medium">{t(`fire.spending_${base}`)}</span>
+                        <span className="ml-2 text-sm tabular-nums text-gray-700 dark:text-gray-200">
+                          {hasDerivedData ? money(derived) : t("fire.contribution_no_data")}
+                        </span>
+                        {mode === "manual" && (
+                          <Badge tone="amber" className="ml-2">{t("fire.settings_manual_tag")}</Badge>
+                        )}
+                      </div>
+                      {!ro && (
+                        mode === "derived" ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              patch({
+                                [modeField]: "manual",
+                                [valueField]: derived && Number(derived) > 0 ? Number(derived).toFixed(2) : manualValue,
+                              } as Partial<FireSettings>)
+                            }
+                            className="text-xs font-medium text-sky-600 hover:underline dark:text-sky-400"
+                          >
+                            {t("fire.settings_override_link")}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => patch({ [modeField]: "derived" } as Partial<FireSettings>, [errKey])}
+                            className="text-xs font-medium text-sky-600 hover:underline dark:text-sky-400"
+                          >
+                            {t("fire.settings_use_derived_link")}
+                          </button>
+                        )
+                      )}
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                       {t(`fire.spending_${base}_derived_explain`)}
                     </p>
-                  </div>
-                  <div className="rounded-md border border-border p-2">
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="radio"
-                        name={`fire-spending-${base}`}
-                        className="h-4 w-4 border-border text-primary focus:ring-primary"
-                        checked={mode === "manual"}
-                        disabled={ro}
-                        onChange={() => patch({ [modeField]: "manual" } as Partial<FireSettings>)}
-                      />
-                      <span className="flex-1">{t("fire.spending_manual")}</span>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        className="w-36"
-                        value={manualValue}
-                        disabled={ro}
-                        invalid={!!error}
-                        onChange={(e) => patch({ [valueField]: e.target.value } as Partial<FireSettings>, [errKey])}
-                      />
-                    </label>
-                    <FieldError message={error} />
-                  </div>
-                </div>
-                {mode === "manual" && hasDerivedData && (
-                  <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
-                    {t(`fire.spending_${base}_gap`, { derived: money(derived), manual: money(manualValue) })}
-                  </p>
-                )}
-              </div>
-            );
-          })}
-          {(() => {
-            const effEssential = form.essentialSpendingMode === "manual"
-              ? Number(form.manualEssentialSpending)
-              : Number(projection?.spending.derivedEssentialMonthly ?? 0);
-            const effTotal = form.totalSpendingMode === "manual"
-              ? Number(form.manualTotalSpending)
-              : Number(projection?.spending.derivedTotalMonthly ?? 0);
-            const incoherent = Number.isFinite(effEssential) && Number.isFinite(effTotal) && effTotal > 0 && effEssential > effTotal;
-            return incoherent ? (
-              <p className="mt-1 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
-                {t("fire.spending_coherence_warning")}
-              </p>
-            ) : null;
-          })()}
-        </section>
-
-        {/* Contribution: three sources, all visible */}
-        <section>
-          <p className="mb-1 text-sm font-semibold text-gray-700 dark:text-gray-200">{t("fire.contribution_mode")}</p>
-          <div className="space-y-2">
-            {(["manual", "savings", "movements"] as const).map((mode) => {
-              const derived = projection?.contributions;
-              const value =
-                mode === "manual" ? form.monthlyContribution
-                : mode === "savings" ? derived?.savingsMonthly ?? null
-                : derived?.movementsMonthly ?? null;
-              return (
-                <div key={mode} className="rounded-md border border-border p-2">
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="radio"
-                      name="fire-contribution-mode"
-                      className="h-4 w-4 border-border text-primary focus:ring-primary"
-                      checked={form.contributionMode === mode}
-                      disabled={ro}
-                      onChange={() => patch({ contributionMode: mode })}
-                    />
-                    <span className="flex-1">{t(`fire.contribution_${mode}`)}</span>
-                    {mode === "manual" ? (
-                      <Input
-                        type="number"
-                        step="0.01"
-                        className="w-36"
-                        value={form.monthlyContribution}
-                        disabled={ro}
-                        invalid={!!errors.monthlyContribution}
-                        onChange={(e) => patch({ monthlyContribution: e.target.value }, ["monthlyContribution"])}
-                      />
-                    ) : (
-                      <span className="font-medium">
-                        {value !== null ? money(value) : t("fire.contribution_no_data")}
-                      </span>
+                    {mode === "manual" && (
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          className="w-36"
+                          aria-label={t(`fire.spending_${base}`)}
+                          value={manualValue}
+                          disabled={ro}
+                          invalid={!!error}
+                          onChange={(e) => patch({ [valueField]: e.target.value } as Partial<FireSettings>, [errKey])}
+                        />
+                        <FieldError message={error} />
+                        {hasDerivedData && (
+                          <span className="text-xs text-amber-700 dark:text-amber-300">
+                            {t(`fire.spending_${base}_gap`, { derived: money(derived), manual: money(manualValue) })}
+                          </span>
+                        )}
+                      </div>
                     )}
-                  </label>
-                  {mode !== "manual" && (
-                    <p className="ml-6 mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      {t(`fire.contribution_${mode}_explain`)}
-                      {mode === "savings" && derived?.savingsRatePct != null && (
-                        <> ({t("fire.savings_rate_badge", { rate: formatPercent(derived.savingsRatePct, locale, 1) })})</>
-                      )}
-                    </p>
-                  )}
-                  {mode === "manual" && <FieldError message={errors.monthlyContribution} />}
-                </div>
-              );
-            })}
-          </div>
-          {projection?.contributions.savingsMonthly != null && projection.contributions.movementsMonthly != null &&
-            form.contributionMode !== "manual" && (
-            <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
-              {t("fire.contribution_gap", {
-                savings: money(projection.contributions.savingsMonthly),
-                movements: money(projection.contributions.movementsMonthly),
+                  </div>
+                );
               })}
-            </p>
-          )}
-        </section>
 
-        {/* Return scenarios */}
-        <section>
-          <Label>{t("fire.scenarios")}</Label>
-          <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
-            {t("fire.scenarios_help")} {t("fire.scenarios_nominal_note")}
-          </p>
-          <div className="space-y-2">
-            {form.returnScenarios.map((sc, idx) => {
-              const meanErr = errors.scenarios?.[idx]?.meanPercent;
-              const stdErr = errors.scenarios?.[idx]?.stdDevPercent;
-              return (
-                <div key={idx} className="flex items-start gap-2">
-                  <div className="flex-1">
-                    <Label className="text-xs">{t("fire.mean_return")}</Label>
-                    <Input
-                      type="number"
-                      step="0.1"
-                      value={sc.meanPercent}
-                      disabled={ro}
-                      invalid={!!meanErr}
-                      onChange={(e) => setScenarioField(idx, "meanPercent", e.target.value)}
-                    />
-                    <FieldError message={meanErr} />
+              {(() => {
+                const effEssential = form.essentialSpendingMode === "manual"
+                  ? Number(form.manualEssentialSpending)
+                  : Number(projection?.spending.derivedEssentialMonthly ?? 0);
+                const effTotal = form.totalSpendingMode === "manual"
+                  ? Number(form.manualTotalSpending)
+                  : Number(projection?.spending.derivedTotalMonthly ?? 0);
+                const incoherent = Number.isFinite(effEssential) && Number.isFinite(effTotal) && effTotal > 0 && effEssential > effTotal;
+                return incoherent ? (
+                  <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                    {t("fire.spending_coherence_warning")}
+                  </p>
+                ) : null;
+              })()}
+            </div>
+          </AdvancedSection>
+
+          {/* 2. Return scenarios (names editable here) */}
+          <AdvancedSection title={t("fire.scenarios")} summary={scenariosSummary}>
+            <div className="space-y-2">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {t("fire.scenarios_help")} {t("fire.scenarios_nominal_note")}
+              </p>
+              {form.returnScenarios.map((sc, idx) => {
+                const meanErr = errors.scenarios?.[idx]?.meanPercent;
+                const stdErr = errors.scenarios?.[idx]?.stdDevPercent;
+                return (
+                  <div key={idx} className="grid grid-cols-1 items-start gap-2 sm:grid-cols-12">
+                    <div className="sm:col-span-4">
+                      <Label className="text-xs">{t("fire.scenario_name")}</Label>
+                      <Input
+                        type="text"
+                        value={sc.name}
+                        disabled={ro}
+                        placeholder={scenarioDisplayName({ name: "" }, idx, t)}
+                        onChange={(e) => setScenarioField(idx, "name", e.target.value)}
+                      />
+                    </div>
+                    <div className="sm:col-span-3">
+                      <Label className="text-xs">{t("fire.mean_return")}</Label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        value={sc.meanPercent}
+                        disabled={ro}
+                        invalid={!!meanErr}
+                        onChange={(e) => setScenarioField(idx, "meanPercent", e.target.value)}
+                      />
+                      <FieldError message={meanErr} />
+                    </div>
+                    <div className="sm:col-span-3">
+                      <Label className="text-xs">{t("fire.std_dev")}</Label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        value={sc.stdDevPercent}
+                        disabled={ro}
+                        invalid={!!stdErr}
+                        onChange={(e) => setScenarioField(idx, "stdDevPercent", e.target.value)}
+                      />
+                      <FieldError message={stdErr} />
+                    </div>
+                    <div className="flex items-center gap-2 sm:col-span-2 sm:mt-6">
+                      {sc.historical && (
+                        <Badge tone="sky" className="whitespace-nowrap">
+                          <span title={t("fire.historical_tooltip", { years: projection?.historicalScenario?.yearsOfData ?? 0 })}>
+                            {t("fire.historical_ref")}
+                          </span>
+                        </Badge>
+                      )}
+                      <Button
+                        variant="ghost"
+                        disabled={ro || form.returnScenarios.length <= 1}
+                        onClick={() => {
+                          const nextScenarios = form.returnScenarios.filter((_, i) => i !== idx);
+                          const nextRef =
+                            form.referenceScenarioIndex === idx
+                              ? Math.floor(nextScenarios.length / 2)
+                              : form.referenceScenarioIndex > idx
+                                ? form.referenceScenarioIndex - 1
+                                : form.referenceScenarioIndex;
+                          patch({ returnScenarios: nextScenarios, referenceScenarioIndex: nextRef });
+                        }}
+                      >
+                        {t("common.delete")}
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <Label className="text-xs">{t("fire.std_dev")}</Label>
+                );
+              })}
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button
+                  variant="secondary"
+                  disabled={ro}
+                  onClick={() =>
+                    addScenario({
+                      name: t("fire.scenario_default_n", { n: form.returnScenarios.length + 1 }),
+                      meanPercent: "6.0",
+                      stdDevPercent: "12.0",
+                      historical: false,
+                    })
+                  }
+                >
+                  {t("fire.add_scenario")}
+                </Button>
+                <span title={projection?.historicalScenario ? t("fire.historical_tooltip", { years: projection.historicalScenario.yearsOfData }) : t("fire.add_historical_disabled")}>
+                  <Button
+                    variant="secondary"
+                    disabled={ro || !projection?.historicalScenario}
+                    onClick={() => {
+                      const h = projection?.historicalScenario;
+                      if (h) {
+                        addScenario({
+                          name: t("fire.historical_ref"),
+                          meanPercent: h.meanPercent,
+                          stdDevPercent: h.stdDevPercent,
+                          historical: true,
+                        });
+                      }
+                    }}
+                  >
+                    {t("fire.add_historical")}
+                  </Button>
+                </span>
+                <span title={t("fire.suggest_asset_mix_help")}>
+                  <Button
+                    variant="secondary"
+                    disabled={ro || !projection?.suggestedScenario}
+                    onClick={() => {
+                      const sug = projection?.suggestedScenario;
+                      if (sug) {
+                        addScenario({
+                          ...sug,
+                          name: sug.name || t("fire.suggest_asset_mix"),
+                        });
+                      }
+                    }}
+                  >
+                    {t("fire.suggest_asset_mix")}
+                  </Button>
+                </span>
+              </div>
+            </div>
+          </AdvancedSection>
+
+          {/* 3. Retirement drawdown years and Fat FIRE multiplier */}
+          <AdvancedSection title={t("fire.settings_drawdown_fat_title")} summary={drawdownFatSummary}>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <Label>{t("fire.drawdown_years")}</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  max="80"
+                  value={form.drawdownYears}
+                  disabled={ro}
+                  invalid={!!errors.drawdownYears}
+                  onChange={(e) => patch({ drawdownYears: Number(e.target.value) }, ["drawdownYears"])}
+                />
+                <FieldError message={errors.drawdownYears} />
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{t("fire.drawdown_years_help")}</p>
+              </div>
+              <div>
+                <Label>{t("fire.fat_multiplier")}</Label>
+                <Input
+                  type="number"
+                  step="0.1"
+                  min="1"
+                  value={form.fatMultiplier}
+                  disabled={ro}
+                  invalid={!!errors.fatMultiplier}
+                  onChange={(e) => patch({ fatMultiplier: e.target.value }, ["fatMultiplier"])}
+                />
+                <FieldError message={errors.fatMultiplier} />
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{fatEffect}</p>
+              </div>
+            </div>
+          </AdvancedSection>
+
+          {/* 4. What counts as investment (qualifying classes) */}
+          <AdvancedSection title={t("fire.settings_qualifying_plain")} summary={qualifyingSummary}>
+            <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
+              {t("fire.settings_qualifying_tech")} · {t("fire.qualifying_help")}
+            </p>
+            <div className={`flex flex-wrap gap-2 ${errors.qualifying ? "rounded-md p-1 ring-1 ring-red-500" : ""}`}>
+              {assetClasses.map((cls) => {
+                const active = form.qualifyingAssetClasses.includes(cls.code);
+                return (
+                  <button
+                    key={cls.code}
+                    type="button"
+                    disabled={ro}
+                    onClick={() => {
+                      const next = active
+                        ? form.qualifyingAssetClasses.filter((x) => x !== cls.code)
+                        : [...form.qualifyingAssetClasses, cls.code];
+                      patch({ qualifyingAssetClasses: next }, ["qualifying"]);
+                    }}
+                    className={`rounded-full border px-3 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-60 ${active ? "border-primary bg-sky-50 text-primary dark:bg-sky-900/40 dark:text-sky-300" : "border-border-strong bg-raised text-gray-700 dark:text-gray-200"}`}
+                  >
+                    {t(`asset.${cls.code}`)}
+                  </button>
+                );
+              })}
+            </div>
+            <FieldError message={errors.qualifying} />
+          </AdvancedSection>
+
+          {/* 5. Capital-gains tax */}
+          <AdvancedSection title={t("fire.tax_title")} summary={taxSummary}>
+            <div className="space-y-3">
+              <div className="max-w-xl">
+                <Toggle
+                  checked={form.applyCapitalGainsTax}
+                  disabled={ro}
+                  onChange={(v) => patch({ applyCapitalGainsTax: v })}
+                  label={t("fire.tax_apply")}
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400">{taxEffect}</p>
+              </div>
+
+              {form.applyCapitalGainsTax && (
+                <div className="space-y-3 pt-1">
+                  <div className="max-w-xl">
+                    <Toggle
+                      checked={form.indexTaxBrackets}
+                      disabled={ro}
+                      onChange={(v) => patch({ indexTaxBrackets: v })}
+                      label={t("fire.index_tax_brackets")}
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{t("fire.index_tax_brackets_help")}</p>
+                  </div>
+                  <div className="max-w-md">
+                    <Label>{t("fire.settings_gain_share_plain")}</Label>
+                    <p className="mb-1 text-xs text-gray-500 dark:text-gray-400">{t("fire.gain_fraction")}</p>
                     <Input
                       type="number"
-                      step="0.1"
+                      step="1"
                       min="0"
-                      value={sc.stdDevPercent}
+                      max="100"
+                      className="max-w-xs"
+                      value={form.fallbackGainFractionPct}
                       disabled={ro}
-                      invalid={!!stdErr}
-                      onChange={(e) => setScenarioField(idx, "stdDevPercent", e.target.value)}
+                      invalid={!!errors.gainFraction}
+                      onChange={(e) => patch({ fallbackGainFractionPct: e.target.value }, ["gainFraction"])}
                     />
-                    <FieldError message={stdErr} />
-                  </div>
-                  <div className="mt-6 flex items-center gap-2">
-                    {sc.historical && (
-                      <Badge tone="sky" className="whitespace-nowrap" >
-                        <span title={t("fire.historical_tooltip", { years: projection?.historicalScenario?.yearsOfData ?? 0 })}>
-                          {t("fire.historical_ref")}
-                        </span>
-                      </Badge>
+                    <FieldError message={errors.gainFraction} />
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      {t("fire.gain_fraction_effect")}{" "}
+                      {projection && (projection.gainFraction.source === "movements"
+                        ? t("fire.gain_fraction_movements", { pct: formatNumber(Number(projection.gainFraction.percent), locale, 2) })
+                        : t("fire.gain_fraction_manual", { pct: formatNumber(Number(projection.gainFraction.percent), locale, 2) }))}
+                    </p>
+                    {projection && projection.gainFraction.source === "movements" && projection.gainFraction.uncoveredMonths > 0 && (
+                      <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                        {t("fire.gain_fraction_coverage_warning", {
+                          gain: formatPercent(Number(projection.gainFraction.percent), locale, 2),
+                          months: projection.gainFraction.uncoveredMonths,
+                        })}
+                      </p>
                     )}
+                  </div>
+
+                  <div>
+                    <Label>{t("fire.tax_brackets")}</Label>
+                    <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">{t("fire.tax_brackets_help")}</p>
+                    <div className="max-w-md space-y-2">
+                      {form.taxBrackets.map((b, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <div className="flex-1">
+                            {idx === 0 && <Label className="text-xs">{t("fire.tax_lower_bound")}</Label>}
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={b.lowerBound}
+                              disabled={ro}
+                              invalid={!!errors.brackets}
+                              onChange={(e) => {
+                                const next = form.taxBrackets.map((x, i) => (i === idx ? { ...x, lowerBound: e.target.value } : x));
+                                patch({ taxBrackets: next }, ["brackets"]);
+                              }}
+                            />
+                          </div>
+                          <div className="flex-1">
+                            {idx === 0 && <Label className="text-xs">{t("fire.tax_rate")}</Label>}
+                            <Input
+                              type="number"
+                              step="0.1"
+                              min="0"
+                              max="100"
+                              value={b.ratePct}
+                              disabled={ro}
+                              invalid={!!errors.brackets}
+                              onChange={(e) => {
+                                const next = form.taxBrackets.map((x, i) => (i === idx ? { ...x, ratePct: e.target.value } : x));
+                                patch({ taxBrackets: next }, ["brackets"]);
+                              }}
+                            />
+                          </div>
+                          <Button
+                            variant="ghost"
+                            className={idx === 0 ? "mt-5" : ""}
+                            disabled={ro || form.taxBrackets.length <= 1}
+                            onClick={() => patch({ taxBrackets: form.taxBrackets.filter((_, i) => i !== idx) }, ["brackets"])}
+                          >
+                            {t("common.delete")}
+                          </Button>
+                        </div>
+                      ))}
+                      <FieldError message={errors.brackets} />
+                      <Button
+                        variant="secondary"
+                        disabled={ro}
+                        onClick={() => {
+                          const lastBound = Number(form.taxBrackets[form.taxBrackets.length - 1]?.lowerBound ?? 0);
+                          patch({
+                            taxBrackets: [...form.taxBrackets, { lowerBound: String(lastBound + 50000), ratePct: "30.0" }],
+                          }, ["brackets"]);
+                        }}
+                      >
+                        {t("fire.add_bracket")}
+                      </Button>
+                    </div>
+                    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{t("fire.tax_model_note")}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </AdvancedSection>
+
+          {/* 6. Cash-flow events & life phases */}
+          <AdvancedSection title={t("fire.cash_flow_events")} summary={eventsSummary}>
+            <div className="space-y-2">
+              <p className="text-xs text-gray-500 dark:text-gray-400">{t("fire.cash_flow_events_help")}</p>
+              {form.cashFlowEvents.map((ev, idx) => (
+                <div key={idx} className="grid grid-cols-1 gap-2 rounded-md border border-border p-2 sm:grid-cols-12 sm:items-end">
+                  <div className="sm:col-span-2">
+                    <Label className="text-xs">{t("fire.event_year")}</Label>
+                    <Input
+                      type="number"
+                      value={ev.year}
+                      disabled={ro}
+                      onChange={(e) => {
+                        const next = form.cashFlowEvents.map((x, i) => (i === idx ? { ...x, year: Number(e.target.value) } : x));
+                        patch({ cashFlowEvents: next }, ["cashFlowEvents"]);
+                      }}
+                    />
+                  </div>
+                  <div className="sm:col-span-3">
+                    <Label className="text-xs">{t("fire.event_kind")}</Label>
+                    <Select
+                      value={ev.kind}
+                      disabled={ro}
+                      onChange={(e) => {
+                        const next = form.cashFlowEvents.map((x, i) =>
+                          i === idx ? { ...x, kind: e.target.value as CashFlowEventKind } : x,
+                        );
+                        patch({ cashFlowEvents: next }, ["cashFlowEvents"]);
+                      }}
+                    >
+                      <option value="lump_sum">{t("fire.event_lump_sum")}</option>
+                      <option value="contribution_delta">{t("fire.event_contribution_delta")}</option>
+                      <option value="spending_delta">{t("fire.event_spending_delta")}</option>
+                    </Select>
+                  </div>
+                  <div className="sm:col-span-3">
+                    <Label className="text-xs">{t("fire.event_amount")} ({currency})</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={ev.amount}
+                      disabled={ro}
+                      onChange={(e) => {
+                        const next = form.cashFlowEvents.map((x, i) => (i === idx ? { ...x, amount: e.target.value } : x));
+                        patch({ cashFlowEvents: next }, ["cashFlowEvents"]);
+                      }}
+                    />
+                  </div>
+                  <div className="sm:col-span-3">
+                    <Label className="text-xs">{t("fire.event_label")}</Label>
+                    <Input
+                      type="text"
+                      value={ev.label}
+                      disabled={ro}
+                      placeholder={t("fire.event_label_placeholder")}
+                      onChange={(e) => {
+                        const next = form.cashFlowEvents.map((x, i) => (i === idx ? { ...x, label: e.target.value } : x));
+                        patch({ cashFlowEvents: next }, ["cashFlowEvents"]);
+                      }}
+                    />
+                  </div>
+                  <div className="sm:col-span-1">
                     <Button
                       variant="ghost"
-                      disabled={ro || form.returnScenarios.length <= 1}
-                      onClick={() => patch({ returnScenarios: form.returnScenarios.filter((_, i) => i !== idx) })}
+                      disabled={ro}
+                      onClick={() => patch({ cashFlowEvents: form.cashFlowEvents.filter((_, i) => i !== idx) }, ["cashFlowEvents"])}
                     >
                       {t("common.delete")}
                     </Button>
                   </div>
                 </div>
-              );
-            })}
-            <div className="flex flex-wrap gap-2">
+              ))}
+              <FieldError message={errors.cashFlowEvents} />
               <Button
                 variant="secondary"
                 disabled={ro}
-                onClick={() => addScenario({ meanPercent: "6.0", stdDevPercent: "12.0", historical: false })}
+                onClick={() =>
+                  patch(
+                    {
+                      cashFlowEvents: [
+                        ...form.cashFlowEvents,
+                        { year: (projection?.startYear ?? 2026) + 5, kind: "contribution_delta", amount: "500.00", label: "" },
+                      ],
+                    },
+                    ["cashFlowEvents"],
+                  )
+                }
               >
-                {t("fire.add_scenario")}
+                {t("fire.add_cash_flow_event")}
               </Button>
-              <span title={projection?.historicalScenario ? t("fire.historical_tooltip", { years: projection.historicalScenario.yearsOfData }) : t("fire.add_historical_disabled")}>
-                <Button
-                  variant="secondary"
-                  disabled={ro || !projection?.historicalScenario}
-                  onClick={() => {
-                    const h = projection?.historicalScenario;
-                    if (h) addScenario({ meanPercent: h.meanPercent, stdDevPercent: h.stdDevPercent, historical: true });
-                  }}
-                >
-                  {t("fire.add_historical")}
-                </Button>
-              </span>
-              <span title={t("fire.suggest_asset_mix_help")}>
-                <Button
-                  variant="secondary"
-                  disabled={ro || !projection?.suggestedScenario}
-                  onClick={() => {
-                    const sug = projection?.suggestedScenario;
-                    if (sug) addScenario(sug);
-                  }}
-                >
-                  {t("fire.suggest_asset_mix")}
-                </Button>
-              </span>
             </div>
-          </div>
+          </AdvancedSection>
         </section>
 
-        {/* Qualifying asset classes */}
-        <section>
-          <Label>{t("fire.qualifying")}</Label>
-          <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">{t("fire.qualifying_help")}</p>
-          <div className={`flex flex-wrap gap-2 ${errors.qualifying ? "rounded-md p-1 ring-1 ring-red-500" : ""}`}>
-            {assetClasses.map((cls) => {
-              const active = form.qualifyingAssetClasses.includes(cls.code);
-              return (
-                <button
-                  key={cls.code}
-                  type="button"
-                  disabled={ro}
-                  onClick={() => {
-                    const next = active
-                      ? form.qualifyingAssetClasses.filter((x) => x !== cls.code)
-                      : [...form.qualifyingAssetClasses, cls.code];
-                    patch({ qualifyingAssetClasses: next }, ["qualifying"]);
-                  }}
-                  className={`rounded-full border px-3 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-60 ${active ? "border-primary bg-sky-50 text-primary dark:bg-sky-900/40 dark:text-sky-300" : "border-border-strong bg-raised text-gray-700 dark:text-gray-200"}`}
-                >
-                  {t(`asset.${cls.code}`)}
-                </button>
-              );
-            })}
-          </div>
-          <FieldError message={errors.qualifying} />
-        </section>
-
-        {/* Capital-gains tax */}
-        <section>
-          <p className="mb-1 text-sm font-semibold text-gray-700 dark:text-gray-200">{t("fire.tax_title")}</p>
-          <div className="max-w-xl">
-            <Toggle
-              checked={form.applyCapitalGainsTax}
-              disabled={ro}
-              onChange={(v) => patch({ applyCapitalGainsTax: v })}
-              label={t("fire.tax_apply")}
-            />
-            <p className="text-xs text-gray-500 dark:text-gray-400">{taxEffect}</p>
-          </div>
-
-          {form.applyCapitalGainsTax && (
-            <div className="mt-3 space-y-3">
-              <div className="max-w-xl">
-                <Toggle
-                  checked={form.indexTaxBrackets}
-                  disabled={ro}
-                  onChange={(v) => patch({ indexTaxBrackets: v })}
-                  label={t("fire.index_tax_brackets")}
-                />
-                <p className="text-xs text-gray-500 dark:text-gray-400">{t("fire.index_tax_brackets_help")}</p>
-              </div>
-              <div className="max-w-xs">
-                <Label>{t("fire.gain_fraction")}</Label>
-                <Input
-                  type="number"
-                  step="1"
-                  min="0"
-                  max="100"
-                  value={form.fallbackGainFractionPct}
-                  disabled={ro}
-                  invalid={!!errors.gainFraction}
-                  onChange={(e) => patch({ fallbackGainFractionPct: e.target.value }, ["gainFraction"])}
-                />
-                <FieldError message={errors.gainFraction} />
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  {t("fire.gain_fraction_effect")}{" "}
-                  {projection && (projection.gainFraction.source === "movements"
-                    ? t("fire.gain_fraction_movements", { pct: formatNumber(Number(projection.gainFraction.percent), locale, 2) })
-                    : t("fire.gain_fraction_manual", { pct: formatNumber(Number(projection.gainFraction.percent), locale, 2) }))}
-                </p>
-                {projection && projection.gainFraction.source === "movements" && projection.gainFraction.uncoveredMonths > 0 && (
-                  <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
-                    {t("fire.gain_fraction_coverage_warning", {
-                      gain: formatPercent(Number(projection.gainFraction.percent), locale, 2),
-                      months: projection.gainFraction.uncoveredMonths,
-                    })}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <Label>{t("fire.tax_brackets")}</Label>
-                <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">{t("fire.tax_brackets_help")}</p>
-                <div className="max-w-md space-y-2">
-                  {form.taxBrackets.map((b, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
-                      <div className="flex-1">
-                        {idx === 0 && <Label className="text-xs">{t("fire.tax_lower_bound")}</Label>}
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={b.lowerBound}
-                          disabled={ro}
-                          invalid={!!errors.brackets}
-                          onChange={(e) => {
-                            const next = form.taxBrackets.map((x, i) => (i === idx ? { ...x, lowerBound: e.target.value } : x));
-                            patch({ taxBrackets: next }, ["brackets"]);
-                          }}
-                        />
-                      </div>
-                      <div className="flex-1">
-                        {idx === 0 && <Label className="text-xs">{t("fire.tax_rate")}</Label>}
-                        <Input
-                          type="number"
-                          step="0.1"
-                          min="0"
-                          max="100"
-                          value={b.ratePct}
-                          disabled={ro}
-                          invalid={!!errors.brackets}
-                          onChange={(e) => {
-                            const next = form.taxBrackets.map((x, i) => (i === idx ? { ...x, ratePct: e.target.value } : x));
-                            patch({ taxBrackets: next }, ["brackets"]);
-                          }}
-                        />
-                      </div>
-                      <Button
-                        variant="ghost"
-                        className={idx === 0 ? "mt-5" : ""}
-                        disabled={ro || form.taxBrackets.length <= 1}
-                        onClick={() => patch({ taxBrackets: form.taxBrackets.filter((_, i) => i !== idx) }, ["brackets"])}
-                      >
-                        {t("common.delete")}
-                      </Button>
-                    </div>
-                  ))}
-                  <FieldError message={errors.brackets} />
-                  <Button
-                    variant="secondary"
-                    disabled={ro}
-                    onClick={() => {
-                      const lastBound = Number(form.taxBrackets[form.taxBrackets.length - 1]?.lowerBound ?? 0);
-                      patch({
-                        taxBrackets: [...form.taxBrackets, { lowerBound: String(lastBound + 50000), ratePct: "30.0" }],
-                      }, ["brackets"]);
-                    }}
-                  >
-                    {t("fire.add_bracket")}
-                  </Button>
-                </div>
-                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{t("fire.tax_model_note")}</p>
-              </div>
-            </div>
-          )}
-        </section>
-
-        {/* Cash-flow events / life phases */}
-        <section>
-          <p className="mb-1 text-sm font-semibold text-gray-700 dark:text-gray-200">{t("fire.cash_flow_events")}</p>
-          <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">{t("fire.cash_flow_events_help")}</p>
-          <div className="space-y-2">
-            {form.cashFlowEvents.map((ev, idx) => (
-              <div key={idx} className="grid grid-cols-1 gap-2 rounded-md border border-border p-2 sm:grid-cols-12 sm:items-end">
-                <div className="sm:col-span-2">
-                  <Label className="text-xs">{t("fire.event_year")}</Label>
-                  <Input
-                    type="number"
-                    value={ev.year}
-                    disabled={ro}
-                    onChange={(e) => {
-                      const next = form.cashFlowEvents.map((x, i) => (i === idx ? { ...x, year: Number(e.target.value) } : x));
-                      patch({ cashFlowEvents: next }, ["cashFlowEvents"]);
-                    }}
-                  />
-                </div>
-                <div className="sm:col-span-3">
-                  <Label className="text-xs">{t("fire.event_kind")}</Label>
-                  <Select
-                    value={ev.kind}
-                    disabled={ro}
-                    onChange={(e) => {
-                      const next = form.cashFlowEvents.map((x, i) =>
-                        i === idx ? { ...x, kind: e.target.value as CashFlowEventKind } : x,
-                      );
-                      patch({ cashFlowEvents: next }, ["cashFlowEvents"]);
-                    }}
-                  >
-                    <option value="lump_sum">{t("fire.event_lump_sum")}</option>
-                    <option value="contribution_delta">{t("fire.event_contribution_delta")}</option>
-                    <option value="spending_delta">{t("fire.event_spending_delta")}</option>
-                  </Select>
-                </div>
-                <div className="sm:col-span-3">
-                  <Label className="text-xs">{t("fire.event_amount")} ({currency})</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={ev.amount}
-                    disabled={ro}
-                    onChange={(e) => {
-                      const next = form.cashFlowEvents.map((x, i) => (i === idx ? { ...x, amount: e.target.value } : x));
-                      patch({ cashFlowEvents: next }, ["cashFlowEvents"]);
-                    }}
-                  />
-                </div>
-                <div className="sm:col-span-3">
-                  <Label className="text-xs">{t("fire.event_label")}</Label>
-                  <Input
-                    type="text"
-                    value={ev.label}
-                    disabled={ro}
-                    placeholder={t("fire.event_label_placeholder")}
-                    onChange={(e) => {
-                      const next = form.cashFlowEvents.map((x, i) => (i === idx ? { ...x, label: e.target.value } : x));
-                      patch({ cashFlowEvents: next }, ["cashFlowEvents"]);
-                    }}
-                  />
-                </div>
-                <div className="sm:col-span-1">
-                  <Button
-                    variant="ghost"
-                    disabled={ro}
-                    onClick={() => patch({ cashFlowEvents: form.cashFlowEvents.filter((_, i) => i !== idx) }, ["cashFlowEvents"])}
-                  >
-                    {t("common.delete")}
-                  </Button>
-                </div>
-              </div>
-            ))}
-            <FieldError message={errors.cashFlowEvents} />
-            <Button
-              variant="secondary"
-              disabled={ro}
-              onClick={() =>
-                patch(
-                  {
-                    cashFlowEvents: [
-                      ...form.cashFlowEvents,
-                      { year: (projection?.startYear ?? 2026) + 5, kind: "contribution_delta", amount: "500.00", label: "" },
-                    ],
-                  },
-                  ["cashFlowEvents"],
-                )
-              }
-            >
-              {t("fire.add_cash_flow_event")}
-            </Button>
-          </div>
-        </section>
-
-        <div className="flex items-center justify-end gap-3">
-          {serverError && <p className="text-sm text-red-600">{serverError}</p>}
-          {saved && !serverError && <p className="text-sm text-emerald-600">{t("common.saved")}</p>}
-          {isOwner && (
-            <Button onClick={onSave} disabled={saving}>
-              {t("common.save")}
-            </Button>
-          )}
+        {serverError && <p className="text-sm text-red-600">{serverError}</p>}
+        <div className="flex items-center gap-3">
+          <Button disabled={ro || saving} onClick={onSave}>
+            {saving ? t("common.saving") : t("common.save")}
+          </Button>
+          {saved && <span className="text-sm text-emerald-600">{t("common.saved")}</span>}
         </div>
       </CardBody>
     </Card>

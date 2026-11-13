@@ -4,8 +4,15 @@ import { useTranslation } from "react-i18next";
 import type { FireProjection, FireTierOutput } from "@/api/fire";
 import { Badge, Card, CardBody, CardHeader } from "@/components/ui/primitives";
 import { formatMoney, formatPercent } from "@/lib/money";
-import { Explain } from "./Explain";
-import { TIER_COLORS, TIER_ORDER } from "./fireLabels";
+import { formatDeltaValue } from "./FireHeroStrip";
+import {
+  TIER_COLORS,
+  TIER_ORDER,
+  formatHitProbability,
+  hitMedianYear,
+  resolveReferenceScenario,
+  resolveReferenceTierKey,
+} from "./fireLabels";
 
 const STALE_SNAPSHOT_DAYS = 45;
 
@@ -25,9 +32,17 @@ function writeDismissed(key: string): void {
   }
 }
 
-/** One box per active tier: target today, the spending base it derives from, current coverage, and the
- *  instantiated formula behind it. */
-export function FireTiersCard({ projection, currency }: { projection: FireProjection; currency: string }) {
+/** Single-row tier strip: plain-language labels, target amount, coverage bar, and reference-scenario year/probability,
+ *  with coast, tax, and calculation formula tucked into a collapsed disclosure per tier. */
+export function FireTiersCard({
+  projection,
+  baselineProjection,
+  currency,
+}: {
+  projection: FireProjection;
+  baselineProjection?: FireProjection;
+  currency: string;
+}) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const money = (v: string | number | null | undefined) => formatMoney(v ?? 0, currency, locale);
@@ -38,7 +53,7 @@ export function FireTiersCard({ projection, currency }: { projection: FireProjec
 
   const s = projection.settings;
   const taxOn = s.applyCapitalGainsTax;
-  // The "<12 months of data" note only concerns tiers whose base is actually derived from data.
+  const refTierKey = resolveReferenceTierKey(projection);
   const anyDerivedBase = tiers.some((tier) =>
     tier.key === "lean"
       ? projection.spending.essentialMode === "derived"
@@ -64,7 +79,6 @@ export function FireTiersCard({ projection, currency }: { projection: FireProjec
     taxOn &&
     projection.gainFraction.source === "movements" &&
     projection.gainFraction.uncoveredMonths > 0;
-  const savingsRatePct = projection.contributions.savingsRatePct;
 
   if (tiers.length === 0 || tiers.every((tier) => tier.targetToday === null)) {
     return (
@@ -79,21 +93,16 @@ export function FireTiersCard({ projection, currency }: { projection: FireProjec
     );
   }
 
+  const gridColsClass = tiers.length >= 4 ? "xl:grid-cols-4" : tiers.length === 2 ? "md:grid-cols-2" : "md:grid-cols-3";
+
   return (
     <Card>
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="font-medium">{t("fire.tiers")}</p>
-          <div className="flex flex-wrap items-center gap-2">
-            {savingsRatePct !== null && (
-              <Badge tone={savingsRatePct >= 0 ? "green" : "amber"}>
-                {t("fire.savings_rate_badge", { rate: formatPercent(savingsRatePct, locale, 1) })}
-              </Badge>
-            )}
-            <Link to="/fire?tab=settings" className="text-xs font-medium text-sky-600 hover:underline dark:text-sky-400">
-              {t("fire.adjust_spending_link")}
-            </Link>
-          </div>
+          <Link to="/fire?tab=settings" className="text-xs font-medium text-sky-600 hover:underline dark:text-sky-400">
+            {t("fire.adjust_spending_link")}
+          </Link>
         </div>
         {anyDerivedBase && projection.spending.monthsAvailable > 0 && projection.spending.monthsAvailable < 12 && (
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -125,11 +134,21 @@ export function FireTiersCard({ projection, currency }: { projection: FireProjec
             </button>
           </div>
         )}
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+
+        <div className={`grid grid-cols-1 gap-3 ${gridColsClass}`}>
           {tiers.map((tier) => (
-            <TierBox key={tier.key} tier={tier} projection={projection} currency={currency} />
+            <TierBox
+              key={tier.key}
+              tier={tier}
+              baseTier={baselineProjection?.tiers.find((b) => b.key === tier.key)}
+              projection={projection}
+              baselineProjection={baselineProjection}
+              isReference={tier.key === refTierKey}
+              currency={currency}
+            />
           ))}
         </div>
+
         {spendingIncoherent && (
           <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
             {t("fire.spending_coherence_warning")}
@@ -156,26 +175,51 @@ export function FireTiersCard({ projection, currency }: { projection: FireProjec
             </button>
           </div>
         )}
-        {taxOn && (
-          <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-            {t("fire.tax_targets_note", { gain: formatPercent(Number(projection.gainFraction.percent), locale, 2) })}
-          </p>
-        )}
-        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          {t("fire.coverage_source_note", { value: money(projection.startingValue), date: projection.snapshotDate ?? "—" })}
+
+        <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+          {taxOn
+            ? t("fire.tier_footnote_tax", {
+                gain: formatPercent(Number(projection.gainFraction.percent), locale, 2),
+                value: money(projection.startingValue),
+                date: projection.snapshotDate ?? "—",
+              })
+            : t("fire.tier_footnote_no_tax", {
+                value: money(projection.startingValue),
+                date: projection.snapshotDate ?? "—",
+              })}
         </p>
       </CardBody>
     </Card>
   );
 }
 
-function TierBox({ tier, projection, currency }: { tier: FireTierOutput; projection: FireProjection; currency: string }) {
+function TierBox({
+  tier,
+  baseTier,
+  projection,
+  baselineProjection,
+  isReference,
+  currency,
+}: {
+  tier: FireTierOutput;
+  baseTier?: FireTierOutput;
+  projection: FireProjection;
+  baselineProjection?: FireProjection;
+  isReference: boolean;
+  currency: string;
+}) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const money = (v: string | number | null | undefined) => formatMoney(v ?? 0, currency, locale);
   const s = projection.settings;
   const taxOn = s.applyCapitalGainsTax;
-  // Lean derives from the essential base; FIRE and Fat from the total base.
+
+  const plainLabel =
+    tier.key === "fat"
+      ? t("fire.tier_plain_fat", { multiplier: s.fatMultiplier })
+      : t(`fire.tier_plain_${tier.key}`);
+  const techLabel = t(`fire.tier_${tier.key}`);
+
   const manualBase =
     tier.key === "lean"
       ? projection.spending.essentialMode === "manual"
@@ -183,24 +227,6 @@ function TierBox({ tier, projection, currency }: { tier: FireTierOutput; project
         ? projection.spending.totalMode === "manual"
         : false;
   const variant = manualBase ? "_manual" : "";
-  const sourceMonths = projection.spending.monthsAvailable || projection.spending.lookbackMonths || 12;
-  const source = t(
-    projection.spending.aggregation === "median" ? "fire.spending_source_median" : "fire.spending_source_mean",
-    { months: sourceMonths },
-  );
-
-  const baseLine = (() => {
-    switch (tier.key) {
-      case "lean":
-        return t(`fire.tier_lean_base${variant}`, { monthly: money(tier.monthlyNetSpending), source });
-      case "fire":
-        return t(`fire.tier_fire_base${variant}`, { monthly: money(tier.monthlyNetSpending), source });
-      case "fat":
-        return t(`fire.tier_fat_base${variant}`, { monthly: money(projection.spending.totalMonthly), multiplier: s.fatMultiplier, source });
-      case "custom":
-        return t("fire.tier_custom_base");
-    }
-  })();
 
   const explain = (() => {
     if (tier.targetToday === null) return null;
@@ -222,34 +248,64 @@ function TierBox({ tier, projection, currency }: { tier: FireTierOutput; project
     }
   })();
 
-  const nonHist = projection.scenarios.filter((sc) => !sc.historical);
-  const scenarioPool = nonHist.length > 0 ? nonHist : projection.scenarios;
-  const refScenario = scenarioPool[Math.floor(scenarioPool.length / 2)];
-  const coastTarget = refScenario?.tierStats.find((st) => st.tier === tier.key)?.coastTargetToday ?? null;
+  const { scenario: refScenario } = resolveReferenceScenario(projection);
+  const refStat = refScenario?.tierStats.find((st) => st.tier === tier.key);
+  const baseScenario = baselineProjection ? resolveReferenceScenario(baselineProjection).scenario : undefined;
+  const baseStat = baseScenario?.tierStats.find((st) => st.tier === tier.key);
+
+  const hitYear = refStat ? hitMedianYear(refStat.probabilityOfReachingTarget, refStat.medianYearReachingTarget) : "—";
+  const baseHitYear = baseStat ? hitMedianYear(baseStat.probabilityOfReachingTarget, baseStat.medianYearReachingTarget) : null;
+  const hitProb = refStat ? formatHitProbability(refStat.probabilityOfReachingTarget) : "—";
+  const baseHitProb = baseStat ? formatHitProbability(baseStat.probabilityOfReachingTarget) : null;
+
+  const coastTarget = refStat?.coastTargetToday ?? null;
   const coastFundedPct =
     coastTarget && Number(coastTarget) > 0
       ? (Number(projection.startingValue) / Number(coastTarget)) * 100
       : null;
 
+  const targetText = tier.targetToday !== null ? money(tier.targetToday) : "—";
+  const baseTargetText = baseTier?.targetToday != null ? money(baseTier.targetToday) : null;
+  const covText = tier.coveragePercent !== null ? formatPercent(tier.coveragePercent, locale, 0) : "—";
+  const baseCovText = baseTier?.coveragePercent != null ? formatPercent(baseTier.coveragePercent, locale, 0) : null;
+
   return (
-    <div className="rounded-md border border-border p-3">
-      <div className="flex items-center gap-2">
-        <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: TIER_COLORS[tier.key] }} />
-        <p className="font-medium">{t(`fire.tier_${tier.key}`)}</p>
+    <div
+      className={`rounded-md border p-3 ${
+        isReference
+          ? "border-primary/70 bg-sky-50/30 ring-1 ring-primary/20 dark:bg-sky-950/20"
+          : "border-border"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: TIER_COLORS[tier.key] }} />
+          <div>
+            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{plainLabel}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">{techLabel}</p>
+          </div>
+        </div>
+        {isReference && <Badge tone="sky">{t("fire.tier_reference_badge")}</Badge>}
       </div>
+
       {tier.targetToday === null ? (
         <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
           {tier.key === "custom" ? t("fire.no_target") : t("fire.no_spending_data")}
         </p>
       ) : (
         <>
-          <p className="mt-1 text-xl font-semibold tabular-nums">{money(tier.targetToday)}</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">{baseLine}</p>
+          <p className="mt-2 text-xl font-semibold tabular-nums">
+            {formatDeltaValue(baseTargetText, targetText)}
+          </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            {t("fire.tier_target_plain")} · {t("fire.tier_target_tech")}
+          </p>
+
           {tier.coveragePercent !== null && (
             <div className="mt-2.5">
               <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-300">
-                <span>{t("fire.coverage")}</span>
-                <span className="font-medium tabular-nums">{formatPercent(tier.coveragePercent, locale, 0)}</span>
+                <span>{t("fire.photo_coverage_tech")}</span>
+                <span className="font-medium tabular-nums">{formatDeltaValue(baseCovText, covText)}</span>
               </div>
               <div className="mt-1 h-1.5 w-full overflow-hidden rounded bg-gray-100 dark:bg-raised">
                 <div
@@ -259,23 +315,36 @@ function TierBox({ tier, projection, currency }: { tier: FireTierOutput; project
               </div>
             </div>
           )}
-          {((coastTarget !== null && coastFundedPct !== null && refScenario) ||
-            (taxOn && tier.estimatedAnnualTax !== null && Number(tier.estimatedAnnualTax) > 0)) && (
-            <dl className="mt-2.5 space-y-1 border-t border-border/60 pt-2 text-xs">
-              {coastTarget !== null && coastFundedPct !== null && refScenario && (
-                <div className="flex items-center justify-between gap-2">
-                  <dt className="text-gray-500 dark:text-gray-400">
-                    {t("fire.coast_short_label", { mean: refScenario.meanPercent })}
-                  </dt>
-                  <dd className="font-medium tabular-nums text-gray-700 dark:text-gray-200">
-                    {money(coastTarget)} · {formatPercent(coastFundedPct, locale, 0)}
-                  </dd>
+
+          {refStat && (
+            <div className="mt-2.5 flex items-center justify-between text-xs text-gray-700 dark:text-gray-200">
+              <span>{t("fire.photo_year_main")}</span>
+              <span className="font-medium tabular-nums">
+                {formatDeltaValue(baseHitYear !== null ? String(baseHitYear) : null, String(hitYear))}
+                {" · "}
+                {formatDeltaValue(baseHitProb, hitProb)}
+              </span>
+            </div>
+          )}
+
+          {/* Collapsed detail per tier: coast, estimated tax, and "How is this calculated?" */}
+          <details className="mt-2.5 border-t border-border/60 pt-2 text-xs text-gray-500 dark:text-gray-400">
+            <summary className="cursor-pointer select-none text-sky-600 hover:underline dark:text-sky-400">
+              {t("fire.tier_details_toggle")}
+            </summary>
+            <div className="mt-2 space-y-2">
+              {coastTarget !== null && coastFundedPct !== null && (
+                <div>
+                  <p className="text-gray-700 dark:text-gray-200">{t("fire.tier_coast_plain")}</p>
+                  <p className="tabular-nums">
+                    {t("fire.tier_coast_tech")}: {money(coastTarget)} · {formatPercent(coastFundedPct, locale, 0)}
+                  </p>
                 </div>
               )}
               {taxOn && tier.estimatedAnnualTax !== null && Number(tier.estimatedAnnualTax) > 0 && (
                 <div className="flex items-center justify-between gap-2">
-                  <dt className="text-gray-500 dark:text-gray-400">{t("fire.est_tax_label")}</dt>
-                  <dd className="font-medium tabular-nums text-gray-700 dark:text-gray-200">
+                  <span>{t("fire.est_tax_label")}</span>
+                  <span className="font-medium tabular-nums text-gray-700 dark:text-gray-200">
                     +{money(tier.estimatedAnnualTax)}/yr (
                     {formatPercent(
                       (Number(tier.estimatedAnnualTax) / Math.max(1e-9, Number(tier.annualGrossSpending))) * 100,
@@ -283,24 +352,27 @@ function TierBox({ tier, projection, currency }: { tier: FireTierOutput; project
                       1,
                     )}
                     )
-                  </dd>
+                  </span>
                 </div>
               )}
-            </dl>
-          )}
-          {explain && (
-            <Explain>
-              <p>{explain}</p>
-              {tier.coveragePercent !== null && (
-                <p>
-                  {t("fire.coverage_explain", {
-                    wealth: money(projection.startingValue),
-                    target: money(tier.targetToday),
-                  })}
-                </p>
+              {explain && (
+                <div className="space-y-1">
+                  <p className="font-medium text-gray-700 dark:text-gray-200">
+                    {t("fire.tier_explain_question", { target: targetText })}
+                  </p>
+                  <p>{explain}</p>
+                  {tier.coveragePercent !== null && (
+                    <p>
+                      {t("fire.coverage_explain", {
+                        wealth: money(projection.startingValue),
+                        target: targetText,
+                      })}
+                    </p>
+                  )}
+                </div>
               )}
-            </Explain>
-          )}
+            </div>
+          </details>
         </>
       )}
     </div>

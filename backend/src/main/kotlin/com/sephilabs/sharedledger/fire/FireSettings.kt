@@ -20,6 +20,7 @@ data class ReturnScenario(
     val stdDevPercent: BigDecimal = BigDecimal.ZERO,
     /** Marks the "(historical — reference)" scenario derived from the household's own returns. */
     val historical: Boolean = false,
+    val name: String = "",
 )
 
 /** Source feeding the projection's monthly contribution. */
@@ -63,9 +64,9 @@ class FireSettings(
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "return_scenarios", nullable = false, columnDefinition = "jsonb")
     var returnScenarios: List<ReturnScenario> = listOf(
-        ReturnScenario(BigDecimal("4.0"), BigDecimal("5.0")),
-        ReturnScenario(BigDecimal("6.0"), BigDecimal("12.0")),
-        ReturnScenario(BigDecimal("8.0"), BigDecimal("18.0")),
+        ReturnScenario(BigDecimal("4.0"), BigDecimal("5.0"), name = "Conservative"),
+        ReturnScenario(BigDecimal("6.0"), BigDecimal("12.0"), name = "Base"),
+        ReturnScenario(BigDecimal("8.0"), BigDecimal("18.0"), name = "Optimistic"),
     ),
 
     @Column(name = "qualifying_asset_classes", nullable = false, columnDefinition = "text[]")
@@ -147,6 +148,13 @@ class FireSettings(
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "cash_flow_events", nullable = false, columnDefinition = "jsonb")
     var cashFlowEvents: List<FireCashFlowEvent> = emptyList(),
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "reference_tier", nullable = false, length = 16)
+    var referenceTier: FireTierKey = FireTierKey.fire,
+
+    @Column(name = "reference_scenario_index", nullable = false)
+    var referenceScenarioIndex: Short = 1,
 
     @Column(name = "updated_by_user_id")
     var updatedByUserId: UUID? = null,

@@ -69,6 +69,11 @@ export function FirePage() {
     preview.reset();
   }
 
+  function handleBackToPlan() {
+    handleResetWhatIf();
+    setWhatIfOpen(false);
+  }
+
   function handleApplyWhatIf() {
     if (!form || !projection || !whatIfDraft) return;
     const baseContrib = projection.contributions.activeMonthly ?? projection.settings.monthlyContribution;
@@ -199,19 +204,44 @@ export function FirePage() {
 
       {tab === "projection" && (
         <>
-          {activeProjection && <FireHeroStrip projection={activeProjection} currency={household.currency} />}
-          {activeProjection && <FireTiersCard projection={activeProjection} currency={household.currency} />}
-          {projection && whatIfDraft && (whatIfOpen || isWhatIfActive) && (
-            <FireWhatIfBar
-              baseProjection={projection}
-              draft={whatIfDraft}
-              isActive={isWhatIfActive}
-              isLoading={preview.isPending}
-              isOwner={isOwner}
+          {activeProjection && (
+            <FireHeroStrip
+              projection={activeProjection}
+              baselineProjection={isWhatIfActive ? projection : undefined}
               currency={household.currency}
-              onChange={setWhatIfDraft}
-              onReset={handleResetWhatIf}
-              onApply={handleApplyWhatIf}
+              whatIfOpen={whatIfOpen || isWhatIfActive}
+              isWhatIfActive={isWhatIfActive}
+              onToggleWhatIf={() => setWhatIfOpen((v) => !v)}
+              onBackToPlan={handleBackToPlan}
+              whatIfSlot={
+                projection && whatIfDraft && (whatIfOpen || isWhatIfActive) ? (
+                  <FireWhatIfBar
+                    baseProjection={projection}
+                    draft={whatIfDraft}
+                    isActive={isWhatIfActive}
+                    isLoading={preview.isPending}
+                    isOwner={isOwner}
+                    currency={household.currency}
+                    onChange={setWhatIfDraft}
+                    onReset={handleResetWhatIf}
+                    onApply={handleApplyWhatIf}
+                  />
+                ) : undefined
+              }
+            />
+          )}
+          {activeProjection && (
+            <FireTiersCard
+              projection={activeProjection}
+              baselineProjection={isWhatIfActive ? projection : undefined}
+              currency={household.currency}
+            />
+          )}
+          {activeProjection && (
+            <FireScenarioTable
+              projection={activeProjection}
+              baselineProjection={isWhatIfActive ? projection : undefined}
+              currency={household.currency}
             />
           )}
           {activeProjection && (
@@ -219,11 +249,8 @@ export function FirePage() {
               projection={activeProjection}
               baselineProjection={isWhatIfActive ? projection : undefined}
               currency={household.currency}
-              whatIfOpen={whatIfOpen || isWhatIfActive}
-              onToggleWhatIf={() => setWhatIfOpen((v) => !v)}
             />
           )}
-          {activeProjection && <FireScenarioTable projection={activeProjection} currency={household.currency} />}
         </>
       )}
 
