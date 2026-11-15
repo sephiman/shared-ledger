@@ -14,6 +14,7 @@
     "analytics": "Analítica",
     "fire": "FIRE",
     "settings": "Ajustes",
+    "manual": "Manual de usuario",
     "logout": "Cerrar sesión",
     "go_home": "Ir a Inicio"
   },
@@ -2377,5 +2378,19 @@
     "stacked": "apilado: {{list}}",
     "all_time_until": "todo el histórico hasta {{date}}",
     "one_category_at_a_time": "la lista muestra una categoría cada vez"
+  },
+  "manual": {
+    "title": "Manual de usuario",
+    "subtitle": "Cómo funciona Shared Ledger, funcionalidad por funcionalidad.",
+    "search_label": "Buscar en el manual",
+    "search_placeholder": "Buscar funciones, p. ej. devoluciones, XIRR, Enable Banking, Coast FIRE…",
+    "clear_search": "Limpiar búsqueda",
+    "contents": "Índice",
+    "jump_to": "Ir a la sección",
+    "no_results": "Ninguna sección del manual coincide con \"{{query}}\".",
+    "results_count": "{{count}} secciones coincidentes",
+    "open_section": "Ir a {{name}} →",
+    "back_to_top": "Volver arriba",
+    "tip_label": "Consejo"
   }
 }

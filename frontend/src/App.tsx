@@ -22,6 +22,7 @@ const SettingsPage = lazy(() => import("@/features/settings/SettingsPage").then(
 const DataImportPage = lazy(() => import("@/features/settings/DataImportPage").then((m) => ({ default: m.DataImportPage })));
 const CategorizationRulesPage = lazy(() => import("@/features/banks/CategorizationRulesPage").then((m) => ({ default: m.CategorizationRulesPage })));
 const BankCallbackPage = lazy(() => import("@/features/banks/BankCallbackPage").then((m) => ({ default: m.BankCallbackPage })));
+const ManualPage = lazy(() => import("@/features/manual/ManualPage").then((m) => ({ default: m.ManualPage })));
 
 function LazyFallback() {
   const { t } = useTranslation();
@@ -67,6 +68,7 @@ export default function App() {
           <Route path="/settings/import" element={<Lazy><DataImportPage /></Lazy>} />
           <Route path="/settings/rules" element={<Lazy><CategorizationRulesPage /></Lazy>} />
           <Route path="/settings/banks/callback" element={<Lazy><BankCallbackPage /></Lazy>} />
+          <Route path="/manual" element={<Lazy><ManualPage /></Lazy>} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

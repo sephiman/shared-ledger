@@ -14,6 +14,7 @@
     "analytics": "Analytics",
     "fire": "FIRE",
     "settings": "Settings",
+    "manual": "User manual",
     "logout": "Log out",
     "go_home": "Go to Home"
   },
@@ -2377,5 +2378,19 @@
     "stacked": "stacked: {{list}}",
     "all_time_until": "all time until {{date}}",
     "one_category_at_a_time": "the list shows one category at a time"
+  },
+  "manual": {
+    "title": "User manual",
+    "subtitle": "How Shared Ledger works, feature by feature.",
+    "search_label": "Search the manual",
+    "search_placeholder": "Search features, e.g. refunds, XIRR, Enable Banking, Coast FIRE…",
+    "clear_search": "Clear search",
+    "contents": "Contents",
+    "jump_to": "Jump to section",
+    "no_results": "No manual sections match \"{{query}}\".",
+    "results_count": "{{count}} matching sections",
+    "open_section": "Open {{name}} →",
+    "back_to_top": "Back to top",
+    "tip_label": "Tip"
   }
 }

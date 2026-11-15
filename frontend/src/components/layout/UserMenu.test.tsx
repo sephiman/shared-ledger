@@ -103,3 +103,20 @@ describe("language picker", () => {
     expect(updateLocale.mutate).not.toHaveBeenCalled();
   });
 });
+
+describe("user manual link", () => {
+  it("links to /manual in English and Spanish and closes the menu on click", async () => {
+    const user = await openMenu();
+
+    const enLink = screen.getByRole("menuitem", { name: "User manual" });
+    expect(enLink).toHaveAttribute("href", "/manual");
+
+    await user.click(enLink);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+
+    await i18n.changeLanguage("es");
+    await user.click(screen.getByRole("button", { name: i18n.t("user.menu_aria") }));
+    const esLink = screen.getByRole("menuitem", { name: "Manual de usuario" });
+    expect(esLink).toHaveAttribute("href", "/manual");
+  });
+});

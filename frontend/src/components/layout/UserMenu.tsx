@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
 import { useUpdateLocale } from "@/api/settings";
 import { cn } from "@/lib/cn";
@@ -161,6 +161,14 @@ export function UserMenu() {
               ))}
             </div>
           </div>
+          <Link
+            to="/manual"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="block w-full border-b border-border px-4 py-3 text-left text-sm font-medium text-gray-700 hover:bg-item-hover dark:text-gray-200"
+          >
+            {t("nav.manual")}
+          </Link>
           <button
             type="button"
             role="menuitem"
