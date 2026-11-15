@@ -37,6 +37,41 @@ data class CashAdjustmentDto(
     val adjustmentDate: LocalDate,
     @JsonFormat(shape = JsonFormat.Shape.STRING)
     val amount: BigDecimal,
+    val source: CashAdjustmentSource,
+)
+
+data class OtherCashRequest(
+    @field:NotNull
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    val amount: BigDecimal,
+)
+
+data class BankCashAccountRequest(@field:NotNull val countsAsCash: Boolean)
+
+data class BankCashAccountDto(
+    val id: UUID,
+    val bankName: String,
+    val accountName: String?,
+    val ibanMasked: String?,
+    val currency: String?,
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    val balance: BigDecimal?,
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    val balanceBase: BigDecimal?,
+    val balanceType: String?,
+    val balanceDate: LocalDate?,
+    val countsAsCash: Boolean,
+    val paused: Boolean,
+)
+
+data class BankCashDto(
+    val accounts: List<BankCashAccountDto>,
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    val bankTotal: BigDecimal,
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    val otherCash: BigDecimal,
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    val total: BigDecimal,
 )
 
 data class CashEstimateDto(
@@ -74,6 +109,7 @@ data class CashSettingsDto(
 class CashController(
     private val adjustments: CashAdjustmentRepository,
     private val estimates: CashEstimateService,
+    private val bankCash: BankCashService,
     private val currentUser: CurrentUser,
 ) {
 
@@ -82,7 +118,7 @@ class CashController(
     @GetMapping("/adjustments")
     fun listAdjustments(@PathVariable householdId: UUID): List<CashAdjustmentDto> =
         adjustments.findAllByHouseholdIdOrderByAdjustmentDateDescCreatedAtDesc(householdId)
-            .map { CashAdjustmentDto(it.id, it.adjustmentDate, it.amount) }
+            .map { it.toDto() }
 
     @PostMapping("/adjustments")
     @Transactional
@@ -100,7 +136,7 @@ class CashController(
         )
         adjustments.save(entry)
         log.info("cash_adjustment_added adjustment={}", entry.id)
-        return ResponseEntity.status(201).body(CashAdjustmentDto(entry.id, entry.adjustmentDate, entry.amount))
+        return ResponseEntity.status(201).body(entry.toDto())
     }
 
     @PatchMapping("/adjustments/{id}")
@@ -112,11 +148,13 @@ class CashController(
     ): CashAdjustmentDto {
         val by = currentUser.requireUser()
         val entry = loadOwn(householdId, id)
+        // The next balance refresh would overwrite an edit; a bank anchor is corrected via other cash.
+        if (entry.source == CashAdjustmentSource.bank) throw AppException.conflict("CASH_ADJUSTMENT_FROM_BANK")
         entry.adjustmentDate = body.adjustmentDate
         entry.amount = Money.normalize(body.amount)
         entry.updatedByUserId = by.id
         log.info("cash_adjustment_updated adjustment={}", entry.id)
-        return CashAdjustmentDto(entry.id, entry.adjustmentDate, entry.amount)
+        return entry.toDto()
     }
 
     @DeleteMapping("/adjustments/{id}")
@@ -165,11 +203,51 @@ class CashController(
             currentUser.requireUser(),
         ).toDto()
 
+    @GetMapping("/bank")
+    fun bank(@PathVariable householdId: UUID): BankCashDto = bankCash.overview(householdId).toDto()
+
+    @PutMapping("/other-cash")
+    fun updateOtherCash(@PathVariable householdId: UUID, @Valid @RequestBody body: OtherCashRequest): BankCashDto =
+        bankCash.setOtherCash(householdId, body.amount, currentUser.requireUser()).toDto()
+
+    @PutMapping("/bank/accounts/{accountId}")
+    fun updateBankAccount(
+        @PathVariable householdId: UUID,
+        @PathVariable accountId: UUID,
+        @Valid @RequestBody body: BankCashAccountRequest,
+    ): BankCashDto {
+        currentUser.requireUser()
+        return bankCash.setCountsAsCash(householdId, accountId, body.countsAsCash).toDto()
+    }
+
     private fun loadOwn(householdId: UUID, id: UUID): CashAdjustment {
         val entry = adjustments.findById(id).orElseThrow { AppException.notFound("CASH_ADJUSTMENT_NOT_FOUND") }
         if (entry.householdId != householdId) throw AppException.notFound("CASH_ADJUSTMENT_NOT_FOUND")
         return entry
     }
+
+    private fun CashAdjustment.toDto() = CashAdjustmentDto(id, adjustmentDate, amount, source)
+
+    private fun BankCashOverview.toDto() = BankCashDto(
+        accounts = accounts.map {
+            BankCashAccountDto(
+                id = it.account.id,
+                bankName = it.connection.label ?: it.connection.aspspName,
+                accountName = it.account.name,
+                ibanMasked = it.account.ibanMasked,
+                currency = it.account.balanceCurrency ?: it.account.currency,
+                balance = it.account.balanceAmount,
+                balanceBase = it.account.balanceAmountBase,
+                balanceType = it.account.balanceType,
+                balanceDate = it.account.balanceDate,
+                countsAsCash = it.account.countsAsCash,
+                paused = it.paused,
+            )
+        },
+        bankTotal = bankTotal,
+        otherCash = otherCash,
+        total = total,
+    )
 
     private fun CashEstimateSettings.toDto() =
         CashSettingsDto(includeTransactions, includeLendings, includeMovements)

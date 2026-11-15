@@ -9,10 +9,11 @@ import {
   useDeleteCashAdjustment,
   useUpdateCashAdjustment,
   useUpdateCashSettings,
+  type CashAdjustmentEntry,
   type CashSettings,
-  type ValueEntry,
 } from "@/api/networth";
-import { Button, Card, CardBody, CardHeader, Input, Label } from "@/components/ui/primitives";
+import { BankCashCard } from "./BankCashCard";
+import { Badge, Button, Card, CardBody, CardHeader, Input, Label } from "@/components/ui/primitives";
 import { formatMoney } from "@/lib/money";
 import { formatDate, isoToday } from "@/lib/dates";
 
@@ -38,7 +39,7 @@ export function CashTab() {
   function openAdd() {
     setEditor({ date: today, value: "" });
   }
-  function openEdit(e: ValueEntry) {
+  function openEdit(e: CashAdjustmentEntry) {
     setEditor({ entryId: e.id, date: e.date, value: e.value });
   }
   async function save() {
@@ -111,9 +112,15 @@ export function CashTab() {
                 {entries.map((e) => (
                   <li key={e.id} className="flex items-center justify-between gap-3 border-t border-border py-1 first:border-t-0">
                     <span className="text-gray-600 dark:text-gray-300">{formatDate(e.date, i18n.language)}</span>
-                    <span className="font-mono tabular-nums">{money(e.value)}</span>
+                    <span className="flex items-center gap-2">
+                      {e.source === "bank" && <Badge tone="sky">{t("networth.cash_adjustment_from_bank")}</Badge>}
+                      <span className="font-mono tabular-nums">{money(e.value)}</span>
+                    </span>
                     <span className="flex gap-1">
-                      <Button variant="ghost" className="px-2" title={t("common.edit")} onClick={() => openEdit(e)}><span aria-hidden>✏️</span></Button>
+                      {/* A bank anchor is rewritten on each daily balance read, so it is not editable. */}
+                      {e.source === "manual" && (
+                        <Button variant="ghost" className="px-2" title={t("common.edit")} onClick={() => openEdit(e)}><span aria-hidden>✏️</span></Button>
+                      )}
                       <Button variant="ghost" className="px-2" title={t("common.delete")} onClick={() => { if (window.confirm(t("common.delete") + "?")) void del.mutateAsync(e.id); }}><span aria-hidden>🗑️</span></Button>
                     </span>
                   </li>
@@ -160,6 +167,8 @@ export function CashTab() {
           </div>
         </CardBody>
       </Card>
+
+      <BankCashCard />
     </div>
   );
 }

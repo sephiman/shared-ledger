@@ -414,6 +414,34 @@ export interface CashSettings {
   includeMovements: boolean;
 }
 
+export type CashAdjustmentSource = "manual" | "bank";
+
+export interface CashAdjustmentEntry extends ValueEntry {
+  source: CashAdjustmentSource;
+}
+
+export interface BankCashAccount {
+  id: string;
+  bankName: string;
+  accountName: string | null;
+  ibanMasked: string | null;
+  currency: string | null;
+  balance: string | null;
+  balanceBase: string | null;
+  balanceType: string | null;
+  balanceDate: string | null;
+  countsAsCash: boolean;
+  paused: boolean;
+}
+
+// Linked-bank cash: the counted accounts' latest balances plus the free other cash.
+export interface BankCash {
+  accounts: BankCashAccount[];
+  bankTotal: string;
+  otherCash: string;
+  total: string;
+}
+
 function invalidateLiabilityValues(qc: ReturnType<typeof useQueryClient>, householdId: string, liabilityId: string) {
   void qc.invalidateQueries({ queryKey: ["liability-values", householdId, liabilityId] });
   void qc.invalidateQueries({ queryKey: ["liabilities", householdId] });
@@ -448,10 +476,10 @@ export function useCashAdjustments(householdId: string) {
   return useQuery({
     queryKey: ["cash-adjustments", householdId],
     queryFn: async () => {
-      const raw = (await apiClient.get<{ id: string; adjustmentDate: string; amount: string }[]>(
+      const raw = (await apiClient.get<{ id: string; adjustmentDate: string; amount: string; source: CashAdjustmentSource }[]>(
         `/households/${householdId}/cash/adjustments`,
       )).data;
-      return raw.map((e): ValueEntry => ({ id: e.id, date: e.adjustmentDate, value: e.amount }));
+      return raw.map((e): CashAdjustmentEntry => ({ id: e.id, date: e.adjustmentDate, value: e.amount, source: e.source }));
     },
   });
 }
@@ -510,5 +538,36 @@ export function useUpdateCashSettings(householdId: string) {
       void qc.invalidateQueries({ queryKey: ["cash-estimate", householdId] });
       void qc.invalidateQueries({ queryKey: ["named-values", householdId] });
     },
+  });
+}
+
+export function useBankCash(householdId: string) {
+  return useQuery({
+    queryKey: ["cash-bank", householdId],
+    queryFn: async () => (await apiClient.get<BankCash>(`/households/${householdId}/cash/bank`)).data,
+  });
+}
+
+function invalidateBankCash(qc: ReturnType<typeof useQueryClient>, householdId: string) {
+  void qc.invalidateQueries({ queryKey: ["cash-bank", householdId] });
+  // Changing other cash or the counted accounts rewrites the bank anchor.
+  invalidateCash(qc, householdId);
+}
+
+export function useUpdateOtherCash(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (amount: string) =>
+      (await apiClient.put<BankCash>(`/households/${householdId}/cash/other-cash`, { amount })).data,
+    onSuccess: () => invalidateBankCash(qc, householdId),
+  });
+}
+
+export function useUpdateBankCashAccount(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ accountId, countsAsCash }: { accountId: string; countsAsCash: boolean }) =>
+      (await apiClient.put<BankCash>(`/households/${householdId}/cash/bank/accounts/${accountId}`, { countsAsCash })).data,
+    onSuccess: () => invalidateBankCash(qc, householdId),
   });
 }

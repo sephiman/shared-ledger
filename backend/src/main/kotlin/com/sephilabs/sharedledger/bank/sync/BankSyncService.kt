@@ -64,6 +64,7 @@ class BankSyncService(
     private val fx: BankFxConverter,
     private val metrics: AppMetrics,
     private val notifications: NotificationPublisher,
+    private val balances: AccountBalanceRefresher,
     txManager: PlatformTransactionManager,
     @Qualifier("bankSyncExecutor") private val executor: Executor,
 ) {
@@ -265,7 +266,7 @@ class BankSyncService(
 
             // ---- Persist phase: one short transaction ----
             val callsAtEnd = callsUsed
-            write {
+            val ingested = write {
                 val n = saveNew(connection, fetched)
                 markConnection(connectionId) {
                     it.lastSyncedAt = Instant.now()
@@ -280,6 +281,9 @@ class BankSyncService(
                 notifications.bankMovementsToReview(connection.householdId, n, connection.aspspName, connection.label, NotifyActor.Schedule(connection.householdId))
                 n
             }
+            // Never throws: a balance the bank refuses must not turn a good sync into a failed one.
+            balances.refreshIfDue(connection.householdId, creds, sessionId, activeAccounts, psu, today)
+            ingested
         } catch (_: RateLimitExceededException) {
             // The bank refused a background fetch: persist whatever we already have (idempotent) and
             // back off. Not a hard failure — the connection stays active and retries after the wait.

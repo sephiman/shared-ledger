@@ -32,4 +32,7 @@ interface BankConnector {
         continuationKey: String? = null,
         psu: PsuContext? = null,
     ): MovementPage
+
+    /** Every balance the bank reports for an account; [psu] as in [fetchMovements]. */
+    fun fetchBalances(creds: EbCredentials, sessionId: String, accountUid: String, psu: PsuContext? = null): List<BankBalance>
 }

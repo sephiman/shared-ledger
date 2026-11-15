@@ -126,17 +126,37 @@ class EnableBankingConnector(
             }
             if (continuationKey != null) append("&continuation_key=").append(continuationKey)
         }
-        val headers = if (psu != null) {
-            mapOf("psu-ip-address" to psu.ipAddress, "psu-user-agent" to psu.userAgent)
-        } else {
-            emptyMap()
-        }
+        val headers = psuHeaders(psu)
         // The op label (not the raw query — it carries the opaque continuation key) is what a failure
         // log shows, so an ASPSP that refuses one particular window/page is identifiable afterwards.
         val op = "transactions account=$accountUid strategy=$strategy from=$dateFrom to=$dateTo " +
             "page=${if (continuationKey == null) "first" else "next"} psu=${psu != null}"
         return fetchPage(creds, op, query, headers, accountUid)
     }
+
+    override fun fetchBalances(
+        creds: EbCredentials,
+        sessionId: String,
+        accountUid: String,
+        psu: PsuContext?,
+    ): List<BankBalance> = call("balances account=$accountUid psu=${psu != null}") {
+        val body = get(creds, "/accounts/$accountUid/balances", psuHeaders(psu))
+        body.path("balances").mapNotNull { mapBalance(it) }
+    }
+
+    private fun mapBalance(node: JsonNode): BankBalance? {
+        val amountNode = node.path("balance_amount")
+        val amount = amountNode.path("amount").textOrNull()?.toBigDecimalOrNull() ?: return null
+        return BankBalance(
+            type = node.path("balance_type").textOrNull()?.uppercase() ?: "OTHR",
+            amount = amount,
+            currency = amountNode.path("currency").textOrNull() ?: "EUR",
+            referenceDate = node.path("reference_date").textOrNull()?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
+        )
+    }
+
+    private fun psuHeaders(psu: PsuContext?): Map<String, String> =
+        if (psu == null) emptyMap() else mapOf("psu-ip-address" to psu.ipAddress, "psu-user-agent" to psu.userAgent)
 
     private fun fetchPage(
         creds: EbCredentials,

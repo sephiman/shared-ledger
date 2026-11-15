@@ -5,7 +5,9 @@ import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import org.springframework.data.jpa.repository.JpaRepository
+import java.math.BigDecimal
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 
 /** An account exposed by a connection's authorization. One connection can grant several. */
@@ -40,8 +42,32 @@ class BankConnectionAccount(
 
     @Column(name = "created_at", nullable = false)
     var createdAt: Instant = Instant.now(),
+
+    // Latest balance as the bank reported it, plus its base-currency value; refreshed once a day.
+    @Column(name = "balance_amount", precision = 15, scale = 2)
+    var balanceAmount: BigDecimal? = null,
+
+    @Column(name = "balance_currency", length = 3)
+    var balanceCurrency: String? = null,
+
+    @Column(name = "balance_amount_base", precision = 15, scale = 2)
+    var balanceAmountBase: BigDecimal? = null,
+
+    @Column(name = "balance_type", length = 8)
+    var balanceType: String? = null,
+
+    // The day the balance is valid at (the bank's reference date, or our best reading of it).
+    @Column(name = "balance_date")
+    var balanceDate: LocalDate? = null,
+
+    @Column(name = "balance_fetched_on")
+    var balanceFetchedOn: LocalDate? = null,
+
+    @Column(name = "counts_as_cash", nullable = false)
+    var countsAsCash: Boolean = true,
 )
 
 interface BankConnectionAccountRepository : JpaRepository<BankConnectionAccount, UUID> {
     fun findAllByConnectionId(connectionId: UUID): List<BankConnectionAccount>
+    fun findAllByConnectionIdIn(connectionIds: Collection<UUID>): List<BankConnectionAccount>
 }

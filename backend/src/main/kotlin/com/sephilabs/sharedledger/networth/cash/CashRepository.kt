@@ -19,6 +19,18 @@ interface CashAdjustmentRepository : JpaRepository<CashAdjustment, UUID> {
         date: LocalDate,
     ): CashAdjustment?
 
+    /** The latest daily bank anchor, which a later re-computation updates rather than moving backwards. */
+    fun findFirstByHouseholdIdAndSourceOrderByAdjustmentDateDescCreatedAtDesc(
+        householdId: UUID,
+        source: CashAdjustmentSource,
+    ): CashAdjustment?
+
+    fun findFirstByHouseholdIdAndAdjustmentDateAndSource(
+        householdId: UUID,
+        adjustmentDate: LocalDate,
+        source: CashAdjustmentSource,
+    ): CashAdjustment?
+
     /** Hard-delete every adjustment of the household, INCLUDING soft-deleted (native, bypasses @SQLRestriction). */
     @Modifying
     @Query(value = "DELETE FROM cash_adjustments WHERE household_id = :hid", nativeQuery = true)

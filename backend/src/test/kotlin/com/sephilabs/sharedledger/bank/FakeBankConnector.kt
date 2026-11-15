@@ -5,6 +5,7 @@ import com.sephilabs.sharedledger.bank.connector.AuthStart
 import com.sephilabs.sharedledger.bank.connector.AuthStartRequest
 import com.sephilabs.sharedledger.bank.connector.AuthorizedAccount
 import com.sephilabs.sharedledger.bank.connector.AuthorizedSession
+import com.sephilabs.sharedledger.bank.connector.BankBalance
 import com.sephilabs.sharedledger.bank.connector.BankConnector
 import com.sephilabs.sharedledger.bank.connector.BankConnectorException
 import com.sephilabs.sharedledger.bank.connector.BankMovement
@@ -67,6 +68,13 @@ class FakeBankConnector : BankConnector {
     /** When true, [failingAccountUids] fail only on `strategy=longest`, so a bounded retry succeeds. */
     var failLongestOnly: Boolean = false
 
+    /** Balances served per account uid (none = the bank reports no balance), and every balance call made. */
+    val balancesByAccount: MutableMap<String, List<BankBalance>> = mutableMapOf()
+    val balanceCalls: MutableList<String> = mutableListOf()
+
+    /** Account uids whose balance endpoint fails with a provider error. */
+    val failingBalanceUids: MutableSet<String> = mutableSetOf()
+
     /** Which application the last call ran under, and the redirect URL it passed to `/auth`. */
     var lastCreds: EbCredentials? = null
     var lastRedirectUrl: String? = null
@@ -124,6 +132,15 @@ class FakeBankConnector : BankConnector {
                 (dateTo == null || !it.bookingDate.isAfter(dateTo))
         }
         return MovementPage(movements = filtered, continuationKey = null)
+    }
+
+    override fun fetchBalances(creds: EbCredentials, sessionId: String, accountUid: String, psu: PsuContext?): List<BankBalance> {
+        lastCreds = creds
+        balanceCalls += accountUid
+        if (accountUid in failingBalanceUids) {
+            throw BankConnectorException("ASPSP_ERROR: Error interacting with ASPSP", null, "ASPSP_ERROR")
+        }
+        return balancesByAccount[accountUid].orEmpty()
     }
 }
 

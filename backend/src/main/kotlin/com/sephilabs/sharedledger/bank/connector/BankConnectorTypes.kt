@@ -100,3 +100,32 @@ data class MovementPage(
     val movements: List<BankMovement>,
     val continuationKey: String? = null,
 )
+
+/** One balance of an account as the bank reports it. [type] is the ISO 20022 code (`CLBD`, `ITBD`, …);
+ *  [amount] is signed (an overdraft is negative). */
+data class BankBalance(
+    val type: String,
+    val amount: BigDecimal,
+    val currency: String,
+    val referenceDate: LocalDate?,
+) {
+    /** The day this balance holds at the close of. A closing balance without a reference date is
+     *  yesterday's close; any other kind is as of [today]. */
+    fun validOn(today: LocalDate): LocalDate {
+        val day = referenceDate ?: if (type in CLOSING_TYPES) today.minusDays(1) else today
+        return minOf(day, today)
+    }
+
+    companion object {
+        private val CLOSING_TYPES = setOf("CLBD", "CLAV")
+
+        // Booked before available (available can include an overdraft line); closing first because,
+        // dated at its reference day, today's movements then add on top under the end-of-day convention.
+        private val PREFERENCE = listOf("CLBD", "ITBD", "XPCD", "CLAV", "ITAV")
+
+        /** The balance cash should use out of everything the bank returned, or null if it returned none. */
+        fun preferred(balances: List<BankBalance>): BankBalance? =
+            PREFERENCE.firstNotNullOfOrNull { type -> balances.firstOrNull { it.type == type } }
+                ?: balances.firstOrNull()
+    }
+}

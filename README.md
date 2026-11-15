@@ -190,7 +190,7 @@ If the operator chooses not to record movements, the app remains correct (net wo
 
 ### Cash (adjustment series + flow-based estimate)
 
-Cash is a **hybrid**: a manual adjustment series is the source of truth, and between adjustments the balance is **estimated** from the flows the household marks as affecting cash. It lives in a **Cash** sub-tab under the **Flows** container in the Wealth hub (next to Movements). Cash stays an aggregate asset *class*, not a named asset — there is a single cash balance, not multiple accounts (v1).
+Cash is a **hybrid**: a manual adjustment series is the source of truth, and between adjustments the balance is **estimated** from the flows the household marks as affecting cash. It lives in a **Cash** sub-tab under the **Flows** container in the Wealth hub (next to Movements). Cash stays an aggregate asset *class*, not a named asset — there is a single cash balance; linked bank accounts only feed it (see *Linked-bank cash* below).
 
 - **Adjustment series (the truth).** A dated series of `date + amount` entries ("at the close of day X I had Y"), editable and deletable exactly like an asset's value history. An adjustment is the truth of cash at that date; from there cash is estimated via flows.
 - **Estimate between adjustments (computed on demand, never cached).** Estimated cash at a date = the latest adjustment on/before that date **+ the net of the marked flows dated strictly after that adjustment**. Only adjustments (the truth) and each snapshot's frozen value are persisted; the intermediate estimate is always derived.
@@ -199,6 +199,7 @@ Cash is a **hybrid**: a manual adjustment series is the source of truth, and bet
 - **Per-type toggles (per household).** An on/off toggle for each of Transactions / Lent / Movements, configured in the Cash sub-tab itself (not general Settings), all on by default. A user who captures a flow type incompletely can turn it off and lean on manual adjustments.
 - **Two-panel layout.** Left: the current estimated balance and the adjustment series (add/edit/delete), with inline helper text making the end-of-day meaning explicit. Right: the flow toggles and a breakdown of the estimate ("since your last adjustment on X (€Y), net flows +€Z → estimated €W"). Panels stack on mobile.
 - **Snapshot integration.** Creating a snapshot prefills Cash with the estimate (marked *computed*, like market classes). Editing that value **re-anchors** — it writes a new adjustment at the snapshot date and freezes the value into the snapshot. Both the Cash sub-tab and the snapshot write to the **same** series. Past snapshots are never rewritten when adjustments or later flows are added.
+- **Linked-bank cash.** When bank accounts are linked, a **Linked bank accounts** panel in the Cash sub-tab lists each one with its latest balance (and the day it holds at), a *counts as cash* checkbox (on by default; paused accounts never count), and a free **Other cash** amount for money outside the linked banks (wallet, unlinked accounts), with the sum *banks + other = total*. Whenever balances are read (once a day, see [Bank ingestion](#bank-ingestion-open-banking--psd2)), other cash is saved or an account is (un)counted, that total is written as an automatic **bank adjustment** (no author, marked *Bank* in the series) dated at the freshest counted balance's day — so the estimate re-anchors on the bank each day, and between reads it moves with the marked flows as usual. Bank movements reach cash once confirmed as transactions from the inbox. The bank anchor never moves backwards: if un-counting an account leaves an older freshest balance, the latest bank adjustment is recomputed in place. A bank adjustment can be deleted but not edited (`409 CASH_ADJUSTMENT_FROM_BANK`) — the next read would overwrite an edit; correct it through other cash, or add a manual adjustment (the latest one wins). Without any counted balance no bank adjustment is written and the manual series works as before.
 - **Compatibility.** With no adjustments and no marked flows, cash behaves exactly as before — carried over from the previous snapshot. The first anchor is created from the Cash sub-tab (or by correcting a snapshot once a series exists).
 
 ### Portfolio (investments)
@@ -609,6 +610,14 @@ Wise could be added via its own API) with the always-available CSV import as the
     its `identification_hash`. Accounts stored before the hash was kept are matched on masked IBAN +
     currency + name. The matched row keeps its id and pause state and takes the new `uid`. Copies
     left by earlier re-links are merged into the oldest row (migration V039).
+- **Account balances (daily).** On each account's **first successful sync of the day** (initial,
+  manual or scheduled) the app also reads its balance (`/accounts/{uid}/balances`) — one call per
+  account per day, outside the transactions call budget; later syncs that day don't read it again.
+  Out of the balances the bank returns it keeps the closing booked one (`CLBD`), else interim booked,
+  expected, closing available, interim available, else the first; it is dated at the bank's
+  reference date (a closing balance without one counts as yesterday's close) and converted to EUR at
+  that day's ECB rate. A balance the bank refuses is logged and skipped — it never fails the sync.
+  These balances feed linked-bank cash (see [Cash](#cash-adjustment-series--flow-based-estimate)).
 - **Sync** follows Enable Banking's fetch rules and comes in two shapes:
   - **Initial (on link)** — a **full-history** sync using `strategy=longest` (the provider finds the
     earliest available transaction and pulls everything forward). It runs asynchronously right after

@@ -14,6 +14,7 @@ import org.springframework.test.web.client.match.MockRestRequestMatchers.method
 import org.springframework.test.web.client.response.MockRestResponseCreators.withStatus
 import org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess
 import org.springframework.web.client.RestClient
+import java.math.BigDecimal
 import java.security.KeyPairGenerator
 import java.time.LocalDate
 import java.util.Base64
@@ -233,6 +234,36 @@ class EnableBankingConnectorMappingTest {
         headers.forEach { (name, value) -> response.header(name, value) }
         server.expect(method(org.springframework.http.HttpMethod.GET)).andRespond(response)
         return EnableBankingConnector(props, EnableBankingJwt(), builder)
+    }
+
+    @Test
+    fun `balances map signed amounts and the closing booked balance is preferred over available`() {
+        val builder = RestClient.builder()
+        val server = MockRestServiceServer.bindTo(builder).build()
+        server.expect(method(org.springframework.http.HttpMethod.GET)).andRespond(
+            withSuccess(
+                """{"balances":[
+                  {"balance_type":"ITAV","balance_amount":{"amount":"510.00","currency":"EUR"},"reference_date":"2026-11-15"},
+                  {"balance_type":"CLBD","balance_amount":{"amount":"-12.30","currency":"EUR"},"reference_date":"2026-11-14"},
+                  {"balance_type":"XPCD","balance_amount":{"currency":"EUR"}}
+                ]}""",
+                MediaType.APPLICATION_JSON,
+            ),
+        )
+        val balances = EnableBankingConnector(props, EnableBankingJwt(), builder).fetchBalances(creds, "s-1", "acc-1")
+
+        assertThat(balances.map { it.type }).containsExactly("ITAV", "CLBD")
+        val preferred = BankBalance.preferred(balances)!!
+        assertThat(preferred.amount).isEqualByComparingTo("-12.30")
+        assertThat(preferred.validOn(LocalDate.of(2026, 11, 15))).isEqualTo(LocalDate.of(2026, 11, 14))
+    }
+
+    @Test
+    fun `a balance without reference date is yesterday's close when closing, otherwise today`() {
+        val today = LocalDate.of(2026, 11, 15)
+        assertThat(BankBalance("CLBD", BigDecimal.ONE, "EUR", null).validOn(today)).isEqualTo(today.minusDays(1))
+        assertThat(BankBalance("ITBD", BigDecimal.ONE, "EUR", null).validOn(today)).isEqualTo(today)
+        assertThat(BankBalance("XPCD", BigDecimal.ONE, "EUR", today.plusDays(3)).validOn(today)).isEqualTo(today)
     }
 
     private fun generatePkcs8PrivateKey(): String {
