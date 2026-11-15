@@ -28,20 +28,96 @@ export function formatWholeMoney(value: string | number | Decimal | null | undef
   }).format(toDecimal(value).toNumber());
 }
 
-/** Per-unit price. €1 and above show the standard 2 decimals; only sub-unit prices expand to their full
- *  stored precision so tiny coins don't collapse to 0.00 (PEPE keeps all 12 decimals, no rounding and no
- *  significant-figure truncation). Unit prices only — EUR aggregates stay at 2dp via {@link formatMoney}. */
-export function formatPrice(value: string | number | Decimal | null | undefined, currency: string, locale: string): string {
+export const MAX_QUANTITY_DECIMALS = 6;
+
+/** Fraction digits {@link formatPrice} uses on a standalone price: 2 at or above 1 unit, expanding to
+ *  stored sub-unit decimals up to Intl's 20-digit limit so micro-priced coins never collapse to 0.00. */
+export function priceDecimals(value: string | number | Decimal | null | undefined): number {
   const d = toDecimal(value);
-  // Never fewer than 2 (so 5 reads as 5.00); cap at Intl's 20-fraction-digit ceiling.
-  // Only sub-€1 magnitudes get extra decimals; ≥€1 stays at 2 like formatMoney.
-  const decimals = d.abs().gte(1) ? 2 : Math.min(20, Math.max(2, d.decimalPlaces()));
+  return d.abs().gte(1) ? 2 : Math.min(20, Math.max(2, d.decimalPlaces()));
+}
+
+function effectivePriceDecimals(
+  d: Decimal,
+  referencePrice?: string | number | Decimal | null,
+): number {
+  const own = priceDecimals(d);
+  if (referencePrice == null || referencePrice === "") return own;
+  return Math.min(own, priceDecimals(referencePrice));
+}
+
+/** Per-unit price or unit cost. 1 unit and above show 2 decimals; sub-unit values keep stored precision
+ *  (never truncated when no reference cap applies), and when [referencePrice] is passed (unit cost
+ *  paired with a market price), precision never exceeds the price shown alongside it. */
+export function formatPrice(
+  value: string | number | Decimal | null | undefined,
+  currency: string,
+  locale: string,
+  referencePrice?: string | number | Decimal | null,
+): string {
+  const d = toDecimal(value);
+  const decimals = effectivePriceDecimals(d, referencePrice);
+  const rounded = d.toDecimalPlaces(decimals);
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: decimals,
+  }).format(rounded.toNumber());
+}
+
+/** Unrounded currency string at full stored precision (min 2dp) for hover/assistive-tech tooltips. */
+export function formatFullPrecisionMoney(
+  value: string | number | Decimal | null | undefined,
+  currency: string,
+  locale: string,
+): string {
+  const d = toDecimal(value);
+  const decimals = Math.min(20, Math.max(2, d.decimalPlaces()));
   return new Intl.NumberFormat(locale, {
     style: "currency",
     currency,
     minimumFractionDigits: 2,
     maximumFractionDigits: decimals,
   }).format(d.toNumber());
+}
+
+/** Plain decimal string rounded to the display precision of {@link formatPrice} for numeric input fields. */
+export function formatPriceInput(
+  value: string | number | Decimal | null | undefined,
+  referencePrice?: string | number | Decimal | null,
+): string {
+  const d = toDecimal(value);
+  const decimals = effectivePriceDecimals(d, referencePrice);
+  const str = d.toDecimalPlaces(decimals).toFixed(decimals);
+  // Keep at least 2dp (e.g. "2.10") while dropping extraneous trailing zeros ("0.790000" -> "0.79").
+  return str.replace(/(\.\d{2,}?)0+$/, "$1");
+}
+
+/** Locale-formatted quantity with forced thousands grouping (matching {@link formatWholeMoney} for
+ *  Spanish 4-digit numbers), trailing zeros stripped, and a capped decimal scale. */
+export function formatQuantity(
+  value: string | number | Decimal | null | undefined,
+  locale: string,
+  maxDecimals = MAX_QUANTITY_DECIMALS,
+): string {
+  const d = toDecimal(value);
+  const cap = Math.max(0, Math.min(20, maxDecimals));
+  const rounded = d.toDecimalPlaces(cap);
+  return new Intl.NumberFormat(locale, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: Math.min(cap, rounded.decimalPlaces()),
+    useGrouping: "always",
+  }).format(rounded.toNumber());
+}
+
+/** Full-precision locale-formatted quantity for hover/assistive-tech tooltips. */
+export function formatQuantityFull(
+  value: string | number | Decimal | null | undefined,
+  locale: string,
+): string {
+  const d = toDecimal(value);
+  return formatQuantity(d, locale, Math.min(20, d.decimalPlaces()));
 }
 
 export function formatNumber(value: number, locale: string, fractionDigits = 0): string {

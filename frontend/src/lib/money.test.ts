@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { formatCompactMoney, formatMoney, formatPercent, formatPrice, toDecimal } from "./money";
+import {
+  formatCompactMoney,
+  formatFullPrecisionMoney,
+  formatMoney,
+  formatPercent,
+  formatPrice,
+  formatPriceInput,
+  formatQuantity,
+  formatQuantityFull,
+  toDecimal,
+} from "./money";
 
 describe("money", () => {
   it("formats EUR in en locale", () => {
@@ -50,5 +60,58 @@ describe("money", () => {
   it("formats an already-scaled percentage", () => {
     expect(formatPercent(12.34, "en")).toBe("12.3 %");
     expect(formatPercent(0, "en", 0)).toBe("0 %");
+  });
+
+  describe("unit cost precision (formatPrice with referencePrice + formatPriceInput)", () => {
+    it("never shows more decimals than the reference price above it in EN and ES", () => {
+      // Sub-unit costs when current price is ≥ €1 drop to 2 decimals
+      expect(formatPrice("0.792399305858", "EUR", "en", "2.46")).toBe("€0.79");
+      expect(formatPrice("0.792399305858", "EUR", "es", "2.46")).toMatch(/^0,79\s?€$/);
+
+      // Sub-unit cost capped by a 6-decimal sub-unit price (e.g. ADA) and 7-decimal (KAS)
+      expect(formatPrice("0.792399305858", "EUR", "en", "0.135768")).toBe("€0.792399");
+      expect(formatPrice("0.792399305858", "EUR", "es", "0.135768")).toMatch(/^0,792399\s?€$/);
+
+      expect(formatPrice("0.087573690621", "EUR", "en", "0.0240653")).toBe("€0.0875737");
+      expect(formatPrice("0.087573690621", "EUR", "es", "0.0240653")).toMatch(/^0,0875737\s?€$/);
+
+      // Sub-cent coin keeps full stored precision when the price above has at least as many decimals
+      expect(formatPrice("0.00001234", "EUR", "en", "0.00001234")).toBe("€0.00001234");
+      expect(formatPrice("0.00001234", "EUR", "es", "0.00001234")).toMatch(/^0,00001234\s?€$/);
+      // And caps if the price above has fewer decimals
+      expect(formatPrice("0.00001234", "EUR", "en", "0.00002")).toBe("€0.00001");
+
+      // Values >= 1 stay at 2 decimals even when the price above has 6 decimals
+      expect(formatPrice("2.46", "EUR", "en", "0.135768")).toBe("€2.46");
+      expect(formatPrice("2.46", "EUR", "es", "0.135768")).toMatch(/^2,46\s?€$/);
+      expect(formatPrice("59204.14", "EUR", "en", "58614.00")).toBe("€59,204.14");
+      expect(formatPrice("59204.14", "EUR", "es", "58614.00")).toMatch(/^59\.204,14\s?€$/);
+    });
+
+    it("produces matching plain decimal input strings and full-precision tooltips", () => {
+      expect(formatPriceInput("0.792399305858", "0.135768")).toBe("0.792399");
+      expect(formatPriceInput("0.792399305858", "2.46")).toBe("0.79");
+      expect(formatPriceInput("2.100000000000")).toBe("2.10");
+      expect(formatFullPrecisionMoney("0.792399305858", "EUR", "en")).toBe("€0.792399305858");
+      expect(formatFullPrecisionMoney("0.792399305858", "EUR", "es")).toMatch(/^0,792399305858\s?€$/);
+    });
+  });
+
+  describe("formatQuantity and formatQuantityFull", () => {
+    it("formats quantities with locale decimal separator, grouping, stripped trailing zeros, and a 6dp cap", () => {
+      expect(formatQuantity("1261.99", "en")).toBe("1,261.99");
+      expect(formatQuantity("1261.99", "es")).toBe("1.261,99");
+
+      expect(formatQuantity("0.2508968", "en")).toBe("0.250897");
+      expect(formatQuantity("0.2508968", "es")).toBe("0,250897");
+      expect(formatQuantityFull("0.2508968", "en")).toBe("0.2508968");
+      expect(formatQuantityFull("0.2508968", "es")).toBe("0,2508968");
+
+      expect(formatQuantity("11467.1802", "en")).toBe("11,467.1802");
+      expect(formatQuantity("11467.1802", "es")).toBe("11.467,1802");
+
+      expect(formatQuantity("16420", "en")).toBe("16,420");
+      expect(formatQuantity("16420", "es")).toBe("16.420");
+    });
   });
 });

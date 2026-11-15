@@ -23,7 +23,7 @@ import {
 import { apiErrorMessage } from "@/api/client";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select, Toggle } from "@/components/ui/primitives";
 import { InfoTip } from "@/components/ui/InfoTip";
-import { formatMoney, formatNumber, formatPrice } from "@/lib/money";
+import { formatFullPrecisionMoney, formatMoney, formatNumber, formatPrice, formatQuantity, formatQuantityFull } from "@/lib/money";
 import { formatDate, isoToday } from "@/lib/dates";
 import { useToggleSet } from "@/lib/useToggleSet";
 import { SymbolSearchCombobox } from "./SymbolSearchCombobox";
@@ -50,14 +50,14 @@ interface HoldingColumn {
 
 /** The desktop table's columns, in order; every one of them sorts on the figure it prints. */
 const COLUMNS: HoldingColumn[] = [
-  { key: "symbol", labelKey: "portfolio.symbol", align: "left" },
-  { key: "quantity", labelKey: "portfolio.quantity", align: "right" },
-  { key: "costBasis", labelKey: "portfolio.cost_basis", align: "right" },
-  { key: "currentPrice", labelKey: "portfolio.current_price", align: "right", className: "min-w-[9.5rem]" },
-  { key: "currentValue", labelKey: "portfolio.current_value", align: "right" },
-  { key: "unrealizedPnl", labelKey: "portfolio.unrealized_pnl", align: "right" },
-  { key: "realizedPnl", labelKey: "portfolio.realized_pnl", align: "right" },
-  { key: "weight", labelKey: "portfolio.weight", align: "right" },
+  { key: "symbol", labelKey: "portfolio.symbol", align: "left", className: "w-full pr-2" },
+  { key: "quantity", labelKey: "portfolio.quantity", align: "right", className: "px-1 xl:px-1.5" },
+  { key: "costBasis", labelKey: "portfolio.cost_basis", align: "right", className: "px-1 xl:px-1.5" },
+  { key: "currentPrice", labelKey: "portfolio.current_price", align: "right", className: "px-1 xl:px-1.5" },
+  { key: "currentValue", labelKey: "portfolio.current_value", align: "right", className: "px-1 xl:px-1.5" },
+  { key: "unrealizedPnl", labelKey: "portfolio.unrealized_pnl", align: "right", className: "px-1 xl:px-1.5" },
+  { key: "realizedPnl", labelKey: "portfolio.realized_pnl", align: "right", className: "px-1 xl:px-1.5" },
+  { key: "weight", labelKey: "portfolio.weight", align: "right", className: "px-1 xl:px-1.5" },
 ];
 
 /** Per browser, like the theme: a view preference for this table, with no home in Settings. */
@@ -73,10 +73,9 @@ function readShowClosed(): boolean {
 
 type PanelMode = { kind: "closed" } | { kind: "create" } | { kind: "edit"; holding: Holding };
 
-/** A stored decimal at full precision: trims only pure trailing zeros (10000.000000 -> 10000), never drops
- *  meaningful digits, and avoids exponent notation for tiny holdings. Used for quantities on screen and to
- *  seed the trade form's number fields, which would otherwise show a stored value's zero tail. */
-function formatQty(value: string): string {
+/** A stored decimal at full precision: trims only pure trailing zeros (10000.000000 -> 10000) and avoids
+ *  exponent notation. Used to seed the trade form's HTML number fields without a stored zero tail. */
+function trimZeroTail(value: string): string {
   try {
     return new Decimal(value).toFixed();
   } catch {
@@ -219,9 +218,12 @@ export function HoldingsTab() {
     : null;
   const money = (v: string | number | null | undefined, currency = household.currency) =>
     v == null ? "—" : formatMoney(v, currency, locale);
-  // Per-unit prices (current price, avg cost) at full precision — tiny coins keep every decimal.
-  const price = (v: string | number | null | undefined, currency = household.currency) =>
-    v == null ? "—" : formatPrice(v, currency, locale);
+  // Per-unit prices (current price, avg cost); optional referencePrice caps unit-cost precision at the price above it.
+  const price = (
+    v: string | number | null | undefined,
+    currency = household.currency,
+    referencePrice?: string | null,
+  ) => (v == null ? "—" : formatPrice(v, currency, locale, referencePrice));
   // Signed money plus the percentage over its own denominator, e.g. "+€1,234 (11.1%)";
   // an undefined percentage (zero denominator) renders as "(—)", never 0%.
   const pnlStat = (v: string | null | undefined, fraction: string | null): string =>
@@ -407,7 +409,11 @@ export function HoldingsTab() {
                   className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2.5 py-0.5 text-xs font-medium text-sky-700 hover:bg-gray-100 dark:text-sky-300 dark:hover:bg-raised"
                 >
                   <span aria-hidden>🔔</span>
-                  <span>{t("portfolio.alerts.count", { count: activeAlertCount })}</span>
+                  <span>
+                    {activeAlertCount > 0
+                      ? t("portfolio.alerts.count", { count: activeAlertCount })
+                      : t("portfolio.alerts.count_zero")}
+                  </span>
                 </button>
               )}
             </div>
@@ -458,7 +464,10 @@ export function HoldingsTab() {
                               <p className="mt-0.5 truncate text-sm text-gray-600 dark:text-gray-300">{row.holding.label}</p>
                             )}
                             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                              {formatQty(row.holding.netQuantity)} · {t("portfolio.cost_basis")}: {money(row.holding.remainingCostBasis)}
+                              <span title={formatQuantityFull(row.holding.netQuantity, locale)}>
+                                {formatQuantity(row.holding.netQuantity, locale)}
+                              </span>{" "}
+                              · {t("portfolio.cost_basis")}: {money(row.holding.remainingCostBasis)}
                               {/* No price column to mark on a card, so the dot trails this line — and
                                   costs no extra height. Expanding the card gives the date in words. */}
                               {age?.stale && <StalePriceDot age={age} locale={locale} className="ml-1.5" />}
@@ -504,10 +513,10 @@ export function HoldingsTab() {
                 })}
               </ul>
               <div className="hidden overflow-x-auto lg:block">
-              <table className="w-full text-sm">
+              <table className="w-full text-xs xl:text-sm">
                 <thead className="text-left text-gray-500 dark:text-gray-400">
                   <tr>
-                    <th className="w-6 py-2"></th>
+                    <th className="w-5 px-0.5 py-2"></th>
                     {COLUMNS.map((column) => (
                       <SortableColumn
                         key={column.key}
@@ -517,7 +526,7 @@ export function HoldingsTab() {
                       />
                     ))}
                     {telegramActive && (
-                      <th className="w-12 py-2 text-right font-normal">
+                      <th className="w-10 px-1 py-2 text-right font-normal">
                         <span className="sr-only">{t("portfolio.alerts.drawer_title")}</span>
                       </th>
                     )}
@@ -528,6 +537,16 @@ export function HoldingsTab() {
                     const isOpen = expanded.has(row.holding.id);
                     const avg = avgCost(row);
                     const age = priceAge(row, now);
+                    const priceCcy = row.priceCurrency ?? row.holding.nativeCurrency;
+                    const priceText = row.currentPrice != null ? price(row.currentPrice, priceCcy) : null;
+                    const fullPriceText = row.currentPrice != null ? formatFullPrecisionMoney(row.currentPrice, priceCcy, locale) : null;
+                    const priceTitleParts = [
+                      row.priceAsOf
+                        ? t("portfolio.price_as_of", { date: formatDate(row.priceAsOf, locale) }) +
+                          (row.stale ? ` · ${t("portfolio.stale_price")}` : "")
+                        : null,
+                      fullPriceText && fullPriceText !== priceText ? fullPriceText : null,
+                    ].filter(Boolean);
                     return (
                       <Fragment key={row.holding.id}>
                         <tr
@@ -535,44 +554,44 @@ export function HoldingsTab() {
                           onClick={() => expanded.toggle(row.holding.id)}
                           aria-expanded={isOpen}
                         >
-                          <td className="py-2 text-center text-xs text-gray-400" aria-hidden>{isOpen ? "▾" : "▸"}</td>
-                          <td className="py-2">
+                          <td className="w-5 px-0.5 py-2 text-center text-xs text-gray-400" aria-hidden>{isOpen ? "▾" : "▸"}</td>
+                          <td className="w-full py-2 pr-2 break-words">
                             <span className="font-medium">{row.holding.symbol}</span>
                             {row.holding.label && (
-                              <span className="ml-2 text-gray-500 dark:text-gray-400">{row.holding.label}</span>
+                              <span className="ml-1.5 text-gray-500 dark:text-gray-400" title={row.holding.label}>{row.holding.label}</span>
                             )}
-                            <span className="ml-2 text-xs text-gray-400">{t(`portfolio.class.${row.holding.assetClass}`)}</span>
+                            <span className="ml-1.5 text-xs text-gray-400">{t(`portfolio.class.${row.holding.assetClass}`)}</span>
                             {row.holding.closed && (
-                              <span className="ml-2 rounded-full bg-gray-200 px-2 py-0.5 text-xs text-gray-600 dark:bg-raised dark:text-gray-300">
+                              <span className="ml-1.5 rounded-full bg-gray-200 px-2 py-0.5 text-xs text-gray-600 dark:bg-raised dark:text-gray-300">
                                 {t("portfolio.closed")}
                               </span>
                             )}
                             <ProviderNotListedBadge holding={row.holding} locale={locale} />
                           </td>
-                          <td className="whitespace-nowrap text-right font-mono tabular-nums">{formatQty(row.holding.netQuantity)}</td>
-                          <td className="whitespace-nowrap text-right font-mono tabular-nums">{money(row.holding.remainingCostBasis)}</td>
-                          <td className={`whitespace-nowrap text-right font-mono tabular-nums ${avg != null ? "align-top" : "align-middle"}`}>
+                          <td
+                            className="whitespace-nowrap px-1 text-right font-mono tabular-nums xl:px-1.5"
+                            title={formatQuantityFull(row.holding.netQuantity, locale)}
+                          >
+                            {formatQuantity(row.holding.netQuantity, locale)}
+                          </td>
+                          <td className="whitespace-nowrap px-1 text-right font-mono tabular-nums xl:px-1.5">{money(row.holding.remainingCostBasis)}</td>
+                          <td className={`whitespace-nowrap px-1 text-right font-mono tabular-nums xl:px-1.5 ${avg != null ? "align-top" : "align-middle"}`}>
                             {row.currentPrice != null ? (
                               <div className="flex flex-col items-end leading-tight">
                                 <span
                                   className={row.stale ? "text-amber-600 dark:text-amber-400" : undefined}
-                                  title={
-                                    row.priceAsOf
-                                      ? t("portfolio.price_as_of", { date: formatDate(row.priceAsOf, locale) }) +
-                                        (row.stale ? ` · ${t("portfolio.stale_price")}` : "")
-                                      : undefined
-                                  }
+                                  title={priceTitleParts.length > 0 ? priceTitleParts.join(" · ") : undefined}
                                 >
                                   {/* Leads the number so stale rows keep their digits aligned with the rest. */}
                                   {age?.stale && <StalePriceDot age={age} locale={locale} className="mr-1.5" />}
-                                  {price(row.currentPrice, row.priceCurrency ?? row.holding.nativeCurrency)}
+                                  {priceText}
                                 </span>
                                 {avg != null && (
                                   <span
                                     className="text-xs font-normal text-gray-400 dark:text-gray-500"
-                                    title={t("portfolio.avg_cost_tooltip")}
+                                    title={`${t("portfolio.avg_cost_tooltip")}: ${formatFullPrecisionMoney(avg, household.currency, locale)}`}
                                   >
-                                    {t("portfolio.avg_cost_short")} {price(avg)}
+                                    {t("portfolio.avg_cost_short")} {price(avg, household.currency, row.currentPrice)}
                                   </span>
                                 )}
                               </div>
@@ -580,8 +599,8 @@ export function HoldingsTab() {
                               <PriceBadge row={row} />
                             )}
                           </td>
-                          <td className="whitespace-nowrap text-right font-mono font-medium tabular-nums">{money(row.currentValue)}</td>
-                          <td className={`whitespace-nowrap text-right font-mono tabular-nums ${toneClass(pnlTone(row.unrealizedPnl))}`}>
+                          <td className="whitespace-nowrap px-1 text-right font-mono font-medium tabular-nums xl:px-1.5">{money(row.currentValue)}</td>
+                          <td className={`whitespace-nowrap px-1 text-right font-mono tabular-nums xl:px-1.5 ${toneClass(pnlTone(row.unrealizedPnl))}`}>
                             {row.unrealizedPnl != null ? (
                               <>
                                 {signedMoney(row.unrealizedPnl, money(row.unrealizedPnl))}
@@ -593,14 +612,14 @@ export function HoldingsTab() {
                               </>
                             ) : "—"}
                           </td>
-                          <td className={`whitespace-nowrap text-right font-mono tabular-nums ${toneClass(pnlTone(row.realizedPnl))}`}>
+                          <td className={`whitespace-nowrap px-1 text-right font-mono tabular-nums xl:px-1.5 ${toneClass(pnlTone(row.realizedPnl))}`}>
                             {signedMoney(row.realizedPnl, money(row.realizedPnl))}
                           </td>
-                          <td className="whitespace-nowrap text-right font-mono tabular-nums">
+                          <td className="whitespace-nowrap px-1 text-right font-mono tabular-nums xl:px-1.5">
                             {percentLabel(weights.get(row.holding.id), locale)}
                           </td>
                           {telegramActive && (
-                            <td className="whitespace-nowrap py-1 text-right" onClick={(e) => e.stopPropagation()}>
+                            <td className="w-10 whitespace-nowrap px-1 py-1 text-right" onClick={(e) => e.stopPropagation()}>
                               {isAlertEligibleHolding(row) && (
                                 <AlertBellButton row={row} onClick={() => setAlertModal({ row })} />
                               )}
@@ -678,7 +697,7 @@ function AlertBellButton({ row, onClick }: { row: HoldingSummary; onClick: () =>
       aria-label={label}
       title={label}
       className={cn(
-        "inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors hover:bg-gray-100 dark:hover:bg-raised",
+        "inline-flex items-center gap-0.5 rounded-md px-1 py-1 text-xs transition-colors hover:bg-gray-100 dark:hover:bg-raised",
         count > 0 ? "font-medium text-sky-600 dark:text-sky-400" : "text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300",
       )}
     >
@@ -713,7 +732,8 @@ function SortableColumn({
         onClick={() => onSort(column.key)}
         title={t("common.sort_by", { column: label })}
         className={cn(
-          "inline-flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200",
+          "inline-flex items-center gap-0.5 hover:text-gray-700 dark:hover:text-gray-200",
+          column.align === "right" && "justify-end text-right",
           active && "text-gray-700 dark:text-gray-200",
         )}
       >
@@ -982,10 +1002,23 @@ function LotsEditor({ holding, currency, locale }: { holding: Holding; currency:
                       {t(`portfolio.lot_type.${lot.type}`)}
                     </span>
                     {" "}
-                    {formatDate(lot.tradedOn, locale)} · {formatQty(lot.quantity)} × {formatPrice(lot.unitPrice, lot.currency, locale)}
+                    {formatDate(lot.tradedOn, locale)} ·{" "}
+                    <span title={formatQuantityFull(lot.quantity, locale)}>
+                      {formatQuantity(lot.quantity, locale)}
+                    </span>{" "}
+                    ×{" "}
+                    <span title={formatFullPrecisionMoney(lot.unitPrice, lot.currency, locale)}>
+                      {formatPrice(lot.unitPrice, lot.currency, locale)}
+                    </span>
                     {lot.fee && ` · ${t("portfolio.fee")} ${formatMoney(lot.fee, lot.currency, locale)}`}
                     {partlySold && (
-                      <span className="text-gray-400 dark:text-gray-500"> · {formatQty(remaining!)} {t("portfolio.held_short")}</span>
+                      <span
+                        className="text-gray-400 dark:text-gray-500"
+                        title={formatQuantityFull(remaining!, locale)}
+                      >
+                        {" "}
+                        · {formatQuantity(remaining!, locale)} {t("portfolio.held_short")}
+                      </span>
                     )}
                     {lot.note && ` · ${lot.note}`}
                   </span>
@@ -1067,10 +1100,10 @@ function LotForm({
 
   const [type, setType] = useState<LotType>(target.kind === "edit" ? target.lot.type : target.type);
   const [tradedOn, setTradedOn] = useState(editing?.tradedOn ?? isoToday());
-  const [quantity, setQuantity] = useState(editing ? formatQty(editing.quantity) : "");
-  const [unitPrice, setUnitPrice] = useState(editing ? formatQty(editing.unitPrice) : "");
+  const [quantity, setQuantity] = useState(editing ? trimZeroTail(editing.quantity) : "");
+  const [unitPrice, setUnitPrice] = useState(editing ? trimZeroTail(editing.unitPrice) : "");
   const [lotCurrency, setLotCurrency] = useState(editing?.currency ?? holding.nativeCurrency);
-  const [fee, setFee] = useState(editing?.fee ? formatQty(editing.fee) : "");
+  const [fee, setFee] = useState(editing?.fee ? trimZeroTail(editing.fee) : "");
   const [note, setNote] = useState(editing?.note ?? "");
   const [error, setError] = useState<string | null>(null);
 

@@ -809,6 +809,7 @@
       "bitcoin": "Bitcoin"
     },
     "alerts": {
+      "count_zero": "Alertas",
       "count_one": "{{count}} alerta activa",
       "count_other": "{{count}} alertas activas",
       "bell_label": "Alertas de precio para {{symbol}}",

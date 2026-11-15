@@ -11,7 +11,7 @@ import {
 } from "@/api/portfolio";
 import { Button, FieldError, Input, Label } from "@/components/ui/primitives";
 import { isoToday } from "@/lib/dates";
-import { formatPrice } from "@/lib/money";
+import { formatFullPrecisionMoney, formatPrice, formatPriceInput } from "@/lib/money";
 import { applyPctShortcut, describeCadence, inferAlertDirection, isoDateInZone } from "./priceAlerts";
 
 const PCT_SHORTCUTS = [-20, -10, -5, 5, 10, 20];
@@ -52,10 +52,11 @@ export function PriceAlertModal({ householdId, holdingRow, displayTimezone, exis
 
   const inferred = inferAlertDirection(threshold, currentPrice);
   const equalOrInvalid = inferred === "EQUAL" || inferred === "INVALID";
+  const avgCostInput = avgCost != null ? formatPriceInput(avgCost, currentPrice) : null;
   const costEqualsCurrent = (() => {
-    if (!avgCost || !currentPrice) return false;
+    if (!avgCostInput || !currentPrice) return false;
     try {
-      return new Decimal(avgCost).eq(currentPrice);
+      return new Decimal(avgCostInput).eq(currentPrice) || (avgCost != null && new Decimal(avgCost).eq(currentPrice));
     } catch {
       return false;
     }
@@ -129,14 +130,20 @@ export function PriceAlertModal({ householdId, holdingRow, displayTimezone, exis
           <div className="grid grid-cols-2 gap-3 rounded-md bg-sunken p-3 text-xs">
             <div>
               <p className="text-gray-500 dark:text-gray-400">{t("portfolio.alerts.current_price")}</p>
-              <p className="mt-0.5 font-mono text-sm font-medium tabular-nums">
+              <p
+                className="mt-0.5 font-mono text-sm font-medium tabular-nums"
+                title={currentPrice != null ? formatFullPrecisionMoney(currentPrice, currency, locale) : undefined}
+              >
                 {currentPrice != null ? formatPrice(currentPrice, currency, locale) : "—"}
               </p>
             </div>
             <div>
               <p className="text-gray-500 dark:text-gray-400">{t("portfolio.alerts.avg_cost")}</p>
-              <p className="mt-0.5 font-mono text-sm font-medium tabular-nums">
-                {avgCost != null ? formatPrice(avgCost, currency, locale) : "—"}
+              <p
+                className="mt-0.5 font-mono text-sm font-medium tabular-nums"
+                title={avgCost != null ? formatFullPrecisionMoney(avgCost, currency, locale) : undefined}
+              >
+                {avgCost != null ? formatPrice(avgCost, currency, locale, currentPrice) : "—"}
               </p>
             </div>
           </div>
@@ -156,7 +163,7 @@ export function PriceAlertModal({ householdId, holdingRow, displayTimezone, exis
                 setThreshold(e.target.value);
                 setError(null);
               }}
-              placeholder={currentPrice ?? ""}
+              placeholder={currentPrice != null ? formatPriceInput(currentPrice) : ""}
             />
             {inferred === "ABOVE" && (
               <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
@@ -186,14 +193,14 @@ export function PriceAlertModal({ householdId, holdingRow, displayTimezone, exis
               {t("portfolio.alerts.shortcuts")}
             </p>
             <div className="flex flex-wrap gap-1.5">
-              {avgCost != null && (
+              {avgCostInput != null && (
                 <Button
                   type="button"
                   variant="secondary"
                   className="px-2 py-1 text-xs"
                   disabled={costEqualsCurrent}
                   title={costEqualsCurrent ? t("portfolio.alerts.shortcut_cost_at_current") : undefined}
-                  onClick={() => setThreshold(avgCost)}
+                  onClick={() => setThreshold(avgCostInput)}
                 >
                   {t("portfolio.alerts.shortcut_cost")}
                 </Button>

@@ -809,6 +809,7 @@
       "bitcoin": "Bitcoin"
     },
     "alerts": {
+      "count_zero": "Alerts",
       "count_one": "{{count}} active alert",
       "count_other": "{{count}} active alerts",
       "bell_label": "Price alerts for {{symbol}}",

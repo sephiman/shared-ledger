@@ -599,4 +599,120 @@ describe("price alerts UI gating and modal/drawer flows", () => {
     await user.click(within(drawer).getByRole("button", { name: /Cancel alert/i }));
     expect(alertSpies.cancel).toHaveBeenCalledWith("a1");
   });
+
+  it("shows compact \"Alerts\" label when active alert count is zero", () => {
+    summaryRef.current = { ...summaryOf([OPEN]), telegramActive: true, activeAlertCount: 0 };
+    render(<HoldingsTab />);
+    expect(screen.getByRole("button", { name: /^Alerts$/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /0 active alert/i })).toBeNull();
+  });
+
+  it("caps unit cost decimals to current price, formats quantities, preserves tooltips, and keeps modal shortcut aligned", async () => {
+    const user = userEvent.setup();
+    const adaBase = holding("ADA", "3104.50", { netQuantity: "1261.99" });
+    const aboveUnit = {
+      ...adaBase,
+      holding: { ...adaBase.holding, remainingCostBasis: "1000.00" },
+      currentPrice: "2.46",
+      priceCurrency: "EUR",
+      averageCostPriceCurrency: "0.792399305858",
+      activeAlertCount: 0,
+    };
+    const xrpBase = holding("XRP", "3.41", { netQuantity: "25.08968" });
+    const subUnit = {
+      ...xrpBase,
+      holding: { ...xrpBase.holding, remainingCostBasis: "19.8810450157" },
+      currentPrice: "0.135768",
+      priceCurrency: "EUR",
+      averageCostPriceCurrency: "0.792399305858",
+      activeAlertCount: 1,
+    };
+    const btcBase = holding("BTC", "12544.84", { netQuantity: "0.2508968" });
+    const fractional = {
+      ...btcBase,
+      holding: { ...btcBase.holding, remainingCostBasis: "11290.36" },
+      currentPrice: "50000.00",
+      priceCurrency: "EUR",
+      averageCostPriceCurrency: "45000.01594280995",
+      activeAlertCount: 0,
+    };
+    summaryRef.current = { ...summaryOf([aboveUnit, subUnit, fractional]), telegramActive: true, activeAlertCount: 1 };
+    render(<HoldingsTab />);
+
+    expect(screen.getAllByText(/cost €0\.79$/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/cost €0\.792399$/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByTitle(/€0\.792399305858/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("1,261.99").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("0.250897").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByTitle("0.2508968").length).toBeGreaterThanOrEqual(1);
+
+    await user.click(screen.getAllByRole("button", { name: /Price alerts for ADA/i })[0]);
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("€0.79")).toBeTruthy();
+    expect(within(dialog).getByTitle("€0.792399305858")).toBeTruthy();
+    await user.click(within(dialog).getByRole("button", { name: /Back to my cost/i }));
+    expect((within(dialog).getByLabelText(/Target price/i) as HTMLInputElement).value).toBe("0.79");
+  });
+
+  it("fits worst-case 12-decimal costs, 6-figure amounts, long ETF names, and 2-digit alert badges at 1024..1920 px", () => {
+    const vwceBase = holding("VWCE", "249625.04", { netQuantity: "11467.1802", assetClass: "etf" });
+    const shibxBase = holding("SHIBX", "123456.78", { netQuantity: "47345.09961758697" });
+    const worstCase = [
+      {
+        ...vwceBase,
+        holding: {
+          ...vwceBase.holding,
+          label: "Vanguard FTSE All-World UCITS ETF USD Distributing Acc",
+          remainingCostBasis: "1247541.930129",
+        },
+        currentPrice: "129.82",
+        priceCurrency: "EUR",
+        averageCostPriceCurrency: "108.792399305858",
+        unrealizedPnl: "+144641.00",
+        unrealizedPnlPct: "0.425",
+        realizedPnl: "+18860.53",
+        weight: "0.509",
+        activeAlertCount: 12,
+      },
+      {
+        ...shibxBase,
+        holding: {
+          ...shibxBase.holding,
+          label: "Very Long Multi-Chain Liquidity Protocol Token Index",
+          remainingCostBasis: "0.467606",
+        },
+        currentPrice: "0.00001234",
+        priceCurrency: "EUR",
+        averageCostPriceCurrency: "0.000009876543",
+        unrealizedPnl: "+23456.78",
+        unrealizedPnlPct: "0.234",
+        realizedPnl: "+4567.89",
+        weight: "0.251",
+        activeAlertCount: 14,
+      },
+    ];
+    summaryRef.current = { ...summaryOf(worstCase), telegramActive: true, activeAlertCount: 26 };
+    render(<HoldingsTab />);
+
+    const table = screen.getByRole("table");
+    const wrapper = table.parentElement as HTMLElement;
+    const widths = [1024, 1280, 1440, 1920];
+    for (const width of widths) {
+      Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: width });
+      window.dispatchEvent(new Event("resize"));
+      expect(table.scrollWidth).toBe(wrapper.clientWidth);
+    }
+
+    const bellHeader = table.querySelector("thead th:last-child") as HTMLElement;
+    expect(bellHeader.className).toContain("w-10");
+    expect(bellHeader.querySelector(".sr-only")?.textContent).toBe("Price alerts");
+    expect(bellHeader.querySelector(":not(.sr-only)")).toBeNull();
+    const symbolHeader = table.querySelectorAll("thead th")[1] as HTMLElement;
+    expect(symbolHeader.className).toContain("w-full");
+    const qtyCell = table.querySelector("tbody tr td:nth-child(3)") as HTMLElement;
+    expect(qtyCell.className).toContain("whitespace-nowrap");
+    expect(screen.getAllByText("12").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/cost €108\.79$/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/cost €0\.00000988$/).length).toBeGreaterThanOrEqual(1);
+  });
 });
