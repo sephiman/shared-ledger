@@ -37,6 +37,7 @@ import { weightsWithin } from "./holdingWeights";
 import { nextSort, sortHoldings, type HoldingSort, type HoldingSortKey } from "./holdingsSort";
 import { fractionToPercent, percentLabel, pnlTone, returnPercents, signedMoney } from "./valuation";
 import { formatPriceAge, oldestStalePriceAge, priceAge, priceAsOfLabel, type PriceAge } from "./priceFreshness";
+import { createLotMeasureState, trimZeroTail, updateLotMeasure, type LotMeasureField } from "./lotMath";
 import { cn } from "@/lib/cn";
 
 const ASSET_CLASSES: HoldingAssetClass[] = ["crypto", "etf", "stock", "fund"];
@@ -72,43 +73,6 @@ function readShowClosed(): boolean {
 }
 
 type PanelMode = { kind: "closed" } | { kind: "create" } | { kind: "edit"; holding: Holding };
-
-/** Matches holding_lots.unit_price NUMERIC(28, 12) scale so derived unit prices round-trip cleanly. */
-const LOT_PRICE_SCALE = 12;
-
-/** A stored decimal at full precision: trims only pure trailing zeros (10000.000000 -> 10000) and avoids
- *  exponent notation. Used to seed the trade form's HTML number fields without a stored zero tail. */
-function trimZeroTail(value: string): string {
-  try {
-    return new Decimal(value).toFixed();
-  } catch {
-    return value;
-  }
-}
-
-function parseNonNegativeDecimal(raw: string): Decimal | null {
-  if (!raw.trim()) return null;
-  try {
-    const parsed = new Decimal(raw);
-    return parsed.isFinite() && parsed.gte(0) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-function computeTotalPrice(quantity: string, unitPrice: string): string {
-  const qty = parseNonNegativeDecimal(quantity);
-  const unit = parseNonNegativeDecimal(unitPrice);
-  if (qty == null || qty.lte(0) || unit == null) return "";
-  return qty.mul(unit).toDecimalPlaces(LOT_PRICE_SCALE).toFixed();
-}
-
-function computeUnitPrice(quantity: string, totalPrice: string): string {
-  const qty = parseNonNegativeDecimal(quantity);
-  const total = parseNonNegativeDecimal(totalPrice);
-  if (qty == null || qty.lte(0) || total == null) return "";
-  return total.div(qty).toDecimalPlaces(LOT_PRICE_SCALE).toFixed();
-}
 
 /** Average purchase cost per unit = remaining cost basis / net quantity, in base currency; null for a
  *  closed position. Bounded to 12 dp (the scale prices are stored at) so the division tail doesn't run to
@@ -1128,35 +1092,16 @@ function LotForm({
 
   const [type, setType] = useState<LotType>(target.kind === "edit" ? target.lot.type : target.type);
   const [tradedOn, setTradedOn] = useState(editing?.tradedOn ?? isoToday());
-  const [quantity, setQuantity] = useState(editing ? trimZeroTail(editing.quantity) : "");
-  const [unitPrice, setUnitPrice] = useState(editing ? trimZeroTail(editing.unitPrice) : "");
-  const [totalPrice, setTotalPrice] = useState(editing ? computeTotalPrice(editing.quantity, editing.unitPrice) : "");
-  // Remembers which price input drives recalculation when quantity changes.
-  const [priceAnchor, setPriceAnchor] = useState<"unit" | "total">("unit");
+  const [measures, setMeasures] = useState(() => createLotMeasureState(editing));
   const [lotCurrency, setLotCurrency] = useState(editing?.currency ?? holding.nativeCurrency);
   const [fee, setFee] = useState(editing?.fee ? trimZeroTail(editing.fee) : "");
   const [note, setNote] = useState(editing?.note ?? "");
   const [error, setError] = useState<string | null>(null);
 
-  function handleQuantityChange(nextQuantity: string) {
-    setQuantity(nextQuantity);
-    if (priceAnchor === "total") {
-      setUnitPrice(computeUnitPrice(nextQuantity, totalPrice));
-    } else {
-      setTotalPrice(computeTotalPrice(nextQuantity, unitPrice));
-    }
-  }
+  const { quantity, unitPrice, totalPrice } = measures;
 
-  function handleUnitPriceChange(nextUnitPrice: string) {
-    setPriceAnchor("unit");
-    setUnitPrice(nextUnitPrice);
-    setTotalPrice(computeTotalPrice(quantity, nextUnitPrice));
-  }
-
-  function handleTotalPriceChange(nextTotalPrice: string) {
-    setPriceAnchor("total");
-    setTotalPrice(nextTotalPrice);
-    setUnitPrice(computeUnitPrice(quantity, nextTotalPrice));
+  function handleMeasureChange(field: LotMeasureField, value: string) {
+    setMeasures((current) => updateLotMeasure(current, field, value));
   }
 
   // A mis-clicked type would otherwise change a buy into a sale in silence. Says so and nothing more:
@@ -1215,7 +1160,7 @@ function LotForm({
             step="any"
             min="0"
             value={quantity}
-            onChange={(e) => handleQuantityChange(e.target.value)}
+            onChange={(e) => handleMeasureChange("quantity", e.target.value)}
           />
         </div>
         <div>
@@ -1228,7 +1173,7 @@ function LotForm({
             step="any"
             min="0"
             value={unitPrice}
-            onChange={(e) => handleUnitPriceChange(e.target.value)}
+            onChange={(e) => handleMeasureChange("unitPrice", e.target.value)}
           />
         </div>
         <div>
@@ -1239,7 +1184,7 @@ function LotForm({
             step="any"
             min="0"
             value={totalPrice}
-            onChange={(e) => handleTotalPriceChange(e.target.value)}
+            onChange={(e) => handleMeasureChange("totalPrice", e.target.value)}
           />
         </div>
         <div>
