@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
+import { AppFooter } from "@/components/layout/AppFooter";
 import { HomeLogoLink } from "@/components/layout/HomeLogoLink";
 import { UserMenu } from "@/components/layout/UserMenu";
 import { useActiveHousehold } from "@/auth/AuthContext";
@@ -61,10 +62,11 @@ export function AppShell() {
         </nav>
       </header>
       <ConsentExpiryBanner householdId={household.householdId} />
-      <main className="flex-1 overflow-y-auto bg-canvas">
-        <div className="mx-auto max-w-6xl px-4 pt-6 pb-[calc(env(safe-area-inset-bottom)+5rem)]">
+      <main className="flex flex-1 flex-col overflow-y-auto bg-canvas">
+        <div className="mx-auto w-full max-w-6xl flex-1 px-4 pt-6 pb-8">
           <Outlet />
         </div>
+        <AppFooter />
       </main>
     </div>
   );

@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Badge, Button, Card, CardBody, CardHeader, Input, buttonClassName } from "@/components/ui/primitives";
 import { MANUAL_CHAPTERS_EN } from "./content.en";
 import { MANUAL_CHAPTERS_ES } from "./content.es";
+import { SECTION_LINKS } from "./sectionLinks";
 import type { ManualChapter, ManualSection } from "./manualTypes";
 
 function normalizeSearch(value: string): string {
@@ -180,6 +181,24 @@ export function ManualPage() {
                           <span>{section.tip}</span>
                         </div>
                       )}
+
+                      {(() => {
+                        const links = SECTION_LINKS[section.id];
+                        if (!links || links.length === 0) return null;
+                        return (
+                          <div className="flex flex-wrap items-center gap-2 pt-1">
+                            {links.map((link) => (
+                              <Link
+                                key={`${section.id}-${link.to}-${link.labelKey}`}
+                                to={link.to}
+                                className="inline-flex items-center rounded-md border border-border bg-raised px-2.5 py-1 text-xs font-medium text-primary hover:bg-raised-hover"
+                              >
+                                {t("manual.open_section", { name: t(link.labelKey) })}
+                              </Link>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </section>
                   ))}
                 </CardBody>

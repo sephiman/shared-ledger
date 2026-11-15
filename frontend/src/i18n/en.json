@@ -1,7 +1,8 @@
 {
   "app": {
     "name": "Shared Ledger",
-    "tagline": "household finance, plain and durable"
+    "tagline": "household finance, plain and durable",
+    "by_author": "a <author>sephimandev</author> app"
   },
   "nav": {
     "dashboard": "Home",
@@ -14,7 +15,7 @@
     "analytics": "Analytics",
     "fire": "FIRE",
     "settings": "Settings",
-    "manual": "User manual",
+    "manual": "Help",
     "logout": "Log out",
     "go_home": "Go to Home"
   },
@@ -2391,6 +2392,12 @@
     "results_count": "{{count}} matching sections",
     "open_section": "Open {{name}} →",
     "back_to_top": "Back to top",
-    "tip_label": "Tip"
+    "tip_label": "Tip",
+    "links": {
+      "refunds": "Refunds",
+      "pending": "Pending inbox",
+      "rules": "Categorisation rules",
+      "fire_settings": "FIRE Settings"
+    }
   }
 }

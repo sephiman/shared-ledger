@@ -384,7 +384,7 @@ Long-term wealth projection toward financial independence, derived from the hous
   as *look for exactly this*. Our own labels are the opposite: always the translated ones.
 - Language toggle in the header persists per user.
 - **Theme**: light / dark / OLED / system toggle in the header menu. `system` follows the OS preference and updates live, resolving to light or dark only — never OLED. OLED is a pure-black variant for OLED phone screens (black pixels switch off, so it saves battery and maximizes contrast); like light and dark, choosing it explicitly fixes the theme and stops it following the OS. Stored per browser, not per user.
-- **In-app user manual** (`/manual`): accessible from the avatar menu (*User manual* / *Manual de usuario*), offering a searchable, chapter-by-chapter guide to all current features in both English and Spanish.
+- **In-app user manual** (`/manual`): accessible from the avatar menu and footer (*Help* / *Ayuda*), offering a searchable, chapter-by-chapter guide to all current features in both English and Spanish.
 
 ### Settings
 

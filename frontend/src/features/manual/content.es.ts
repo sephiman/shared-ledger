@@ -355,7 +355,7 @@ export const MANUAL_CHAPTERS_ES: ManualChapter[] = [
     id: "banks",
     title: "Bancos, bandeja de pendientes y reglas",
     summary: "Conexión PSD2 mediante Enable Banking, revisión de movimientos entrantes y categorización automática.",
-    route: { to: "/transactions?view=pending", labelKey: "nav.transactions" },
+    route: { to: "/transactions?tab=pending", labelKey: "nav.transactions" },
     sections: [
       {
         id: "bank-linking",

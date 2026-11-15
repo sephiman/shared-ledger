@@ -355,7 +355,7 @@ export const MANUAL_CHAPTERS_EN: ManualChapter[] = [
     id: "banks",
     title: "Bank sync, pending inbox & rules",
     summary: "Connecting PSD2 banks via Enable Banking, reviewing incoming movements, and automating categorization.",
-    route: { to: "/transactions?view=pending", labelKey: "nav.transactions" },
+    route: { to: "/transactions?tab=pending", labelKey: "nav.transactions" },
     sections: [
       {
         id: "bank-linking",

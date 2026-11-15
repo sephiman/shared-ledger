@@ -1,7 +1,8 @@
 {
   "app": {
     "name": "Shared Ledger",
-    "tagline": "finanzas del hogar, sencillo y duradero"
+    "tagline": "finanzas del hogar, sencillo y duradero",
+    "by_author": "una app de <author>sephimandev</author>"
   },
   "nav": {
     "dashboard": "Inicio",
@@ -14,7 +15,7 @@
     "analytics": "Analítica",
     "fire": "FIRE",
     "settings": "Ajustes",
-    "manual": "Manual de usuario",
+    "manual": "Ayuda",
     "logout": "Cerrar sesión",
     "go_home": "Ir a Inicio"
   },
@@ -2391,6 +2392,12 @@
     "results_count": "{{count}} secciones coincidentes",
     "open_section": "Ir a {{name}} →",
     "back_to_top": "Volver arriba",
-    "tip_label": "Consejo"
+    "tip_label": "Consejo",
+    "links": {
+      "refunds": "Devoluciones",
+      "pending": "Bandeja de pendientes",
+      "rules": "Reglas de categorización",
+      "fire_settings": "Ajustes FIRE"
+    }
   }
 }

@@ -1,3 +1,8 @@
+export interface ManualRouteLink {
+  to: string;
+  labelKey: string;
+}
+
 export interface ManualSection {
   id: string;
   heading: string;
@@ -14,9 +19,6 @@ export interface ManualChapter {
   title: string;
   summary: string;
   /** Optional app route and label key for a quick "Open …" link in the chapter header. */
-  route?: {
-    to: string;
-    labelKey: string;
-  };
+  route?: ManualRouteLink;
   sections: ManualSection[];
 }

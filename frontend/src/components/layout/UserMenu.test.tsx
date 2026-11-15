@@ -108,7 +108,7 @@ describe("user manual link", () => {
   it("links to /manual in English and Spanish and closes the menu on click", async () => {
     const user = await openMenu();
 
-    const enLink = screen.getByRole("menuitem", { name: "User manual" });
+    const enLink = screen.getByRole("menuitem", { name: "Help" });
     expect(enLink).toHaveAttribute("href", "/manual");
 
     await user.click(enLink);
@@ -116,7 +116,7 @@ describe("user manual link", () => {
 
     await i18n.changeLanguage("es");
     await user.click(screen.getByRole("button", { name: i18n.t("user.menu_aria") }));
-    const esLink = screen.getByRole("menuitem", { name: "Manual de usuario" });
+    const esLink = screen.getByRole("menuitem", { name: "Ayuda" });
     expect(esLink).toHaveAttribute("href", "/manual");
   });
 });
