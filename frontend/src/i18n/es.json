@@ -91,7 +91,8 @@
     "next": "Siguiente",
     "page_of": "Página {{page}} de {{total}}",
     "copy": "Copiar",
-    "copied": "Copiado"
+    "copied": "Copiado",
+    "reload": "Recargar página"
   },
   "range": {
     "label": "Periodo",
@@ -1843,6 +1844,8 @@
     "TX_REFUND_OF_WITHOUT_REFUND": "Solo una devolución puede vincularse a una compra",
     "TX_REFUND_TARGET_HAS_REFUNDS": "Esta compra ya tiene devoluciones vinculadas, así que no puede convertirse en una devolución",
     "BANK_REFUND_REQUIRES_INCOME": "Solo el dinero que entra puede marcarse como devolución",
+    "ROUTE_LOAD_TITLE": "No se pudo cargar esta vista",
+    "ROUTE_LOAD_BODY": "Es posible que se haya desplegado una versión nueva o que se haya interrumpido la conexión. Recarga la página para continuar.",
     "IMPORT_REFUND_FLAG_INVALID": "is_refund tiene que ser true o false",
     "IMPORT_REFUND_LINK_INVALID": "Solo una fila de devolución puede llevar refund_of_key",
     "IMPORT_REFUND_DIRECTION_INVALID": "Una fila de devolución tiene que ser un gasto",

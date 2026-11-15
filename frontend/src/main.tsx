@@ -6,7 +6,10 @@ import { AuthProvider } from "@/auth/AuthContext";
 import { ThemeProvider } from "@/lib/theme";
 import App from "./App";
 import { createQueryClient } from "@/lib/queryClient";
+import { installPreloadErrorRecovery } from "@/lib/chunkRecovery";
 import "./index.css";
+
+installPreloadErrorRecovery();
 
 const queryClient = createQueryClient();
 

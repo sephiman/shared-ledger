@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ReactNode } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { LoginPage } from "@/auth/LoginPage";
 import { RegisterPage } from "@/auth/RegisterPage";
@@ -8,6 +8,7 @@ import { ResetPasswordPage } from "@/auth/ResetPasswordPage";
 import { ConfirmEmailPage } from "@/auth/ConfirmEmailPage";
 import { RequireAuth } from "@/auth/RequireAuth";
 import { AppShell } from "@/components/layout/AppShell";
+import { RouteErrorBoundary } from "@/components/layout/RouteErrorBoundary";
 import { ToastHost } from "@/components/ui/ToastHost";
 
 const DashboardPage = lazy(() => import("@/features/dashboard/DashboardPage").then((m) => ({ default: m.DashboardPage })));
@@ -28,7 +29,12 @@ function LazyFallback() {
 }
 
 function Lazy({ children }: { children: ReactNode }) {
-  return <Suspense fallback={<LazyFallback />}>{children}</Suspense>;
+  const { pathname } = useLocation();
+  return (
+    <RouteErrorBoundary resetKey={pathname} pendingFallback={<LazyFallback />}>
+      <Suspense fallback={<LazyFallback />}>{children}</Suspense>
+    </RouteErrorBoundary>
+  );
 }
 
 export default function App() {

@@ -91,7 +91,8 @@
     "next": "Next",
     "page_of": "Page {{page}} of {{total}}",
     "copy": "Copy",
-    "copied": "Copied"
+    "copied": "Copied",
+    "reload": "Reload page"
   },
   "range": {
     "label": "Range",
@@ -1843,6 +1844,8 @@
     "TX_REFUND_OF_WITHOUT_REFUND": "Only a refund can be linked to a purchase",
     "TX_REFUND_TARGET_HAS_REFUNDS": "This purchase already has refunds linked to it, so it can't become a refund itself",
     "BANK_REFUND_REQUIRES_INCOME": "Only money coming in can be marked as a refund",
+    "ROUTE_LOAD_TITLE": "Could not load this view",
+    "ROUTE_LOAD_BODY": "A newer version may have been deployed, or the connection was interrupted. Reload the page to continue.",
     "IMPORT_REFUND_FLAG_INVALID": "is_refund has to be true or false",
     "IMPORT_REFUND_LINK_INVALID": "Only a refund row can carry a refund_of_key",
     "IMPORT_REFUND_DIRECTION_INVALID": "A refund row has to be an expense",
