@@ -91,7 +91,7 @@ export function LendingFormDialog({ open, householdId, editing, onClose, onSaved
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-8 overflow-y-auto"
+      className="fixed inset-0 z-modal flex items-center justify-center bg-black/40 px-4 py-8 overflow-y-auto"
       role="dialog"
       aria-modal="true"
       onClick={onClose}

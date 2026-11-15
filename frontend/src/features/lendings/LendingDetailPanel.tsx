@@ -38,7 +38,7 @@ export function LendingDetailPanel({ householdId, lendingId, currency, locale, o
   const active = detail?.summary.status === "active";
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-black/40" role="dialog" aria-modal="true" onClick={onClose}>
+    <div className="fixed inset-0 z-drawer flex justify-end bg-black/40" role="dialog" aria-modal="true" onClick={onClose}>
       <div
         className="h-full w-full max-w-lg overflow-y-auto bg-gray-50 p-4 shadow-xl dark:bg-panel"
         onClick={(e) => e.stopPropagation()}

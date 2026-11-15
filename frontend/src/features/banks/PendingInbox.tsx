@@ -352,7 +352,7 @@ export function PendingInbox({ householdId, currency, locale }: { householdId: s
 
       {/* Bulk-action bar (sticky, only when something is selected) */}
       {editable && selectedIds.length > 0 && (
-        <div className="sticky top-0 z-10">
+        <div className="sticky top-0 z-sticky-sub">
           <Card className="border-primary/40 shadow">
             <CardBody className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium">{t("banks.n_selected", { count: selectedIds.length })}</span>
@@ -392,7 +392,7 @@ export function PendingInbox({ householdId, currency, locale }: { householdId: s
 
       {/* Bulk-restore bar (rejected view) */}
       {restorable && selectedIds.length > 0 && (
-        <div className="sticky top-0 z-10">
+        <div className="sticky top-0 z-sticky-sub">
           <Card className="border-primary/40 shadow">
             <CardBody className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium">{t("banks.n_selected", { count: selectedIds.length })}</span>
@@ -630,7 +630,7 @@ function MovementRow({
               {menuOpen && (
                 <div
                   role="menu"
-                  className="absolute right-0 z-20 mt-1 w-48 rounded-md border border-border bg-overlay py-1 shadow-lg"
+                  className="absolute right-0 z-dropdown mt-1 w-48 rounded-md border border-border bg-overlay py-1 shadow-lg"
                 >
                   {/* Single-item dialogs, both excluded from the batch actions. */}
                   <button

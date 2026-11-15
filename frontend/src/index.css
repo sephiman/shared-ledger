@@ -41,6 +41,16 @@
   --color-chart-axis: #9ca3af;
   --color-chart-axis-text: #6b7280;
   --color-chart-marker: #334155;
+
+  /* Named layering scale (z-sticky-sub, z-sticky, z-dropdown, z-drawer, z-modal, z-popover, z-toast).
+   * Popovers sit above modals so an InfoTip inside a dialog or drawer stays readable. */
+  --z-index-sticky-sub: 10;
+  --z-index-sticky: 20;
+  --z-index-dropdown: 30;
+  --z-index-drawer: 40;
+  --z-index-modal: 50;
+  --z-index-popover: 60;
+  --z-index-toast: 100;
 }
 
 .dark {

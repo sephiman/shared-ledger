@@ -158,10 +158,12 @@ describe("Suggest generalised rules: visibility", () => {
   });
 
   it("appears with the setting on, saying what is shared and that nothing changes until a proposal is accepted", async () => {
+    const user = userEvent.setup();
     renderPage();
 
     await waitFor(async () => expect(await button()).toBeEnabled());
-    const tip = screen.getByRole("tooltip", { hidden: true });
+    await user.click(screen.getByRole("button", { name: "What does Suggest generalised rules share?" }));
+    const tip = screen.getByRole("tooltip");
     expect(tip.textContent).toContain("Sends your rule patterns and their categories to deepseek-v4.1-flash (opencode.ai)");
     expect(tip.textContent).toContain("Nothing changes until you accept a proposal.");
   });

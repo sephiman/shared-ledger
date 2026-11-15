@@ -126,13 +126,14 @@ describe("pending inbox with AI suggestions", () => {
   });
 
   it("with the setting on offers the button, explains what is shared and splits the filter by origin", async () => {
+    const user = userEvent.setup();
     renderInbox();
 
     const button = await screen.findByRole("button", { name: "Suggest with AI" });
     await waitFor(() => expect(button).toBeEnabled());
-    // Opening it on hover/tap is the browser's <details>, which jsdom does not implement: checked in Playwright.
-    const trigger = screen.getByLabelText("What does Suggest with AI share?");
-    const tip = within(trigger.closest("details")!).getByRole("tooltip", { hidden: true });
+    const trigger = screen.getByRole("button", { name: "What does Suggest with AI share?" });
+    await user.click(trigger);
+    const tip = screen.getByRole("tooltip");
     expect(tip.textContent).toContain("deepseek-v4.1-flash (opencode.ai)");
     expect(tip.textContent).toContain("Shared: counterparty, bank description, direction and booking month");
     expect(tip.textContent).toContain("Not shared: amounts, your IBANs, account and household identifiers");
@@ -140,12 +141,14 @@ describe("pending inbox with AI suggestions", () => {
   });
 
   it("marks only the AI-suggested row, with the confidence in the badge's tooltip", async () => {
+    const user = userEvent.setup();
     renderInbox();
 
-    const badge = await screen.findByLabelText("Suggested by AI with 93% confidence. Check it before confirming.");
+    const badge = await screen.findByRole("button", { name: "Suggested by AI with 93% confidence. Check it before confirming." });
     expect(screen.getAllByText("AI")).toHaveLength(1);
     expect(within(screen.getByText("ETOS").closest("li")!).getByText("AI")).toBeInTheDocument();
-    expect(within(badge.closest("details")!).getByRole("tooltip", { hidden: true }).textContent)
+    await user.click(badge);
+    expect(screen.getByRole("tooltip").textContent)
       .toBe("Suggested by AI with 93% confidence. Check it before confirming.");
   });
 

@@ -59,7 +59,7 @@ export function PriceAlertsDrawer({ householdId, holdings, displayTimezone, onEd
 
   return (
     <div
-      className="fixed inset-0 z-40 flex justify-end bg-black/40"
+      className="fixed inset-0 z-drawer flex justify-end bg-black/40"
       role="dialog"
       aria-modal="true"
       aria-labelledby="price-alerts-drawer-title"

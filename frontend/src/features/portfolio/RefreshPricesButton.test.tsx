@@ -82,10 +82,11 @@ describe("RefreshPricesButton", () => {
   });
 
   it("explains the limited refresh when the stock provider has a daily quota", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     serverStatus = { ...idle, equitiesStaleOnly: true };
     renderButton();
 
-    expect(await screen.findByLabelText("What does Refresh now update?")).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "What does Refresh now update?" }));
     expect(screen.getByRole("tooltip")).toHaveTextContent(/only fetches stocks\/ETFs whose price is out of date/);
   });
 });

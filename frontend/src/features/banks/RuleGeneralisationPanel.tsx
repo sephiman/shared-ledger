@@ -45,7 +45,7 @@ export function RuleGeneralisationPanel({
     <Card>
       <CardBody className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="relative inline-flex items-center gap-1">
+          <span className="inline-flex items-center gap-1">
             <Button
               variant="secondary"
               disabled={running || start.isPending || tooFew || status === undefined}
@@ -60,7 +60,7 @@ export function RuleGeneralisationPanel({
             >
               {t("banks.generalise")}
             </Button>
-            <InfoTip label={t("banks.generalise_info_label")} openOnHover anchor="container" panelClassName="top-full">
+            <InfoTip label={t("banks.generalise_info_label")} openOnHover anchor="container">
               {t("banks.generalise_info", { model: settings.model, host: settings.providerHost })}
             </InfoTip>
           </span>

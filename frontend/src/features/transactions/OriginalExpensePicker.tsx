@@ -93,7 +93,7 @@ export function OriginalExpensePicker({
         aria-autocomplete="list"
       />
       {open && (
-        <div className="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-border-strong bg-overlay shadow-lg">
+        <div className="absolute z-dropdown mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-border-strong bg-overlay shadow-lg">
           {isFetching && <p className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">{t("common.loading")}</p>}
           {!isFetching && results.length === 0 && (
             <p className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">{t("tx.refund_no_originals")}</p>

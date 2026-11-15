@@ -36,9 +36,7 @@ export function AiSuggestButton({ householdId, settings }: { householdId: string
 
   return (
     <>
-      {/* The panel hangs off this group: from its start on phones, where the group wraps to the left edge,
-          and from its end once the toolbar keeps it on the right. */}
-      <span className="relative inline-flex items-center gap-1">
+      <span className="inline-flex items-center gap-1">
         <Button
           variant="secondary"
           disabled={running || start.isPending || (status?.candidates ?? 0) === 0}
@@ -46,7 +44,7 @@ export function AiSuggestButton({ householdId, settings }: { householdId: string
         >
           {t("banks.ai_suggest")}
         </Button>
-        <InfoTip label={t("banks.ai_suggest_info_label")} openOnHover anchor="container" panelClassName="top-full sm:left-auto sm:right-0">
+        <InfoTip label={t("banks.ai_suggest_info_label")} openOnHover>
           {t("banks.ai_suggest_info", { model: settings.model, host: settings.providerHost })}
         </InfoTip>
       </span>

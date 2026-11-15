@@ -99,10 +99,12 @@ describe("Ask: presence and copy", () => {
 
   it("offers an example with the household's most used expense category, and says what is sent", async () => {
     stubLedgerApi();
+    const user = userEvent.setup();
     renderViews("/transactions");
 
     await waitFor(async () => expect(await box()).toHaveAttribute("placeholder", "How much on Restaurants & bars last summer?"));
-    const tip = screen.getByRole("tooltip", { hidden: true });
+    await user.click(screen.getByRole("button", { name: "What does Ask share?" }));
+    const tip = screen.getByRole("tooltip");
     expect(tip.textContent).toContain("Only your question and the list of categories are sent to test-model (ai.test)");
     expect(tip.textContent).toContain("only a filter configuration");
   });

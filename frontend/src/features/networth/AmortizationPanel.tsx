@@ -189,7 +189,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 /** Slide-in overlay from the right; keeps the list/totals in place and puts one form in focus. */
 function SidePanel({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-modal flex justify-end" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
       <div className="relative z-10 h-full w-full max-w-md overflow-y-auto bg-white shadow-xl dark:bg-panel">
         <div className="flex items-center justify-between border-b border-border p-3">
@@ -204,7 +204,7 @@ function SidePanel({ title, onClose, children }: { title: string; onClose: () =>
 
 function Dialog({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-modal flex items-center justify-center p-4" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
       <div className="relative z-10 w-full max-w-lg overflow-y-auto rounded-lg bg-white shadow-xl dark:bg-panel">
         <div className="flex items-center justify-between border-b border-border p-3">
