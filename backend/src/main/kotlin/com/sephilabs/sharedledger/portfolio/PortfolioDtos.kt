@@ -2,6 +2,7 @@ package com.sephilabs.sharedledger.portfolio
 
 import com.fasterxml.jackson.annotation.JsonFormat
 import com.sephilabs.sharedledger.common.validation.ValidCurrency
+import com.sephilabs.sharedledger.portfolio.alert.RefreshCadenceDto
 import com.sephilabs.sharedledger.portfolio.price.ManualRefreshStatus
 import com.sephilabs.sharedledger.portfolio.price.ManualRefreshTrigger
 import jakarta.validation.constraints.NotBlank
@@ -134,6 +135,11 @@ data class HoldingSummaryDto(
     // Fraction of the priced portfolio value, scale 4.
     @JsonFormat(shape = JsonFormat.Shape.STRING)
     val weight: BigDecimal?,
+    // Average FIFO remaining cost per unit in priceCurrency (for alert reference and "back to my cost").
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    val averageCostPriceCurrency: BigDecimal? = null,
+    val refreshCadence: RefreshCadenceDto? = null,
+    val activeAlertCount: Int = 0,
 )
 
 enum class MoneyWeightedReturnUnavailableReason {
@@ -201,6 +207,9 @@ data class PortfolioSummaryDto(
     val byClass: Map<String, BigDecimal>,
     val anyStale: Boolean,
     val anyUnpriced: Boolean,
+    val telegramActive: Boolean = false,
+    val activeAlertCount: Int = 0,
+    val displayTimezone: String = com.sephilabs.sharedledger.config.AppProperties.DEFAULT_DISPLAY_TIMEZONE,
 )
 
 data class HoldingValuationRowDto(

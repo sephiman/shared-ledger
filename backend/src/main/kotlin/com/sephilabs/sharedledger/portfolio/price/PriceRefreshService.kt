@@ -9,6 +9,8 @@ import com.sephilabs.sharedledger.portfolio.HoldingLotRepository
 import com.sephilabs.sharedledger.portfolio.HoldingProvider
 import com.sephilabs.sharedledger.portfolio.HoldingRepository
 import com.sephilabs.sharedledger.portfolio.PortfolioValuationCalculator
+import com.sephilabs.sharedledger.portfolio.alert.PriceAlertEvaluator
+import com.sephilabs.sharedledger.portfolio.alert.PriceCoordinate
 import com.sephilabs.sharedledger.portfolio.toEntry
 import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
@@ -33,6 +35,7 @@ class PriceRefreshService(
     private val cryptoFallback: CryptoHistoryFallback,
     private val equity: EquityPriceProvider,
     private val fx: FxRateProvider,
+    private val alertEvaluator: PriceAlertEvaluator,
     private val metrics: AppMetrics,
     private val props: AppProperties,
     private val txManager: PlatformTransactionManager,
@@ -44,41 +47,47 @@ class PriceRefreshService(
 
     /** Hourly: gap-fill missed days, then upsert today's row from one batched current-price call. */
     fun refreshCrypto(today: LocalDate, scope: ManualRefreshScope? = null) {
-        val demands = demandsFor(HoldingProvider.coingecko, today, scope)
-        if (demands.isEmpty()) return
+        val refreshed = mutableSetOf<PriceCoordinate>()
+        try {
+            val demands = demandsFor(HoldingProvider.coingecko, today, scope)
+            if (demands.isEmpty()) return
 
-        for (demand in demands) {
-            val id = demand.providerSymbol
+            for (demand in demands) {
+                val id = demand.providerSymbol
+                try {
+                    gapFillCrypto(demand, today)
+                } catch (ex: ProviderException) {
+                    abortIfRateLimited(ex, scope)
+                    metrics.priceRefreshFailure(CoinGeckoClient.PROVIDER)
+                    log.error("Crypto gap-fill failed for {}: {}; trying Binance fallback", id, ex.message)
+                    // Binance covers from the last stored day, or the earliest lot when CoinGecko
+                    // never populated the series at all.
+                    val maxStored = prices.findMaxPriceDate(CoinGeckoClient.PROVIDER, id, baseCurrency)
+                    if (maxStored == null || demand.needsTail(maxStored, today.minusDays(1))) {
+                        val from = maxStored?.plusDays(1) ?: cryptoCeiling(demand.earliestLot ?: today, today)
+                        fallbackCryptoFill(id, tickerOf(demand), from, demand.fetchUntil(today.minusDays(1)), today)
+                    }
+                }
+                pace(props.portfolio.coingecko.minRequestIntervalMs)
+            }
+            // A closed position's value is zero at any price, so only open coordinates need today's quote.
+            val coords = demands.filter { it.open }.map { it.providerSymbol }
+            if (coords.isEmpty()) return
             try {
-                gapFillCrypto(demand, today)
+                val current = crypto.currentPrices(coords, vsCurrency)
+                val now = Instant.now()
+                current.forEach { (id, price) ->
+                    upsertPrice(CoinGeckoClient.PROVIDER, id, baseCurrency, DailyPrice(today, price), now)
+                    refreshed += PriceCoordinate(CoinGeckoClient.PROVIDER, id, baseCurrency)
+                }
+                metrics.priceRefreshed(CoinGeckoClient.PROVIDER)
             } catch (ex: ProviderException) {
                 abortIfRateLimited(ex, scope)
                 metrics.priceRefreshFailure(CoinGeckoClient.PROVIDER)
-                log.error("Crypto gap-fill failed for {}: {}; trying Binance fallback", id, ex.message)
-                // Binance covers from the last stored day, or the earliest lot when CoinGecko
-                // never populated the series at all.
-                val maxStored = prices.findMaxPriceDate(CoinGeckoClient.PROVIDER, id, baseCurrency)
-                if (maxStored == null || demand.needsTail(maxStored, today.minusDays(1))) {
-                    val from = maxStored?.plusDays(1) ?: cryptoCeiling(demand.earliestLot ?: today, today)
-                    fallbackCryptoFill(id, tickerOf(demand), from, demand.fetchUntil(today.minusDays(1)), today)
-                }
+                log.error("Crypto current-price refresh failed: {}", ex.message)
             }
-            pace(props.portfolio.coingecko.minRequestIntervalMs)
-        }
-        // A closed position's value is zero at any price, so only open coordinates need today's quote.
-        val coords = demands.filter { it.open }.map { it.providerSymbol }
-        if (coords.isEmpty()) return
-        try {
-            val current = crypto.currentPrices(coords, vsCurrency)
-            val now = Instant.now()
-            current.forEach { (id, price) ->
-                upsertPrice(CoinGeckoClient.PROVIDER, id, baseCurrency, DailyPrice(today, price), now)
-            }
-            metrics.priceRefreshed(CoinGeckoClient.PROVIDER)
-        } catch (ex: ProviderException) {
-            abortIfRateLimited(ex, scope)
-            metrics.priceRefreshFailure(CoinGeckoClient.PROVIDER)
-            log.error("Crypto current-price refresh failed: {}", ex.message)
+        } finally {
+            alertEvaluator.evaluateAndDeliver(refreshed, today)
         }
     }
 
@@ -87,11 +96,16 @@ class PriceRefreshService(
      *  keep their stored prices and show stale until relinked. A failing symbol never crashes the job, and one
      *  the provider no longer lists is re-checked weekly instead of nightly. */
     fun refreshEquities(today: LocalDate, scope: ManualRefreshScope? = null) {
-        val active = props.portfolio.equityProvider.asHoldingProvider()
-        for (demand in demandsFor(active, today, scope)) {
-            if (inNotFoundBackoff(demand, today)) continue
-            refreshEquityDemand(active, demand, today, scope)
-            pace(activeEquityConfig().minRequestIntervalMs)
+        val refreshed = mutableSetOf<PriceCoordinate>()
+        try {
+            val active = props.portfolio.equityProvider.asHoldingProvider()
+            for (demand in demandsFor(active, today, scope)) {
+                if (inNotFoundBackoff(demand, today)) continue
+                refreshEquityDemand(active, demand, today, scope)?.let { refreshed += it }
+                pace(activeEquityConfig().minRequestIntervalMs)
+            }
+        } finally {
+            alertEvaluator.evaluateAndDeliver(refreshed, today)
         }
     }
 
@@ -113,6 +127,8 @@ class PriceRefreshService(
             HoldingProvider.yahoo, HoldingProvider.eodhd, HoldingProvider.twelvedata ->
                 if (provider == props.portfolio.equityProvider.asHoldingProvider()) refreshEquityDemand(provider, demand, today)
         }
+        val coord = PriceCoordinate(provider.name, demand.providerSymbol, priceCurrencyOf(demand.holdings.first()))
+        alertEvaluator.evaluateCoordinates(setOf(coord), today)
     }
 
     private fun refreshEquityDemand(
@@ -120,11 +136,12 @@ class PriceRefreshService(
         demand: CoordinateDemand,
         today: LocalDate,
         scope: ManualRefreshScope? = null,
-    ) {
+    ): PriceCoordinate? {
         try {
             if (refreshEquitySymbol(provider.name, demand, today)) {
                 metrics.priceRefreshed(provider.name)
                 clearNotFound(demand.holdings, demand.providerSymbol)
+                return PriceCoordinate(provider.name, demand.providerSymbol, priceCurrencyOf(demand.holdings.first()))
             }
         } catch (_: SymbolNotFoundException) {
             metrics.priceRefreshFailure(provider.name)
@@ -135,6 +152,7 @@ class PriceRefreshService(
             metrics.priceRefreshFailure(provider.name)
             log.error("Equity refresh failed for {}: {}", demand.providerSymbol, ex.message)
         }
+        return null
     }
 
     /** Fills an equity series both ways so a failed request-time backfill self-heals: bootstraps the
@@ -270,6 +288,10 @@ class PriceRefreshService(
             if (holding.provider == HoldingProvider.coingecko && earliestLot.isBefore(from)) {
                 fallbackCryptoFill(holding.providerSymbol!!, holding.symbol, earliestLot, from.minusDays(1), today)
             }
+            alertEvaluator.evaluateCoordinates(
+                setOf(PriceCoordinate(holding.provider!!.name, holding.providerSymbol!!, priceCurrencyOf(holding))),
+                today,
+            )
         } catch (_: SymbolNotFoundException) {
             // Typically a mistyped or delisted symbol picked at link time: say so instead of a bare stale price.
             metrics.priceRefreshFailure(holding.provider!!.name)
@@ -310,6 +332,10 @@ class PriceRefreshService(
         if (provider == HoldingProvider.coingecko && newEarliest.isBefore(from)) {
             fallbackCryptoFill(providerSymbol, holding.symbol, newEarliest, from.minusDays(1), today)
         }
+        alertEvaluator.evaluateCoordinates(
+            setOf(PriceCoordinate(provider.name, providerSymbol, priceCurrencyOf(holding))),
+            today,
+        )
     }
 
     /** Binance fallback: daily USDT closes (1 USDT = 1 USD) converted to base with each day's ECB rate and

@@ -2,6 +2,7 @@ package com.sephilabs.sharedledger.portfolio.price
 
 import com.sephilabs.sharedledger.config.AppProperties
 import com.sephilabs.sharedledger.observability.AppMetrics
+import com.sephilabs.sharedledger.portfolio.alert.PriceAlertEvaluator
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Service
@@ -30,6 +31,7 @@ data class ManualRefreshTrigger(val outcome: ManualRefreshOutcome, val status: M
 @Service
 class ManualPriceRefreshService(
     private val refresh: PriceRefreshService,
+    private val alertEvaluator: PriceAlertEvaluator,
     @Qualifier("backfillExecutor") private val executor: Executor,
     private val props: AppProperties,
     private val metrics: AppMetrics,
@@ -100,6 +102,7 @@ class ManualPriceRefreshService(
                 refresh.refreshEquities(today, scope)
             }
         } finally {
+            runCatching { alertEvaluator.deliverPendingAlerts(today) }
             runs.computeIfPresent(householdId) { _, run -> run.copy(finishedAt = Instant.now()) }
         }
     }

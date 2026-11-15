@@ -23,6 +23,7 @@ import com.sephilabs.sharedledger.networth.snapshot.AutoSnapshotSettingsReposito
 import com.sephilabs.sharedledger.networth.snapshot.SnapshotRepository
 import com.sephilabs.sharedledger.notification.TelegramSettingsRepository
 import com.sephilabs.sharedledger.portfolio.HoldingRepository
+import com.sephilabs.sharedledger.portfolio.alert.PriceAlertRepository
 import com.sephilabs.sharedledger.recurring.RecurringTemplateRepository
 import com.sephilabs.sharedledger.transaction.TransactionRepository
 import org.slf4j.LoggerFactory
@@ -43,6 +44,7 @@ class HouseholdDataWipeService(
     private val budgets: BudgetRepository,
     private val customCategories: CustomCategoryRepository,
     private val holdings: HoldingRepository,
+    private val priceAlerts: PriceAlertRepository,
     private val assets: AssetRepository,
     private val liabilities: LiabilityRepository,
     private val lendings: LendingRepository,
@@ -80,6 +82,7 @@ class HouseholdDataWipeService(
         val customCategoryCount = customCategories.hardDeleteAllByHouseholdId(householdId)
 
         // 3. Assets & liabilities (children cascade). Liabilities after snapshots/movements above.
+        val priceAlertCount = priceAlerts.hardDeleteAllByHouseholdId(householdId)
         val holdingCount = holdings.hardDeleteAllByHouseholdId(householdId)
         val assetCount = assets.hardDeleteAllByHouseholdId(householdId)
         val liabilityCount = liabilities.hardDeleteAllByHouseholdId(householdId)
@@ -107,11 +110,11 @@ class HouseholdDataWipeService(
 
         log.info(
             "household_data_wipe household={} by_user={} tx={} mv={} snap={} snap_liab_balances={} cash_adj={} " +
-                "recurring={} budgets={} custom_categories={} holdings={} assets={} liabilities={} lendings={} " +
+                "recurring={} budgets={} custom_categories={} price_alerts={} holdings={} assets={} liabilities={} lendings={} " +
                 "pending={} rules={} auth_sessions={} bank_connections={} bank_credentials={} bank_sync_schedule={} fire={} fire_brackets={} telegram={} auto_snapshot={} cash_settings={} " +
                 "ai_runs={} rule_generalisation_runs={} ai_settings={}",
             householdId, byUserId, txCount, movementCount, snapshotCount, balanceCount, cashAdjustmentCount,
-            recurringCount, budgetCount, customCategoryCount, holdingCount, assetCount, liabilityCount, lendingCount,
+            recurringCount, budgetCount, customCategoryCount, priceAlertCount, holdingCount, assetCount, liabilityCount, lendingCount,
             pendingCount, ruleCount, authSessionCount, connectionCount, bankCredentialCount, bankSyncScheduleCount, fireCount, fireBracketCount, telegramCount, autoSnapshotCount, cashSettingsCount,
             aiRunCount, ruleGeneralisationRunCount, aiSettingsCount,
         )

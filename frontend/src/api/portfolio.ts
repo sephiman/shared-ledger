@@ -4,6 +4,64 @@ import { apiClient } from "./client";
 
 export type HoldingAssetClass = "crypto" | "etf" | "stock" | "fund";
 export type HoldingProvider = "coingecko" | "yahoo" | "eodhd" | "twelvedata";
+export type RefreshCadenceUnit = "MINUTES" | "HOURS" | "DAYS";
+
+export interface RefreshCadence {
+  unit: RefreshCadenceUnit;
+  interval: number;
+  weekdaysOnly: boolean;
+  dailyTime: string | null;
+  includesNightlyClose: boolean;
+}
+
+export type AlertDirection = "ABOVE" | "BELOW";
+export type AlertStatus = "ACTIVE" | "FIRED" | "EXPIRED" | "CANCELLED";
+export type AlertCancelReason = "USER" | "POSITION_CLOSED";
+export type AlertExpiryPreset = "DAYS_30" | "DAYS_90" | "CUSTOM_DATE" | "NO_EXPIRY";
+
+export interface PriceAlert {
+  id: string;
+  holdingId: string;
+  symbol: string;
+  label: string | null;
+  assetClass: HoldingAssetClass;
+  direction: AlertDirection;
+  threshold: string;
+  currency: string;
+  currentPrice: string | null;
+  expiresAt: string | null;
+  note: string | null;
+  status: AlertStatus;
+  firedAt: string | null;
+  firedPrice: string | null;
+  firedPriceAsOf: string | null;
+  cancelledAt: string | null;
+  cancelReason: AlertCancelReason | null;
+  deliverySentAt: string | null;
+  deliveryAttempts: number;
+  deliveryLastAttemptAt: string | null;
+  deliveryLastError: string | null;
+  deliveryExhausted: boolean;
+  createdByEmail: string | null;
+  createdAt: string;
+}
+
+export interface CreatePriceAlertInput {
+  holdingId: string;
+  threshold: string;
+  expectedDirection?: AlertDirection | null;
+  expiryPreset: AlertExpiryPreset;
+  customExpiryDate?: string | null;
+  note?: string | null;
+}
+
+export interface UpdatePriceAlertInput {
+  threshold: string;
+  expectedDirection?: AlertDirection | null;
+  expiryPreset: AlertExpiryPreset;
+  customExpiryDate?: string | null;
+  note?: string | null;
+}
 
 export type LotType = "BUY" | "SELL";
 
@@ -113,6 +171,9 @@ export interface HoldingSummary {
   soldCostBasis: string;
   totalReturn: string | null;
   weight: string | null;
+  averageCostPriceCurrency?: string | null;
+  refreshCadence?: RefreshCadence | null;
+  activeAlertCount?: number;
 }
 
 // Money-weighted return (XIRR) over the whole lot history: buys out, sells in, the
@@ -151,6 +212,9 @@ export interface PortfolioSummary {
   byClass: Record<string, string>;
   anyStale: boolean;
   anyUnpriced: boolean;
+  telegramActive?: boolean;
+  activeAlertCount?: number;
+  displayTimezone?: string;
 }
 
 export interface HoldingValuationRow {
@@ -419,6 +483,54 @@ export function useDeleteLot(householdId: string) {
   return useMutation({
     mutationFn: async ({ holdingId, lotId }: { holdingId: string; lotId: string }) => {
       await apiClient.delete(`/households/${householdId}/portfolio/holdings/${holdingId}/lots/${lotId}`);
+    },
+    onSuccess: () => invalidatePortfolio(qc, householdId),
+  });
+}
+
+export function usePriceAlerts(householdId: string, enabled = true, holdingId?: string) {
+  return useQuery({
+    queryKey: ["portfolio", householdId, "alerts", holdingId ?? "all"],
+    queryFn: async () =>
+      (await apiClient.get<PriceAlert[]>(`/households/${householdId}/portfolio/alerts`, {
+        params: holdingId ? { holdingId } : undefined,
+      })).data,
+    enabled,
+  });
+}
+
+export function useCreatePriceAlert(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CreatePriceAlertInput) =>
+      (await apiClient.post<PriceAlert>(`/households/${householdId}/portfolio/alerts`, input)).data,
+    onSuccess: () => invalidatePortfolio(qc, householdId),
+  });
+}
+
+export function useUpdatePriceAlert(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ alertId, input }: { alertId: string; input: UpdatePriceAlertInput }) =>
+      (await apiClient.put<PriceAlert>(`/households/${householdId}/portfolio/alerts/${alertId}`, input)).data,
+    onSuccess: () => invalidatePortfolio(qc, householdId),
+  });
+}
+
+export function useCancelPriceAlert(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (alertId: string) =>
+      (await apiClient.post<PriceAlert>(`/households/${householdId}/portfolio/alerts/${alertId}/cancel`)).data,
+    onSuccess: () => invalidatePortfolio(qc, householdId),
+  });
+}
+
+export function useDeletePriceAlert(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (alertId: string) => {
+      await apiClient.delete(`/households/${householdId}/portfolio/alerts/${alertId}`);
     },
     onSuccess: () => invalidatePortfolio(qc, householdId),
   });

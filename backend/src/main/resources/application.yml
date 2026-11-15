@@ -145,6 +145,9 @@ app:
     # LocalDate.now(), so a non-UTC zone runs early-morning jobs on the previous UTC day
     # and breaks the FX-before-equity refresh ordering. See README §Scheduled jobs.
     timezone: ${SCHEDULER_TIMEZONE:UTC}
+  # IANA zone for user-facing timestamps in Telegram price alerts and custom expiry end-of-day
+  # (e.g. Europe/Madrid). Defaults to Europe/Madrid.
+  display-timezone: ${APP_DISPLAY_TIMEZONE:Europe/Madrid}
   auto-snapshot:
     # Daily check at 06:00; each household's frequency decides if today is due.
     cron: "0 0 6 * * *"

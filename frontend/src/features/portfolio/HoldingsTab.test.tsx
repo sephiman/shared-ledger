@@ -1,13 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { HoldingAssetClass, HoldingSummary, Lot, PortfolioSummary } from "@/api/portfolio";
+import type { HoldingAssetClass, HoldingSummary, Lot, PortfolioSummary, PriceAlert } from "@/api/portfolio";
 import i18n from "@/i18n";
 
 const summaryRef: { current: PortfolioSummary } = { current: null as unknown as PortfolioSummary };
+const alertsRef: { current: PriceAlert[] } = { current: [] };
 
 /** Stable across renders, so a test can assert what the lot mutations were called with. */
 const lotSpies = vi.hoisted(() => ({ add: vi.fn(), update: vi.fn(), remove: vi.fn() }));
+const alertSpies = vi.hoisted(() => ({ create: vi.fn(), update: vi.fn(), cancel: vi.fn(), remove: vi.fn() }));
 
 vi.mock("@/auth/AuthContext", () => ({
   useAuth: () => ({ user: { portfolioReturnBasis: "OPEN_COST" } }),
@@ -31,6 +33,14 @@ vi.mock("@/api/portfolio", async (importOriginal) => {
     useAddLot: spied(lotSpies.add),
     useUpdateLot: spied(lotSpies.update),
     useDeleteLot: spied(lotSpies.remove),
+    usePriceAlerts: (_hid: string, enabled: boolean) => ({
+      data: enabled ? alertsRef.current : [],
+      isLoading: false,
+    }),
+    useCreatePriceAlert: () => ({ mutate: alertSpies.create, mutateAsync: alertSpies.create, isPending: false }),
+    useUpdatePriceAlert: () => ({ mutate: alertSpies.update, mutateAsync: alertSpies.update, isPending: false }),
+    useCancelPriceAlert: () => ({ mutate: alertSpies.cancel, mutateAsync: alertSpies.cancel, isPending: false }),
+    useDeletePriceAlert: () => ({ mutate: alertSpies.remove, mutateAsync: alertSpies.remove, isPending: false }),
   };
 });
 
@@ -179,7 +189,9 @@ const CLOSED_ETF = holding("IWDA", "0.00", { assetClass: "etf", closed: true });
 
 beforeEach(() => {
   localStorage.clear();
+  alertsRef.current = [];
   for (const spy of Object.values(lotSpies)) spy.mockReset();
+  for (const spy of Object.values(alertSpies)) spy.mockReset();
 });
 
 afterEach(async () => {
@@ -474,5 +486,117 @@ describe("the weight column", () => {
     show([holding("BTC", "900.00"), holding("ETH", "300.00"), holding("FUND", null)]);
     expect(weightOf("FUND")).toBe("—");
     expect(weightOf("BTC")).toBe("75.0%");
+  });
+});
+
+describe("price alerts UI gating and modal/drawer flows", () => {
+  it("hides all alert controls when Telegram is inactive", () => {
+    summaryRef.current = { ...summaryOf([OPEN]), telegramActive: false, activeAlertCount: 2 };
+    render(<HoldingsTab />);
+    expect(screen.queryByRole("button", { name: /active alert/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Price alerts for BTC/i })).toBeNull();
+  });
+
+  it("shows bell badge, header counter, creates an alert via shortcuts, and opens drawer", async () => {
+    const sui = {
+      ...holding("SUI", "210.00", { netQuantity: "100" }),
+      currentPrice: "2.10",
+      priceCurrency: "USD",
+      averageCostPriceCurrency: "2.50",
+      activeAlertCount: 1,
+      refreshCadence: { unit: "HOURS" as const, interval: 1, weekdaysOnly: false, dailyTime: null, includesNightlyClose: false },
+    };
+    alertsRef.current = [
+      {
+        id: "a1",
+        holdingId: "SUI",
+        symbol: "SUI",
+        label: null,
+        assetClass: "crypto",
+        currency: "USD",
+        direction: "ABOVE",
+        threshold: "2.80",
+        currentPrice: "2.10",
+        status: "ACTIVE",
+        note: "take profit",
+        expiresAt: "2026-10-27T21:59:59Z",
+        firedAt: null,
+        firedPrice: null,
+        firedPriceAsOf: null,
+        cancelledAt: null,
+        cancelReason: null,
+        deliveryAttempts: 0,
+        deliveryLastAttemptAt: null,
+        deliverySentAt: null,
+        deliveryLastError: null,
+        deliveryExhausted: false,
+        createdByEmail: "owner@example.com",
+        createdAt: "2026-07-29T09:00:00Z",
+      },
+      {
+        id: "a2",
+        holdingId: "SUI",
+        symbol: "SUI",
+        label: null,
+        assetClass: "crypto",
+        currency: "USD",
+        direction: "BELOW",
+        threshold: "1.90",
+        currentPrice: "2.10",
+        status: "FIRED",
+        note: null,
+        expiresAt: null,
+        firedAt: "2026-07-28T10:00:00Z",
+        firedPrice: "1.88",
+        firedPriceAsOf: "2026-07-28T09:55:00Z",
+        cancelledAt: null,
+        cancelReason: null,
+        deliveryAttempts: 1,
+        deliveryLastAttemptAt: "2026-07-28T10:00:01Z",
+        deliverySentAt: "2026-07-28T10:00:01Z",
+        deliveryLastError: null,
+        deliveryExhausted: false,
+        createdByEmail: "owner@example.com",
+        createdAt: "2026-07-20T09:00:00Z",
+      },
+    ];
+    summaryRef.current = {
+      ...summaryOf([sui]),
+      telegramActive: true,
+      activeAlertCount: 1,
+      displayTimezone: "Europe/Madrid",
+    };
+    render(<HoldingsTab />);
+    const user = userEvent.setup();
+
+    // Open modal from row bell (table + mobile both render a bell; click first)
+    await user.click(screen.getAllByRole("button", { name: /Price alerts for SUI \(1 active\)/i })[0]);
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText(/Checked every hour; moves between checks are not seen/i)).toBeTruthy();
+
+    // "Back to my cost" fills 2.50 and infers ABOVE
+    await user.click(within(dialog).getByRole("button", { name: /Back to my cost/i }));
+    expect(within(dialog).getByLabelText(/Target price/i)).toHaveValue(2.5);
+    expect(within(dialog).getByText(/rises to/i)).toBeTruthy();
+
+    // Submit form
+    await user.type(within(dialog).getByLabelText(/Note/i), "break even");
+    await user.click(within(dialog).getByRole("button", { name: /Save alert/i }));
+    expect(alertSpies.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        holdingId: "SUI",
+        threshold: "2.50",
+        expectedDirection: "ABOVE",
+        expiryPreset: "DAYS_90",
+        note: "break even",
+      }),
+    );
+
+    // Open drawer from header counter
+    await user.click(screen.getByRole("button", { name: /1 active alert/i }));
+    const drawer = screen.getByRole("dialog", { name: /Price alerts/i });
+    expect(within(drawer).getByText(/Sent on Telegram/i)).toBeTruthy();
+    await user.click(within(drawer).getByRole("button", { name: /Cancel alert/i }));
+    expect(alertSpies.cancel).toHaveBeenCalledWith("a1");
   });
 });

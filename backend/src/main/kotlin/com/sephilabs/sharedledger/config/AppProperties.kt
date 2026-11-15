@@ -9,6 +9,9 @@ data class AppProperties(
     val bootstrap: Bootstrap = Bootstrap(),
     val invitations: Invitations = Invitations(),
     val scheduler: Scheduler = Scheduler(),
+    // Display zone for user-facing timestamps (Telegram alerts) and custom expiry end-of-day.
+    // Separate from scheduler.timezone so cron jobs stay UTC while human dates match the deployment.
+    val displayTimezone: String = DEFAULT_DISPLAY_TIMEZONE,
     val autoSnapshot: AutoSnapshot = AutoSnapshot(),
     val fire: Fire = Fire(),
     val telegram: Telegram = Telegram(),
@@ -20,6 +23,12 @@ data class AppProperties(
     val emailChange: EmailChange = EmailChange(),
     val ai: Ai = Ai(),
 ) {
+    fun displayZoneId(): java.time.ZoneId =
+        java.time.ZoneId.of(displayTimezone.trim().ifEmpty { DEFAULT_DISPLAY_TIMEZONE })
+
+    companion object {
+        const val DEFAULT_DISPLAY_TIMEZONE = "Europe/Madrid"
+    }
     data class Security(
         val loginRate: LoginRate = LoginRate(),
         val importRate: ImportRate = ImportRate(),
@@ -148,6 +157,10 @@ data class AppProperties(
             baseUrl = "https://api.frankfurter.dev",
             minRequestIntervalMs = 500,
         ),
+        val cryptoRefreshCron: String = "0 5 * * * *",
+        val fxRefreshCron: String = "0 30 0 * * *",
+        val equityRefreshCron: String = "0 0 1 * * *",
+        val equityIntradayRefreshCron: String = "0 10 * * * MON-FRI",
         val equityProvider: EquityProviderKind = EquityProviderKind.YAHOO,
         // CoinGecko Demo plan serves at most 365 days of history.
         val cryptoHistoryCeilingDays: Long = 365,

@@ -1,9 +1,15 @@
 package com.sephilabs.sharedledger.notification
 
 import com.sephilabs.sharedledger.catalog.CategoryService
+import com.sephilabs.sharedledger.config.AppProperties
 import com.sephilabs.sharedledger.i18n.Messages
+import com.sephilabs.sharedledger.portfolio.alert.AlertDirection
 import org.springframework.stereotype.Component
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.text.NumberFormat
+import java.time.Instant
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Currency
@@ -16,6 +22,7 @@ import java.util.UUID
 class TelegramMessageFormatter(
     private val messages: Messages,
     private val categories: CategoryService,
+    private val props: AppProperties,
 ) {
 
     fun formatEntityChange(
@@ -79,6 +86,119 @@ class TelegramMessageFormatter(
     }
 
     fun testMessage(locale: Locale): String = messages.resolve("notif.test", locale = locale)
+
+    fun formatPriceAlert(
+        symbol: String,
+        label: String?,
+        direction: AlertDirection,
+        threshold: BigDecimal,
+        priceCurrency: String,
+        firedPrice: BigDecimal,
+        priceObservedAt: Instant,
+        quantity: BigDecimal,
+        currentValueBase: BigDecimal?,
+        unrealizedPnlBase: BigDecimal?,
+        unrealizedPnlPct: BigDecimal?,
+        baseCurrency: String,
+        note: String?,
+        locale: Locale,
+    ): String {
+        val assetTitle = label?.takeIf { it.isNotBlank() && it != symbol }
+            ?.let { "${sanitize(symbol)} (${sanitize(it)})" }
+            ?: sanitize(symbol)
+        val header = messages.resolve("notif.price_alert.header", arrayOf(assetTitle), locale = locale)
+        val priceFormatted = formatPrice(firedPrice, priceCurrency, locale)
+        val thresholdFormatted = formatPrice(threshold, priceCurrency, locale)
+        val whenFormatted = formatTimestamp(priceObservedAt, props.displayZoneId(), locale)
+        val conditionKey = if (direction == AlertDirection.ABOVE) {
+            "notif.price_alert.condition.above"
+        } else {
+            "notif.price_alert.condition.below"
+        }
+        val conditionText = messages.resolve(conditionKey, arrayOf(thresholdFormatted), locale = locale)
+
+        val qtyText = "${formatQuantity(quantity, locale)} ${sanitize(symbol)}"
+        val valueText = currentValueBase?.let { formatMoney(it, baseCurrency, locale) } ?: "—"
+        val pnlText = if (unrealizedPnlBase != null) {
+            val signedAmt = formatSignedMoney(unrealizedPnlBase, baseCurrency, locale)
+            val pctPart = unrealizedPnlPct?.let { " (${formatSignedPercent(it, locale)})" } ?: ""
+            "$signedAmt$pctPart"
+        } else {
+            "—"
+        }
+
+        val sb = StringBuilder()
+        sb.append("*🔔 ").append(sanitize(header)).append("*\n")
+        sb.append("*").append(sanitize(messages.resolve("notif.price_alert.price_reached", locale = locale))).append("*: ")
+            .append(sanitize(priceFormatted)).append(" (").append(sanitize(whenFormatted)).append(")\n")
+        sb.append("*").append(sanitize(messages.resolve("notif.price_alert.condition", locale = locale))).append("*: ")
+            .append(sanitize(conditionText)).append("\n")
+        sb.append("*").append(sanitize(messages.resolve("notif.price_alert.position", locale = locale))).append("*: ")
+            .append(qtyText).append("\n")
+        sb.append("*").append(sanitize(messages.resolve("notif.price_alert.value", locale = locale))).append("*: ")
+            .append(sanitize(valueText)).append("\n")
+        sb.append("*").append(sanitize(messages.resolve("notif.price_alert.unrealized_pnl", locale = locale))).append("*: ")
+            .append(sanitize(pnlText)).append("\n")
+        if (!note.isNullOrBlank()) {
+            sb.append("*").append(sanitize(messages.resolve("notif.price_alert.note", locale = locale))).append("*: ")
+                .append(sanitize(note)).append("\n")
+        }
+        val baseUrl = props.publicUrl.trim().trimEnd('/')
+        if (baseUrl.isNotEmpty()) {
+            sb.append(baseUrl).append("/networth?tab=holdings")
+        }
+        return sb.toString().trimEnd()
+    }
+
+    private fun formatPrice(amount: BigDecimal, currency: String, locale: Locale): String {
+        val clean = amount.stripTrailingZeros()
+        val scale = maxOf(0, clean.scale())
+        val decimals = if (clean.abs() >= BigDecimal.ONE) 2 else minOf(12, maxOf(2, scale))
+        val nf = NumberFormat.getCurrencyInstance(locale)
+        runCatching { nf.currency = Currency.getInstance(currency) }
+        nf.minimumFractionDigits = 2
+        nf.maximumFractionDigits = decimals
+        return nf.format(amount)
+    }
+
+    private fun formatMoney(amount: BigDecimal, currency: String, locale: Locale): String {
+        val nf = NumberFormat.getCurrencyInstance(locale)
+        runCatching { nf.currency = Currency.getInstance(currency) }
+        nf.minimumFractionDigits = 2
+        nf.maximumFractionDigits = 2
+        return nf.format(amount)
+    }
+
+    private fun formatSignedMoney(amount: BigDecimal, currency: String, locale: Locale): String {
+        val formatted = formatMoney(amount, currency, locale)
+        return if (amount.signum() > 0) "+$formatted" else formatted
+    }
+
+    private fun formatSignedPercent(fraction: BigDecimal, locale: Locale): String {
+        val pct = fraction.multiply(BigDecimal(100)).setScale(1, RoundingMode.HALF_EVEN)
+        val nf = NumberFormat.getNumberInstance(locale)
+        nf.minimumFractionDigits = 1
+        nf.maximumFractionDigits = 1
+        val num = nf.format(pct)
+        return if (pct.signum() > 0) "+$num%" else "$num%"
+    }
+
+    private fun formatQuantity(qty: BigDecimal, locale: Locale): String {
+        val clean = qty.stripTrailingZeros()
+        val nf = NumberFormat.getNumberInstance(locale)
+        nf.minimumFractionDigits = 0
+        nf.maximumFractionDigits = 12
+        return nf.format(clean)
+    }
+
+    internal fun formatTimestamp(instant: Instant, zone: java.time.ZoneId, locale: Locale): String {
+        val pattern = DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm z", locale)
+        val formatted = pattern.format(ZonedDateTime.ofInstant(instant, zone))
+        // Normalize CLDR Spanish abbreviated months ("jul." -> "jul", "sept." -> "sep") to match date-fns.
+        return formatted
+            .replace(Regex("(\\p{L})\\. "), "$1 ")
+            .replace(" sept ", " sep ")
+    }
 
     private fun build(
         header: String,

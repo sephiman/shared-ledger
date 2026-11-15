@@ -8,6 +8,8 @@ import com.sephilabs.sharedledger.identity.user.User
 import com.sephilabs.sharedledger.notification.NotifyAction
 import com.sephilabs.sharedledger.notification.NotifyActor
 import com.sephilabs.sharedledger.notification.NotificationPublisher
+import com.sephilabs.sharedledger.portfolio.alert.AlertCancelReason
+import com.sephilabs.sharedledger.portfolio.alert.PriceAlertRepository
 import com.sephilabs.sharedledger.portfolio.price.FxRateRepository
 import com.sephilabs.sharedledger.portfolio.price.HoldingBackfillRequested
 import com.sephilabs.sharedledger.portfolio.price.HoldingReopened
@@ -26,6 +28,7 @@ import java.util.UUID
 class HoldingService(
     private val holdings: HoldingRepository,
     private val lots: HoldingLotRepository,
+    private val priceAlerts: PriceAlertRepository,
     private val fxRates: FxRateRepository,
     private val priceRefresh: PriceRefreshService,
     private val notifications: NotificationPublisher,
@@ -146,7 +149,8 @@ class HoldingService(
         }
         holding.deletedAt = now
         holding.updatedByUserId = by.id
-        log.info("holding_deleted holding={} lots_deleted={}", holding.id, holdingLots.size)
+        val alertsDeleted = priceAlerts.hardDeleteAllByHoldingId(holding.id)
+        log.info("holding_deleted holding={} lots_deleted={} alerts_deleted={}", holding.id, holdingLots.size, alertsDeleted)
     }
 
     @Transactional
@@ -267,12 +271,18 @@ class HoldingService(
         after: List<PortfolioValuationCalculator.LedgerEntry>,
         newHead: LocalDate?,
     ) {
+        if (isOpen(before) && !isOpen(after)) {
+            priceAlerts.cancelActiveForHolding(holdingId, AlertCancelReason.POSITION_CLOSED, Instant.now())
+        }
         if (isClosed(before) && !isClosed(after)) {
             events.publishEvent(HoldingReopened(holdingId))
         } else if (newHead != null) {
             events.publishEvent(HoldingBackfillRequested(holdingId, newHead))
         }
     }
+
+    private fun isOpen(entries: List<PortfolioValuationCalculator.LedgerEntry>): Boolean =
+        entries.isNotEmpty() && PortfolioValuationCalculator.replay(entries, props.portfolio.costMethod).netQuantity.signum() > 0
 
     private fun isClosed(entries: List<PortfolioValuationCalculator.LedgerEntry>): Boolean =
         entries.isNotEmpty() && PortfolioValuationCalculator.replay(entries, props.portfolio.costMethod).netQuantity.signum() == 0

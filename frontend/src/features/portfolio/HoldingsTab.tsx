@@ -17,6 +17,7 @@ import {
   type HoldingSummary,
   type Lot,
   type LotType,
+  type PriceAlert,
   type SymbolCandidate,
 } from "@/api/portfolio";
 import { apiErrorMessage } from "@/api/client";
@@ -28,6 +29,9 @@ import { useToggleSet } from "@/lib/useToggleSet";
 import { SymbolSearchCombobox } from "./SymbolSearchCombobox";
 import { usePriceRefresh } from "./usePriceRefresh";
 import { RefreshPricesButton } from "./RefreshPricesButton";
+import { PriceAlertModal } from "./PriceAlertModal";
+import { PriceAlertsDrawer } from "./PriceAlertsDrawer";
+import { isAlertEligibleHolding } from "./priceAlerts";
 import { DUST_HOLDING_MAX_VALUE_EUR, isDustHolding, partitionDust } from "./dustHoldings";
 import { weightsWithin } from "./holdingWeights";
 import { nextSort, sortHoldings, type HoldingSort, type HoldingSortKey } from "./holdingsSort";
@@ -156,6 +160,12 @@ export function HoldingsTab() {
   const [assetFilter, setAssetFilter] = useState<AssetFilter>("all");
   const [showClosed, setShowClosed] = useState(readShowClosed);
   const [sort, setSort] = useState<HoldingSort | null>(null);
+  const [alertModal, setAlertModal] = useState<{ row: HoldingSummary; existing?: PriceAlert | null } | null>(null);
+  const [alertsDrawerOpen, setAlertsDrawerOpen] = useState(false);
+
+  const telegramActive = summary?.telegramActive === true;
+  const activeAlertCount = summary?.activeAlertCount ?? 0;
+  const displayTimezone = summary?.displayTimezone;
 
   useEffect(() => {
     try {
@@ -383,12 +393,24 @@ export function HoldingsTab() {
       <Card>
         {holdings.length > 0 && (
           <CardHeader className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2">
-            <p
-              className="text-sm text-gray-500 dark:text-gray-400"
-              title={hidingSome ? t("portfolio.holdings_hidden_tooltip", { threshold: money(DUST_HOLDING_MAX_VALUE_EUR) }) : undefined}
-            >
-              {countLabel}
-            </p>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <p
+                className="text-sm text-gray-500 dark:text-gray-400"
+                title={hidingSome ? t("portfolio.holdings_hidden_tooltip", { threshold: money(DUST_HOLDING_MAX_VALUE_EUR) }) : undefined}
+              >
+                {countLabel}
+              </p>
+              {telegramActive && (
+                <button
+                  type="button"
+                  onClick={() => setAlertsDrawerOpen(true)}
+                  className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2.5 py-0.5 text-xs font-medium text-sky-700 hover:bg-gray-100 dark:text-sky-300 dark:hover:bg-raised"
+                >
+                  <span aria-hidden>🔔</span>
+                  <span>{t("portfolio.alerts.count", { count: activeAlertCount })}</span>
+                </button>
+              )}
+            </div>
             <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
               <RefreshPricesButton householdId={household.householdId} />
               {anyDust && (
@@ -410,11 +432,12 @@ export function HoldingsTab() {
                   const age = priceAge(row, now);
                   return (
                     <li key={row.holding.id} className="rounded-md border border-border">
+                      <div className="flex items-start gap-2 p-3">
                       <button
                         type="button"
                         onClick={() => expanded.toggle(row.holding.id)}
                         aria-expanded={isOpen}
-                        className="block w-full p-3 text-left"
+                        className="min-w-0 flex-1 text-left"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0 flex-1">
@@ -458,10 +481,16 @@ export function HoldingsTab() {
                           </div>
                         </div>
                       </button>
+                      {telegramActive && isAlertEligibleHolding(row) && (
+                        <AlertBellButton row={row} onClick={() => setAlertModal({ row })} />
+                      )}
+                      </div>
                       {isOpen && (
                         <div className="border-t border-border px-3 py-2">
                           <HoldingDetail
                             row={row}
+                            telegramActive={telegramActive}
+                            onOpenAlert={() => setAlertModal({ row })}
                             onEdit={() => setPanel({ kind: "edit", holding: row.holding })}
                             onDelete={() => {
                               if (window.confirm(t("common.delete") + "?")) void del.mutate(row.holding.id);
@@ -487,6 +516,11 @@ export function HoldingsTab() {
                         onSort={(key) => setSort((current) => nextSort(current, key))}
                       />
                     ))}
+                    {telegramActive && (
+                      <th className="w-12 py-2 text-right font-normal">
+                        <span className="sr-only">{t("portfolio.alerts.drawer_title")}</span>
+                      </th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -565,13 +599,22 @@ export function HoldingsTab() {
                           <td className="whitespace-nowrap text-right font-mono tabular-nums">
                             {percentLabel(weights.get(row.holding.id), locale)}
                           </td>
+                          {telegramActive && (
+                            <td className="whitespace-nowrap py-1 text-right" onClick={(e) => e.stopPropagation()}>
+                              {isAlertEligibleHolding(row) && (
+                                <AlertBellButton row={row} onClick={() => setAlertModal({ row })} />
+                              )}
+                            </td>
+                          )}
                         </tr>
                         {isOpen && (
                           <tr className="border-t border-border bg-gray-50/50 dark:bg-sunken/30">
                             <td></td>
-                            <td colSpan={8} className="px-2 py-3">
+                            <td colSpan={telegramActive ? 9 : 8} className="px-2 py-3">
                               <HoldingDetail
                                 row={row}
+                                telegramActive={telegramActive}
+                                onOpenAlert={() => setAlertModal({ row })}
                                 onEdit={() => setPanel({ kind: "edit", holding: row.holding })}
                                 onDelete={() => {
                                   if (window.confirm(t("common.delete") + "?")) void del.mutate(row.holding.id);
@@ -591,7 +634,57 @@ export function HoldingsTab() {
           )}
         </CardBody>
       </Card>
+
+      {telegramActive && alertModal && (
+        <PriceAlertModal
+          householdId={household.householdId}
+          holdingRow={alertModal.row}
+          displayTimezone={displayTimezone}
+          existing={alertModal.existing}
+          onClose={() => setAlertModal(null)}
+        />
+      )}
+
+      {telegramActive && alertsDrawerOpen && (
+        <PriceAlertsDrawer
+          householdId={household.householdId}
+          holdings={holdings}
+          displayTimezone={displayTimezone}
+          onEdit={(alert, holdingRow) => {
+            setAlertsDrawerOpen(false);
+            setAlertModal({ row: holdingRow, existing: alert });
+          }}
+          onClose={() => setAlertsDrawerOpen(false)}
+        />
+      )}
     </div>
+  );
+}
+
+function AlertBellButton({ row, onClick }: { row: HoldingSummary; onClick: () => void }) {
+  const { t } = useTranslation();
+  const count = row.activeAlertCount ?? 0;
+  const label =
+    count > 0
+      ? t("portfolio.alerts.bell_active_label", { symbol: row.holding.symbol, count })
+      : t("portfolio.alerts.bell_label", { symbol: row.holding.symbol });
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      aria-label={label}
+      title={label}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors hover:bg-gray-100 dark:hover:bg-raised",
+        count > 0 ? "font-medium text-sky-600 dark:text-sky-400" : "text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300",
+      )}
+    >
+      <span aria-hidden>🔔</span>
+      {count > 0 && <span className="font-mono tabular-nums">{count}</span>}
+    </button>
   );
 }
 
@@ -707,11 +800,15 @@ function PriceBadge({ row }: { row: HoldingSummary }) {
 
 function HoldingDetail({
   row,
+  telegramActive,
+  onOpenAlert,
   onEdit,
   onDelete,
   onUnlink,
 }: {
   row: HoldingSummary;
+  telegramActive: boolean;
+  onOpenAlert: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onUnlink: () => void;
@@ -728,6 +825,8 @@ function HoldingDetail({
     : holding.assetClass === "fund"
       ? t("portfolio.price_manual")
       : null;
+  const eligibleForAlert = telegramActive && isAlertEligibleHolding(row);
+  const holdingAlertCount = row.activeAlertCount ?? 0;
 
   return (
     <div className="space-y-3 text-sm">
@@ -756,6 +855,19 @@ function HoldingDetail({
           </Button>
         </div>
       </div>
+      {eligibleForAlert && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-sunken px-3 py-2 text-xs">
+          <span className="text-gray-700 dark:text-gray-300">
+            <span className="mr-1.5" aria-hidden>🔔</span>
+            {holdingAlertCount > 0
+              ? t("portfolio.alerts.manage_for_holding_count", { count: holdingAlertCount })
+              : t("portfolio.alerts.manage_for_holding")}
+          </span>
+          <Button variant="secondary" className="px-2.5 py-1 text-xs" onClick={onOpenAlert}>
+            {t("portfolio.alerts.modal_title_create", { symbol: holding.symbol })}
+          </Button>
+        </div>
+      )}
       {!holding.linked && holding.assetClass !== "fund" && <LinkPanel holding={holding} />}
       <LotsEditor holding={holding} currency={household.currency} locale={locale} />
     </div>

@@ -2,6 +2,10 @@ package com.sephilabs.sharedledger.portfolio
 
 import com.sephilabs.sharedledger.common.Money
 import com.sephilabs.sharedledger.config.AppProperties
+import com.sephilabs.sharedledger.notification.TelegramSettingsRepository
+import com.sephilabs.sharedledger.portfolio.alert.AlertStatus
+import com.sephilabs.sharedledger.portfolio.alert.PriceAlertRepository
+import com.sephilabs.sharedledger.portfolio.alert.RefreshCadenceDescriptor
 import com.sephilabs.sharedledger.portfolio.price.FxRateRepository
 import com.sephilabs.sharedledger.portfolio.price.PricePointRepository
 import org.springframework.stereotype.Service
@@ -20,6 +24,8 @@ class PortfolioValuationService(
     private val fxRates: FxRateRepository,
     private val holdingService: HoldingService,
     private val valuations: HoldingValuationRepository,
+    private val priceAlerts: PriceAlertRepository,
+    private val telegramSettings: TelegramSettingsRepository,
     private val props: AppProperties,
 ) {
 
@@ -34,6 +40,8 @@ class PortfolioValuationService(
 
         data class Row(
             val holding: Holding,
+            val state: PortfolioValuationCalculator.LedgerState,
+            val entries: List<PortfolioValuationCalculator.LedgerEntry>,
             val price: PortfolioValuationCalculator.PriceInput?,
             val result: PortfolioValuationCalculator.HoldingValuationResult,
         )
@@ -43,7 +51,7 @@ class PortfolioValuationService(
             val state = PortfolioValuationCalculator.replay(entries, costMethod)
             val price = priceFor(holding, today)
             Row(
-                holding, price,
+                holding, state, entries, price,
                 PortfolioValuationCalculator.value(state, price, today, props.portfolio.stalePriceThresholdDays),
             )
         }
@@ -52,6 +60,19 @@ class PortfolioValuationService(
             .mapNotNull { row -> row.result.currentValueBase?.let { row.holding.id to it } }
             .toMap()
         val weights = PortfolioValuationCalculator.weights(pricedValues)
+
+        val telegramActive = telegramSettings.findByHouseholdId(householdId)
+            ?.let { it.active && it.isDeliverable() } == true
+        val now = java.time.Instant.now()
+        val activeAlertsByHolding = if (telegramActive) {
+            priceAlerts.findAllByHouseholdIdOrderByCreatedAtDesc(householdId)
+                .filter { it.status == AlertStatus.ACTIVE && (it.expiresAt == null || it.expiresAt!!.isAfter(now)) }
+                .groupingBy { it.holdingId }
+                .eachCount()
+        } else {
+            emptyMap()
+        }
+        val totalActiveAlerts = activeAlertsByHolding.values.sum()
 
         val holdingDtos = results.map { row ->
             HoldingSummaryDto(
@@ -70,6 +91,11 @@ class PortfolioValuationService(
                 soldCostBasis = row.result.soldCostBasisBase,
                 totalReturn = row.result.totalReturnBase,
                 weight = weights[row.holding.id],
+                averageCostPriceCurrency = averageCostInPriceCurrency(
+                    row.holding, lotsByHolding[row.holding.id].orEmpty(), row.entries, row.state, row.price, today,
+                ),
+                refreshCadence = RefreshCadenceDescriptor.forHolding(row.holding, props),
+                activeAlertCount = activeAlertsByHolding[row.holding.id] ?: 0,
             )
         }
 
@@ -124,6 +150,9 @@ class PortfolioValuationService(
             byClass = byClass,
             anyStale = results.any { it.result.stale },
             anyUnpriced = anyUnpriced,
+            telegramActive = telegramActive,
+            activeAlertCount = totalActiveAlerts,
+            displayTimezone = props.displayZoneId().id,
         )
     }
 
@@ -458,5 +487,44 @@ class PortfolioValuationService(
     companion object {
         // Evolution charts serve at most this many points; longer ranges sample coarser.
         const val MAX_EVOLUTION_POINTS: Long = 800
+    }
+
+    private fun averageCostInPriceCurrency(
+        holding: Holding,
+        holdingLots: List<HoldingLot>,
+        entries: List<PortfolioValuationCalculator.LedgerEntry>,
+        state: PortfolioValuationCalculator.LedgerState,
+        price: PortfolioValuationCalculator.PriceInput?,
+        today: LocalDate,
+    ): BigDecimal? {
+        if (state.netQuantity.signum() <= 0) return null
+        val targetCurrency = priceCurrencyFor(holding)
+        if (targetCurrency == baseCurrency) {
+            return state.remainingCostBasisBase
+                .divide(state.netQuantity, 12, RoundingMode.HALF_UP)
+                .stripTrailingZeros()
+        }
+        val fxTargetToBase = price?.fxToBase
+            ?: fxRates.findFirstByBaseCurrencyAndQuoteCurrencyAndRateDateLessThanEqualOrderByRateDateDesc(
+                targetCurrency, baseCurrency, today,
+            )?.rate
+        val breakdown = PortfolioValuationCalculator.breakdownByLot(entries, costMethod)
+        var totalCostInTarget = BigDecimal.ZERO
+        for (lot in holdingLots) {
+            if (lot.type != LotType.BUY) continue
+            val b = breakdown[lot.id] ?: continue
+            if (b.remainingQty.signum() <= 0) continue
+            val ratio = b.remainingQty.divide(lot.quantity, MathContext.DECIMAL64)
+            val lotCostTarget = if (lot.currency == targetCurrency) {
+                val nativeTotal = lot.quantity.multiply(lot.unitPrice, MathContext.DECIMAL64)
+                    .add(lot.fee ?: BigDecimal.ZERO, MathContext.DECIMAL64)
+                nativeTotal.multiply(ratio, MathContext.DECIMAL64)
+            } else {
+                val fx = fxTargetToBase ?: return null
+                b.remainingCostBasisBase.divide(fx, MathContext.DECIMAL64)
+            }
+            totalCostInTarget = totalCostInTarget.add(lotCostTarget, MathContext.DECIMAL64)
+        }
+        return totalCostInTarget.divide(state.netQuantity, 12, RoundingMode.HALF_UP).stripTrailingZeros()
     }
 }
