@@ -13,6 +13,7 @@ import com.sephilabs.sharedledger.budget.BudgetRepository
 import com.sephilabs.sharedledger.catalog.CustomCategoryRepository
 import com.sephilabs.sharedledger.fire.FireSettingsRepository
 import com.sephilabs.sharedledger.fire.FireTaxBracketRepository
+import com.sephilabs.sharedledger.fire.ai.FireAiAnalysisRunRepository
 import com.sephilabs.sharedledger.lending.LendingRepository
 import com.sephilabs.sharedledger.networth.asset.AssetRepository
 import com.sephilabs.sharedledger.networth.cash.CashAdjustmentRepository
@@ -62,6 +63,7 @@ class HouseholdDataWipeService(
     private val cashEstimateSettings: CashEstimateSettingsRepository,
     private val aiSuggestionRuns: AiSuggestionRunRepository,
     private val ruleGeneralisationRuns: RuleGeneralisationRunRepository,
+    private val fireAiAnalysisRuns: FireAiAnalysisRunRepository,
     private val aiSuggestionSettings: AiSuggestionSettingsRepository,
 ) {
 
@@ -93,6 +95,7 @@ class HouseholdDataWipeService(
         val pendingCount = pendingMovements.hardDeleteAllByHouseholdId(householdId)
         val aiRunCount = aiSuggestionRuns.hardDeleteAllByHouseholdId(householdId)
         val ruleGeneralisationRunCount = ruleGeneralisationRuns.hardDeleteAllByHouseholdId(householdId)
+        val fireAiRunCount = fireAiAnalysisRuns.hardDeleteAllByHouseholdId(householdId)
         val ruleCount = categorizationRules.hardDeleteAllByHouseholdId(householdId)
         val authSessionCount = bankAuthSessions.hardDeleteAllByHouseholdId(householdId)
         val connectionCount = bankConnections.hardDeleteAllByHouseholdId(householdId)
@@ -112,11 +115,11 @@ class HouseholdDataWipeService(
             "household_data_wipe household={} by_user={} tx={} mv={} snap={} snap_liab_balances={} cash_adj={} " +
                 "recurring={} budgets={} custom_categories={} price_alerts={} holdings={} assets={} liabilities={} lendings={} " +
                 "pending={} rules={} auth_sessions={} bank_connections={} bank_credentials={} bank_sync_schedule={} fire={} fire_brackets={} telegram={} auto_snapshot={} cash_settings={} " +
-                "ai_runs={} rule_generalisation_runs={} ai_settings={}",
+                "ai_runs={} rule_generalisation_runs={} fire_ai_runs={} ai_settings={}",
             householdId, byUserId, txCount, movementCount, snapshotCount, balanceCount, cashAdjustmentCount,
             recurringCount, budgetCount, customCategoryCount, priceAlertCount, holdingCount, assetCount, liabilityCount, lendingCount,
             pendingCount, ruleCount, authSessionCount, connectionCount, bankCredentialCount, bankSyncScheduleCount, fireCount, fireBracketCount, telegramCount, autoSnapshotCount, cashSettingsCount,
-            aiRunCount, ruleGeneralisationRunCount, aiSettingsCount,
+            aiRunCount, ruleGeneralisationRunCount, fireAiRunCount, aiSettingsCount,
         )
     }
 }

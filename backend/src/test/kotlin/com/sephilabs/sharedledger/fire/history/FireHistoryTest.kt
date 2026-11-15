@@ -39,6 +39,7 @@ import jakarta.servlet.http.Cookie
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.data.Offset
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.parallel.ResourceLock
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
@@ -51,6 +52,7 @@ import java.time.YearMonth
 import java.time.temporal.IsoFields
 import java.util.UUID
 
+@ResourceLock("fire-section-cache")
 class FireHistoryTest @Autowired constructor(
     private val objectMapper: ObjectMapper,
     private val users: UserRepository,

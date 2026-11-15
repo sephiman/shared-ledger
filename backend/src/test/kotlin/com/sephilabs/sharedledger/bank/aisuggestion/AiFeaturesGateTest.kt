@@ -70,6 +70,11 @@ class AiFeaturesGateTest @Autowired constructor(
         post("/api/households/$household/banks/rules/generalisations").with(csrf()).cookie(session),
         post("/api/households/$household/questions").with(csrf()).cookie(session)
             .contentType(MediaType.APPLICATION_JSON).content("""{"question":"How much on restaurants?","language":"en","askedFrom":"explorer"}"""),
+        post("/api/households/$household/questions/projection").with(csrf()).cookie(session)
+            .contentType(MediaType.APPLICATION_JSON).content("""{"question":"What if we freeze dining?","language":"en"}"""),
+        post("/api/households/$household/fire/question").with(csrf()).cookie(session)
+            .contentType(MediaType.APPLICATION_JSON).content("""{"question":"What if I save 200 more?","language":"en"}"""),
+        post("/api/households/$household/fire/ai-analysis").with(csrf()).cookie(session),
     )
 
     private fun householdOf(session: Cookie): UUID = UUID.fromString(

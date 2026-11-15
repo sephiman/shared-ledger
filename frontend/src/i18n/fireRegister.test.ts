@@ -24,6 +24,12 @@ function firstPersonPlural(text: string): string[] {
   return words.filter((word) => /(amos|emos|imos)$/i.test(word) && !NOT_FIRST_PERSON_PLURAL.has(word.toLowerCase()));
 }
 
+function collectStrings(node: unknown, prefix = ""): Array<[string, string]> {
+  if (typeof node === "string") return [[prefix, node]];
+  if (!node || typeof node !== "object") return [];
+  return Object.entries(node).flatMap(([k, v]) => collectStrings(v, prefix ? `${prefix}.${k}` : k));
+}
+
 describe("Spanish FIRE copy speaks in the second person singular", () => {
   it("the check recognises the plural forms it guards against, and leaves look-alikes alone", () => {
     expect(secondPersonPlural("Cómo os ha ido")).toEqual(["os"]);
@@ -46,14 +52,14 @@ describe("Spanish FIRE copy speaks in the second person singular", () => {
   });
 
   it("no fire.* string in the es bundle uses nosotros verb forms", () => {
-    const offending = Object.entries(es.fire as Record<string, string>)
+    const offending = collectStrings(es.fire)
       .map(([key, value]) => [key, firstPersonPlural(value)] as const)
       .filter(([, hits]) => hits.length > 0);
     expect(offending).toEqual([]);
   });
 
   it("no fire.* string in the es bundle uses vosotros forms", () => {
-    const offending = Object.entries(es.fire as Record<string, string>)
+    const offending = collectStrings(es.fire)
       .map(([key, value]) => [key, secondPersonPlural(value)] as const)
       .filter(([, hits]) => hits.length > 0);
     expect(offending).toEqual([]);

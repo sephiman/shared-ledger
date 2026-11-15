@@ -1,9 +1,10 @@
 import { useTranslation } from "react-i18next";
-import type { FirePreviewRequest, FireProjection } from "@/api/fire";
+import type { FireCashFlowEvent, FirePreviewRequest, FireProjection } from "@/api/fire";
 import { Badge, Button, Input, Label } from "@/components/ui/primitives";
 import { formatWholeMoney, toDecimal } from "@/lib/money";
 import { WHAT_IF_SAVE_MORE_AMOUNT, WHAT_IF_SPEND_LESS_PCT } from "./fireHeadline";
 import { formatFirePercent } from "./fireLabels";
+import { FireWhatIfAsk } from "./FireWhatIfAsk";
 
 export interface WhatIfDraft {
   monthlyContribution: string;
@@ -15,6 +16,8 @@ export interface WhatIfDraft {
   monthlyEssentialSpending: string;
   /** Percentage points added to every scenario's mean return. */
   returnShiftPct: string;
+  /** Replaces saved cash-flow events in preview when non-null (e.g. from NL What-If). */
+  cashFlowEvents?: FireCashFlowEvent[] | null;
 }
 
 export function initialWhatIfDraft(projection: FireProjection): WhatIfDraft {
@@ -26,6 +29,7 @@ export function initialWhatIfDraft(projection: FireProjection): WhatIfDraft {
     lumpSum: "0",
     monthlyEssentialSpending: "",
     returnShiftPct: "0",
+    cashFlowEvents: null,
   };
 }
 
@@ -41,6 +45,7 @@ export function draftFromPreview(preview: FirePreviewRequest, base: FireProjecti
     safeWithdrawalRatePct: preview.safeWithdrawalRatePct ?? draft.safeWithdrawalRatePct,
     lumpSum: preview.lumpSum ?? draft.lumpSum,
     returnShiftPct: preview.returnShiftPct ?? draft.returnShiftPct,
+    cashFlowEvents: preview.cashFlowEvents ?? null,
   };
 }
 
@@ -70,8 +75,9 @@ export function buildPreviewRequest(draft: WhatIfDraft, base: FireProjection): F
     essentialVal !== Number(base.spending.essentialMonthly);
   const shiftVal = Number(draft.returnShiftPct);
   const shiftChanged = draft.returnShiftPct.trim() !== "" && Number.isFinite(shiftVal) && shiftVal !== 0 && Math.abs(shiftVal) <= 20;
+  const eventsChanged = draft.cashFlowEvents != null;
 
-  if (!contribChanged && !spendChanged && !yearChanged && !swrChanged && !lumpChanged && !essentialChanged && !shiftChanged) {
+  if (!contribChanged && !spendChanged && !yearChanged && !swrChanged && !lumpChanged && !essentialChanged && !shiftChanged && !eventsChanged) {
     return null;
   }
 
@@ -97,10 +103,14 @@ export function buildPreviewRequest(draft: WhatIfDraft, base: FireProjection): F
   if (shiftChanged) {
     req.returnShiftPct = draft.returnShiftPct;
   }
+  if (eventsChanged) {
+    req.cashFlowEvents = draft.cashFlowEvents;
+  }
   return Object.keys(req).length > 0 ? req : null;
 }
 
 interface Props {
+  householdId?: string;
   baseProjection: FireProjection;
   draft: WhatIfDraft;
   isActive: boolean;
@@ -115,6 +125,7 @@ interface Props {
 /** Ephemeral sandbox controls directly under the headline so any household member can test tweaks
  *  without mutating saved household settings. */
 export function FireWhatIfBar({
+  householdId,
   baseProjection,
   draft,
   isActive,
@@ -136,7 +147,8 @@ export function FireWhatIfBar({
       (draft.monthlyEssentialSpending !== "" &&
         Number(draft.monthlyEssentialSpending) !== Number(baseProjection.spending.essentialMonthly)) ||
       Number(draft.targetYear) !== baseProjection.settings.targetYear ||
-      Number(draft.safeWithdrawalRatePct) !== Number(baseProjection.settings.safeWithdrawalRatePct));
+      Number(draft.safeWithdrawalRatePct) !== Number(baseProjection.settings.safeWithdrawalRatePct) ||
+      draft.cashFlowEvents != null);
 
   function handleSaveMore() {
     const baseContrib = Number(baseProjection.contributions.activeMonthly ?? baseProjection.settings.monthlyContribution) || 0;
@@ -159,6 +171,14 @@ export function FireWhatIfBar({
 
   return (
     <div className="space-y-3 rounded-md border border-sky-200/80 bg-raised/50 p-3 dark:border-sky-800/50">
+      {householdId && (
+        <FireWhatIfAsk
+          householdId={householdId}
+          currency={currency}
+          baseProjection={baseProjection}
+          onApplyDraft={onChange}
+        />
+      )}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -266,6 +286,41 @@ export function FireWhatIfBar({
           />
         </div>
       </div>
+      {draft.cashFlowEvents != null && (
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="font-medium text-gray-600 dark:text-gray-300">{t("fire.what_if_events_active")}:</span>
+          {draft.cashFlowEvents.map((ev, idx) => (
+            <span
+              key={idx}
+              className="inline-flex items-center gap-1 rounded-full border border-border bg-white px-2 py-0.5 text-gray-700 dark:bg-chip dark:text-gray-200"
+            >
+              <span>
+                {ev.label || ev.kind} ({ev.year}: {formatWholeMoney(ev.amount, currency, locale)})
+              </span>
+              <button
+                type="button"
+                aria-label={t("common.delete")}
+                onClick={() => {
+                  const next = draft.cashFlowEvents?.filter((_, i) => i !== idx) ?? [];
+                  onChange({
+                    ...draft,
+                    cashFlowEvents: next.length === baseProjection.settings.cashFlowEvents.length &&
+                      next.every((e, i) =>
+                        e.year === baseProjection.settings.cashFlowEvents[i].year &&
+                        e.kind === baseProjection.settings.cashFlowEvents[i].kind &&
+                        e.amount === baseProjection.settings.cashFlowEvents[i].amount)
+                      ? null
+                      : next,
+                  });
+                }}
+                className="text-gray-500 hover:text-red-600 dark:text-gray-300 dark:hover:text-red-400"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

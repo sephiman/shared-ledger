@@ -4,7 +4,13 @@ import { apiErrorMessage } from "@/api/client";
 import { useAiSuggestionSettings, useUpdateAiSuggestionSettings } from "@/api/aiSuggestions";
 import { Card, CardBody, CardHeader, FieldError } from "@/components/ui/primitives";
 
-const FEATURE_LINES = ["settings.ai_features_inbox", "settings.ai_features_rules", "settings.ai_features_ask"] as const;
+const FEATURE_LINES = [
+  "settings.ai_features_inbox",
+  "settings.ai_features_rules",
+  "settings.ai_features_ask",
+  "settings.ai_features_fire_what_if",
+  "settings.ai_features_fire_review",
+] as const;
 
 /** Owner-only opt-in for every AI feature at once. Rendered only when the instance has an AI provider; the help
  *  text names exactly what each feature sends and where it goes, so the owner decides with that in front of them. */

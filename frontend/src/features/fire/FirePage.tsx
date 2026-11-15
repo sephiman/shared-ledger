@@ -2,6 +2,7 @@ import { type ComponentProps, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
+import { useAiSuggestionsOn } from "@/api/aiSuggestions";
 import { useFireHistory, useFireLevers, useFirePreview, useFireProjection, useFireSettings, useUpdateFireSettings, type FirePreviewRequest, type FireProjection, type FireSettings } from "@/api/fire";
 import { useAssetClasses } from "@/api/catalog";
 import { apiErrorMessage } from "@/api/client";
@@ -18,6 +19,7 @@ import { useFireSettingsSource } from "./useFireSettingsSource";
 import { unsavedSections } from "./fireUnsavedSections";
 import { FireWhatIfBar, buildPreviewRequest, draftFromPreview, initialWhatIfDraft, type WhatIfDraft } from "./FireWhatIfBar";
 import { FireLeversSection } from "./FireLeversSection";
+import { FireAiAnalysisTab } from "./FireAiAnalysisTab";
 import { resolveReferenceScenarioIndex, scenarioDisplayName } from "./fireLabels";
 
 const PHOTO_ANCHOR_ID = "fire-photo";
@@ -39,13 +41,22 @@ export function FirePage() {
   const [form, setForm] = useState<FireSettings | null>(null);
   const [errors, setErrors] = useState<FireFormErrors>({});
   const [whatIfDraft, setWhatIfDraft] = useState<WhatIfDraft | null>(null);
+  const ai = useAiSuggestionsOn(household.householdId);
   const [searchParams, setSearchParams] = useSearchParams();
   const rawTab = searchParams.get("tab");
-  const tab: "projection" | "settings" = rawTab === "settings" ? "settings" : "projection";
-  const setTab = (next: "projection" | "settings") => {
+  const tab: "projection" | "settings" | "ai_analysis" =
+    rawTab === "ai_analysis" && ai ? "ai_analysis" : rawTab === "settings" ? "settings" : "projection";
+  const setTab = (next: "projection" | "settings" | "ai_analysis") => {
     setSearchParams(next === "projection" ? {} : { tab: next }, { replace: true });
   };
   const [whatIfOpen, setWhatIfOpen] = useState(false);
+  const [pendingScrollToPhoto, setPendingScrollToPhoto] = useState(false);
+
+  useEffect(() => {
+    if (tab !== "projection" || !pendingScrollToPhoto) return;
+    setPendingScrollToPhoto(false);
+    document.getElementById(PHOTO_ANCHOR_ID)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [tab, pendingScrollToPhoto]);
 
   useEffect(() => {
     if (settings) setForm(settings);
@@ -106,6 +117,7 @@ export function FirePage() {
       ...(essentialChanged
         ? { essentialSpendingMode: "manual", manualEssentialSpending: whatIfDraft.monthlyEssentialSpending }
         : {}),
+      ...(whatIfDraft.cashFlowEvents != null ? { cashFlowEvents: whatIfDraft.cashFlowEvents } : {}),
     };
     setForm(nextForm);
     update.mutate(nextForm);
@@ -163,9 +175,10 @@ export function FirePage() {
         items={[
           { value: "projection", label: t("fire.tab_projection") },
           { value: "settings", label: t("nav.settings") },
+          ...(ai ? [{ value: "ai_analysis", label: t("fire.tab_ai_analysis") }] : []),
         ]}
         value={tab}
-        onChange={(v) => setTab(v as "projection" | "settings")}
+        onChange={(v) => setTab(v as "projection" | "settings" | "ai_analysis")}
         ariaLabel={t("fire.title")}
       />
 
@@ -184,6 +197,7 @@ export function FirePage() {
               whatIfSlot={
                 projection && whatIfDraft && (whatIfOpen || isWhatIfActive) ? (
                   <FireWhatIfBar
+                    householdId={household.householdId}
                     baseProjection={projection}
                     draft={whatIfDraft}
                     isActive={isWhatIfActive}
@@ -266,6 +280,21 @@ export function FirePage() {
           onChange={onChange}
           onScenarioErrorClear={onScenarioErrorClear}
           onSave={validateAndSave}
+        />
+      )}
+
+      {tab === "ai_analysis" && ai && (
+        <FireAiAnalysisTab
+          householdId={household.householdId}
+          currency={household.currency}
+          projection={projection}
+          onPreviewWhatIf={(previewReq) => {
+            if (!projection) return;
+            setWhatIfDraft(draftFromPreview(previewReq, projection));
+            setWhatIfOpen(true);
+            setPendingScrollToPhoto(true);
+            setTab("projection");
+          }}
         />
       )}
     </div>
