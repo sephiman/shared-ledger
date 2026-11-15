@@ -17,12 +17,10 @@ import { apiErrorMessage } from "@/api/client";
 import { formatDate } from "@/lib/dates";
 import { Button, Card, CardBody, CardHeader, FieldError, Input, Label, Select } from "@/components/ui/primitives";
 import { BankAccountList } from "./BankAccountList";
+import { BANK_COUNTRIES, defaultBankCountry } from "./bankCountry";
 import { BankSyncScheduleEditor } from "./BankSyncScheduleEditor";
 import { showWhitelistPhase } from "./whitelistInstructionsBus";
 import { consentUrgency, type ConsentUrgency } from "./consentUrgency";
-
-// Common SEPA / open-banking countries; the ASPSP catalogue itself comes from the provider.
-const COUNTRIES = ["NL", "ES", "DE", "FR", "BE", "IT", "PT", "IE", "AT", "FI", "GB"];
 
 function statusClass(status: ConnectionStatus): string {
   switch (status) {
@@ -94,7 +92,7 @@ export function BanksCard({
   }, [config?.nextSyncTimes, locale]);
 
   const canLink = config?.credentialsConfigured ?? false;
-  const [country, setCountry] = useState("NL");
+  const [country, setCountry] = useState(defaultBankCountry);
   const [aspspName, setAspspName] = useState("");
   const [label, setLabel] = useState("");
   const [linkError, setLinkError] = useState<string | null>(null);
@@ -174,9 +172,9 @@ export function BanksCard({
           <>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
               <div>
-                <Label>{t("banks.country")}</Label>
-                <Select value={country} onChange={(e) => { setCountry(e.target.value); setAspspName(""); }}>
-                  {COUNTRIES.map((c) => (
+                <Label htmlFor="bank-country">{t("banks.country")}</Label>
+                <Select id="bank-country" value={country} onChange={(e) => { setCountry(e.target.value); setAspspName(""); }}>
+                  {BANK_COUNTRIES.map((c) => (
                     <option key={c} value={c}>{c}</option>
                   ))}
                 </Select>

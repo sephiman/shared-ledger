@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Button, Card, CardBody, CardHeader, Input, Label, Toggle } from "@/components/ui/primitives";
 import { apiErrorMessage, asApiError } from "@/api/client";
@@ -56,6 +56,12 @@ export function NotificationsCard({ householdId }: { householdId: string }) {
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [testMsg, setTestMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [copiedUrl, setCopiedUrl] = useState(false);
+
+  const savedChatId = settings?.chatId ?? "";
+  const canTest = tokenConfigured && savedChatId.trim().length > 0;
+  // The test endpoint reads persisted settings, so testing with unsaved edits would silently hit old targets or 400.
+  const hasUnsavedTarget = token.trim().length > 0 || (form.chatId ?? "").trim() !== savedChatId.trim();
 
   useEffect(() => {
     if (settings) {
@@ -134,6 +140,7 @@ export function NotificationsCard({ householdId }: { householdId: string }) {
               onChange={(e) => set("chatId", e.target.value)}
               placeholder="-1001234567890"
             />
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{t("notifications.chat_id_hint")}</p>
           </div>
         </div>
 
@@ -163,11 +170,14 @@ export function NotificationsCard({ householdId }: { householdId: string }) {
 
         <div className="flex flex-wrap items-center gap-3">
           <Button onClick={onSave} disabled={update.isPending}>{t("common.save")}</Button>
-          <Button variant="secondary" onClick={onTest} disabled={test.isPending}>
+          <Button variant="secondary" onClick={onTest} disabled={test.isPending || !canTest || hasUnsavedTarget}>
             {test.isPending ? t("notifications.test_sending") : t("notifications.test_button")}
           </Button>
           {saveMsg && <span className="text-sm text-gray-600 dark:text-gray-300">{saveMsg}</span>}
         </div>
+        {hasUnsavedTarget && (
+          <p className="text-xs text-amber-700 dark:text-amber-400">{t("notifications.test_save_first")}</p>
+        )}
         {testMsg && (
           <div
             className={
@@ -189,27 +199,132 @@ export function NotificationsCard({ householdId }: { householdId: string }) {
             {helpOpen ? t("notifications.help_hide") : t("notifications.help_show")}
           </button>
           {helpOpen && (
-            <div className="mt-2 space-y-3 rounded-md border border-border bg-gray-50 p-3 text-sm dark:bg-sunken/40">
-              <div>
-                <p className="font-medium">{t("notifications.help_step1_title")}</p>
-                <p className="mt-1 text-gray-600 dark:text-gray-300">{t("notifications.help_step1_body")}</p>
-                <a className="text-primary" href="https://t.me/BotFather" target="_blank" rel="noreferrer">https://t.me/BotFather</a>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400"><code>123456789:AAExampleTokenStringFromBotFather</code></p>
-              </div>
-              <div>
-                <p className="font-medium">{t("notifications.help_step2_title")}</p>
-                <p className="mt-1 text-gray-600 dark:text-gray-300">{t("notifications.help_step2_body")}</p>
-              </div>
-              <div>
-                <p className="font-medium">{t("notifications.help_step3_title")}</p>
-                <p className="mt-1 text-gray-600 dark:text-gray-300">{t("notifications.help_step3_body")}</p>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400"><code>https://api.telegram.org/bot&lt;token&gt;/getUpdates</code></p>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{t("notifications.help_step3_hint")}</p>
-              </div>
+            <div className="mt-2 space-y-4 rounded-md border border-border bg-gray-50 p-3 text-sm dark:bg-sunken/40">
+              <SetupStep number={1} title={t("notifications.help_step1_title")}>
+                <p>
+                  {t("notifications.help_step1_body")}{" "}
+                  <a className="text-primary" href="https://t.me/BotFather" target="_blank" rel="noreferrer">
+                    https://t.me/BotFather
+                  </a>
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {t("notifications.help_step1_example_label")}{" "}
+                  <code className="break-all rounded bg-gray-100 px-1 py-0.5 dark:bg-sunken/60">
+                    123456789:AAExampleTokenStringFromBotFather
+                  </code>
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{t("notifications.help_step1_note")}</p>
+              </SetupStep>
+
+              <SetupStep number={2} title={t("notifications.help_step2_title")} className="border-t border-border pt-4">
+                <p>{t("notifications.help_step2_intro")}</p>
+                <ul className="list-disc space-y-1.5 pl-5">
+                  <li>
+                    <strong className="font-semibold text-gray-700 dark:text-gray-200">
+                      {t("notifications.help_step2_private_label")}
+                    </strong>{" "}
+                    {t("notifications.help_step2_private_body")}
+                  </li>
+                  <li>
+                    <strong className="font-semibold text-gray-700 dark:text-gray-200">
+                      {t("notifications.help_step2_group_label")}
+                    </strong>{" "}
+                    {t("notifications.help_step2_group_body")}
+                  </li>
+                  <li>
+                    <strong className="font-semibold text-gray-700 dark:text-gray-200">
+                      {t("notifications.help_step2_channel_label")}
+                    </strong>{" "}
+                    {t("notifications.help_step2_channel_body")}
+                  </li>
+                </ul>
+              </SetupStep>
+
+              <SetupStep number={3} title={t("notifications.help_step3_title")} className="border-t border-border pt-4">
+                <p>{t("notifications.help_step3_body")}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <code className="min-w-0 break-all rounded bg-gray-100 px-2 py-1 text-xs dark:bg-sunken/60">
+                    https://api.telegram.org/bot&lt;token&gt;/getUpdates
+                  </code>
+                  {token.trim().length > 0 && (
+                    <Button
+                      variant="secondary"
+                      className="px-2 py-0.5 text-xs"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard?.writeText(
+                            `https://api.telegram.org/bot${token.trim()}/getUpdates`,
+                          );
+                          setCopiedUrl(true);
+                          setTimeout(() => setCopiedUrl(false), 2000);
+                        } catch {
+                          // Clipboard API can reject in insecure contexts; ignore silently.
+                        }
+                      }}
+                    >
+                      {copiedUrl ? t("common.copied") : t("notifications.help_step3_copy_url")}
+                    </Button>
+                  )}
+                </div>
+                <div>
+                  <p>{t("notifications.help_step3_paths_intro")}</p>
+                  <ul className="mt-1 list-disc space-y-1 pl-5">
+                    <li>
+                      {t("notifications.help_step3_path_message_label")}{" "}
+                      <code className="rounded bg-gray-100 px-1 py-0.5 text-xs dark:bg-sunken/60">
+                        result[].message.chat.id
+                      </code>
+                    </li>
+                    <li>
+                      {t("notifications.help_step3_path_member_label")}{" "}
+                      <code className="rounded bg-gray-100 px-1 py-0.5 text-xs dark:bg-sunken/60">
+                        result[].my_chat_member.chat.id
+                      </code>
+                    </li>
+                    <li>
+                      {t("notifications.help_step3_path_channel_label")}{" "}
+                      <code className="rounded bg-gray-100 px-1 py-0.5 text-xs dark:bg-sunken/60">
+                        result[].channel_post.chat.id
+                      </code>
+                    </li>
+                  </ul>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{t("notifications.help_step3_negative")}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{t("notifications.help_step3_empty")}</p>
+              </SetupStep>
+
+              <SetupStep number={4} title={t("notifications.help_step4_title")} className="border-t border-border pt-4">
+                <p>{t("notifications.help_step4_body")}</p>
+              </SetupStep>
             </div>
           )}
         </div>
       </CardBody>
     </Card>
+  );
+}
+
+/** One numbered step in the Telegram setup guide: circular badge, title, and indented details. */
+function SetupStep({
+  number,
+  title,
+  className,
+  children,
+}: {
+  number: number;
+  title: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className={className}>
+      <div className="flex items-start gap-2">
+        <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+          {number}
+        </span>
+        <p className="mt-0.5 font-semibold text-gray-900 dark:text-gray-100">{title}</p>
+      </div>
+      <div className="mt-2 space-y-2 text-gray-600 dark:text-gray-300 sm:pl-8">{children}</div>
+    </section>
   );
 }
