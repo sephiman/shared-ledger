@@ -330,6 +330,7 @@ describe("editing a trade", () => {
     expect(screen.getByDisplayValue("2026-02-01")).toBeInTheDocument();
     expect(screen.getByDisplayValue("2")).toBeInTheDocument();
     expect(screen.getByDisplayValue("100")).toBeInTheDocument();
+    expect((screen.getByLabelText("Total price") as HTMLInputElement).value).toBe("200");
     expect(screen.getByDisplayValue("EUR")).toBeInTheDocument();
     expect(screen.getByDisplayValue("1.5")).toBeInTheDocument();
     expect(screen.getByDisplayValue("first buy")).toBeInTheDocument();
@@ -400,6 +401,127 @@ describe("editing a trade", () => {
 
     await user.selectOptions(screen.getByRole("combobox"), "SELL");
     expect(screen.getByText("Estás convirtiendo una compra en una venta.")).toBeInTheDocument();
+  });
+});
+
+describe("registering a trade with unit or total price", () => {
+  async function openCreateForm(user: ReturnType<typeof userEvent.setup>, buttonLabel = "Register buy") {
+    await user.click(screen.getAllByRole("button", { name: /BTC/ })[0]);
+    await user.click(screen.getAllByRole("button", { name: buttonLabel })[0]);
+  }
+
+  it("labels buy creation as Añadir compra in Spanish and Register buy in English", async () => {
+    const user = show([OPEN]);
+    await openCreateForm(user, "Register buy");
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+
+    cleanup();
+    await i18n.changeLanguage("es");
+    const esUser = show([OPEN]);
+    await openCreateForm(esUser, "Añadir compra");
+    expect(screen.getByText("Añadir compra", { selector: "p" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Precio unitario")).toBeInTheDocument();
+    expect(screen.getByLabelText("Precio total")).toBeInTheDocument();
+  });
+
+  it("calculates total price from quantity and unit price", async () => {
+    const user = show([OPEN]);
+    await openCreateForm(user);
+
+    await user.type(screen.getByLabelText("Quantity"), "2.5");
+    await user.type(screen.getByLabelText("Unit price"), "400");
+
+    expect((screen.getByLabelText("Total price") as HTMLInputElement).value).toBe("1000");
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(lotSpies.add).toHaveBeenCalledWith({
+      holdingId: "BTC",
+      input: expect.objectContaining({
+        type: "BUY",
+        quantity: "2.5",
+        unitPrice: "400",
+      }),
+    });
+  });
+
+  it("calculates unit price from quantity and total price, capped at 12 decimals without mutating total", async () => {
+    const user = show([OPEN]);
+    await openCreateForm(user);
+
+    await user.type(screen.getByLabelText("Quantity"), "3");
+    await user.type(screen.getByLabelText("Total price"), "100");
+
+    expect((screen.getByLabelText("Unit price") as HTMLInputElement).value).toBe("33.333333333333");
+    expect((screen.getByLabelText("Total price") as HTMLInputElement).value).toBe("100");
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(lotSpies.add).toHaveBeenCalledWith({
+      holdingId: "BTC",
+      input: expect.objectContaining({
+        type: "BUY",
+        quantity: "3",
+        unitPrice: "33.333333333333",
+      }),
+    });
+  });
+
+  it("recalculates whichever price field was not edited last when quantity changes", async () => {
+    const user = show([OPEN]);
+    await openCreateForm(user);
+
+    const qty = screen.getByLabelText("Quantity") as HTMLInputElement;
+    const unit = screen.getByLabelText("Unit price") as HTMLInputElement;
+    const total = screen.getByLabelText("Total price") as HTMLInputElement;
+
+    // Anchor = total: changing quantity keeps total fixed and updates unit price.
+    await user.type(qty, "2");
+    await user.type(total, "500");
+    expect(unit.value).toBe("250");
+
+    await user.clear(qty);
+    expect(unit.value).toBe("");
+    expect(total.value).toBe("500");
+
+    await user.type(qty, "4");
+    expect(unit.value).toBe("125");
+    expect(total.value).toBe("500");
+
+    // Switching to editing unit price flips anchor = unit: changing quantity updates total.
+    await user.clear(unit);
+    await user.type(unit, "200");
+    expect(total.value).toBe("800");
+
+    await user.clear(qty);
+    await user.type(qty, "3");
+    expect(unit.value).toBe("200");
+    expect(total.value).toBe("600");
+  });
+
+  it("guards against zero quantity without producing NaN or Infinity, and works for sales", async () => {
+    const user = show([OPEN]);
+    await openCreateForm(user, "Register sale");
+
+    const qty = screen.getByLabelText("Quantity") as HTMLInputElement;
+    const salePrice = screen.getByLabelText("Sale price") as HTMLInputElement;
+    const total = screen.getByLabelText("Total price") as HTMLInputElement;
+
+    await user.type(qty, "0");
+    await user.type(total, "250");
+    expect(salePrice.value).toBe("");
+
+    await user.clear(qty);
+    await user.type(qty, "0.5");
+    expect(salePrice.value).toBe("500");
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(lotSpies.add).toHaveBeenCalledWith({
+      holdingId: "BTC",
+      input: expect.objectContaining({
+        type: "SELL",
+        quantity: "0.5",
+        unitPrice: "500",
+      }),
+    });
   });
 });
 

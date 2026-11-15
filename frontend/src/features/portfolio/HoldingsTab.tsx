@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import Decimal from "decimal.js";
 import { useActiveHousehold, useAuth } from "@/auth/AuthContext";
@@ -73,6 +73,9 @@ function readShowClosed(): boolean {
 
 type PanelMode = { kind: "closed" } | { kind: "create" } | { kind: "edit"; holding: Holding };
 
+/** Matches holding_lots.unit_price NUMERIC(28, 12) scale so derived unit prices round-trip cleanly. */
+const LOT_PRICE_SCALE = 12;
+
 /** A stored decimal at full precision: trims only pure trailing zeros (10000.000000 -> 10000) and avoids
  *  exponent notation. Used to seed the trade form's HTML number fields without a stored zero tail. */
 function trimZeroTail(value: string): string {
@@ -81,6 +84,30 @@ function trimZeroTail(value: string): string {
   } catch {
     return value;
   }
+}
+
+function parseNonNegativeDecimal(raw: string): Decimal | null {
+  if (!raw.trim()) return null;
+  try {
+    const parsed = new Decimal(raw);
+    return parsed.isFinite() && parsed.gte(0) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function computeTotalPrice(quantity: string, unitPrice: string): string {
+  const qty = parseNonNegativeDecimal(quantity);
+  const unit = parseNonNegativeDecimal(unitPrice);
+  if (qty == null || qty.lte(0) || unit == null) return "";
+  return qty.mul(unit).toDecimalPlaces(LOT_PRICE_SCALE).toFixed();
+}
+
+function computeUnitPrice(quantity: string, totalPrice: string): string {
+  const qty = parseNonNegativeDecimal(quantity);
+  const total = parseNonNegativeDecimal(totalPrice);
+  if (qty == null || qty.lte(0) || total == null) return "";
+  return total.div(qty).toDecimalPlaces(LOT_PRICE_SCALE).toFixed();
 }
 
 /** Average purchase cost per unit = remaining cost basis / net quantity, in base currency; null for a
@@ -1093,6 +1120,7 @@ function LotForm({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
+  const idPrefix = useId();
   const household = useActiveHousehold();
   const addLot = useAddLot(household.householdId);
   const updateLot = useUpdateLot(household.householdId);
@@ -1102,10 +1130,34 @@ function LotForm({
   const [tradedOn, setTradedOn] = useState(editing?.tradedOn ?? isoToday());
   const [quantity, setQuantity] = useState(editing ? trimZeroTail(editing.quantity) : "");
   const [unitPrice, setUnitPrice] = useState(editing ? trimZeroTail(editing.unitPrice) : "");
+  const [totalPrice, setTotalPrice] = useState(editing ? computeTotalPrice(editing.quantity, editing.unitPrice) : "");
+  // Remembers which price input drives recalculation when quantity changes.
+  const [priceAnchor, setPriceAnchor] = useState<"unit" | "total">("unit");
   const [lotCurrency, setLotCurrency] = useState(editing?.currency ?? holding.nativeCurrency);
   const [fee, setFee] = useState(editing?.fee ? trimZeroTail(editing.fee) : "");
   const [note, setNote] = useState(editing?.note ?? "");
   const [error, setError] = useState<string | null>(null);
+
+  function handleQuantityChange(nextQuantity: string) {
+    setQuantity(nextQuantity);
+    if (priceAnchor === "total") {
+      setUnitPrice(computeUnitPrice(nextQuantity, totalPrice));
+    } else {
+      setTotalPrice(computeTotalPrice(nextQuantity, unitPrice));
+    }
+  }
+
+  function handleUnitPriceChange(nextUnitPrice: string) {
+    setPriceAnchor("unit");
+    setUnitPrice(nextUnitPrice);
+    setTotalPrice(computeTotalPrice(quantity, nextUnitPrice));
+  }
+
+  function handleTotalPriceChange(nextTotalPrice: string) {
+    setPriceAnchor("total");
+    setTotalPrice(nextTotalPrice);
+    setUnitPrice(computeUnitPrice(quantity, nextTotalPrice));
+  }
 
   // A mis-clicked type would otherwise change a buy into a sale in silence. Says so and nothing more:
   // the save still runs the same validation it would for a fresh trade.
@@ -1144,36 +1196,75 @@ function LotForm({
       <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
         {editing && (
           <div>
-            <Label>{t("portfolio.trade_type")}</Label>
-            <Select value={type} onChange={(e) => setType(e.target.value as LotType)}>
+            <Label htmlFor={`${idPrefix}-type`}>{t("portfolio.trade_type")}</Label>
+            <Select id={`${idPrefix}-type`} value={type} onChange={(e) => setType(e.target.value as LotType)}>
               <option value="BUY">{t("portfolio.lot_type.BUY")}</option>
               <option value="SELL">{t("portfolio.lot_type.SELL")}</option>
             </Select>
           </div>
         )}
         <div>
-          <Label>{t("portfolio.traded_on")}</Label>
-          <Input type="date" value={tradedOn} onChange={(e) => setTradedOn(e.target.value)} />
+          <Label htmlFor={`${idPrefix}-traded-on`}>{t("portfolio.traded_on")}</Label>
+          <Input id={`${idPrefix}-traded-on`} type="date" value={tradedOn} onChange={(e) => setTradedOn(e.target.value)} />
         </div>
         <div>
-          <Label>{t("portfolio.quantity")}</Label>
-          <Input type="number" step="any" min="0" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+          <Label htmlFor={`${idPrefix}-quantity`}>{t("portfolio.quantity")}</Label>
+          <Input
+            id={`${idPrefix}-quantity`}
+            type="number"
+            step="any"
+            min="0"
+            value={quantity}
+            onChange={(e) => handleQuantityChange(e.target.value)}
+          />
         </div>
         <div>
-          <Label>{type === "BUY" ? t("portfolio.unit_price") : t("portfolio.sale_price")}</Label>
-          <Input type="number" step="any" min="0" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} />
+          <Label htmlFor={`${idPrefix}-unit-price`}>
+            {type === "BUY" ? t("portfolio.unit_price") : t("portfolio.sale_price")}
+          </Label>
+          <Input
+            id={`${idPrefix}-unit-price`}
+            type="number"
+            step="any"
+            min="0"
+            value={unitPrice}
+            onChange={(e) => handleUnitPriceChange(e.target.value)}
+          />
         </div>
         <div>
-          <Label>{t("portfolio.lot_currency")}</Label>
-          <Input value={lotCurrency} maxLength={3} onChange={(e) => setLotCurrency(e.target.value.toUpperCase())} />
+          <Label htmlFor={`${idPrefix}-total-price`}>{t("portfolio.total_price")}</Label>
+          <Input
+            id={`${idPrefix}-total-price`}
+            type="number"
+            step="any"
+            min="0"
+            value={totalPrice}
+            onChange={(e) => handleTotalPriceChange(e.target.value)}
+          />
         </div>
         <div>
-          <Label>{t("portfolio.fee")}</Label>
-          <Input type="number" step="any" min="0" value={fee} onChange={(e) => setFee(e.target.value)} />
+          <Label htmlFor={`${idPrefix}-currency`}>{t("portfolio.lot_currency")}</Label>
+          <Input
+            id={`${idPrefix}-currency`}
+            value={lotCurrency}
+            maxLength={3}
+            onChange={(e) => setLotCurrency(e.target.value.toUpperCase())}
+          />
         </div>
         <div>
-          <Label>{t("portfolio.note")}</Label>
-          <Input value={note} onChange={(e) => setNote(e.target.value)} />
+          <Label htmlFor={`${idPrefix}-fee`}>{t("portfolio.fee")}</Label>
+          <Input
+            id={`${idPrefix}-fee`}
+            type="number"
+            step="any"
+            min="0"
+            value={fee}
+            onChange={(e) => setFee(e.target.value)}
+          />
+        </div>
+        <div>
+          <Label htmlFor={`${idPrefix}-note`}>{t("portfolio.note")}</Label>
+          <Input id={`${idPrefix}-note`} value={note} onChange={(e) => setNote(e.target.value)} />
         </div>
       </div>
       {converting && (
