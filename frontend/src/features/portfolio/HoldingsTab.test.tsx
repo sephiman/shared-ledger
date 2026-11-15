@@ -523,6 +523,33 @@ describe("registering a trade with unit or total price", () => {
       }),
     });
   });
+
+  it("calculates quantity from unit price and total price, guarding zero unit price", async () => {
+    const user = show([OPEN]);
+    await openCreateForm(user);
+
+    const qty = screen.getByLabelText("Quantity") as HTMLInputElement;
+    const unit = screen.getByLabelText("Unit price") as HTMLInputElement;
+    const total = screen.getByLabelText("Total price") as HTMLInputElement;
+
+    await user.type(unit, "0");
+    await user.type(total, "500");
+    expect(qty.value).toBe("");
+
+    await user.clear(unit);
+    await user.type(unit, "50000");
+    expect(qty.value).toBe("0.01");
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(lotSpies.add).toHaveBeenCalledWith({
+      holdingId: "BTC",
+      input: expect.objectContaining({
+        type: "BUY",
+        quantity: "0.01",
+        unitPrice: "50000",
+      }),
+    });
+  });
 });
 
 describe("sorting by column", () => {
