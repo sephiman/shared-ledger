@@ -11,7 +11,7 @@ export function AppFooter() {
   const logoSrc = resolvedTheme === "light" ? logoLight : logoDark;
 
   return (
-    <footer className="border-t border-border bg-surface/60">
+    <footer className="shrink-0 border-t border-border bg-surface/60">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] text-xs text-gray-500 dark:text-gray-400">
         <div className="flex flex-wrap items-center gap-2.5">
           <Link

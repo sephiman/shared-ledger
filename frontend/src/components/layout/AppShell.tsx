@@ -28,8 +28,8 @@ export function AppShell() {
   const pendingCount = usePendingCount(household.householdId, hasBanks).data?.count ?? 0;
 
   return (
-    <div className="flex flex-col h-dvh">
-      <header className="border-b border-border bg-surface">
+    <div className="flex h-dvh flex-col overflow-hidden">
+      <header className="shrink-0 border-b border-border bg-surface">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
           <HomeLogoLink />
           <UserMenu />
@@ -62,11 +62,13 @@ export function AppShell() {
         </nav>
       </header>
       <ConsentExpiryBanner householdId={household.householdId} />
-      <main className="flex flex-1 flex-col overflow-y-auto bg-canvas">
-        <div className="mx-auto w-full max-w-6xl flex-1 px-4 pt-6 pb-8">
-          <Outlet />
+      <main className="min-h-0 flex-1 overflow-y-auto overscroll-y-none bg-canvas">
+        <div className="flex min-h-full flex-col">
+          <div className="mx-auto w-full max-w-6xl flex-1 px-4 pt-6 pb-8">
+            <Outlet />
+          </div>
+          <AppFooter />
         </div>
-        <AppFooter />
       </main>
     </div>
   );
