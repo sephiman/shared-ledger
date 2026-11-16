@@ -4,6 +4,7 @@ import com.sephilabs.sharedledger.catalog.CategoryEntity
 import com.sephilabs.sharedledger.catalog.CustomCategoryEntity
 import com.sephilabs.sharedledger.catalog.CustomCategoryId
 import org.springframework.data.jpa.domain.Specification
+import java.math.BigDecimal
 import java.time.LocalDate
 import java.util.UUID
 
@@ -21,6 +22,8 @@ data class TransactionSearchCriteria(
     val sort: String,
     val isRefund: Boolean? = null,
     val q: String? = null,
+    val amountFrom: BigDecimal? = null,
+    val amountTo: BigDecimal? = null,
 )
 
 object TransactionSpecs {
@@ -33,6 +36,12 @@ object TransactionSpecs {
 
     fun toDate(to: LocalDate): Specification<Transaction> =
         Specification { root, _, cb -> cb.lessThanOrEqualTo(root.get("occurrenceDate"), to) }
+
+    fun amountAtLeast(min: BigDecimal): Specification<Transaction> =
+        Specification { root, _, cb -> cb.greaterThanOrEqualTo(cb.abs(root.get("amount")), min) }
+
+    fun amountAtMost(max: BigDecimal): Specification<Transaction> =
+        Specification { root, _, cb -> cb.lessThanOrEqualTo(cb.abs(root.get("amount")), max) }
 
     fun directionIs(direction: Direction): Specification<Transaction> =
         Specification { root, _, cb -> cb.equal(root.get<Direction>("direction"), direction) }
@@ -80,6 +89,8 @@ object TransactionSpecs {
         var spec: Specification<Transaction> = householdIs(c.householdId)
         c.from?.let { spec = spec.and(fromDate(it)) }
         c.to?.let { spec = spec.and(toDate(it)) }
+        c.amountFrom?.let { spec = spec.and(amountAtLeast(it)) }
+        c.amountTo?.let { spec = spec.and(amountAtMost(it)) }
         c.direction?.let { spec = spec.and(directionIs(it)) }
         c.categoryCode?.let { spec = spec.and(categoryCodeIs(it)) }
         c.categoryGroup?.let { spec = spec.and(categoryGroupIs(c.householdId, it)) }

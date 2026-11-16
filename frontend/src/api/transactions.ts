@@ -42,6 +42,8 @@ export interface TransactionPage {
 export interface TransactionFilters {
   from?: string;
   to?: string;
+  amountFrom?: string;
+  amountTo?: string;
   direction?: "income" | "expense";
   categoryCode?: string;
   categoryGroup?: string;
@@ -52,6 +54,7 @@ export interface TransactionFilters {
   page?: number;
   size?: number;
   sort?: string;
+  locale?: string;
 }
 
 export function useTransactions(householdId: string, filters: TransactionFilters) {
@@ -79,7 +82,10 @@ export interface TransactionTotals {
 /** Keyed under the list, so whatever refreshes the list refreshes its totals. */
 export function useTransactionTotals(
   householdId: string,
-  filters: Pick<TransactionFilters, "from" | "to" | "direction" | "categoryCode" | "categoryGroup" | "isRefund">,
+  filters: Pick<
+    TransactionFilters,
+    "from" | "to" | "amountFrom" | "amountTo" | "direction" | "categoryCode" | "categoryGroup" | "isRefund"
+  >,
 ) {
   return useQuery({
     queryKey: ["transactions", householdId, "totals", filters],

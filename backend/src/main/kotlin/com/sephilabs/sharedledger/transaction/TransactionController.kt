@@ -6,6 +6,7 @@ import com.sephilabs.sharedledger.household.HouseholdRepository
 import com.sephilabs.sharedledger.household.getOrThrow
 import com.sephilabs.sharedledger.identity.auth.CurrentUser
 import jakarta.validation.Valid
+import org.springframework.context.i18n.LocaleContextHolder
 import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -17,7 +18,9 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import java.math.BigDecimal
 import java.time.LocalDate
+import java.util.Locale
 import java.util.UUID
 
 @RestController
@@ -34,6 +37,8 @@ class TransactionController(
         @PathVariable householdId: UUID,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) from: LocalDate?,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) to: LocalDate?,
+        @RequestParam(required = false) amountFrom: BigDecimal?,
+        @RequestParam(required = false) amountTo: BigDecimal?,
         @RequestParam(required = false) direction: Direction?,
         @RequestParam(required = false) categoryCode: String?,
         @RequestParam(required = false) categoryGroup: String?,
@@ -42,21 +47,27 @@ class TransactionController(
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "50") size: Int,
         @RequestParam(defaultValue = "date_desc") sort: String,
+        @RequestParam(required = false) locale: String?,
     ): PageResponse<TransactionDto> {
+        val resolvedLocale = locale?.trim()?.takeIf { it.isNotEmpty() }?.let(Locale::forLanguageTag)
+            ?: LocaleContextHolder.getLocale()
         return service.search(
             TransactionSearchCriteria(
                 householdId = householdId,
                 from = from,
                 to = to,
+                amountFrom = amountFrom,
+                amountTo = amountTo,
                 direction = direction,
                 categoryCode = categoryCode,
                 categoryGroup = categoryGroup,
-                page = page,
+                page = page.coerceAtLeast(0),
                 size = size.coerceIn(1, 200),
                 sort = sort,
                 isRefund = isRefund,
                 q = q,
-            )
+            ),
+            locale = resolvedLocale,
         )
     }
 
@@ -66,6 +77,8 @@ class TransactionController(
         @PathVariable householdId: UUID,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) from: LocalDate?,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) to: LocalDate?,
+        @RequestParam(required = false) amountFrom: BigDecimal?,
+        @RequestParam(required = false) amountTo: BigDecimal?,
         @RequestParam(required = false) direction: Direction?,
         @RequestParam(required = false) categoryCode: String?,
         @RequestParam(required = false) categoryGroup: String?,
@@ -76,6 +89,8 @@ class TransactionController(
             householdId = householdId,
             from = from,
             to = to,
+            amountFrom = amountFrom,
+            amountTo = amountTo,
             direction = direction,
             categoryCode = categoryCode,
             categoryGroup = categoryGroup,
@@ -122,6 +137,8 @@ class TransactionController(
         @PathVariable householdId: UUID,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) from: LocalDate?,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) to: LocalDate?,
+        @RequestParam(required = false) amountFrom: BigDecimal?,
+        @RequestParam(required = false) amountTo: BigDecimal?,
         @RequestParam(required = false) direction: Direction?,
         @RequestParam(required = false) categoryCode: String?,
         @RequestParam(required = false) categoryGroup: String?,
@@ -133,6 +150,8 @@ class TransactionController(
                 householdId = householdId,
                 from = from,
                 to = to,
+                amountFrom = amountFrom,
+                amountTo = amountTo,
                 direction = direction,
                 categoryCode = categoryCode,
                 categoryGroup = categoryGroup,

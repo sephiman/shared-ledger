@@ -93,8 +93,8 @@ export const MANUAL_CHAPTERS_EN: ManualChapter[] = [
         ],
         bullets: [
           {
-            term: "Filters & totals line",
-            text: "Filter by date range, direction (income/expense), category, category group, or Refunds only. Filters stay in the URL so you can bookmark or reload a filtered view. Above the list, the totals line sums the entire filtered set—not only the current page.",
+            term: "Filters, sorting & totals line",
+            text: "Filter by date range, amount range (from/to), direction (income/expense), category, category group, or Refunds only, and click any column header (Date, Category, Description, Amount) to sort. Filters and sort stay in the URL so you can bookmark or reload a view. Above the list, the totals line sums the entire filtered set—not only the current page.",
           },
           {
             term: "Soft delete",

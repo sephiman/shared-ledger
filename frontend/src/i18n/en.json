@@ -131,6 +131,8 @@
     "no_description": "No description",
     "filter_from": "From",
     "filter_to": "To",
+    "filter_amount_from": "Amount from",
+    "filter_amount_to": "Amount to",
     "delete_confirm": "Delete this transaction?",
     "edit_title": "Edit transaction",
     "chips_title": "Recently used",

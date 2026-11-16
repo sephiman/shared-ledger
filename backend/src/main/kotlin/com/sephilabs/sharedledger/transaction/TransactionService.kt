@@ -5,19 +5,28 @@ import com.sephilabs.sharedledger.common.Csv
 import com.sephilabs.sharedledger.common.Money
 import com.sephilabs.sharedledger.common.PageResponse
 import com.sephilabs.sharedledger.common.errors.AppException
+import com.sephilabs.sharedledger.i18n.Messages
 import com.sephilabs.sharedledger.identity.user.User
 import com.sephilabs.sharedledger.notification.NotifyAction
 import com.sephilabs.sharedledger.notification.NotifyActor
 import com.sephilabs.sharedledger.notification.NotificationPublisher
 import com.sephilabs.sharedledger.observability.AppMetrics
+import jakarta.persistence.EntityManager
+import jakarta.persistence.criteria.CriteriaBuilder
+import jakarta.persistence.criteria.Order
+import jakarta.persistence.criteria.Root
 import org.slf4j.LoggerFactory
-import org.springframework.data.domain.PageRequest
+import org.springframework.context.i18n.LocaleContextHolder
 import org.springframework.data.domain.Sort
+import org.springframework.data.jpa.domain.Specification
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.math.BigDecimal
+import java.text.Collator
 import java.time.Instant
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
+import java.util.Locale
 import java.util.UUID
 
 @Service
@@ -26,6 +35,8 @@ class TransactionService(
     private val categoryService: CategoryService,
     private val metrics: AppMetrics,
     private val notifications: NotificationPublisher,
+    private val em: EntityManager,
+    private val messages: Messages,
 ) {
 
     private val log = LoggerFactory.getLogger(javaClass)
@@ -105,16 +116,95 @@ class TransactionService(
     fun get(householdId: UUID, id: UUID): Transaction = loadOwn(householdId, id)
 
     @Transactional(readOnly = true)
-    fun search(criteria: TransactionSearchCriteria): PageResponse<TransactionDto> {
-        val sort = when (criteria.sort) {
-            "amount_desc" -> Sort.by(Sort.Order.desc("amount"), Sort.Order.desc("occurrenceDate"))
-            "amount_asc"  -> Sort.by(Sort.Order.asc("amount"), Sort.Order.desc("occurrenceDate"))
-            "date_asc"    -> Sort.by(Sort.Order.asc("occurrenceDate"), Sort.Order.asc("createdAt"))
-            else          -> Sort.by(Sort.Order.desc("occurrenceDate"), Sort.Order.desc("createdAt"))
+    fun search(
+        criteria: TransactionSearchCriteria,
+        locale: Locale = LocaleContextHolder.getLocale(),
+    ): PageResponse<TransactionDto> {
+        val cb = em.criteriaBuilder
+        val spec = TransactionSpecs.fromCriteria(criteria)
+        val query = cb.createQuery(Transaction::class.java)
+        val root = query.from(Transaction::class.java)
+        query.where(spec.toPredicate(root, query, cb))
+        query.orderBy(buildOrders(cb, root, criteria, locale))
+
+        val items = em.createQuery(query)
+            .setFirstResult(criteria.page.coerceAtLeast(0) * criteria.size)
+            .setMaxResults(criteria.size)
+            .resultList
+        val total = countMatching(cb, spec)
+        return PageResponse.of(enrich(items), criteria.page, criteria.size, total)
+    }
+
+    private fun countMatching(cb: CriteriaBuilder, spec: Specification<Transaction>): Long {
+        val countQuery = cb.createQuery(Long::class.javaObjectType)
+        val countRoot = countQuery.from(Transaction::class.java)
+        countQuery.select(cb.count(countRoot))
+        countQuery.where(spec.toPredicate(countRoot, countQuery, cb))
+        return em.createQuery(countQuery).singleResult
+    }
+
+    private fun buildOrders(
+        cb: CriteriaBuilder,
+        root: Root<Transaction>,
+        criteria: TransactionSearchCriteria,
+        locale: Locale,
+    ): List<Order> {
+        val date = root.get<LocalDate>("occurrenceDate")
+        val created = root.get<Instant>("createdAt")
+        val id = root.get<UUID>("id")
+        return when (criteria.sort) {
+            "date_asc" -> listOf(cb.asc(date), cb.asc(created), cb.asc(id))
+            "amount_desc", "amount_asc" -> {
+                // Sort by signed display amount (income positive, expenses/refunds negated) so the order matches what is read.
+                val amount = root.get<BigDecimal>("amount")
+                val signed = cb.selectCase<BigDecimal>()
+                    .`when`(cb.equal(root.get<Direction>("direction"), Direction.income), amount)
+                    .otherwise(cb.neg(amount))
+                val primary = if (criteria.sort == "amount_asc") cb.asc(signed) else cb.desc(signed)
+                listOf(primary, cb.desc(date), cb.desc(created), cb.desc(id))
+            }
+            "description_asc", "description_desc" -> {
+                val trimmed = cb.trim(cb.coalesce(root.get<String>("description"), ""))
+                val isBlank = cb.selectCase<Int>().`when`(cb.equal(trimmed, ""), 1).otherwise(0)
+                val lower = cb.lower(trimmed)
+                val textOrder = if (criteria.sort == "description_desc") cb.desc(lower) else cb.asc(lower)
+                listOf(cb.asc(isBlank), textOrder, cb.desc(date), cb.desc(created), cb.desc(id))
+            }
+            "category_asc", "category_desc" -> categoryOrders(cb, root, criteria, locale)
+            else -> listOf(cb.desc(date), cb.desc(created), cb.desc(id))
         }
-        val pageable = PageRequest.of(criteria.page, criteria.size, sort)
-        val page = repository.findAll(TransactionSpecs.fromCriteria(criteria), pageable)
-        return PageResponse.of(enrich(page.content), criteria.page, criteria.size, page.totalElements)
+    }
+
+    private fun categoryOrders(
+        cb: CriteriaBuilder,
+        root: Root<Transaction>,
+        criteria: TransactionSearchCriteria,
+        locale: Locale,
+    ): List<Order> {
+        val desc = criteria.sort == "category_desc"
+        val collator = Collator.getInstance(locale).apply { strength = Collator.PRIMARY }
+        val orderedCodes = categoryService.listForHousehold(criteria.householdId)
+            .sortedWith(compareBy(collator) { cat ->
+                if (cat.custom) cat.name else messages.resolve(cat.name, fallback = cat.code, locale = locale)
+            })
+            .map { it.code }
+        val codePath = root.get<String>("categoryCode")
+        val primary = if (orderedCodes.isEmpty()) {
+            if (desc) cb.desc(codePath) else cb.asc(codePath)
+        } else {
+            val ranked = if (desc) orderedCodes.asReversed() else orderedCodes
+            val rankCase = cb.selectCase<Int>()
+            ranked.forEachIndexed { idx, code -> rankCase.`when`(cb.equal(codePath, code), idx) }
+            cb.asc(rankCase.otherwise(ranked.size))
+        }
+        val codeTie = if (desc) cb.desc(codePath) else cb.asc(codePath)
+        return listOf(
+            primary,
+            codeTie,
+            cb.desc(root.get<LocalDate>("occurrenceDate")),
+            cb.desc(root.get<Instant>("createdAt")),
+            cb.desc(root.get<UUID>("id")),
+        )
     }
 
     @Transactional(readOnly = true)

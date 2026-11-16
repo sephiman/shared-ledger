@@ -86,11 +86,13 @@ describe("the transactions list's totals line", () => {
     await totalsLine();
 
     expect(lastRequest("/transactions/totals")).toEqual({
-      from: "2026-01-01", to: "2026-10-28", direction: "expense", categoryGroup: "outings",
-      categoryCode: undefined, isRefund: undefined,
+      from: "2026-01-01", to: "2026-10-28", amountFrom: undefined, amountTo: undefined,
+      direction: "expense", categoryGroup: "outings", categoryCode: undefined, isRefund: undefined,
     });
     await user.selectOptions(fieldByLabel("Category"), "outings.restaurants");
     await waitFor(() => expect(lastRequest("/transactions/totals")).toMatchObject({ categoryCode: "outings.restaurants" }));
+    await user.type(fieldByLabel("Amount from"), "25");
+    await waitFor(() => expect(lastRequest("/transactions/totals")).toMatchObject({ amountFrom: "25" }));
   });
 
   it("is hidden when the list is empty", async () => {

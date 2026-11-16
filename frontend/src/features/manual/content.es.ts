@@ -93,8 +93,8 @@ export const MANUAL_CHAPTERS_ES: ManualChapter[] = [
         ],
         bullets: [
           {
-            term: "Filtros y línea de totales",
-            text: "Filtra por rango de fechas, tipo (ingreso/gasto), categoría, grupo o Solo devoluciones. Los filtros se guardan en la URL para poder recargar o compartir la vista. Encima de la tabla, la línea de totales suma todo el conjunto filtrado, no solo la página visible.",
+            term: "Filtros, ordenación y línea de totales",
+            text: "Filtra por rango de fechas, rango de importe (desde/hasta), tipo (ingreso/gasto), categoría, grupo o Solo devoluciones, y pulsa cualquier cabecera de columna (Fecha, Categoría, Descripción, Importe) para ordenar. Los filtros y el orden se guardan en la URL para poder recargar o compartir la vista. Encima de la tabla, la línea de totales suma todo el conjunto filtrado, no solo la página visible.",
           },
           {
             term: "Borrado lógico",

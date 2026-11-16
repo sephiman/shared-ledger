@@ -14,6 +14,7 @@ import { Badge, Button, Card, CardBody, CardHeader, Chip, Input, Label, Select }
 import { TabBar } from "@/components/ui/TabBar";
 import { formatMoney } from "@/lib/money";
 import { formatDate, formatDayMonthYear } from "@/lib/dates";
+import { cn } from "@/lib/cn";
 import { categoryIcon } from "@/lib/categoryGroup";
 import { categoryLabel, categoryLabelByCode } from "@/lib/categoryLabel";
 import { QuickAddForm } from "./QuickAddForm";
@@ -22,10 +23,20 @@ import { TransactionTotalsLine } from "./TransactionTotalsLine";
 import { formatTxAmount, isPositiveDisplay } from "./txDisplay";
 import {
   hasActiveTransactionFilters,
+  normalizeAmountInput,
   transactionFiltersFromSearch,
   type TransactionListFilters,
   withTransactionFilters,
 } from "./txFilters";
+import {
+  DEFAULT_TRANSACTION_SORT,
+  nextTransactionSort,
+  parseTransactionSort,
+  splitTransactionSort,
+  type TransactionSortColumn,
+  type TransactionSortKey,
+  withTransactionSort,
+} from "./txSort";
 import { PendingInbox } from "@/features/banks/PendingInbox";
 import { AskBox } from "@/features/ask/AskBox";
 
@@ -68,7 +79,16 @@ function RefundNote({ tx, currency, locale }: { tx: Transaction; currency: strin
 }
 
 function buildExportQuery(filters: TransactionFilters): string {
-  const keys: (keyof TransactionFilters)[] = ["from", "to", "direction", "categoryCode", "categoryGroup", "isRefund"];
+  const keys: (keyof TransactionFilters)[] = [
+    "from",
+    "to",
+    "amountFrom",
+    "amountTo",
+    "direction",
+    "categoryCode",
+    "categoryGroup",
+    "isRefund",
+  ];
   const params = new URLSearchParams();
   for (const k of keys) {
     const v = filters[k];
@@ -78,6 +98,119 @@ function buildExportQuery(filters: TransactionFilters): string {
   return s ? `?${s}` : "";
 }
 
+const COLUMNS: { key: TransactionSortColumn; labelKey: string; align?: "right" }[] = [
+  { key: "date", labelKey: "common.date" },
+  { key: "category", labelKey: "common.category" },
+  { key: "description", labelKey: "common.description" },
+  { key: "amount", labelKey: "common.amount", align: "right" },
+];
+
+/** Preserves partial decimal input (like "10." or "10,") while syncing valid bounds to the URL immediately. */
+function AmountFilterField({
+  label,
+  value,
+  onCommit,
+}: {
+  label: string;
+  value: string | undefined;
+  onCommit: (next: string | undefined) => void;
+}) {
+  const [draft, setDraft] = useState(value ?? "");
+  const prevValue = useRef(value);
+
+  useEffect(() => {
+    if (value !== prevValue.current) {
+      prevValue.current = value;
+      if (normalizeAmountInput(draft) !== value) {
+        setDraft(value ?? "");
+      }
+    }
+  }, [value, draft]);
+
+  const handleChange = (raw: string) => {
+    setDraft(raw);
+    const trimmed = raw.trim();
+    if (trimmed === "") {
+      prevValue.current = undefined;
+      onCommit(undefined);
+      return;
+    }
+    const normalized = normalizeAmountInput(raw);
+    if (normalized !== undefined) {
+      prevValue.current = normalized;
+      onCommit(normalized);
+    }
+  };
+
+  const handleBlur = () => {
+    const trimmed = draft.trim().replace(",", ".");
+    if (trimmed === "") return;
+    const stripped = trimmed.endsWith(".") ? trimmed.slice(0, -1) : trimmed;
+    const normalized = normalizeAmountInput(stripped);
+    if (normalized !== undefined) {
+      setDraft(normalized);
+      if (normalized !== value) {
+        prevValue.current = normalized;
+        onCommit(normalized);
+      }
+    } else {
+      setDraft(value ?? "");
+    }
+  };
+
+  return (
+    <div>
+      <Label>{label}</Label>
+      <Input
+        type="text"
+        inputMode="decimal"
+        placeholder="0.00"
+        value={draft}
+        onChange={(e) => handleChange(e.target.value)}
+        onBlur={handleBlur}
+      />
+    </div>
+  );
+}
+
+function SortableColumn({
+  column,
+  sort,
+  onSort,
+}: {
+  column: { key: TransactionSortColumn; labelKey: string; align?: "right" };
+  sort: TransactionSortKey;
+  onSort: (key: TransactionSortColumn) => void;
+}) {
+  const { t } = useTranslation();
+  const activeSort = splitTransactionSort(sort);
+  const active = activeSort.column === column.key;
+  const label = t(column.labelKey);
+  return (
+    <th
+      scope="col"
+      className={cn("py-2", column.align === "right" && "text-right")}
+      aria-sort={!active ? "none" : activeSort.direction === "asc" ? "ascending" : "descending"}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(column.key)}
+        title={t("common.sort_by", { column: label })}
+        className={cn(
+          "inline-flex items-center gap-0.5 hover:text-gray-700 dark:hover:text-gray-200",
+          column.align === "right" && "justify-end text-right",
+          active && "text-gray-700 dark:text-gray-200",
+        )}
+      >
+        {label}
+        <span aria-hidden className="w-2 text-[0.625rem] leading-none">
+          {active ? (activeSort.direction === "asc" ? "▲" : "▼") : ""}
+        </span>
+      </button>
+    </th>
+  );
+}
+
 export function TransactionsPage() {
   const { t, i18n } = useTranslation();
   const household = useActiveHousehold();
@@ -85,9 +218,18 @@ export function TransactionsPage() {
   // The URL holds the list filters — hand edits, deep links (e.g. from analytics) and questions alike — so
   // a filtered list can be reloaded, shared or reached back to.
   const listFilters = transactionFiltersFromSearch(searchParams);
-  const filters: TransactionFilters = { size: 50, page: 0, ...listFilters };
+  const sort = parseTransactionSort(searchParams.get("sort"));
+  const filters: TransactionFilters = {
+    size: 50,
+    page: 0,
+    ...listFilters,
+    ...(sort !== DEFAULT_TRANSACTION_SORT ? { sort } : {}),
+    ...(sort.startsWith("category_") ? { locale: i18n.language } : {}),
+  };
   const setListFilters = (next: TransactionListFilters) =>
     setSearchParams(withTransactionFilters(searchParams, next), { replace: true });
+  const handleSort = (column: TransactionSortColumn) =>
+    setSearchParams(withTransactionSort(searchParams, nextTransactionSort(sort, column)), { replace: true });
   const [panel, setPanel] = useState<PanelMode>({ kind: "closed" });
   // The purchase a manually-recorded refund is being registered against.
   const [refundFor, setRefundFor] = useState<Transaction | null>(null);
@@ -119,7 +261,10 @@ export function TransactionsPage() {
     }
   }, [panel]);
 
-  const clearFilters = () => setListFilters({});
+  const clearFilters = () =>
+    setSearchParams(withTransactionSort(withTransactionFilters(searchParams, {}), DEFAULT_TRANSACTION_SORT), {
+      replace: true,
+    });
 
   const closePanel = () => setPanel({ kind: "closed" });
   const toggleCreate = () =>
@@ -193,7 +338,7 @@ export function TransactionsPage() {
       {tab === "confirmed" && (
       <Card>
         <CardHeader>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
             <div>
               <Label>{t("tx.filter_from")}</Label>
               <Input type="date" value={filters.from ?? ""} onChange={(e) => setListFilters({ ...listFilters, from: e.target.value || undefined })} />
@@ -202,6 +347,16 @@ export function TransactionsPage() {
               <Label>{t("tx.filter_to")}</Label>
               <Input type="date" value={filters.to ?? ""} onChange={(e) => setListFilters({ ...listFilters, to: e.target.value || undefined })} />
             </div>
+            <AmountFilterField
+              label={t("tx.filter_amount_from")}
+              value={listFilters.amountFrom}
+              onCommit={(amountFrom) => setListFilters({ ...listFilters, amountFrom })}
+            />
+            <AmountFilterField
+              label={t("tx.filter_amount_to")}
+              value={listFilters.amountTo}
+              onCommit={(amountTo) => setListFilters({ ...listFilters, amountTo })}
+            />
             <div>
               <Label>{t("common.direction")}</Label>
               <Select
@@ -240,7 +395,7 @@ export function TransactionsPage() {
             >
               {t("tx.refunds_only")}
             </Chip>
-            {hasActiveTransactionFilters(filters) && (
+            {(hasActiveTransactionFilters(filters) || sort !== DEFAULT_TRANSACTION_SORT) && (
               <Button variant="ghost" className="ml-auto" onClick={clearFilters}>{t("tx.clear_filters")}</Button>
             )}
           </div>
@@ -315,10 +470,9 @@ export function TransactionsPage() {
               <table className="hidden w-full text-sm md:table">
                 <thead className="text-left text-gray-500 dark:text-gray-400">
                   <tr>
-                    <th className="py-2">{t("common.date")}</th>
-                    <th>{t("common.category")}</th>
-                    <th>{t("common.description")}</th>
-                    <th className="text-right">{t("common.amount")}</th>
+                    {COLUMNS.map((column) => (
+                      <SortableColumn key={column.key} column={column} sort={sort} onSort={handleSort} />
+                    ))}
                     <th></th>
                   </tr>
                 </thead>

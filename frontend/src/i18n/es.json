@@ -131,6 +131,8 @@
     "no_description": "Sin descripción",
     "filter_from": "Desde",
     "filter_to": "Hasta",
+    "filter_amount_from": "Importe desde",
+    "filter_amount_to": "Importe hasta",
     "delete_confirm": "¿Borrar esta transacción?",
     "edit_title": "Editar transacción",
     "chips_title": "Recientes",
