@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold, useAuth } from "@/auth/AuthContext";
 import { useChangePassword, useDeleteHousehold, useHousehold, useHouseholdMembers, useInvitations, useIssueInvitation, useResendInvitation, useRevokeInvitation, useSetDefaultHousehold, useUpdateHousehold, useUpdateMemberRole, useWipeHouseholdData, type HouseholdMemberRow, type IssuedInvitation } from "@/api/settings";
@@ -20,6 +20,7 @@ import { useBankConfig } from "@/api/banks";
 import { BanksCard } from "@/features/banks/BanksCard";
 import { BankCredentialsCard } from "@/features/banks/BankCredentialsCard";
 import { AiFeaturesCard } from "./AiFeaturesCard";
+import { useAiSuggestionSettings } from "@/api/aiSuggestions";
 import { useInstanceFeatures } from "@/api/features";
 
 export function SettingsPage() {
@@ -32,7 +33,7 @@ export function SettingsPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState("");
-  const { data: hh } = useHousehold(household.householdId);
+  const { data: hh, isLoading: hhLoading } = useHousehold(household.householdId);
   const updateHh = useUpdateHousehold(household.householdId);
   const isOwner = household.role === "owner";
 
@@ -83,8 +84,9 @@ export function SettingsPage() {
   const [wipeConfirm, setWipeConfirm] = useState("");
   const [wipeMsg, setWipeMsg] = useState<string | null>(null);
 
-  const { data: bankConfig } = useBankConfig(household.householdId);
-  const { data: features } = useInstanceFeatures();
+  const { data: bankConfig, isLoading: bankConfigLoading } = useBankConfig(household.householdId);
+  const { data: features, isLoading: featuresLoading } = useInstanceFeatures();
+  const { isLoading: aiSettingsLoading } = useAiSuggestionSettings(household.householdId, isOwner);
   const { data: allCategories = [] } = useCategories(household.householdId);
   const customCategories = allCategories.filter((c) => c.custom);
   const deleteCustom = useDeleteCustomCategory(household.householdId);
@@ -94,11 +96,109 @@ export function SettingsPage() {
   const [customDeleteConfirm, setCustomDeleteConfirm] = useState("");
   const [customDeleteError, setCustomDeleteError] = useState<string | null>(null);
 
+  const { hash } = useLocation();
+  const topRef = useRef<HTMLDivElement>(null);
+  const sectionsRef = useRef<HTMLDivElement>(null);
+  const scrolledHashRef = useRef<string | null>(null);
+  const queriesSettled =
+    !hhLoading && !bankConfigLoading && !featuresLoading && !(isOwner && features?.ai && aiSettingsLoading);
+
+  useEffect(() => {
+    if (!hash) {
+      scrolledHashRef.current = null;
+      return;
+    }
+    if (!queriesSettled) return;
+    const id = hash.slice(1);
+    const tryScroll = () => {
+      if (scrolledHashRef.current === hash) return true;
+      const target = document.getElementById(id);
+      if (!target) return false;
+      scrolledHashRef.current = hash;
+      scrollElementIntoContainer(target);
+      return true;
+    };
+    if (tryScroll() || !sectionsRef.current || typeof MutationObserver === "undefined") return;
+    const observer = new MutationObserver(() => {
+      if (tryScroll()) observer.disconnect();
+    });
+    observer.observe(sectionsRef.current, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [hash, queriesSettled]);
+
+  const showBanks = Boolean(bankConfig?.credentialsConfigured || (bankConfig?.connectionCount ?? 0) > 0);
+  const showBankRules = Boolean(bankConfig?.credentialsConfigured);
+  const showAiFeatures = Boolean(isOwner && features?.ai);
+
+  const sections = [
+    { id: "import-export", label: t("import.title") },
+    ...(user ? [{ id: "email", label: t("settings.change_email") }] : []),
+    { id: "password", label: t("auth.change_password") },
+    { id: "home-panels", label: t("settings.home_panels_title") },
+    { id: "portfolio-return-basis", label: t("settings.portfolio_return_basis_title") },
+    ...(user ? [{ id: "households", label: t("settings.households_title") }] : []),
+    ...(hh ? [{ id: "household-settings", label: t("settings.household_settings") }] : []),
+    ...(isOwner
+      ? [
+          { id: "auto-snapshots", label: t("networth.auto_snapshot_title") },
+          { id: "notifications", label: t("notifications.title") },
+          { id: "bank-credentials", label: t("banks.credentials_title") },
+        ]
+      : []),
+    ...(showBanks ? [{ id: "banks", label: t("banks.title") }] : []),
+    ...(showBankRules ? [{ id: "bank-rules", label: t("banks.rules_title") }] : []),
+    ...(showAiFeatures ? [{ id: "ai-features", label: t("settings.ai_features_title") }] : []),
+    { id: "custom-categories", label: t("settings.custom_categories_title") },
+    { id: "members", label: t("settings.members_list_title") },
+    ...(isOwner
+      ? [
+          { id: "invitations", label: t("settings.invitations") },
+          { id: "danger-zone", label: t("settings.danger_zone") },
+        ]
+      : []),
+  ];
+
   return (
-    <div className="space-y-4">
+    <div ref={topRef} className="scroll-mt-6 space-y-6">
       <h1 className="text-xl font-semibold">{t("settings.title")}</h1>
 
-      <Card>
+      <div className="grid gap-6 lg:grid-cols-[240px_1fr] lg:items-start">
+        <aside aria-label={t("settings.contents")} className="lg:sticky lg:top-6">
+          <Card>
+            <CardHeader className="py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                {t("settings.contents")}
+              </p>
+            </CardHeader>
+            <CardBody className="p-2 lg:max-h-[calc(100dvh-10rem)] lg:overflow-y-auto">
+              <nav aria-label={t("settings.jump_to")}>
+                <ul className="space-y-0.5">
+                  {sections.map((section) => (
+                    <li key={section.id}>
+                      <a
+                        href={`#${section.id}`}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (window.location.hash !== `#${section.id}`) {
+                            window.history.replaceState(null, "", `#${section.id}`);
+                          }
+                          const target = document.getElementById(section.id);
+                          if (target) scrollElementIntoContainer(target);
+                        }}
+                        className="block rounded-md px-2.5 py-1.5 text-sm text-gray-700 hover:bg-item-hover hover:text-primary dark:text-gray-200"
+                      >
+                        {section.label}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </nav>
+            </CardBody>
+          </Card>
+        </aside>
+
+        <div ref={sectionsRef} className="min-w-0 space-y-4">
+          <Card id="import-export" className="scroll-mt-6">
         <CardHeader>
           <p className="font-medium">{t("import.title")}</p>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("import.settings_description")}</p>
@@ -110,7 +210,7 @@ export function SettingsPage() {
 
       <EmailChangeCard />
 
-      <Card>
+      <Card id="password" className="scroll-mt-6">
         <CardHeader>
           <p className="font-medium">{t("auth.change_password")}</p>
         </CardHeader>
@@ -163,7 +263,7 @@ export function SettingsPage() {
       <PortfolioReturnBasisCard />
 
       {user && (
-        <Card>
+        <Card id="households" className="scroll-mt-6">
           <CardHeader>
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -290,7 +390,7 @@ export function SettingsPage() {
       )}
 
       {hh && (
-        <Card>
+        <Card id="household-settings" className="scroll-mt-6">
           <CardHeader>
             <p className="font-medium">{t("settings.household_settings")}</p>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("settings.household_settings_description")}</p>
@@ -364,12 +464,12 @@ export function SettingsPage() {
       {isOwner && <BankCredentialsCard householdId={household.householdId} />}
 
       {/* Connections stay visible without credentials, so the gap explains itself. */}
-      {(bankConfig?.credentialsConfigured || (bankConfig?.connectionCount ?? 0) > 0) && (
+      {showBanks && (
         <BanksCard householdId={household.householdId} locale={i18n.language} canReviewInstructions={isOwner} canEditSchedule={isOwner} />
       )}
 
-      {bankConfig?.credentialsConfigured && (
-        <Card>
+      {showBankRules && (
+        <Card id="bank-rules" className="scroll-mt-6">
           <CardHeader>
             <p className="font-medium">{t("banks.rules_title")}</p>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("banks.rules_description")}</p>
@@ -381,9 +481,9 @@ export function SettingsPage() {
       )}
 
       {/* Without a provider on the instance the feature does not exist: no card, no request. */}
-      {isOwner && features?.ai && <AiFeaturesCard householdId={household.householdId} />}
+      {showAiFeatures && <AiFeaturesCard householdId={household.householdId} />}
 
-      <Card>
+      <Card id="custom-categories" className="scroll-mt-6">
         <CardHeader>
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -498,7 +598,7 @@ export function SettingsPage() {
         </CardBody>
       </Card>
 
-      <Card>
+      <Card id="members" className="scroll-mt-6">
         <CardHeader>
           <p className="font-medium">{t("settings.members_list_title")}</p>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("settings.members_list_description")}</p>
@@ -563,7 +663,7 @@ export function SettingsPage() {
       </Card>
 
       {isOwner && (
-        <Card>
+        <Card id="invitations" className="scroll-mt-6">
           <CardHeader>
             <p className="font-medium">{t("settings.invitations")}</p>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("settings.invitations_description")}</p>
@@ -660,7 +760,7 @@ export function SettingsPage() {
       )}
 
       {isOwner && (
-        <Card className="border-red-300 dark:border-red-800">
+        <Card id="danger-zone" className="scroll-mt-6 border-red-300 dark:border-red-800">
           <CardHeader>
             <p className="font-medium text-red-700 dark:text-red-400">{t("settings.danger_zone")}</p>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("settings.wipe_description")}</p>
@@ -719,6 +819,27 @@ export function SettingsPage() {
         </Card>
       )}
 
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                const topEl = topRef.current;
+                if (!topEl) return;
+                const container = findScrollContainer(topEl);
+                if (container?.scrollTo) {
+                  container.scrollTo({ top: 0, behavior: "smooth" });
+                  return;
+                }
+                topEl.scrollIntoView?.({ behavior: "smooth", block: "start" });
+              }}
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              {t("settings.back_to_top")}
+            </button>
+          </div>
+        </div>
+      </div>
+
       <CreateHouseholdDialog
         open={createOpen}
         onClose={() => setCreateOpen(false)}
@@ -766,4 +887,28 @@ function RoleAction({
       {promoting ? t("settings.make_owner") : t("settings.make_member")}
     </Button>
   );
+}
+
+function findScrollContainer(el: HTMLElement): HTMLElement | null {
+  let current = el.parentElement;
+  while (current) {
+    const { overflowY } = getComputedStyle(current);
+    if (overflowY === "auto" || overflowY === "scroll") return current;
+    current = current.parentElement;
+  }
+  return null;
+}
+
+/** Scrolls only the nearest scrollable ancestor (`<main>` in `AppShell`), clamped to its scroll range so
+ *  anchor jumps near the bottom never pull the outer shell or header off-screen. */
+function scrollElementIntoContainer(target: HTMLElement) {
+  const container = findScrollContainer(target);
+  if (!container?.scrollTo) {
+    target.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    return;
+  }
+  const marginTop = Number.parseFloat(getComputedStyle(target).scrollMarginTop) || 0;
+  const targetTop = container.scrollTop + target.getBoundingClientRect().top - container.getBoundingClientRect().top - marginTop;
+  const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
+  container.scrollTo({ top: Math.min(Math.max(0, targetTop), maxScroll), behavior: "smooth" });
 }

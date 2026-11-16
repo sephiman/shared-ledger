@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useAspsps,
@@ -73,12 +72,6 @@ export function BanksCard({
   const { data: connections = [] } = useBankConnections(householdId);
   const { data: config } = useBankConfig(householdId);
   const startLink = useStartLink(householdId);
-  const { hash } = useLocation();
-
-  // The consent banner links here; Settings is lazy-loaded, so the browser's own anchor jump misses it.
-  useEffect(() => {
-    if (hash === "#banks") document.getElementById("banks")?.scrollIntoView?.({ block: "start" });
-  }, [hash]);
 
   // Distinct daily background-sync times in the viewer's own timezone, sorted by time of day.
   const syncTimes = useMemo(() => {
@@ -138,7 +131,7 @@ export function BanksCard({
   };
 
   return (
-    <Card id="banks" className="scroll-mt-4">
+    <Card id="banks" className="scroll-mt-6">
       <CardHeader>
         <p className="font-medium">{t("banks.title")}</p>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("banks.settings_description")}</p>

@@ -33,13 +33,13 @@ export interface AiSuggestionStatus {
 const settingsKey = (householdId: string) => ["ai-suggestion-settings", householdId];
 
 /** Only requested once the instance reports the feature; otherwise nothing AI-related is fetched. */
-export function useAiSuggestionSettings(householdId: string) {
+export function useAiSuggestionSettings(householdId: string, enabled = true) {
   const { data: features } = useInstanceFeatures();
   return useQuery({
     queryKey: settingsKey(householdId),
     queryFn: async () =>
       (await apiClient.get<AiSuggestionSettings>(`/households/${householdId}/ai-suggestions/settings`)).data,
-    enabled: features?.ai === true,
+    enabled: enabled && features?.ai === true,
   });
 }
 

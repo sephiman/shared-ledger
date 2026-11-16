@@ -58,7 +58,7 @@ export function EmailChangeCard() {
   };
 
   return (
-    <Card>
+    <Card id="email" className="scroll-mt-6">
       <CardHeader>
         <p className="font-medium">{t("settings.change_email")}</p>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("settings.current_email", { email: user.email })}</p>

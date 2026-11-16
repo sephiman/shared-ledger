@@ -24,7 +24,7 @@ export function HomePanelsCard() {
   };
 
   return (
-    <Card>
+    <Card id="home-panels" className="scroll-mt-6">
       <CardHeader>
         <p className="font-medium">{t("settings.home_panels_title")}</p>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("settings.home_panels_description")}</p>

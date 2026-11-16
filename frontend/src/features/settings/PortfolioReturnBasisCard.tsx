@@ -22,7 +22,7 @@ export function PortfolioReturnBasisCard() {
   };
 
   return (
-    <Card>
+    <Card id="portfolio-return-basis" className="scroll-mt-6">
       <CardHeader>
         <p className="font-medium">{t("settings.portfolio_return_basis_title")}</p>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("settings.portfolio_return_basis_description")}</p>

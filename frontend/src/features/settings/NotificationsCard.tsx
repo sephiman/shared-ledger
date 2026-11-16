@@ -114,7 +114,7 @@ export function NotificationsCard({ householdId }: { householdId: string }) {
   };
 
   return (
-    <Card>
+    <Card id="notifications" className="scroll-mt-6">
       <CardHeader>
         <p className="font-medium">{t("notifications.title")}</p>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("notifications.description")}</p>

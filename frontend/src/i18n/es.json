@@ -1755,6 +1755,9 @@
   },
   "settings": {
     "title": "Ajustes",
+    "contents": "Índice",
+    "jump_to": "Ir a la sección",
+    "back_to_top": "Volver arriba",
     "change_email": "Dirección de email",
     "current_email": "Sesión iniciada como {{email}}",
     "new_email": "Nuevo email",

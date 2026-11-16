@@ -23,7 +23,7 @@ export function AiFeaturesCard({ householdId }: { householdId: string }) {
 
   if (!settings) return null;
   return (
-    <Card>
+    <Card id="ai-features" className="scroll-mt-6">
       <CardHeader>
         <p className="font-medium">{t("settings.ai_features_title")}</p>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">

@@ -1755,6 +1755,9 @@
   },
   "settings": {
     "title": "Settings",
+    "contents": "Contents",
+    "jump_to": "Jump to section",
+    "back_to_top": "Back to top",
     "change_email": "Email address",
     "current_email": "Signed in as {{email}}",
     "new_email": "New email",

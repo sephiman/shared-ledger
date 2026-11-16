@@ -28,7 +28,8 @@ export function AppShell() {
   const pendingCount = usePendingCount(household.householdId, hasBanks).data?.count ?? 0;
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden">
+    // overflow-clip (not overflow-hidden) keeps the outer shell from becoming a scroll container that #fragment jumps near the bottom can scroll.
+    <div className="flex h-dvh flex-col overflow-clip">
       <header className="shrink-0 border-b border-border bg-surface">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
           <HomeLogoLink />
