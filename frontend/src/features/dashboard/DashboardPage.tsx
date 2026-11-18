@@ -10,6 +10,7 @@ import {
   type DashboardExtras,
 } from "@/api/analytics";
 import { Card, CardBody, CardHeader } from "@/components/ui/primitives";
+import { CashOverviewTile } from "./CashOverviewTile";
 import { CurrentWealthTile } from "./CurrentWealthTile";
 import { LendingsOverviewTile } from "./LendingsOverviewTile";
 import { PortfolioOverviewTile } from "./PortfolioOverviewTile";
@@ -77,6 +78,9 @@ export function DashboardPage() {
         )}
         {isPanelVisible(user?.hiddenHomePanels, "money_lent") && (
           <LendingsOverviewTile householdId={household.householdId} currency={household.currency} locale={i18n.language} />
+        )}
+        {isPanelVisible(user?.hiddenHomePanels, "cash") && (
+          <CashOverviewTile householdId={household.householdId} currency={household.currency} locale={i18n.language} />
         )}
         {isPanelVisible(user?.hiddenHomePanels, "pending_bank") && (
           <PendingBankTile householdId={household.householdId} />

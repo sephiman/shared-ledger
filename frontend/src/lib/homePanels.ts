@@ -1,4 +1,4 @@
-/** The six user-configurable Home panels. Ids are the wire/storage format shared with the backend
+/** The seven user-configurable Home panels. Ids are the wire/storage format shared with the backend
  *  (`HomePanel` enum, `users.hidden_home_panels`); the server stores the ids a user chose to HIDE, so an
  *  empty list means everything is visible. The month/year summary and expenses chart are always shown. */
 export type HomePanelId =
@@ -7,6 +7,7 @@ export type HomePanelId =
   | "current_wealth"
   | "portfolio"
   | "money_lent"
+  | "cash"
   | "pending_bank";
 
 export interface HomePanelDef {
@@ -23,10 +24,9 @@ export const HOME_PANELS: HomePanelDef[] = [
   { id: "current_wealth", labelKey: "wealth.home_title", dataDependent: true },
   { id: "portfolio", labelKey: "portfolio.title", dataDependent: true },
   { id: "money_lent", labelKey: "lendings.home_title", dataDependent: true },
+  { id: "cash", labelKey: "networth.cash", dataDependent: true },
   { id: "pending_bank", labelKey: "banks.pending_title", dataDependent: true },
 ];
-
-const KNOWN = new Set<string>(HOME_PANELS.map((p) => p.id));
 
 /** Canonicalize a server-sent hidden list: drop unknown ids, dedupe, registry order. */
 export function normalizeHiddenPanels(hidden: string[] | undefined): HomePanelId[] {

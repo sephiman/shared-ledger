@@ -65,7 +65,7 @@ export const MANUAL_CHAPTERS_ES: ManualChapter[] = [
         id: "home-overview",
         heading: "Tarjetas resumen y gráficos",
         paragraphs: [
-          "Inicio muestra los totales de ingresos, gastos y neto del mes y del año en curso junto al gráfico mensual de gastos. Encima aparecen hasta seis tarjetas de un vistazo:",
+          "Inicio muestra los totales de ingresos, gastos y neto del mes y del año en curso junto al gráfico mensual de gastos. Encima aparecen hasta siete tarjetas de un vistazo:",
         ],
         bullets: [
           { term: "Tasa de ahorro", text: "Tasa de los últimos 12 meses con un minigráfico de 24 meses, además del año en curso y el mes actual." },
@@ -73,9 +73,10 @@ export const MANUAL_CHAPTERS_ES: ManualChapter[] = [
           { term: "Patrimonio actual", text: "Total de tu última instantánea de patrimonio (aparece en cuanto registras al menos una)." },
           { term: "Cartera", text: "Valor de mercado actual, capital invertido, invertido neto («dinero propio») y rentabilidad de tus posiciones." },
           { term: "Dinero prestado", text: "Saldo pendiente total de los préstamos activos a terceros y los tres mayores." },
+          { term: "Efectivo", text: "Efectivo total entre las cuentas bancarias vinculadas que cuentan como efectivo y otro efectivo, desglosado por banco." },
           { term: "Movimientos bancarios pendientes", text: "Número de movimientos bancarios por revisar en la bandeja de entrada." },
         ],
-        tip: "Las tarjetas dependientes de datos solo se muestran cuando tienen contenido. Cada persona puede ocultar cualquiera de las seis tarjetas en Ajustes → Paneles de inicio.",
+        tip: "Las tarjetas dependientes de datos solo se muestran cuando tienen contenido. Cada persona puede ocultar cualquiera de las siete tarjetas en Ajustes → Paneles de inicio.",
       },
     ],
   },

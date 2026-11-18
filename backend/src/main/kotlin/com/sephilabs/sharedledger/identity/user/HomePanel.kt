@@ -9,6 +9,7 @@ enum class HomePanel(val id: String) {
     CURRENT_WEALTH("current_wealth"),
     PORTFOLIO("portfolio"),
     MONEY_LENT("money_lent"),
+    CASH("cash"),
     PENDING_BANK("pending_bank"),
     ;
 

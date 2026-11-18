@@ -65,7 +65,7 @@ export const MANUAL_CHAPTERS_EN: ManualChapter[] = [
         id: "home-overview",
         heading: "Summary tiles and charts",
         paragraphs: [
-          "Home opens with the current month and current year income, expenses, and net totals alongside the monthly expense breakdown chart. Above them sit up to six quick-glance tiles:",
+          "Home opens with the current month and current year income, expenses, and net totals alongside the monthly expense breakdown chart. Above them sit up to seven quick-glance tiles:",
         ],
         bullets: [
           { term: "Savings rate", text: "Trailing 12-month savings rate with a 24-month sparkline, plus year-to-date and current-month rates." },
@@ -73,9 +73,10 @@ export const MANUAL_CHAPTERS_EN: ManualChapter[] = [
           { term: "Current wealth", text: "Latest net worth snapshot total (appears once you have at least one snapshot)." },
           { term: "Portfolio", text: "Live market value, invested cost, net invested ('own money'), and return for your holdings." },
           { term: "Money lent", text: "Total outstanding across active lendings and the top three balances." },
+          { term: "Cash", text: "Total cash across counted linked bank accounts and other cash, broken down per bank." },
           { term: "Pending bank movements", text: "Count of unreviewed bank movements waiting in the inbox." },
         ],
-        tip: "Data-dependent tiles appear only when they have data to show. Each user can hide any of the six tiles per account under Settings → Home panels.",
+        tip: "Data-dependent tiles appear only when they have data to show. Each user can hide any of the seven tiles per account under Settings → Home panels.",
       },
     ],
   },

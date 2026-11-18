@@ -2,13 +2,14 @@ import { describe, expect, it } from "vitest";
 import { HOME_PANELS, isPanelVisible, normalizeHiddenPanels, setPanelVisible } from "./homePanels";
 
 describe("homePanels", () => {
-  it("lists exactly the six configurable panels, in Home order", () => {
+  it("lists exactly the seven configurable panels, in Home order", () => {
     expect(HOME_PANELS.map((p) => p.id)).toEqual([
       "savings_rate",
       "cost_of_living",
       "current_wealth",
       "portfolio",
       "money_lent",
+      "cash",
       "pending_bank",
     ]);
   });

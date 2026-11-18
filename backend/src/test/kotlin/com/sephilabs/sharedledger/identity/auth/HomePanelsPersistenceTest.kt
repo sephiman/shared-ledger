@@ -29,9 +29,10 @@ class HomePanelsPersistenceTest @Autowired constructor(
     fun `hidden panels persist and can be cleared`() {
         val saved = newUser("hp-set")
 
-        authService.setHiddenHomePanels(saved.id, listOf("portfolio", "savings_rate"))
+        authService.setHiddenHomePanels(saved.id, listOf("pending_bank", "portfolio", "cash", "savings_rate"))
         // Serialized in canonical (enum) order regardless of input order.
-        assertThat(users.findById(saved.id).orElseThrow().hiddenHomePanels).isEqualTo("savings_rate,portfolio")
+        assertThat(users.findById(saved.id).orElseThrow().hiddenHomePanels)
+            .isEqualTo("savings_rate,portfolio,cash,pending_bank")
 
         authService.setHiddenHomePanels(saved.id, emptyList())
         assertThat(users.findById(saved.id).orElseThrow().hiddenHomePanels).isEmpty()
