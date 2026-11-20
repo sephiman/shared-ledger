@@ -1,5 +1,6 @@
 package com.sephilabs.sharedledger.fire.ai
 
+import com.sephilabs.sharedledger.ai.AiCitationMapper
 import com.sephilabs.sharedledger.bank.aisuggestion.AI_FEATURES_DISABLED
 import com.sephilabs.sharedledger.bank.aisuggestion.AiAvailability
 import com.sephilabs.sharedledger.bank.aisuggestion.AiSuggestionSettingsService
@@ -286,27 +287,12 @@ class FireAiAnalysisService(
     }
 
     private fun citationsOf(node: JsonNode, payload: JsonNode?): List<FireAiCitationDto> =
-        citationsFromArray(node.path("citations"), payload)
+        AiCitationMapper.fromNode(node, payload, ::citationContext)
 
     private fun citationsFromArray(node: JsonNode?, payload: JsonNode?): List<FireAiCitationDto> =
-        node?.takeIf { it.isArray }?.toList()?.map { cite ->
-            val path = cite.path("path").asString("")
-            val grounded = payload?.let { FireAiGroundingVerifier.check(it, cite).grounded } ?: false
-            FireAiCitationDto(
-                path = path,
-                value = cite.path("value").takeIf { !it.isMissingNode },
-                grounded = grounded,
-                context = if (payload != null && grounded) citationContext(payload, path) else null,
-            )
-        } ?: emptyList()
+        AiCitationMapper.fromArray(node, payload, ::citationContext)
 
-    private fun citationContext(payload: JsonNode, path: String): String? {
-        val normalized = path.replace("[", ".").replace("]", "")
-        val segments = normalized.split('.').filter { it.isNotEmpty() }
-        if (segments.size < 2 || segments.none { it.toIntOrNull() != null }) return null
-        val parent = FireAiGroundingVerifier.resolve(payload, segments.dropLast(1).joinToString(".")) ?: return null
-        if (!parent.isObject) return null
-
+    private fun citationContext(parent: JsonNode): String? {
         val name = parent.path("name").takeIf { it.isString }?.asString()
         if (!name.isNullOrBlank()) return name
         val key = parent.path("key").takeIf { it.isString }?.asString()

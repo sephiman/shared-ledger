@@ -88,6 +88,7 @@ function buildExportQuery(filters: TransactionFilters): string {
     "categoryCode",
     "categoryGroup",
     "isRefund",
+    "q",
   ];
   const params = new URLSearchParams();
   for (const k of keys) {
@@ -389,6 +390,14 @@ export function TransactionsPage() {
             </div>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Input
+              type="search"
+              aria-label={t("tx.filter_search")}
+              placeholder={t("tx.filter_search_placeholder")}
+              value={listFilters.q ?? ""}
+              onChange={(e) => setListFilters({ ...listFilters, q: e.target.value.trim() ? e.target.value : undefined })}
+              className="w-full sm:w-64"
+            />
             <Chip
               active={filters.isRefund === true}
               onClick={() => setListFilters({ ...listFilters, isRefund: listFilters.isRefund ? undefined : true })}

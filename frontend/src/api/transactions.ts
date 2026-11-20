@@ -84,7 +84,7 @@ export function useTransactionTotals(
   householdId: string,
   filters: Pick<
     TransactionFilters,
-    "from" | "to" | "amountFrom" | "amountTo" | "direction" | "categoryCode" | "categoryGroup" | "isRefund"
+    "from" | "to" | "amountFrom" | "amountTo" | "direction" | "categoryCode" | "categoryGroup" | "isRefund" | "q"
   >,
 ) {
   return useQuery({

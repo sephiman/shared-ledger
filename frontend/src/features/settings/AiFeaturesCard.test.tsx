@@ -40,13 +40,15 @@ describe("AI features setting", () => {
     expect(screen.getAllByRole("checkbox")).toHaveLength(1);
     expect(screen.getByText(/Data goes to deepseek-v4\.1-flash at opencode\.ai/)).toBeInTheDocument();
     const lines = screen.getAllByRole("listitem").map((li) => li.textContent);
-    expect(lines).toHaveLength(5);
+    expect(lines).toHaveLength(6);
     expect(lines[0]).toContain("the counterparty, bank description, direction and booking month");
     expect(lines[0]).toContain("Amounts, the household's IBANs (every IBAN is removed from the text), account and household identifiers are not sent");
     expect(lines[1]).toContain("Amount rules are never sent");
     expect(lines[2]).toContain("only your question and the list of categories");
     expect(lines[3]).toContain("only your what-if question");
     expect(lines[4]).toContain("pre-computed FIRE summary metrics");
+    expect(lines[5]).toContain("Analytics Spending Review");
+    expect(lines[5]).toContain("person-to-person counterparties anonymized");
   });
 
   it("turns the setting on through the API", async () => {

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import type { FirePreviewRequest, FireProjection, FireTierKey } from "@/api/fire";
@@ -16,6 +16,10 @@ import {
   type FireAiSuggestedWhatIf,
 } from "@/api/fireAi";
 import { apiErrorMessage } from "@/api/client";
+import { AiCitations } from "@/components/ai/AiCitations";
+import { AiFollowupSection } from "@/components/ai/AiFollowupSection";
+import { AiRunCardHeader, AiScopeChip } from "@/components/ai/AiRunCardHeader";
+import { AiSeverityBadge } from "@/components/ai/AiSeverityBadge";
 import { Button, Card, CardBody, FieldError } from "@/components/ui/primitives";
 import { cn } from "@/lib/cn";
 import { formatDate } from "@/lib/dates";
@@ -152,11 +156,7 @@ export function FireAiAnalysisTab({ householdId, currency = "EUR", projection, o
 }
 
 function ScopeChip({ label }: { label: string }) {
-  return (
-    <span className="rounded border border-border bg-gray-100 px-2 py-0.5 text-xs text-gray-700 dark:bg-chip dark:text-gray-200">
-      {label}
-    </span>
-  );
+  return <AiScopeChip label={label} />;
 }
 
 function formatScopeTier(rawTier: string, fatMultiplier: string, locale: string, t: TFunction): string {
@@ -188,7 +188,6 @@ function RunCard({
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const [open, setOpen] = useState(defaultOpen);
-  const [copied, setCopied] = useState(false);
   const [question, setQuestion] = useState("");
   const ask = useAskFireAiFollowup(householdId);
 
@@ -199,7 +198,7 @@ function RunCard({
   const ungrounded = run.citationsUngrounded ?? 0;
   const tierLabel = formatScopeTier(run.scope.referenceTier, fatMultiplier, locale, t);
 
-  const copyReport = () => {
+  const buildMarkdown = () => {
     const lines: string[] = [
       `# ${t("fire.ai.title")} (${formatDate(run.createdAt, locale, "d MMM yyyy HH:mm")})`,
       `**${t("fire.ai.scope_tier")}:** ${tierLabel} · **${t("fire.ai.scope_scenario")}:** ${run.scope.referenceScenarioName} · **${t("fire.ai.scope_model")}:** ${run.model}`,
@@ -237,63 +236,34 @@ function RunCard({
       lines.push(`## ${t("fire.ai.followup_title")}`);
       for (const f of run.followups) lines.push(`**Q:** ${f.question}`, `**A:** ${f.answer}`, "");
     }
-    void navigator.clipboard.writeText(lines.join("\n")).then(() => {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    });
+    return lines.join("\n");
   };
 
   return (
     <Card>
       <CardBody className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <button type="button" onClick={toggle} className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-left">
-            <span className="font-medium">{formatDate(run.createdAt, locale, "d MMM yyyy HH:mm")}</span>
-            <ScopeChip label={`${tierLabel} · ${run.scope.referenceScenarioName}`} />
-            {run.scope.coveragePercent != null && (
-              <ScopeChip label={formatFirePercent(run.scope.coveragePercent, locale, 1)} />
-            )}
-            {run.status === "completed" && (
-              <span
-                className={cn(
-                  "rounded px-2 py-0.5 text-xs",
-                  ungrounded === 0
-                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
-                    : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
-                )}
-              >
-                {ungrounded === 0
-                  ? t("fire.ai.grounded_ok")
-                  : t("fire.ai.grounded_off", { off: ungrounded, total: run.citationsTotal ?? 0 })}
-              </span>
-            )}
-          </button>
-          <div className="flex items-center gap-2">
-            {run.status === "completed" && (
-              <button
-                type="button"
-                onClick={copyReport}
-                title={t("fire.ai.copy_report")}
-                className="inline-flex items-center gap-1 rounded border border-border-strong bg-raised px-2 py-1 text-xs text-gray-700 hover:bg-raised-hover dark:text-gray-200"
-              >
-                <span>{copied ? "✓" : "📋"}</span>
-                <span>{copied ? t("fire.ai.copied") : t("fire.ai.copy_report")}</span>
-              </button>
-            )}
-            <span className="text-xs text-gray-400">{run.model}</span>
-            <button
-              type="button"
-              aria-label={t("common.delete")}
-              title={t("common.delete")}
-              onClick={() => {
-                if (window.confirm(t("fire.ai.confirm_delete"))) onDelete(run.id);
-              }}
-              className="rounded p-1 text-gray-500 hover:bg-item-hover hover:text-red-600 dark:text-gray-300 dark:hover:text-red-400"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
+        <AiRunCardHeader
+          createdAt={run.createdAt}
+          status={run.status}
+          model={run.model}
+          citationsUngrounded={run.citationsUngrounded}
+          groundedOkLabel={t("fire.ai.grounded_ok")}
+          groundedOffLabel={t("fire.ai.grounded_off", { off: ungrounded, total: run.citationsTotal ?? 0 })}
+          copyReportLabel={t("fire.ai.copy_report")}
+          copiedLabel={t("fire.ai.copied")}
+          confirmDeleteMessage={t("fire.ai.confirm_delete")}
+          chips={
+            <>
+              <ScopeChip label={`${tierLabel} · ${run.scope.referenceScenarioName}`} />
+              {run.scope.coveragePercent != null && (
+                <ScopeChip label={formatFirePercent(run.scope.coveragePercent, locale, 1)} />
+              )}
+            </>
+          }
+          onToggle={toggle}
+          onBuildMarkdown={buildMarkdown}
+          onDelete={() => onDelete(run.id)}
+        />
 
         {run.status === "running" && (
           <p role="status" className="text-sm text-gray-500 dark:text-gray-400">
@@ -569,30 +539,7 @@ function DataGapRow({ item }: { item: FireAiDataGap }) {
 
 function Citations({ citations }: { citations: FireAiCitation[] }) {
   const { t } = useTranslation();
-  return (
-    <ul className="flex flex-wrap gap-1.5">
-      {citations.map((c, i) => {
-        const label = formatFireCitationPath(c.path, t, c.context);
-        const value = formatCitedValue(c.value);
-        const title = c.grounded ? c.path : `${c.path} — ${t("fire.ai.citation_mismatch")}`;
-        return (
-          <li key={i}>
-            <span
-              title={title}
-              className={cn(
-                "inline-block rounded border px-1.5 py-0.5 text-xs tabular-nums",
-                c.grounded
-                  ? "border-emerald-200 text-emerald-700 dark:border-emerald-800 dark:text-emerald-300"
-                  : "border-red-300 text-red-600 line-through dark:border-red-800 dark:text-red-400",
-              )}
-            >
-              <span>{label}</span> = {value}
-            </span>
-          </li>
-        );
-      })}
-    </ul>
-  );
+  return <AiCitations citations={citations} formatLabel={(c) => formatFireCitationPath(c.path, t, c.context)} />;
 }
 
 function FollowupSection({
@@ -617,80 +564,25 @@ function FollowupSection({
     t("fire.ai.followup_starter_spending"),
   ];
 
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    const trimmed = question.trim();
-    if (!trimmed || isPending) return;
-    onAsk(trimmed);
-  }
-
   return (
-    <div className="space-y-3 rounded-lg border border-border bg-gray-50/70 p-3.5 dark:bg-sunken">
-      <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-300">
-        {t("fire.ai.followup_title")}
-      </h4>
-      {run.followups.length > 0 && (
-        <ul className="space-y-3">
-          {run.followups.map((item) => (
-            <li key={item.id} className="space-y-2 rounded-md border border-border bg-white/90 p-3 dark:bg-surface">
-              <p className="text-xs font-semibold text-sky-700 dark:text-sky-300">{item.question}</p>
-              <p className="whitespace-pre-line text-sm leading-relaxed text-gray-800 dark:text-gray-200">{item.answer}</p>
-              {item.citations.length > 0 && <Citations citations={item.citations} />}
-            </li>
-          ))}
-        </ul>
-      )}
-      <div className="flex flex-wrap gap-1.5">
-        {starters.map((s) => (
-          <button
-            key={s}
-            type="button"
-            disabled={isPending}
-            onClick={() => onQuestionChange(s)}
-            className="rounded-full border border-border-strong bg-raised px-2.5 py-1 text-xs text-gray-700 hover:border-sky-400 hover:bg-raised-hover hover:text-sky-700 disabled:opacity-50 dark:text-gray-200 dark:hover:border-sky-500 dark:hover:text-sky-300"
-          >
-            {s}
-          </button>
-        ))}
-      </div>
-      <form onSubmit={submit} className="flex flex-col gap-2 sm:flex-row">
-        <input
-          type="text"
-          maxLength={FIRE_AI_FOLLOWUP_MAX_CHARS}
-          value={question}
-          disabled={isPending}
-          onChange={(e) => onQuestionChange(e.target.value)}
-          placeholder={t("fire.ai.followup_placeholder")}
-          aria-label={t("fire.ai.followup_placeholder")}
-          className="flex-1 rounded-md border border-border-strong bg-field px-3 py-1.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-sky-500 focus:outline-none dark:text-gray-100 dark:placeholder:text-gray-500"
-        />
-        <Button type="submit" disabled={isPending || question.trim().length === 0}>
-          {isPending ? t("fire.ai.followup_asking") : t("fire.ai.followup_ask")}
-        </Button>
-      </form>
-      <FieldError message={errorMessage} />
-    </div>
+    <AiFollowupSection
+      title={t("fire.ai.followup_title")}
+      followups={run.followups}
+      starters={starters}
+      question={question}
+      maxChars={FIRE_AI_FOLLOWUP_MAX_CHARS}
+      placeholder={t("fire.ai.followup_placeholder")}
+      askLabel={t("fire.ai.followup_ask")}
+      askingLabel={t("fire.ai.followup_asking")}
+      isPending={isPending}
+      errorMessage={errorMessage}
+      onQuestionChange={onQuestionChange}
+      onAsk={onAsk}
+      formatCitationLabel={(c) => formatFireCitationPath(c.path, t, c.context)}
+    />
   );
 }
 
 function SeverityBadge({ severity }: { severity: string }) {
-  const { t } = useTranslation();
-  const s = severity.toLowerCase();
-  const tone =
-    s === "critical"
-      ? "border-red-200 bg-red-100 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
-      : s === "warning"
-        ? "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
-        : "border-emerald-200 bg-emerald-100 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300";
-
-  return (
-    <span className={cn("inline-flex items-center rounded border px-1.5 py-0.5 text-xs font-medium", tone)}>
-      {t(`fire.ai.severity_${s}`, { defaultValue: s })}
-    </span>
-  );
-}
-
-function formatCitedValue(value: unknown): string {
-  if (typeof value === "string" || typeof value === "number") return String(value);
-  return JSON.stringify(value);
+  return <AiSeverityBadge severity={severity} />;
 }

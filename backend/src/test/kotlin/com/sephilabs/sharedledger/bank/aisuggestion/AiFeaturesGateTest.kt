@@ -75,6 +75,8 @@ class AiFeaturesGateTest @Autowired constructor(
         post("/api/households/$household/fire/question").with(csrf()).cookie(session)
             .contentType(MediaType.APPLICATION_JSON).content("""{"question":"What if I save 200 more?","language":"en"}"""),
         post("/api/households/$household/fire/ai-analysis").with(csrf()).cookie(session),
+        get("/api/households/$household/analytics/ai-review").cookie(session),
+        post("/api/households/$household/analytics/ai-review").with(csrf()).cookie(session),
     )
 
     private fun householdOf(session: Cookie): UUID = UUID.fromString(

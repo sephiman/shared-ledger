@@ -1,5 +1,7 @@
 package com.sephilabs.sharedledger.fire.ai
 
+import com.sephilabs.sharedledger.ai.AiJsonUtils.decimalField
+import com.sephilabs.sharedledger.ai.AiJsonUtils.intField
 import com.sephilabs.sharedledger.bank.aisuggestion.ChatAnswer
 import com.sephilabs.sharedledger.bank.aisuggestion.ChatPrompt
 import com.sephilabs.sharedledger.bank.aisuggestion.JsonObjectReader
@@ -213,19 +215,6 @@ class FireAiAnalysisRunner(
                 monthlyEssentialSpending = essential,
                 returnShiftPct = returnShift,
             )
-        }
-
-        private fun decimalField(node: JsonNode): BigDecimal? = when {
-            node.isNumber -> node.decimalValue()
-            node.isString -> node.asString().trim().takeIf { it.isNotEmpty() }?.let { runCatching { BigDecimal(it) }.getOrNull() }
-            else -> null
-        }
-
-        private fun intField(node: JsonNode): Int? = when {
-            node.isInt || node.isLong -> node.asInt()
-            node.isNumber -> node.doubleValue().takeIf { it == it.toInt().toDouble() }?.toInt()
-            node.isString -> node.asString().trim().toIntOrNull()
-            else -> null
         }
     }
 }

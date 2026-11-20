@@ -385,11 +385,7 @@ class FireService(
         val derived = s.totalSpendingMode == SpendingBaseMode.derived || s.essentialSpendingMode == SpendingBaseMode.derived
         if (!derived) return null
         val windowEnd = if (s.excludeCurrentMonth) asOfMonth.minusMonths(1) else asOfMonth
-        // The month the moment falls in is still open, so it neither proves nor disproves anything — unless it has spending.
-        val lastComplete = if (windowEnd == asOfMonth) asOfMonth.minusMonths(1) else windowEnd
-        val firstChecked = lastComplete.minusMonths(FireDefaults.STALE_SPENDING_MONTHS - 1L)
-        val lastExpense = transactions.lastDateOf(s.householdId, Direction.expense, windowEnd.atEndOfMonth()) ?: return null
-        return YearMonth.from(lastExpense).takeIf { it.isBefore(firstChecked) }
+        return com.sephilabs.sharedledger.ai.SpendingStaleness.noSpendingSince(transactions, s.householdId, windowEnd, asOfMonth)
     }
 
     /** Derived cost of living over the configured window ending at `asOfMonth` (or the month before it). */

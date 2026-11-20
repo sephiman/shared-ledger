@@ -10,6 +10,7 @@ const FEATURE_LINES = [
   "settings.ai_features_ask",
   "settings.ai_features_fire_what_if",
   "settings.ai_features_fire_review",
+  "settings.ai_features_analytics_review",
 ] as const;
 
 /** Owner-only opt-in for every AI feature at once. Rendered only when the instance has an AI provider; the help

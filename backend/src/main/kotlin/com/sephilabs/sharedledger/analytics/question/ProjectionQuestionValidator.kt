@@ -29,6 +29,10 @@ object ProjectionQuestionValidator {
             ?: ProjectionInterpretation.Understood(answer.scenario, answer.explain, answer.unsupported)
     }
 
+    /** Validates a standalone [ProjectionScenario] with the sandbox's own validator; returns null when valid. */
+    fun validateScenario(scenario: ProjectionScenario, catalogue: List<CatalogueEntry>): QuestionRejection? =
+        if (scenario.isEmpty()) QuestionRejection.nothing_asked else scenarioProblem(scenario, catalogue)
+
     private fun scenarioProblem(scenario: ProjectionScenario?, catalogue: List<CatalogueEntry>): QuestionRejection? {
         if (scenario == null) return null
         if (scenario.level != null && scenario.level !in ProjectionQuestionSchema.LEVELS) return QuestionRejection.malformed

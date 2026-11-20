@@ -16,7 +16,7 @@ function secondPersonPlural(text: string): string[] {
 }
 
 /** Words ending like a first-person-plural verb that are not verbs. Add here only after checking the word. */
-const NOT_FIRST_PERSON_PLURAL = new Set(["últimos", "tramos"]);
+const NOT_FIRST_PERSON_PLURAL = new Set(["últimos", "tramos", "préstamos"]);
 
 /** First-person-plural (nosotros) verb forms: ahorramos, gastamos, dejamos, proyectamos, retiramos. */
 function firstPersonPlural(text: string): string[] {
@@ -63,5 +63,16 @@ describe("Spanish FIRE copy speaks in the second person singular", () => {
       .map(([key, value]) => [key, secondPersonPlural(value)] as const)
       .filter(([, hits]) => hits.length > 0);
     expect(offending).toEqual([]);
+  });
+
+  it("no analytics.review.* string in the es bundle uses vosotros or nosotros forms", () => {
+    const pluralHits = collectStrings(es.analytics.review)
+      .map(([key, value]) => [key, secondPersonPlural(value)] as const)
+      .filter(([, hits]) => hits.length > 0);
+    const weHits = collectStrings(es.analytics.review)
+      .map(([key, value]) => [key, firstPersonPlural(value)] as const)
+      .filter(([, hits]) => hits.length > 0);
+    expect(pluralHits).toEqual([]);
+    expect(weHits).toEqual([]);
   });
 });

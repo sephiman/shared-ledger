@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
 import { useMoneyFlow, useYearsAvailable } from "@/api/analytics";
+import type { ProjectionScenario } from "@/api/questions";
 import { Card, CardBody, CardHeader, Input, Label, Select } from "@/components/ui/primitives";
 import { isoToday, monthName } from "@/lib/dates";
 import { MoneyFlowSankeyChart, MoneyFlowTotals, useMoneyFlowSankey } from "./MoneyFlowChart";
@@ -11,7 +12,13 @@ import { isCurrentMonthScope } from "./moneyflowProjection";
 
 type Level = "group" | "category";
 
-export function MoneyFlowTab() {
+export function MoneyFlowTab({
+  initialScenario = null,
+  onInitialScenarioApplied,
+}: {
+  initialScenario?: ProjectionScenario | null;
+  onInitialScenarioApplied?: () => void;
+} = {}) {
   const { t, i18n } = useTranslation();
   const household = useActiveHousehold();
   const now = new Date();
@@ -22,6 +29,14 @@ export function MoneyFlowTab() {
   const [customFrom, setCustomFrom] = useState<string>("");
   const [customTo, setCustomTo] = useState<string>(isoToday());
   const [level, setLevel] = useState<Level>("group");
+
+  useEffect(() => {
+    if (!initialScenario) return;
+    setScope("month");
+    setYear(now.getFullYear());
+    setMonth(now.getMonth() + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialScenario]);
 
   const range = resolveMoneyFlowRange({ scope, year, month, customFrom, customTo }, now);
   const { data, isLoading } = useMoneyFlow(
@@ -125,7 +140,12 @@ export function MoneyFlowTab() {
       </Card>
 
       {isCurrentMonthScope({ scope, year, month }, now) && (
-        <MoneyFlowProjectionPanel householdId={household.householdId} currency={currency} />
+        <MoneyFlowProjectionPanel
+          householdId={household.householdId}
+          currency={currency}
+          initialScenario={initialScenario}
+          onInitialScenarioApplied={onInitialScenarioApplied}
+        />
       )}
     </div>
   );

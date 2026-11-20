@@ -10,6 +10,7 @@ const FILTER_KEYS = [
   "categoryCode",
   "categoryGroup",
   "isRefund",
+  "q",
 ] as const;
 
 export type TransactionListFilters = Pick<TransactionFilters, (typeof FILTER_KEYS)[number]>;
@@ -41,6 +42,7 @@ export function transactionFiltersFromSearch(params: URLSearchParams): Transacti
     categoryCode: params.get("categoryCode") || undefined,
     categoryGroup: params.get("categoryGroup") || undefined,
     isRefund: params.get("isRefund") === "true" ? true : undefined,
+    q: params.get("q") || undefined,
   };
 }
 

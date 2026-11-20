@@ -1,19 +1,14 @@
 package com.sephilabs.sharedledger.fire.ai
 
+import com.sephilabs.sharedledger.ai.AiCitationDto
 import com.sephilabs.sharedledger.fire.FirePreviewRequest
-import tools.jackson.databind.JsonNode
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
 data class FireAiFollowupRequest(val question: String?)
 
-data class FireAiCitationDto(
-    val path: String,
-    val value: JsonNode?,
-    val grounded: Boolean,
-    val context: String? = null,
-)
+typealias FireAiCitationDto = AiCitationDto
 
 data class FireAiScopeDto(
     val referenceTier: String,

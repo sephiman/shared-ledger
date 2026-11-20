@@ -54,9 +54,31 @@ describe("transactions list filters in the URL", () => {
     await waitFor(() =>
       expect(lastRequest("/transactions")).toEqual({
         size: 50, page: 0, direction: "expense", categoryCode: "outings.restaurants", isRefund: true,
-        from: undefined, to: undefined, amountFrom: undefined, amountTo: undefined, categoryGroup: undefined,
+        from: undefined, to: undefined, amountFrom: undefined, amountTo: undefined, categoryGroup: undefined, q: undefined,
       }),
     );
+  });
+
+  it("writes q description search to URL, requests, totals, and CSV export, and clears it cleanly", async () => {
+    stubLedgerApi(undefined, { page: { items: [listedTransaction()], page: 0, size: 50, total: 1 } });
+    const user = userEvent.setup();
+    renderAt("/transactions");
+    await screen.findByRole("option", { name: /Restaurants/ });
+
+    const searchInput = screen.getByRole("searchbox", { name: "Description" });
+    await user.type(searchInput, "Vattenfall");
+
+    await waitFor(() => expect(location()).toBe("/transactions?q=Vattenfall"));
+    await waitFor(() => expect(lastRequest("/transactions")).toMatchObject({ q: "Vattenfall" }));
+    await waitFor(() => expect(lastRequest("/transactions/totals")).toMatchObject({ q: "Vattenfall" }));
+    expect(screen.getByRole("link", { name: "Export CSV" })).toHaveAttribute(
+      "href",
+      "/api/households/h1/transactions/export.csv?q=Vattenfall",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(location()).toBe("/transactions");
+    expect(searchInput).toHaveValue("");
   });
 
   it("writes amountFrom and amountTo to URL, requests, and CSV export, and clears them cleanly", async () => {

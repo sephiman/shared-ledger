@@ -63,13 +63,23 @@ function windowAssumption(r: MoneyFlowProjectionResponse, t: Translate, locale: 
   return t("analytics.money_flow_projection_window", { window: r.windowMonths, months });
 }
 
-export function MoneyFlowProjectionPanel({ householdId, currency }: { householdId: string; currency: string }) {
+export function MoneyFlowProjectionPanel({
+  householdId,
+  currency,
+  initialScenario = null,
+  onInitialScenarioApplied,
+}: {
+  householdId: string;
+  currency: string;
+  initialScenario?: ProjectionScenario | null;
+  onInitialScenarioApplied?: () => void;
+}) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const [window, setWindow] = useForecastWindow();
   // Exploration state, deliberately not remembered: every visit starts from the group view with nothing switched off.
   const [level, setLevel] = useState<Level>("group");
-  const [collapsed, setCollapsed] = useState(readCollapsed);
+  const [collapsed, setCollapsed] = useState(() => (initialScenario ? false : readCollapsed()));
   const [scenario, setScenario] = useState<ProjectionScenario | null>(null);
   const { data: response, isLoading } = useMoneyFlowProjection(householdId, level, window);
 
@@ -115,6 +125,14 @@ export function MoneyFlowProjectionPanel({ householdId, currency }: { householdI
       setWindow(parseForecastWindow(String(next.windowMonths)));
     }
   };
+
+  useEffect(() => {
+    if (!initialScenario) return;
+    setCollapsed(false);
+    applyScenario(initialScenario);
+    onInitialScenarioApplied?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialScenario]);
 
   const toggleNode = (node: SankeyNodeDatum) => {
     const key = nodeKey(node);

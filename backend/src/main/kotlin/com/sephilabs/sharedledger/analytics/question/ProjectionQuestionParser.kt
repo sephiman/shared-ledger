@@ -18,35 +18,45 @@ sealed interface ParsedProjectionAnswer {
 
 object ProjectionQuestionParser {
 
-    private class Refused(val reason: QuestionRejection) : RuntimeException(null, null, false, false)
+    private class Refused : RuntimeException(null, null, false, false)
 
     fun parse(raw: String?): ParsedProjectionAnswer {
         val root = JsonObjectReader.first(raw) ?: return ParsedProjectionAnswer.Unreadable(QuestionRejection.unreadable)
         return try {
             read(root)
-        } catch (refused: Refused) {
-            ParsedProjectionAnswer.Unreadable(refused.reason)
+        } catch (_: Refused) {
+            ParsedProjectionAnswer.Unreadable(QuestionRejection.malformed)
         }
     }
 
     private fun read(root: JsonNode): ParsedProjectionAnswer.Read {
         val confidence = root.path("confidence").takeIf { it.isNumber }?.asDouble()?.takeIf { it in 0.0..1.0 }
-            ?: refuse(QuestionRejection.malformed)
+            ?: malformed()
         val unsupported = unsupported(root.path("unsupported"))
         val scenario = scenario(root.path("scenario"))
         val explain = explain(root.path("explain"))
         return ParsedProjectionAnswer.Read(scenario, explain, unsupported, confidence)
     }
 
+    /** Parses a standalone scenario JSON object using the sandbox's own schema rules; returns null if missing/empty/malformed. */
+    fun parseScenario(node: JsonNode?): ProjectionScenario? {
+        if (node == null || node.isMissingNode || node.isNull) return null
+        return try {
+            scenario(node)
+        } catch (_: Refused) {
+            null
+        }
+    }
+
     private fun scenario(node: JsonNode): ProjectionScenario? {
         if (node.isMissingNode || node.isNull) return null
-        if (!node.isObject) refuse(QuestionRejection.malformed)
+        if (!node.isObject) malformed()
         val freeze = scopeArray(node.path("freeze"))
         val adjustments = adjustmentArray(node.path("adjustments"))
         val level = optionalString(node.path("level"))
         val windowMonths = optionalInt(node.path("windowMonths"))
         val modeOverride = optionalString(node.path("modeOverride"))?.let { name ->
-            ProjectionMode.entries.firstOrNull { it.name == name } ?: refuse(QuestionRejection.malformed)
+            ProjectionMode.entries.firstOrNull { it.name == name } ?: malformed()
         }
         val savingsTarget = optionalDecimal(node.path("savingsTarget"))
         val parsed = ProjectionScenario(freeze, adjustments, level, windowMonths, modeOverride, savingsTarget)
@@ -55,9 +65,9 @@ object ProjectionQuestionParser {
 
     private fun explain(node: JsonNode): ProjectionExplain? {
         if (node.isMissingNode || node.isNull) return null
-        if (!node.isObject) refuse(QuestionRejection.malformed)
-        val kindName = optionalString(node.path("kind")) ?: refuse(QuestionRejection.malformed)
-        val kind = ExplainKind.entries.firstOrNull { it.name == kindName } ?: refuse(QuestionRejection.malformed)
+        if (!node.isObject) malformed()
+        val kindName = optionalString(node.path("kind")) ?: malformed()
+        val kind = ExplainKind.entries.firstOrNull { it.name == kindName } ?: malformed()
         val scopeNode = node.path("scope")
         val scope = if (scopeNode.isMissingNode || scopeNode.isNull) null else scope(scopeNode)
         return ProjectionExplain(kind, scope)
@@ -65,43 +75,43 @@ object ProjectionQuestionParser {
 
     private fun scopeArray(node: JsonNode): List<ScopeRef> {
         if (node.isMissingNode || node.isNull) return emptyList()
-        if (!node.isArray) refuse(QuestionRejection.malformed)
+        if (!node.isArray) malformed()
         return node.values().map(::scope).distinct()
     }
 
     private fun adjustmentArray(node: JsonNode): List<ProjectionAdjustment> {
         if (node.isMissingNode || node.isNull) return emptyList()
-        if (!node.isArray) refuse(QuestionRejection.malformed)
+        if (!node.isArray) malformed()
         return node.values().map(::adjustment)
     }
 
     private fun adjustment(node: JsonNode): ProjectionAdjustment {
-        if (!node.isObject) refuse(QuestionRejection.malformed)
+        if (!node.isObject) malformed()
         val scope = scope(node.path("scope"))
-        val kindName = optionalString(node.path("kind")) ?: refuse(QuestionRejection.malformed)
-        val kind = AdjustmentKind.entries.firstOrNull { it.name == kindName } ?: refuse(QuestionRejection.malformed)
+        val kindName = optionalString(node.path("kind")) ?: malformed()
+        val kind = AdjustmentKind.entries.firstOrNull { it.name == kindName } ?: malformed()
         val valueNode = node.path("value")
-        val value = if (valueNode.isNumber) valueNode.decimalValue() else refuse(QuestionRejection.malformed)
+        val value = if (valueNode.isNumber) valueNode.decimalValue() else malformed()
         return ProjectionAdjustment(scope, kind, value)
     }
 
     private fun scope(node: JsonNode): ScopeRef {
-        if (!node.isObject) refuse(QuestionRejection.malformed)
+        if (!node.isObject) malformed()
         val type = optionalString(node.path("type"))?.let { name -> ScopeType.entries.firstOrNull { it.name == name } }
         val code = optionalString(node.path("code"))
-        if (type == null || code == null) refuse(QuestionRejection.malformed)
+        if (type == null || code == null) malformed()
         return ScopeRef(type, code)
     }
 
     private fun unsupported(node: JsonNode): List<UnsupportedFilter> {
         if (node.isMissingNode || node.isNull) return emptyList()
-        if (!node.isArray) refuse(QuestionRejection.malformed)
+        if (!node.isArray) malformed()
         return node.values().take(QuestionSchema.MAX_UNSUPPORTED).map { item ->
-            if (!item.isObject) refuse(QuestionRejection.malformed)
+            if (!item.isObject) malformed()
             val kind = optionalString(item.path("kind"))?.let { name -> UnsupportedKind.entries.firstOrNull { it.name == name } }
                 ?: UnsupportedKind.other
             val label = optionalString(item.path("label"))?.take(QuestionSchema.MAX_UNSUPPORTED_LABEL)
-                ?: refuse(QuestionRejection.malformed)
+                ?: malformed()
             UnsupportedFilter(kind, label)
         }
     }
@@ -112,11 +122,11 @@ object ProjectionQuestionParser {
 
     private fun optionalInt(node: JsonNode): Int? =
         if (node.isMissingNode || node.isNull) null
-        else if (node.isInt || node.isLong) node.asInt() else refuse(QuestionRejection.malformed)
+        else if (node.isInt || node.isLong) node.asInt() else malformed()
 
     private fun optionalDecimal(node: JsonNode): BigDecimal? =
         if (node.isMissingNode || node.isNull) null
-        else if (node.isNumber) node.decimalValue() else refuse(QuestionRejection.malformed)
+        else if (node.isNumber) node.decimalValue() else malformed()
 
-    private fun refuse(reason: QuestionRejection): Nothing = throw Refused(reason)
+    private fun malformed(): Nothing = throw Refused()
 }

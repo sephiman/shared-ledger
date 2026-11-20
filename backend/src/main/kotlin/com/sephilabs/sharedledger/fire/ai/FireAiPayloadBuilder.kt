@@ -1,5 +1,9 @@
 package com.sephilabs.sharedledger.fire.ai
 
+import com.sephilabs.sharedledger.ai.AiJsonUtils.putNullableDouble
+import com.sephilabs.sharedledger.ai.AiJsonUtils.putNullableInt
+import com.sephilabs.sharedledger.ai.AiJsonUtils.putNullableNumber
+import com.sephilabs.sharedledger.ai.AiJsonUtils.putNumber
 import com.sephilabs.sharedledger.fire.FireProjectionResponse
 import com.sephilabs.sharedledger.fire.FireScenarioOutput
 import com.sephilabs.sharedledger.fire.FireTierKey
@@ -7,8 +11,6 @@ import com.sephilabs.sharedledger.fire.history.FireHistoryResponse
 import com.sephilabs.sharedledger.fire.levers.FireLeversResponse
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.json.JsonMapper
-import tools.jackson.databind.node.ObjectNode
-import java.math.BigDecimal
 
 /** Builds the compact, pre-computed FIRE snapshot sent to the AI plan review. No DB IDs, user emails,
  *  account names, or raw transactions ever enter this payload. */
@@ -316,21 +318,5 @@ object FireAiPayloadBuilder {
             3 -> "Optimistic"
             else -> "Scenario $rank"
         }
-    }
-
-    private fun ObjectNode.putNumber(field: String, value: BigDecimal) {
-        put(field, value.toDouble())
-    }
-
-    private fun ObjectNode.putNullableNumber(field: String, value: BigDecimal?) {
-        if (value == null) putNull(field) else put(field, value.toDouble())
-    }
-
-    private fun ObjectNode.putNullableDouble(field: String, value: Double?) {
-        if (value == null || !value.isFinite()) putNull(field) else put(field, value)
-    }
-
-    private fun ObjectNode.putNullableInt(field: String, value: Int?) {
-        if (value == null) putNull(field) else put(field, value)
     }
 }

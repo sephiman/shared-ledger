@@ -1,5 +1,6 @@
 package com.sephilabs.sharedledger.fire.ai
 
+import com.sephilabs.sharedledger.ai.AiRunStatus
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
@@ -17,7 +18,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
-enum class FireAiAnalysisRunStatus { running, completed, failed, interrupted }
+typealias FireAiAnalysisRunStatus = AiRunStatus
 
 @Entity
 @Table(name = "fire_ai_analysis_runs")

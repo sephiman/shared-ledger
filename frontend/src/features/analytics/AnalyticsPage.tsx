@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import type { ProjectionScenario } from "@/api/questions";
 import { TabBar } from "@/components/ui/TabBar";
 import { DailyTab } from "./DailyTab";
 import { ExplorerTab } from "./ExplorerTab";
@@ -7,6 +9,7 @@ import { CompositionTab } from "./CompositionTab";
 import { ChangesTab } from "./ChangesTab";
 import { TrendsTab } from "./TrendsTab";
 import { MoneyFlowTab } from "./MoneyFlowTab";
+import { SpendingReviewTab } from "./review/SpendingReviewTab";
 
 type TabDef = { slug: string; labelKey: string };
 
@@ -17,6 +20,7 @@ const TABS: TabDef[] = [
   { slug: "changes", labelKey: "analytics.changes" },
   { slug: "trends", labelKey: "analytics.trends" },
   { slug: "money-flow", labelKey: "analytics.money_flow" },
+  { slug: "review", labelKey: "analytics.spending_review" },
 ];
 
 export function AnalyticsPage() {
@@ -26,6 +30,17 @@ export function AnalyticsPage() {
   const current = location.pathname.split("/")[2] ?? "";
   const activeTab = TABS.some((it) => it.slug === current) ? current : "daily";
   const items = TABS.map((it) => ({ value: it.slug, label: t(it.labelKey) }));
+  const [pendingScenario, setPendingScenario] = useState<ProjectionScenario | null>(
+    () => (location.state as { initialScenario?: ProjectionScenario } | null)?.initialScenario ?? null,
+  );
+
+  useEffect(() => {
+    const incoming = (location.state as { initialScenario?: ProjectionScenario } | null)?.initialScenario;
+    if (!incoming) return;
+    setPendingScenario(incoming);
+    navigate(location.pathname + location.search, { replace: true, state: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
 
   return (
     <div className="space-y-4">
@@ -38,7 +53,16 @@ export function AnalyticsPage() {
         <Route path="composition" element={<CompositionTab />} />
         <Route path="changes" element={<ChangesTab />} />
         <Route path="trends" element={<TrendsTab />} />
-        <Route path="money-flow" element={<MoneyFlowTab />} />
+        <Route
+          path="money-flow"
+          element={
+            <MoneyFlowTab
+              initialScenario={pendingScenario}
+              onInitialScenarioApplied={() => setPendingScenario(null)}
+            />
+          }
+        />
+        <Route path="review" element={<SpendingReviewTab />} />
 
         <Route path="yoy" element={<Navigate to="/analytics/trends#yoy" replace />} />
         <Route path="yby" element={<Navigate to="/analytics/trends#yby" replace />} />
