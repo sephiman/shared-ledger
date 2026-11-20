@@ -10,12 +10,17 @@ import {
   useAnalyticsAiRuns,
   useAskAnalyticsAiFollowup,
   useDeleteAnalyticsAiRun,
+  useDeleteSpendingReviewDecision,
+  useRecordSpendingReviewDecision,
   useSpendingReviewCandidates,
   useStartAnalyticsAiReview,
   type AnalyticsAiRun,
   type AnalyticsBudgetFinding,
   type AnalyticsChangeFinding,
   type AnalyticsSavingsFinding,
+  type RecordSpendingReviewDecisionRequest,
+  type SinceLastMonthItem,
+  type UpcomingCharge,
   type VerifiedMetric,
 } from "@/api/analyticsAi";
 import { useCategories, type Category } from "@/api/catalog";
@@ -29,7 +34,7 @@ import { AiSeverityBadge } from "@/components/ai/AiSeverityBadge";
 import { Badge, Button, Card, CardBody, FieldError, Label, Select } from "@/components/ui/primitives";
 import { categoryLabelByCode } from "@/lib/categoryLabel";
 import { cn } from "@/lib/cn";
-import { formatDate, monthName } from "@/lib/dates";
+import { formatDate, formatDayMonthYear, monthName } from "@/lib/dates";
 import { formatWholeMoney } from "@/lib/money";
 import {
   explorerUrlFromLink,
@@ -106,7 +111,11 @@ export function SpendingReviewTab() {
   );
   const period = candidatesQuery.data?.period;
   const candidates = candidatesQuery.data?.candidates;
+  const decisions = candidatesQuery.data?.decisions ?? [];
   const skeleton = candidatesQuery.data?.skeleton ?? null;
+  const recordDecision = useRecordSpendingReviewDecision(household.householdId);
+  const deleteDecision = useDeleteSpendingReviewDecision(household.householdId);
+  const decisionBusy = recordDecision.isPending || deleteDecision.isPending;
 
   // Three-level AI gate: when AI is absent or household toggle is off, no AI queries or UI appear.
   const ai = useAiSuggestionsOn(household.householdId);
@@ -375,10 +384,15 @@ export function SpendingReviewTab() {
           householdId={household.householdId}
           currency={household.currency}
           run={latestRun}
+          sinceLastMonth={latestCoversCurrentSelection ? (skeleton?.sinceLastMonth ?? []) : []}
+          upcomingCharges={latestCoversCurrentSelection ? (skeleton?.upcomingCharges ?? []) : []}
           defaultOpen
           onDelete={del.mutate}
           onSimulate={handleSimulate}
           onOpenUnderlying={openUnderlyingAt}
+          onRecordDecision={(req) => recordDecision.mutate(req)}
+          onUndoDecision={(id) => deleteDecision.mutate(id)}
+          decisionBusy={decisionBusy}
         />
       )}
 
@@ -395,9 +409,11 @@ export function SpendingReviewTab() {
             </div>
             <ReportSections
               summary={skeleton.summary}
+              sinceLastMonth={skeleton.sinceLastMonth ?? []}
               savingsOpportunities={skeleton.savingsOpportunities}
               whatChanged={skeleton.whatChanged}
               budgetFindings={skeleton.budgetFindings}
+              upcomingCharges={skeleton.upcomingCharges ?? []}
               savingsOmitted={skeleton.savingsOmitted}
               whatChangedOmitted={skeleton.whatChangedOmitted}
               budgetsOmitted={skeleton.budgetsOmitted}
@@ -406,6 +422,9 @@ export function SpendingReviewTab() {
               categories={categories}
               onSimulate={handleSimulate}
               onOpenUnderlying={openUnderlyingAt}
+              onRecordDecision={(req) => recordDecision.mutate(req)}
+              onUndoDecision={(id) => deleteDecision.mutate(id)}
+              decisionBusy={decisionBusy}
               formatCiteLabel={formatCiteLabel}
               formatCiteValue={formatCiteValue}
             />
@@ -451,6 +470,9 @@ export function SpendingReviewTab() {
           currency={household.currency}
           period={period}
           candidates={candidates}
+          decisions={decisions}
+          onUndoDecision={(id) => deleteDecision.mutate(id)}
+          decisionBusy={decisionBusy}
           underlyingMovers={skeleton?.underlyingMovers ?? []}
           underlyingBudgetOverruns={skeleton?.underlyingBudgetOverruns ?? []}
           open={underlyingOpen}
@@ -464,9 +486,11 @@ export function SpendingReviewTab() {
 
 function ReportSections({
   summary,
+  sinceLastMonth = [],
   savingsOpportunities,
   whatChanged,
   budgetFindings,
+  upcomingCharges = [],
   savingsOmitted = 0,
   whatChangedOmitted = 0,
   budgetsOmitted = 0,
@@ -475,13 +499,18 @@ function ReportSections({
   categories,
   onSimulate,
   onOpenUnderlying,
+  onRecordDecision,
+  onUndoDecision,
+  decisionBusy = false,
   formatCiteLabel,
   formatCiteValue,
 }: {
   summary: string | null;
+  sinceLastMonth?: SinceLastMonthItem[];
   savingsOpportunities: AnalyticsSavingsFinding[];
   whatChanged: AnalyticsChangeFinding[];
   budgetFindings: AnalyticsBudgetFinding[];
+  upcomingCharges?: UpcomingCharge[];
   savingsOmitted?: number;
   whatChangedOmitted?: number;
   budgetsOmitted?: number;
@@ -490,15 +519,20 @@ function ReportSections({
   categories: Category[];
   onSimulate: (scenario: ProjectionScenario) => void;
   onOpenUnderlying: (group: UnderlyingDataGroup) => void;
+  onRecordDecision?: (req: RecordSpendingReviewDecisionRequest) => void;
+  onUndoDecision?: (decisionId: string) => void;
+  decisionBusy?: boolean;
   formatCiteLabel: (c: { path: string; value: unknown; grounded: boolean; context?: string | null }) => string;
   formatCiteValue: (c: { path: string; value: unknown; grounded: boolean; context?: string | null }) => string;
 }) {
   const { t } = useTranslation();
   const hasAny =
     Boolean(summary) ||
+    sinceLastMonth.length > 0 ||
     savingsOpportunities.length > 0 ||
     whatChanged.length > 0 ||
-    budgetFindings.length > 0;
+    budgetFindings.length > 0 ||
+    upcomingCharges.length > 0;
 
   if (!hasAny) {
     return (
@@ -510,6 +544,59 @@ function ReportSections({
 
   return (
     <>
+      {sinceLastMonth.length > 0 && (
+        <section
+          aria-label={t("analytics.review.since_last_month_title")}
+          className="rounded-lg border border-sky-200 bg-sky-50/40 p-4 dark:border-sky-900/40 dark:bg-sky-950/20"
+        >
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-sky-800 dark:text-sky-300">
+            {t("analytics.review.since_last_month_title")}
+          </h4>
+          <ul className="mt-2.5 space-y-2">
+            {sinceLastMonth.map((item) => {
+              const badgeKey =
+                item.changeType === "stopped_recurring"
+                  ? "since_last_month_stopped"
+                  : item.changeType === "new_recurring"
+                    ? "since_last_month_new"
+                    : item.changeType === "decision_resurfaced"
+                      ? "since_last_month_resurfaced"
+                      : item.changeType === "decision_expired"
+                        ? "since_last_month_expired"
+                        : "since_last_month_changed";
+              const tone =
+                item.changeType === "stopped_recurring"
+                  ? "green"
+                  : item.changeType === "decision_resurfaced" || item.changeType === "decision_expired"
+                    ? "amber"
+                    : "sky";
+              return (
+                <li
+                  key={item.id}
+                  className="flex flex-wrap items-start justify-between gap-2 rounded-md border border-border bg-white/90 px-3 py-2 text-sm dark:bg-surface"
+                >
+                  <div className="space-y-0.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge tone={tone}>{t(`analytics.review.${badgeKey}`)}</Badge>
+                      <span className="font-medium text-gray-900 dark:text-gray-100">{item.title}</span>
+                    </div>
+                    <p className="text-xs text-gray-600 dark:text-gray-300">{item.detail}</p>
+                  </div>
+                  {item.txFilter && (
+                    <Link
+                      to={transactionsUrlFromFilter(item.txFilter)}
+                      className="text-xs text-sky-700 hover:underline dark:text-sky-300"
+                    >
+                      {t("analytics.review.see_transactions")}
+                    </Link>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
       {summary && (
         <div className="rounded-md border border-sky-200 bg-sky-50/60 p-3.5 text-sm leading-relaxed text-gray-800 dark:border-sky-900/40 dark:bg-sky-950/25 dark:text-gray-200">
           <p className="text-xs font-semibold uppercase tracking-wider text-sky-800 dark:text-sky-300">
@@ -533,6 +620,9 @@ function ReportSections({
                 locale={locale}
                 categoryLabel={item.categoryCode ? categoryLabelByCode(item.categoryCode, categories, t) : null}
                 onSimulate={onSimulate}
+                onRecordDecision={onRecordDecision}
+                onUndoDecision={onUndoDecision}
+                decisionBusy={decisionBusy}
                 formatCiteLabel={formatCiteLabel}
                 formatCiteValue={formatCiteValue}
               />
@@ -562,6 +652,8 @@ function ReportSections({
                 item={item}
                 currency={currency}
                 locale={locale}
+                onUndoDecision={onUndoDecision}
+                decisionBusy={decisionBusy}
                 formatCiteLabel={formatCiteLabel}
                 formatCiteValue={formatCiteValue}
               />
@@ -607,6 +699,65 @@ function ReportSections({
           )}
         </section>
       )}
+
+      {upcomingCharges.length > 0 && (
+        <section
+          aria-label={t("analytics.review.upcoming_title")}
+          className="rounded-lg border border-violet-200 bg-violet-50/40 p-4 dark:border-violet-900/40 dark:bg-violet-950/20"
+        >
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-violet-800 dark:text-violet-300">
+            {t("analytics.review.upcoming_title")}
+          </h4>
+          <ul className="mt-2.5 space-y-2">
+            {upcomingCharges.map((u) => (
+              <li
+                key={u.id}
+                className="flex flex-wrap items-start justify-between gap-2 rounded-md border border-border bg-white/90 px-3 py-2.5 text-sm dark:bg-surface"
+              >
+                <div className="space-y-0.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold text-gray-900 dark:text-gray-100">{u.merchant}</span>
+                    <Badge tone="neutral">{t(`analytics.review.cadence_${u.cadence}`)}</Badge>
+                    {u.kept && <Badge tone="green">{t("analytics.review.upcoming_kept_badge")}</Badge>}
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      {categoryLabelByCode(u.categoryCode, categories, t)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-600 dark:text-gray-300">
+                    {t("analytics.review.upcoming_window", {
+                      from: formatDayMonthYear(u.expectedFrom, locale),
+                      to: formatDayMonthYear(u.expectedTo, locale),
+                    })}
+                    {" · "}
+                    <span className="font-semibold tabular-nums">
+                      {formatWholeMoney(u.typicalAmount, currency, locale)}
+                    </span>
+                    {u.compareBeforeRenewal && (
+                      <span className="ml-1.5 text-amber-700 dark:text-amber-300">
+                        · {t("analytics.review.upcoming_compare_note")}
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <div className="inline-flex items-center gap-2 text-xs">
+                  <Link
+                    to={transactionsUrlFromFilter(u.txFilter)}
+                    className="text-sky-700 hover:underline dark:text-sky-300"
+                  >
+                    {t("analytics.review.see_transactions")}
+                  </Link>
+                  <Link
+                    to={explorerUrlFromLink(u.explorerLink)}
+                    className="text-gray-600 hover:underline dark:text-gray-300"
+                  >
+                    {t("analytics.review.see_explorer")}
+                  </Link>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </>
   );
 }
@@ -615,20 +766,30 @@ function ReviewRunCard({
   householdId,
   currency,
   run,
+  sinceLastMonth = [],
+  upcomingCharges = [],
   defaultOpen,
   onToggle,
   onDelete,
   onSimulate,
   onOpenUnderlying,
+  onRecordDecision,
+  onUndoDecision,
+  decisionBusy = false,
 }: {
   householdId: string;
   currency: string;
   run: AnalyticsAiRun;
+  sinceLastMonth?: SinceLastMonthItem[];
+  upcomingCharges?: UpcomingCharge[];
   defaultOpen: boolean;
   onToggle?: () => void;
   onDelete: (id: string) => void;
   onSimulate: (scenario: ProjectionScenario) => void;
   onOpenUnderlying: (group: UnderlyingDataGroup) => void;
+  onRecordDecision?: (req: RecordSpendingReviewDecisionRequest) => void;
+  onUndoDecision?: (decisionId: string) => void;
+  decisionBusy?: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
@@ -760,9 +921,11 @@ function ReviewRunCard({
 
             <ReportSections
               summary={run.summary}
+              sinceLastMonth={sinceLastMonth}
               savingsOpportunities={run.savingsOpportunities}
               whatChanged={run.whatChanged}
               budgetFindings={run.scope.hasBudgets ? run.budgetFindings : []}
+              upcomingCharges={upcomingCharges}
               savingsOmitted={run.savingsOmitted ?? 0}
               whatChangedOmitted={run.whatChangedOmitted ?? 0}
               budgetsOmitted={run.budgetsOmitted ?? 0}
@@ -771,6 +934,9 @@ function ReviewRunCard({
               categories={categories}
               onSimulate={onSimulate}
               onOpenUnderlying={onOpenUnderlying}
+              onRecordDecision={onRecordDecision}
+              onUndoDecision={onUndoDecision}
+              decisionBusy={decisionBusy}
               formatCiteLabel={formatCiteLabel}
               formatCiteValue={formatCiteValue}
             />
@@ -862,6 +1028,9 @@ function SavingsFindingCard({
   locale,
   categoryLabel,
   onSimulate,
+  onRecordDecision,
+  onUndoDecision,
+  decisionBusy = false,
   formatCiteLabel,
   formatCiteValue,
 }: {
@@ -870,12 +1039,62 @@ function SavingsFindingCard({
   locale: string;
   categoryLabel: string | null;
   onSimulate: (scenario: ProjectionScenario) => void;
+  onRecordDecision?: (req: RecordSpendingReviewDecisionRequest) => void;
+  onUndoDecision?: (decisionId: string) => void;
+  decisionBusy?: boolean;
   formatCiteLabel: (c: { path: string; value: unknown; grounded: boolean; context?: string | null }) => string;
   formatCiteValue: (c: { path: string; value: unknown; grounded: boolean; context?: string | null }) => string;
 }) {
   const { t } = useTranslation();
+  const [splitting, setSplitting] = useState(false);
+  const variants = item.mergedVariants ?? [];
+  const [groupChoice, setGroupChoice] = useState<Record<string, "A" | "B">>({});
+
   const titleHasName =
     item.localName != null && item.title.toLowerCase().includes(item.localName.toLowerCase());
+  const canDecide = Boolean(onRecordDecision && item.subjectKind && item.categoryCode && item.localName);
+  const canSplit = Boolean(canDecide && variants.length > 1);
+
+  const openSplit = () => {
+    const initial: Record<string, "A" | "B"> = {};
+    variants.forEach((v, idx) => {
+      initial[v] = idx === 0 ? "A" : "B";
+    });
+    setGroupChoice(initial);
+    setSplitting(true);
+  };
+
+  const submitSplit = () => {
+    if (!onRecordDecision || !item.subjectKind || !item.categoryCode || !item.localName) return;
+    const groupA = variants.filter((v) => (groupChoice[v] ?? "A") === "A");
+    const groupB = variants.filter((v) => groupChoice[v] === "B");
+    if (groupA.length === 0 || groupB.length === 0) return;
+    onRecordDecision({
+      subjectKind: item.subjectKind,
+      categoryCode: item.categoryCode,
+      decisionType: "split",
+      displayLabel: variants.join(" / "),
+      memberKeys: item.memberKeys,
+      splitGroups: [groupA, groupB],
+    });
+    setSplitting(false);
+  };
+
+  const recordSimple = (decisionType: "keep" | "compared" | "not_recurring") => {
+    if (!onRecordDecision || !item.subjectKind || !item.categoryCode || !item.localName) return;
+    onRecordDecision({
+      subjectKind: item.subjectKind,
+      categoryCode: item.categoryCode,
+      decisionType,
+      displayLabel: item.localName,
+      memberKeys: item.memberKeys && item.memberKeys.length > 0 ? item.memberKeys : [item.localName],
+      amountAtDecision: item.amountAtDecision ?? item.potentialMonthlySaving ?? null,
+    });
+  };
+
+  const groupACount = variants.filter((v) => (groupChoice[v] ?? "A") === "A").length;
+  const groupBCount = variants.filter((v) => groupChoice[v] === "B").length;
+
   return (
     <li
       className={cn(
@@ -935,6 +1154,115 @@ function SavingsFindingCard({
       </div>
       <p className="mt-1.5 text-sm leading-relaxed text-gray-700 dark:text-gray-300">{item.detail}</p>
       <VerifiedMetricStrip metrics={item.metrics} currency={currency} locale={locale} />
+      {(canDecide || (item.decision && onUndoDecision)) && (
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-border pt-2">
+          {canDecide && (
+            <>
+              <button
+                type="button"
+                disabled={decisionBusy}
+                onClick={() => recordSimple("keep")}
+                className="rounded border border-border bg-sunken px-2 py-1 text-xs text-gray-700 hover:bg-raised-hover disabled:opacity-50 dark:text-gray-200"
+              >
+                {t("analytics.review.decision_keep")}
+              </button>
+              <button
+                type="button"
+                disabled={decisionBusy}
+                onClick={() => recordSimple("compared")}
+                className="rounded border border-border bg-sunken px-2 py-1 text-xs text-gray-700 hover:bg-raised-hover disabled:opacity-50 dark:text-gray-200"
+              >
+                {t("analytics.review.decision_compared")}
+              </button>
+              {item.subjectKind === "recurring" && (
+                <button
+                  type="button"
+                  disabled={decisionBusy}
+                  onClick={() => recordSimple("not_recurring")}
+                  className="rounded border border-border bg-sunken px-2 py-1 text-xs text-gray-700 hover:bg-raised-hover disabled:opacity-50 dark:text-gray-200"
+                >
+                  {t("analytics.review.decision_not_recurring")}
+                </button>
+              )}
+              {canSplit && (
+                <button
+                  type="button"
+                  disabled={decisionBusy}
+                  onClick={() => (splitting ? setSplitting(false) : openSplit())}
+                  className="rounded border border-border bg-sunken px-2 py-1 text-xs text-gray-700 hover:bg-raised-hover disabled:opacity-50 dark:text-gray-200"
+                >
+                  {t("analytics.review.decision_split")}
+                </button>
+              )}
+            </>
+          )}
+          {item.decision && onUndoDecision && (
+            <button
+              type="button"
+              disabled={decisionBusy}
+              onClick={() => onUndoDecision(item.decision!.id)}
+              className="ml-auto rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-800 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200"
+            >
+              {t("analytics.review.decision_undo")}
+            </button>
+          )}
+        </div>
+      )}
+      {splitting && canSplit && (
+        <div className="mt-2 rounded-md border border-border bg-sunken p-2.5 text-xs space-y-2">
+          <p className="font-medium text-gray-800 dark:text-gray-200">{t("analytics.review.decision_split_title")}</p>
+          <p className="text-gray-500 dark:text-gray-400">{t("analytics.review.decision_split_hint")}</p>
+          <ul className="space-y-1.5">
+            {variants.map((v) => {
+              const chosen = groupChoice[v] ?? "A";
+              return (
+                <li key={v} className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium text-gray-800 dark:text-gray-200">{v}</span>
+                  <div className="inline-flex gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setGroupChoice((prev) => ({ ...prev, [v]: "A" }))}
+                      className={cn(
+                        "rounded border px-2 py-0.5 text-xs",
+                        chosen === "A"
+                          ? "border-sky-600 bg-sky-600 text-white"
+                          : "border-border bg-surface text-gray-700 dark:text-gray-300",
+                      )}
+                    >
+                      {t("analytics.review.decision_split_group_a")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGroupChoice((prev) => ({ ...prev, [v]: "B" }))}
+                      className={cn(
+                        "rounded border px-2 py-0.5 text-xs",
+                        chosen === "B"
+                          ? "border-sky-600 bg-sky-600 text-white"
+                          : "border-border bg-surface text-gray-700 dark:text-gray-300",
+                      )}
+                    >
+                      {t("analytics.review.decision_split_group_b")}
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="primary"
+              className="px-2.5 py-1 text-xs"
+              disabled={decisionBusy || groupACount === 0 || groupBCount === 0}
+              onClick={submitSplit}
+            >
+              {t("analytics.review.decision_split_confirm")}
+            </Button>
+            <Button variant="ghost" className="px-2 py-1 text-xs" onClick={() => setSplitting(false)}>
+              {t("common.cancel")}
+            </Button>
+          </div>
+        </div>
+      )}
       {item.citations.length > 0 && (
         <div className="mt-2">
           <AiCitations citations={item.citations} formatLabel={formatCiteLabel} formatValue={formatCiteValue} />
@@ -948,12 +1276,16 @@ function ChangeFindingCard({
   item,
   currency,
   locale,
+  onUndoDecision,
+  decisionBusy = false,
   formatCiteLabel,
   formatCiteValue,
 }: {
   item: AnalyticsChangeFinding;
   currency: string;
   locale: string;
+  onUndoDecision?: (decisionId: string) => void;
+  decisionBusy?: boolean;
   formatCiteLabel: (c: { path: string; value: unknown; grounded: boolean; context?: string | null }) => string;
   formatCiteValue: (c: { path: string; value: unknown; grounded: boolean; context?: string | null }) => string;
 }) {
@@ -974,9 +1306,22 @@ function ChangeFindingCard({
           <AiSeverityBadge severity={item.severity} keyPrefix="analytics.review.severity_" />
           <Badge tone="neutral">{t(`analytics.review.change_kind_${item.changeKind}`, { defaultValue: item.changeKind })}</Badge>
           <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{item.title}</p>
+          {item.decision?.decisionType === "keep" && (
+            <Badge tone="green">{t("analytics.review.upcoming_kept_badge")}</Badge>
+          )}
           <MergedVariantsToggle variants={item.mergedVariants} />
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs">
+          {item.decision && onUndoDecision && (
+            <button
+              type="button"
+              disabled={decisionBusy}
+              onClick={() => onUndoDecision(item.decision!.id)}
+              className="text-amber-700 hover:underline disabled:opacity-50 dark:text-amber-300"
+            >
+              {t("analytics.review.decision_undo")}
+            </button>
+          )}
           {item.txFilter && (
             <Link
               to={transactionsUrlFromFilter(item.txFilter)}

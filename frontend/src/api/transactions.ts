@@ -51,6 +51,8 @@ export interface TransactionFilters {
   isRefund?: boolean;
   /** Description contains — used by the original-expense picker. */
   q?: string;
+  /** Matches transactions with missing or blank description. */
+  unlabelled?: boolean;
   page?: number;
   size?: number;
   sort?: string;
@@ -84,7 +86,7 @@ export function useTransactionTotals(
   householdId: string,
   filters: Pick<
     TransactionFilters,
-    "from" | "to" | "amountFrom" | "amountTo" | "direction" | "categoryCode" | "categoryGroup" | "isRefund" | "q"
+    "from" | "to" | "amountFrom" | "amountTo" | "direction" | "categoryCode" | "categoryGroup" | "isRefund" | "q" | "unlabelled"
   >,
 ) {
   return useQuery({

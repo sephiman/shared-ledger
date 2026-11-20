@@ -12,6 +12,7 @@ import java.time.LocalDate
 import java.util.UUID
 
 interface TxAggRow {
+    val id: UUID
     val occurrenceDate: LocalDate
     val direction: Direction
     val categoryCode: String
@@ -107,7 +108,8 @@ interface TransactionRepository :
     ): List<Array<Any>>
 
     @Query("""
-        SELECT t.occurrenceDate as occurrenceDate,
+        SELECT t.id as id,
+               t.occurrenceDate as occurrenceDate,
                t.direction as direction,
                t.categoryCode as categoryCode,
                t.amount as amount,

@@ -44,6 +44,7 @@ class TransactionController(
         @RequestParam(required = false) categoryGroup: String?,
         @RequestParam(required = false) isRefund: Boolean?,
         @RequestParam(required = false) q: String?,
+        @RequestParam(required = false) unlabelled: Boolean?,
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "50") size: Int,
         @RequestParam(defaultValue = "date_desc") sort: String,
@@ -66,6 +67,7 @@ class TransactionController(
                 sort = sort,
                 isRefund = isRefund,
                 q = q,
+                unlabelled = unlabelled,
             ),
             locale = resolvedLocale,
         )
@@ -84,6 +86,7 @@ class TransactionController(
         @RequestParam(required = false) categoryGroup: String?,
         @RequestParam(required = false) isRefund: Boolean?,
         @RequestParam(required = false) q: String?,
+        @RequestParam(required = false) unlabelled: Boolean?,
     ): TransactionTotalsDto = totals.of(
         TransactionSearchCriteria(
             householdId = householdId,
@@ -99,6 +102,7 @@ class TransactionController(
             sort = "date_desc",
             isRefund = isRefund,
             q = q,
+            unlabelled = unlabelled,
         )
     )
 
@@ -144,6 +148,7 @@ class TransactionController(
         @RequestParam(required = false) categoryGroup: String?,
         @RequestParam(required = false) isRefund: Boolean?,
         @RequestParam(required = false) q: String?,
+        @RequestParam(required = false) unlabelled: Boolean?,
     ): ResponseEntity<String> {
         val csv = service.exportCsv(
             TransactionSearchCriteria(
@@ -160,6 +165,7 @@ class TransactionController(
                 sort = "date_asc",
                 isRefund = isRefund,
                 q = q,
+                unlabelled = unlabelled,
             )
         )
         return Csv.download(households.getOrThrow(householdId).name, "transactions", csv)

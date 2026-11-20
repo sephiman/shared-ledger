@@ -1,11 +1,12 @@
-package com.sephilabs.sharedledger.analytics.review
+package com.sephilabs.sharedledger.analytics.recurring
 
+import java.security.MessageDigest
 import kotlin.math.abs
 import kotlin.math.min
 
 /** Clusters name variants of the same payee within a single category before recurring detection
  *  or merchant aggregation: merges case, spacing, punctuation, edit distance 1-2, and shared
- *  distinctive tokens without collapsing unrelated payees. */
+ *  distinctive tokens while honouring user-recorded split rules. */
 object PayeeVariantClusterer {
 
     private val NON_ALNUM = Regex("""[^a-z0-9\s]+""")
@@ -24,10 +25,17 @@ object PayeeVariantClusterer {
         "clientes", "klantenservice", "holland", "almere", "amsterdam", "madrid", "barcelona",
     )
 
+    /** User-recorded split keeping [groups] of normalized variant keys permanently separate within [categoryCode]. */
+    data class SplitRule(
+        val categoryCode: String,
+        val groups: List<Set<String>>,
+    )
+
     data class PayeeCluster(
         val categoryCode: String,
         val canonicalMerchant: String,
         val canonicalKey: String,
+        val anchorKey: String,
         val searchQuery: String,
         val mergedVariants: List<String>,
         val memberKeys: Set<String>,
@@ -42,26 +50,96 @@ object PayeeVariantClusterer {
 
     /** Normalizes a raw label into a punctuation-free, accent-folded, single-spaced lowercase key. */
     fun canonicalKey(label: String): String =
-        NON_ALNUM.replace(MerchantSanitizer.fold(label), " ")
+        NON_ALNUM.replace(RecurringDetectionConstants.foldAscii(label), " ")
             .replace(WHITESPACE, " ")
             .trim()
+
+    /** Stable cross-month key for a recurring or merchant subject using the lexicographically smallest variant key. */
+    fun stableSubjectKey(kind: String, categoryCode: String, memberKeys: Set<String>): String {
+        val anchor = memberKeys.filter { it.isNotBlank() }.minOrNull().orEmpty()
+        return "$kind:$categoryCode:$anchor".take(250)
+    }
+
+    /** Stable unique key for a split decision over normalized variant partitions within [categoryCode]. */
+    fun splitSubjectKey(categoryCode: String, groups: List<Set<String>>): String {
+        val canonical = groups
+            .map { g -> g.map(::canonicalKey).filter { it.isNotBlank() }.sorted().joinToString(",") }
+            .filter { it.isNotEmpty() }
+            .sorted()
+            .joinToString("|")
+        val raw = "split:$categoryCode:$canonical"
+        if (raw.length <= 240) return raw
+        val digest = MessageDigest.getInstance("SHA-256").digest(canonical.toByteArray(Charsets.UTF_8))
+            .take(12).joinToString("") { "%02x".format(it) }
+        return "split:$categoryCode:$digest"
+    }
 
     fun areVariants(labelA: String, labelB: String): Boolean =
         areProfileVariants(profile(canonicalKey(labelA)), profile(canonicalKey(labelB)))
 
-    fun clusterByCategory(records: List<ExpenseRecord>): List<PayeeCluster> {
+    fun clusterByCategory(
+        records: List<ExpenseRecord>,
+        splitRules: List<SplitRule> = emptyList(),
+    ): List<PayeeCluster> {
         val labeled = records.filter { !it.rawLabel.isNullOrBlank() }
         val byCategory = labeled.groupBy { it.categoryCode }
+        val rulesByCategory = splitRules.groupBy { it.categoryCode }
         val clusters = mutableListOf<PayeeCluster>()
 
         for ((categoryCode, catRecords) in byCategory) {
             val byKey = catRecords.groupBy { canonicalKey(it.rawLabel!!) }
                 .filterKeys { it.isNotEmpty() }
-            val keys = byKey.keys.toList()
+            val keys = byKey.keys.sorted()
             if (keys.isEmpty()) continue
 
+            val catRules = rulesByCategory[categoryCode].orEmpty()
+                .map { rule -> rule.groups.map { g -> g.map(::canonicalKey).filter { it.isNotBlank() }.toSet() }.filter { it.isNotEmpty() } }
+                .filter { it.size >= 2 }
+
             val profiles = keys.map(::profile)
+            val keyToIdx = keys.withIndex().associate { (idx, k) -> k to idx }
+
+            // Track which (ruleIdx, groupIdx) each declared key belongs to.
+            val declaredSides = Array(keys.size) { mutableSetOf<Pair<Int, Int>>() }
+            for ((rIdx, groups) in catRules.withIndex()) {
+                for ((gIdx, group) in groups.withIndex()) {
+                    for (member in group) {
+                        keyToIdx[member]?.let { idx -> declaredSides[idx] += rIdx to gIdx }
+                    }
+                }
+            }
+
+            // Pre-build profiles for every rule group (including keys absent from the current window) so a new
+            // variant introduced in a later month is classified strictly against all split sides.
+            val ruleGroupProfiles: List<List<List<KeyProfile>>> = catRules.map { groups ->
+                groups.map { group -> group.map(::profile) }
+            }
+
+            // For any undeclared (new) key, check whether it matches multiple groups of any split rule.
+            // A key matching >=2 sides is a bridge and stays unattached to that rule rather than re-merging it;
+            // a key matching exactly 1 side attaches to that side only.
+            val bridgeRulesForIdx = Array(keys.size) { mutableSetOf<Int>() }
+            val attachedSides = Array(keys.size) { declaredSides[it].toMutableSet() }
+            for (idx in keys.indices) {
+                for ((rIdx, groupProfileLists) in ruleGroupProfiles.withIndex()) {
+                    if (declaredSides[idx].any { it.first == rIdx }) continue
+                    val matchedGroups = mutableListOf<Int>()
+                    for ((gIdx, gProfiles) in groupProfileLists.withIndex()) {
+                        if (gProfiles.any { gp -> areProfileVariants(profiles[idx], gp) }) {
+                            matchedGroups += gIdx
+                        }
+                    }
+                    when (matchedGroups.size) {
+                        1 -> attachedSides[idx] += rIdx to matchedGroups[0]
+                        in 2..Int.MAX_VALUE -> bridgeRulesForIdx[idx] += rIdx
+                    }
+                }
+            }
+
             val parent = IntArray(keys.size) { it }
+            val compSides = Array(keys.size) { attachedSides[it].toMutableSet() }
+            val compBridgeRules = Array(keys.size) { bridgeRulesForIdx[it].toMutableSet() }
+
             fun find(x: Int): Int {
                 var r = x
                 while (parent[r] != r) {
@@ -70,12 +148,47 @@ object PayeeVariantClusterer {
                 }
                 return r
             }
+
+            fun canUnion(ra: Int, rb: Int): Boolean {
+                if (ra == rb) return true
+                // Never merge two components that contain different groups of the same split rule.
+                for ((rIdx, gA) in compSides[ra]) {
+                    if (compSides[rb].any { it.first == rIdx && it.second != gA }) return false
+                    if (rIdx in compBridgeRules[rb]) return false
+                }
+                for ((rIdx, _) in compSides[rb]) {
+                    if (rIdx in compBridgeRules[ra]) return false
+                }
+                return true
+            }
+
             fun union(a: Int, b: Int) {
                 val ra = find(a)
                 val rb = find(b)
-                if (ra != rb) parent[rb] = ra
+                if (ra == rb || !canUnion(ra, rb)) return
+                parent[rb] = ra
+                compSides[ra] += compSides[rb]
+                compBridgeRules[ra] += compBridgeRules[rb]
             }
 
+            // 1. Keep keys explicitly placed in the same split group together.
+            for ((rIdx, groups) in catRules.withIndex()) {
+                for (group in groups) {
+                    val present = group.mapNotNull { keyToIdx[it] }
+                    for (k in 1 until present.size) {
+                        union(present[0], present[k])
+                    }
+                }
+                // Attach unambiguous new variants that matched exactly one side of this split rule.
+                for (idx in keys.indices) {
+                    if (declaredSides[idx].any { it.first == rIdx }) continue
+                    val targetSide = attachedSides[idx].firstOrNull { it.first == rIdx } ?: continue
+                    val anchorIdx = groups[targetSide.second].firstNotNullOfOrNull { keyToIdx[it] } ?: continue
+                    union(anchorIdx, idx)
+                }
+            }
+
+            // 2. Standard variant merging for all non-conflicting pairs.
             for (i in profiles.indices) {
                 for (j in i + 1 until profiles.size) {
                     if (areProfileVariants(profiles[i], profiles[j])) {
@@ -91,10 +204,12 @@ object PayeeVariantClusterer {
                 val canonicalMerchant = pickCanonicalLabel(mergedRecords)
                 val searchQuery = pickSearchQuery(mergedRecords, canonicalMerchant)
                 val mergedVariants = collectDistinctVariants(mergedRecords)
+                val anchorKey = memberKeys.minOrNull() ?: canonicalKey(canonicalMerchant)
                 clusters += PayeeCluster(
                     categoryCode = categoryCode,
                     canonicalMerchant = canonicalMerchant,
                     canonicalKey = canonicalKey(canonicalMerchant),
+                    anchorKey = anchorKey,
                     searchQuery = searchQuery,
                     mergedVariants = mergedVariants,
                     memberKeys = memberKeys,
@@ -108,7 +223,7 @@ object PayeeVariantClusterer {
     private fun profile(key: String): KeyProfile {
         val compact = key.replace(" ", "")
         val tokens = key.split(' ')
-            .filter { it.length >= SpendingReviewConstants.PAYEE_VARIANT_DISTINCTIVE_TOKEN_MIN_LEN && it !in GENERIC_TOKENS }
+            .filter { it.length >= RecurringDetectionConstants.PAYEE_VARIANT_DISTINCTIVE_TOKEN_MIN_LEN && it !in GENERIC_TOKENS }
             .toSet()
         return KeyProfile(key, compact, tokens)
     }
@@ -125,8 +240,8 @@ object PayeeVariantClusterer {
         val minLen = min(a.compact.length, b.compact.length)
         val lenDiff = abs(a.compact.length - b.compact.length)
         val maxDist = when {
-            minLen >= SpendingReviewConstants.PAYEE_VARIANT_LONG_KEY_MIN_LEN -> SpendingReviewConstants.PAYEE_VARIANT_MAX_EDIT_DIST_LONG
-            minLen >= SpendingReviewConstants.PAYEE_VARIANT_SHORT_KEY_MIN_LEN -> SpendingReviewConstants.PAYEE_VARIANT_MAX_EDIT_DIST_SHORT
+            minLen >= RecurringDetectionConstants.PAYEE_VARIANT_LONG_KEY_MIN_LEN -> RecurringDetectionConstants.PAYEE_VARIANT_MAX_EDIT_DIST_LONG
+            minLen >= RecurringDetectionConstants.PAYEE_VARIANT_SHORT_KEY_MIN_LEN -> RecurringDetectionConstants.PAYEE_VARIANT_MAX_EDIT_DIST_SHORT
             else -> return false
         }
         if (lenDiff > maxDist) return false
@@ -153,8 +268,6 @@ object PayeeVariantClusterer {
                     .thenBy { it.first().first.lowercase() },
             )
             .map { group ->
-                // Prefer the most capitalized casing (e.g. "Nat Postcode Loterij" over "Nat postcode loterij"),
-                // breaking ties by latest occurrence date.
                 group.maxWith(
                     compareBy<Pair<String, java.time.LocalDate>> { pair -> pair.first.count { it.isUpperCase() } }
                         .thenBy { it.second },
@@ -169,7 +282,6 @@ object PayeeVariantClusterer {
             compareBy<List<Pair<String, java.time.LocalDate>>> { it.size }
                 .thenBy { group -> group.maxOf { it.second } },
         )
-        // Prefer the most recent casing of the most frequent label.
         return winningGroup.maxBy { it.second }.first
     }
 
@@ -180,20 +292,20 @@ object PayeeVariantClusterer {
             .distinctBy { it.lowercase() }
         if (distinctRaw.size <= 1) return canonicalMerchant
 
-        val foldedAll = distinctRaw.map { MerchantSanitizer.fold(it) }
+        val foldedAll = distinctRaw.map { RecurringDetectionConstants.foldAscii(it) }
         val candidateTokens = canonicalMerchant.split(Regex("""[\s\-_./]+"""))
             .map { it.trim() }
             .filter {
-                val folded = MerchantSanitizer.fold(it)
-                folded.length >= SpendingReviewConstants.PAYEE_VARIANT_DISTINCTIVE_TOKEN_MIN_LEN && folded !in GENERIC_TOKENS
+                val folded = RecurringDetectionConstants.foldAscii(it)
+                folded.length >= RecurringDetectionConstants.PAYEE_VARIANT_DISTINCTIVE_TOKEN_MIN_LEN && folded !in GENERIC_TOKENS
             }
             .sortedByDescending { it.length }
 
         for (tok in candidateTokens) {
-            val foldedTok = MerchantSanitizer.fold(tok)
+            val foldedTok = RecurringDetectionConstants.foldAscii(tok)
             if (foldedAll.all { it.contains(foldedTok) }) {
                 val capitalized = distinctRaw.flatMap { it.split(Regex("""[\s\-_./]+""")) }
-                    .firstOrNull { MerchantSanitizer.fold(it) == foldedTok && it.firstOrNull()?.isUpperCase() == true }
+                    .firstOrNull { RecurringDetectionConstants.foldAscii(it) == foldedTok && it.firstOrNull()?.isUpperCase() == true }
                 return capitalized ?: tok
             }
         }

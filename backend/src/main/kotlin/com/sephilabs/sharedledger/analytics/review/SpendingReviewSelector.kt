@@ -11,6 +11,9 @@ import com.sephilabs.sharedledger.analytics.question.ProjectionScenarioDto
 import com.sephilabs.sharedledger.analytics.question.ScopeDto
 import com.sephilabs.sharedledger.analytics.question.ScopeRef
 import com.sephilabs.sharedledger.analytics.question.ScopeType
+import com.sephilabs.sharedledger.analytics.recurring.PayeeVariantClusterer
+import com.sephilabs.sharedledger.analytics.recurring.RecurringAction
+import com.sephilabs.sharedledger.analytics.recurring.YoyChangeKind
 import com.sephilabs.sharedledger.budget.MonthSummaryResponse
 import com.sephilabs.sharedledger.budget.MonthSummaryRow
 import com.sephilabs.sharedledger.catalog.CategoryView
@@ -75,6 +78,11 @@ data class SelectedFinding(
     val section: FindingSection,
     val kind: FindingKind,
     val candidateId: String?,
+    val subjectKey: String? = null,
+    val subjectKind: DecisionSubjectKind? = null,
+    val memberKeys: List<String> = emptyList(),
+    val amountAtDecision: BigDecimal? = null,
+    val decision: ActiveDecisionBadgeDto? = null,
     val payloadSubject: String,
     val localSubject: String?,
     val anonymized: Boolean,
@@ -98,9 +106,11 @@ data class SelectedReview(
     val currency: String,
     val period: SpendingReviewPeriodDto,
     val summaryFacts: SelectedSummaryFacts?,
+    val sinceLastMonth: List<SinceLastMonthItemDto> = emptyList(),
     val savings: List<SelectedFinding>,
     val whatChanged: List<SelectedFinding>,
     val budgets: List<SelectedFinding>,
+    val upcomingCharges: List<UpcomingChargeDto> = emptyList(),
     val savingsOmitted: Int,
     val whatChangedOmitted: Int,
     val budgetsOmitted: Int,
@@ -150,6 +160,8 @@ object SpendingReviewSelector {
         val categories: List<CategoryView>,
         val incomeMovers: List<IncomeCategoryMover> = emptyList(),
         val budgetHistoryStats: Map<String, BudgetHistoryStats> = emptyMap(),
+        val upcomingCharges: List<UpcomingChargeDto> = emptyList(),
+        val sinceLastMonth: List<SinceLastMonthItemDto> = emptyList(),
     )
 
     fun select(inputs: Inputs): SelectedReview {
@@ -169,12 +181,18 @@ object SpendingReviewSelector {
             buildSummaryFacts(period, inputs.monthDashboard, inputs.trailing12, inputs.paceProjection)
         } else null
 
-        // 2. Savings section: fills in strict priority order up to MAX_SAVINGS_FINDINGS; sub-caps are ceilings.
+        // 2. Savings section: apply user decisions BEFORE selection so freed slots fill with the next findings.
+        fun isHiddenFromSavings(decision: ActiveDecisionBadgeDto?): Boolean =
+            decision != null && (
+                decision.decisionType == SpendingReviewDecisionType.keep ||
+                    (decision.decisionType == SpendingReviewDecisionType.compared && decision.status == "snoozed")
+                )
+
         val savingsPicked = mutableListOf<SelectedFinding>()
         val selectedRecurringKeys = mutableSetOf<Pair<String, String>>()
 
         val allCancellable = candidates.recurringCharges
-            .filter { it.action == RecurringAction.cancellable }
+            .filter { it.action == RecurringAction.cancellable && !isHiddenFromSavings(it.decision) }
             .sortedWith(compareByDescending<RecurringChargeCandidateDto> { it.annualCost }.thenBy { it.id })
         val allFees = candidates.feesAndInterest.fees
             .filter { it.annualCost.signum() > 0 }
@@ -182,6 +200,7 @@ object SpendingReviewSelector {
         val allNegotiableUp = candidates.recurringCharges
             .filter {
                 it.action == RecurringAction.negotiable &&
+                    !isHiddenFromSavings(it.decision) &&
                     it.yoyChangeKind == YoyChangeKind.price_increase &&
                     it.priorYearAmount != null &&
                     it.yoyDeltaPct != null
@@ -203,14 +222,26 @@ object SpendingReviewSelector {
 
         val allMerchants = candidates.topNonEssentialMerchants
             .filter { m ->
-                m.purchases >= SpendingReviewConstants.MIN_MERCHANT_PURCHASES &&
+                !isHiddenFromSavings(m.decision) &&
+                    m.purchases >= SpendingReviewConstants.MIN_MERCHANT_PURCHASES &&
                     m.categoryCode !in oneOffCategoryCodes &&
                     (m.categoryCode to PayeeVariantClusterer.canonicalKey(m.merchant)) !in selectedRecurringKeys
             }
             .sortedWith(compareByDescending<TopMerchantCandidateDto> { it.total }.thenBy { it.id })
 
+        // Option A: dominant-peak categories (>= HABITUAL_PEAK_OUTLIER_MIN_SHARE of 12m above-median excess
+        // coming from a single peak month) are excluded from Savings; they stay in What changed & Underlying data.
+        val activeWindowMonths = BigDecimal.valueOf(period.monthsAvailable.coerceAtLeast(1).toLong())
         val allHabitual = candidates.lumpyCategories
-            .filter { it.monthlyMedian.signum() > 0 }
+            .filter { l ->
+                if (l.monthlyMedian.signum() <= 0) return@filter false
+                val peakAboveMed = (l.peakMonthAmount - l.monthlyMedian).max(BigDecimal.ZERO)
+                val totalExcess = l.trimToMedianMonthly.multiply(activeWindowMonths)
+                val peakShare = if (totalExcess.signum() > 0) {
+                    peakAboveMed.divide(totalExcess, 4, RoundingMode.HALF_EVEN)
+                } else BigDecimal.ZERO
+                peakShare < SpendingReviewConstants.HABITUAL_PEAK_OUTLIER_MIN_SHARE
+            }
             .sortedWith(compareByDescending<LumpyCategoryCandidateDto> { it.trimToMedianAnnual }.thenBy { it.categoryCode })
 
         val totalEligibleSavings = allCancellable.size + allFees.size + allNegotiableUp.size + allMerchants.size + allHabitual.size
@@ -240,6 +271,11 @@ object SpendingReviewSelector {
                 section = FindingSection.savings,
                 kind = FindingKind.cancellable_recurring,
                 candidateId = r.id,
+                subjectKey = r.subjectKey.ifBlank { null },
+                subjectKind = DecisionSubjectKind.recurring,
+                memberKeys = r.memberKeys,
+                amountAtDecision = r.monthlyCost,
+                decision = r.decision,
                 payloadSubject = r.payloadLabel,
                 localSubject = r.merchant,
                 anonymized = r.anonymized,
@@ -296,6 +332,11 @@ object SpendingReviewSelector {
                 section = FindingSection.savings,
                 kind = FindingKind.negotiable_price_increase,
                 candidateId = r.id,
+                subjectKey = r.subjectKey.ifBlank { null },
+                subjectKind = DecisionSubjectKind.recurring,
+                memberKeys = r.memberKeys,
+                amountAtDecision = r.monthlyCost,
+                decision = r.decision,
                 payloadSubject = r.payloadLabel,
                 localSubject = r.merchant,
                 anonymized = r.anonymized,
@@ -331,6 +372,11 @@ object SpendingReviewSelector {
                 section = FindingSection.savings,
                 kind = FindingKind.top_merchant,
                 candidateId = m.id,
+                subjectKey = m.subjectKey.ifBlank { null },
+                subjectKind = DecisionSubjectKind.merchant,
+                memberKeys = m.memberKeys,
+                amountAtDecision = m.monthlyEquivalent,
+                decision = m.decision,
                 payloadSubject = m.payloadLabel,
                 localSubject = m.merchant,
                 anonymized = m.anonymized,
@@ -429,7 +475,8 @@ object SpendingReviewSelector {
 
             val nonePriceChanges = candidates.recurringCharges
                 .filter {
-                    it.action == RecurringAction.none &&
+                    val isKept = it.decision?.decisionType == SpendingReviewDecisionType.keep
+                    (it.action == RecurringAction.none || isKept) &&
                         (it.yoyChangeKind == YoyChangeKind.price_increase || it.yoyChangeKind == YoyChangeKind.price_decrease) &&
                         it.priorYearAmount != null &&
                         it.yoyDeltaPct != null
@@ -526,6 +573,7 @@ object SpendingReviewSelector {
                         ctx["topDriverName"] = topDriver.merchant
                     }
                 }
+                val isUnlabelledDriver = ctx["topDriverKind"] == "unlabelled"
                 changedPicked += SelectedFinding(
                     id = "chg_inc_${inc.categoryCode.replace('.', '_')}",
                     section = FindingSection.whatChanged,
@@ -544,13 +592,19 @@ object SpendingReviewSelector {
                     potentialAnnualSaving = null,
                     figures = figs,
                     context = ctx,
-                    txFilter = TransactionLinkFilterDto(from = periodFrom, to = periodTo, direction = "expense", categoryCode = inc.categoryCode),
+                    txFilter = TransactionLinkFilterDto(
+                        from = periodFrom,
+                        to = periodTo,
+                        direction = "expense",
+                        categoryCode = inc.categoryCode,
+                        unlabelled = if (isUnlabelledDriver) true else null,
+                    ),
                     explorerLink = ExplorerLinkDto("category", inc.categoryCode, preset = "custom", from = windowFrom, to = periodTo),
                     simulationScenario = null,
                 )
             }
 
-            // Priority 2: price changes on items with action == none (stated as facts, no suggestion).
+            // Priority 2: price changes on items with action == none or kept recurring charges (stated as facts, no suggestion).
             for (r in nonePriceChanges.take(minOf(SpendingReviewConstants.MAX_CHANGED_NONE_PRICES, changedRoom()))) {
                 val dir = if (r.yoyChangeKind == YoyChangeKind.price_decrease) "down" else "up"
                 changedPicked += SelectedFinding(
@@ -558,6 +612,11 @@ object SpendingReviewSelector {
                     section = FindingSection.whatChanged,
                     kind = FindingKind.non_actionable_price_change,
                     candidateId = r.id,
+                    subjectKey = r.subjectKey.ifBlank { null },
+                    subjectKind = DecisionSubjectKind.recurring,
+                    memberKeys = r.memberKeys,
+                    amountAtDecision = r.monthlyCost,
+                    decision = r.decision,
                     payloadSubject = r.payloadLabel,
                     localSubject = r.merchant,
                     anonymized = r.anonymized,
@@ -721,9 +780,11 @@ object SpendingReviewSelector {
                 reviewKind = if (inputs.mode == ReviewMode.SAVINGS_ONLY) "savings_only" else period.reviewKind,
             ),
             summaryFacts = summaryFacts,
+            sinceLastMonth = inputs.sinceLastMonth,
             savings = savingsPicked,
             whatChanged = changedPicked,
             budgets = budgetsPicked,
+            upcomingCharges = inputs.upcomingCharges,
             savingsOmitted = savingsOmitted,
             whatChangedOmitted = whatChangedOmitted,
             budgetsOmitted = budgetsOmitted,

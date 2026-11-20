@@ -181,12 +181,18 @@ class AnalyticsService(
     }
 
     @Transactional(readOnly = true)
-    fun forecast(householdId: UUID, horizonMonths: Int, windowMonths: Int): ForecastResponse {
-        val currentMonth = YearMonth.now()
-        val basis = forecastEstimator.basis(householdId, currentMonth, windowMonths)
+    fun forecast(
+        householdId: UUID,
+        horizonMonths: Int,
+        windowMonths: Int,
+        asOfMonth: YearMonth = YearMonth.now(),
+    ): ForecastResponse {
+        val today = LocalDate.now()
+        val asOfDate = if (asOfMonth == YearMonth.from(today)) today else asOfMonth.atEndOfMonth()
+        val basis = forecastEstimator.basis(householdId, asOfMonth, windowMonths, asOfDate = asOfDate)
         val modes = projectionModes.modes(householdId)
         val groupOf = categoryService.listForHousehold(householdId).associate { it.code to (it.group ?: "ungrouped") }
-        val months = (1..horizonMonths).map { currentMonth.plusMonths(it.toLong()) }
+        val months = (1..horizonMonths).map { asOfMonth.plusMonths(it.toLong()) }
         val scheduled = months.associateWith { basis.recurringScheduled(it) }
         val codes = (basis.discretionaryAverage.keys + scheduled.values.flatMap { it.keys })
             .filter { it.direction == Direction.expense }
@@ -336,7 +342,12 @@ class AnalyticsService(
         val discretionaryByCategory: Map<FlowKey, BigDecimal>,
     )
 
-    private fun aggregateFlows(householdId: UUID, from: LocalDate, to: LocalDate): FlowAggregate {
+    private fun aggregateFlows(
+        householdId: UUID,
+        from: LocalDate,
+        to: LocalDate,
+        excludedDiscretionaryTxIds: Set<UUID> = emptySet(),
+    ): FlowAggregate {
         val rows = transactions.aggregationRows(householdId, from, to)
         val catGroup = categoryService.listForHousehold(householdId).associate { it.code to (it.group ?: "ungrouped") }
         var income = BigDecimal.ZERO
@@ -346,7 +357,7 @@ class AnalyticsService(
         val expensesByCategory = LinkedHashMap<String, BigDecimal>()
         val discretionaryByCategory = LinkedHashMap<FlowKey, BigDecimal>()
         for (r in rows) {
-            if (r.recurringTemplateId == null) {
+            if (r.recurringTemplateId == null && r.id !in excludedDiscretionaryTxIds) {
                 discretionaryByCategory.merge(FlowKey(r.direction, r.categoryCode), r.amount) { a, b -> a + b }
             }
             when (r.direction) {
@@ -468,10 +479,11 @@ class AnalyticsService(
     @Transactional(readOnly = true)
     fun moneyFlowProjection(householdId: UUID, today: LocalDate, level: String, windowMonths: Int): MoneyFlowProjectionResponse {
         val month = YearMonth.from(today)
-        // The same whole-month aggregation as the real panel, so the "actual" parts match it to the cent.
-        val flows = aggregateFlows(householdId, month.atDay(1), month.atEndOfMonth())
-        val basis = forecastEstimator.basis(householdId, month, windowMonths)
-        val stillDue = basis.recurringStillDue(month)
+        val basis = forecastEstimator.basis(householdId, month, windowMonths, asOfDate = today)
+        // The same whole-month aggregation as the real panel, so the "actual" parts match it to the cent,
+        // while excluding detected recurring charges from discretionarySpent so no charge is counted twice.
+        val flows = aggregateFlows(householdId, month.atDay(1), month.atEndOfMonth(), basis.detectedMatchedTxIds)
+        val stillDue = basis.recurringStillDue(month, today)
         val modes = projectionModes.modes(householdId)
         val progress = MonthProgress.asOf(today)
         val groupOfCategory = { code: String -> flows.categoryGroups[code] ?: "ungrouped" }

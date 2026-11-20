@@ -396,6 +396,7 @@ describe("SpendingReviewTab & deep links", () => {
             id: "rec_postcode",
             merchant: "Nat Postcode",
             mergedVariants: postcodeVariants,
+            attributedEntries: ["Mortgage"],
             payloadLabel: "Nat Postcode",
             categoryCode: "outings.subscriptions",
           },
@@ -470,6 +471,12 @@ describe("SpendingReviewTab & deep links", () => {
     expect(
       screen.getByText("Includes: Nat Postcode, Postcode Loterij, Nat Postcode Loterij, National Postcode"),
     ).toBeInTheDocument();
+
+    // Attributed gap-month entry renders locally alongside merged variants
+    const attributedToggle = screen.getByRole("button", { name: "1 attributed" });
+    expect(attributedToggle).toHaveAttribute("title", "Gap month attributed by amount: Mortgage");
+    await user.click(attributedToggle);
+    expect(screen.getByText("Gap month attributed by amount: Mortgage")).toBeInTheDocument();
   });
 
   it("offers last month with data and 12-month savings-only actions when the selected month is empty or stale", async () => {
@@ -558,5 +565,135 @@ describe("SpendingReviewTab & deep links", () => {
 
     const adjustLink = await screen.findByRole("link", { name: "Adjust budget" });
     expect(adjustLink).toHaveAttribute("href", "/budgets?year=2026&month=5&category=transport.car_maintenance");
+  });
+
+  it("renders Since last month, Coming up, decision actions, split picker, My decisions with Undo, and unlabelled tx link", async () => {
+    const richResp: SpendingReviewCandidatesResponse = {
+      ...SAMPLE_CANDIDATES,
+      decisions: [
+        {
+          id: "dec-1",
+          subjectKey: "recurring:outings.lottery:old",
+          subjectKind: "recurring",
+          categoryCode: "outings.lottery",
+          decisionType: "keep",
+          displayLabel: "Old Lottery",
+          memberKeys: ["old"],
+          splitGroups: [],
+          amountAtDecision: "15.00",
+          currentMonthlyCost: null,
+          snoozeUntil: null,
+          status: "inactive",
+          decidedBy: "alex@example.com",
+          decidedAt: "2026-04-10T10:00:00Z",
+        },
+      ],
+      skeleton: {
+        ...SAMPLE_CANDIDATES.skeleton!,
+        sinceLastMonth: [
+          {
+            id: "slm_1",
+            changeType: "stopped_recurring",
+            subjectKey: "recurring:outings.lottery:nat postcode",
+            merchant: "Nat Postcode",
+            payloadLabel: "Nat Postcode",
+            anonymized: false,
+            categoryCode: "outings.lottery",
+            previousMonthlyCost: "21.00",
+            currentMonthlyCost: "0.00",
+            deltaMonthly: "-21.00",
+            cadence: "monthly",
+            title: "Stopped: Nat Postcode",
+            detail: "No longer paying Nat Postcode: €21 a month.",
+            txFilter: null,
+          },
+        ],
+        savingsOpportunities: [
+          {
+            ...SAMPLE_CANDIDATES.skeleton!.savingsOpportunities[0],
+            subjectKey: "recurring:outings.subscriptions:hbo",
+            subjectKind: "recurring",
+            memberKeys: ["hbo", "hbo max"],
+            mergedVariants: ["HBO", "HBO Max"],
+            amountAtDecision: "6.99",
+          },
+        ],
+        upcomingCharges: [
+          {
+            id: "upc_1",
+            subjectKey: "recurring:home.insurance_fees:allianzdirect",
+            merchant: "AllianzDirect",
+            payloadLabel: "AllianzDirect",
+            anonymized: false,
+            categoryCode: "home.insurance_fees",
+            groupCode: "home",
+            cadence: "yearly",
+            action: "negotiable",
+            expectedFrom: "2026-11-10",
+            expectedTo: "2026-12-08",
+            typicalAmount: "911.95",
+            compareBeforeRenewal: true,
+            kept: false,
+            txFilter: { from: "2025-11-01", to: "2026-10-31", direction: "expense", categoryCode: "home.insurance_fees", q: "AllianzDirect" },
+            explorerLink: { scopeType: "category", scopeCode: "home.insurance_fees", preset: "custom", from: "2025-11-01", to: "2026-10-31" },
+          },
+        ],
+      },
+    };
+
+    const postSpy = vi.spyOn(apiClient, "post").mockResolvedValue({ data: { id: "dec-new" } } as never);
+    const deleteSpy = vi.spyOn(apiClient, "delete").mockResolvedValue({ data: {} } as never);
+    vi.spyOn(apiClient, "get").mockImplementation(async (url: string) => {
+      if (url === "/features") return { data: { ai: false } };
+      if (url.endsWith("/analytics/years-available")) return { data: { years: [2026] } };
+      if (url.endsWith("/categories")) return { data: [] };
+      if (url.endsWith("/analytics/spending-review/candidates")) return { data: richResp };
+      return { data: {} };
+    });
+
+    const user = userEvent.setup();
+    renderTab();
+
+    // Since last month & Coming up sections render
+    expect(await screen.findByText("Since last month")).toBeInTheDocument();
+    expect(screen.getByText("No longer paying Nat Postcode: €21 a month.")).toBeInTheDocument();
+    expect(screen.getByText("Coming up (next 60 days)")).toBeInTheDocument();
+    expect(screen.getByText("AllianzDirect")).toBeInTheDocument();
+    expect(screen.getByText(/Worth comparing before it renews/)).toBeInTheDocument();
+
+    // Decision action triggers POST /spending-review/decisions
+    await user.click(screen.getByRole("button", { name: "I keep this" }));
+    expect(postSpy).toHaveBeenCalledWith(
+      "/households/h1/analytics/spending-review/decisions",
+      expect.objectContaining({ decisionType: "keep", displayLabel: "HBO" }),
+    );
+
+    // Split variants picker works when mergedVariants.length > 1
+    await user.click(screen.getByRole("button", { name: "These are different things" }));
+    expect(screen.getByText("Choose which variants belong in each group")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save split" }));
+    expect(postSpy).toHaveBeenCalledWith(
+      "/households/h1/analytics/spending-review/decisions",
+      expect.objectContaining({ decisionType: "split", splitGroups: [["HBO"], ["HBO Max"]] }),
+    );
+
+    // Open Underlying data -> My decisions shows inactive decision + Undo deletes it
+    await user.click(screen.getByRole("button", { name: /Underlying data/ }));
+    expect(screen.getByText("My decisions")).toBeInTheDocument();
+    expect(screen.getByText("Old Lottery")).toBeInTheDocument();
+    expect(screen.getByText("Inactive")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    expect(deleteSpy).toHaveBeenCalledWith("/households/h1/analytics/spending-review/decisions/dec-1");
+
+    // Unlabelled filter URL round-trip
+    expect(
+      transactionsUrlFromFilter({
+        from: "2026-05-01",
+        to: "2026-05-31",
+        direction: "expense",
+        categoryCode: "outings.restaurants",
+        unlabelled: true,
+      }),
+    ).toBe("/transactions?from=2026-05-01&to=2026-05-31&direction=expense&categoryCode=outings.restaurants&unlabelled=true");
   });
 });

@@ -16,7 +16,7 @@ function secondPersonPlural(text: string): string[] {
 }
 
 /** Words ending like a first-person-plural verb that are not verbs. Add here only after checking the word. */
-const NOT_FIRST_PERSON_PLURAL = new Set(["últimos", "tramos", "préstamos"]);
+const NOT_FIRST_PERSON_PLURAL = new Set(["últimos", "tramos", "préstamos", "próximos"]);
 
 /** First-person-plural (nosotros) verb forms: ahorramos, gastamos, dejamos, proyectamos, retiramos. */
 function firstPersonPlural(text: string): string[] {

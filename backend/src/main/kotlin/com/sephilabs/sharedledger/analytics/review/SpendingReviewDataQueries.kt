@@ -152,8 +152,19 @@ class SpendingReviewDataQueries(
         return out
     }
 
+    /** Maps user IDs to emails for displaying who recorded a household decision in local UI. */
+    fun userEmails(userIds: Collection<UUID>): Map<UUID, String> {
+        if (userIds.isEmpty()) return emptyMap()
+        val sql = "SELECT id, email FROM users WHERE id IN (:ids)"
+        val out = LinkedHashMap<UUID, String>()
+        jdbc.query(sql, mapOf("ids" to userIds.distinct())) { rs ->
+            out[rs.getObject("id", UUID::class.java)] = rs.getString("email") ?: ""
+        }
+        return out
+    }
+
     /** Changes whenever any input to savings candidates changes (transactions, recurring templates,
-     *  categories, bank-movement links, or charged amortization entries). Mirrors FireSettingsRepository.dataFingerprint. */
+     *  categories, bank-movement links, charged amortization entries, or review decisions). */
     fun dataFingerprint(householdId: UUID): String {
         val sql = """
             SELECT md5(concat_ws('|',
@@ -178,7 +189,12 @@ class SpendingReviewDataQueries(
                    FROM amortization_entries e
                    JOIN amortization_parts p ON p.id = e.part_id AND p.deleted_at IS NULL
                    JOIN liabilities l ON l.id = p.liability_id AND l.deleted_at IS NULL
-                  WHERE l.household_id = :hid)
+                  WHERE l.household_id = :hid),
+                (SELECT string_agg(
+                    d.id::text || ':' || d.subject_key || ':' || d.decision_type || ':' || d.member_keys_json || ':' ||
+                    coalesce(d.split_groups_json, '') || ':' || coalesce(d.amount_at_decision::text, '') || ':' ||
+                    coalesce(d.snooze_until::text, '') || ':' || d.decided_at::text, ',' ORDER BY d.id)
+                   FROM spending_review_decisions d WHERE d.household_id = :hid)
             ))
         """.trimIndent()
         return jdbc.queryForObject(sql, mapOf("hid" to householdId), String::class.java) ?: ""

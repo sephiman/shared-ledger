@@ -3,24 +3,28 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import type {
   SavingsCandidates,
+  SpendingReviewDecision,
   SpendingReviewPeriod,
   UnderlyingBudgetOverrun,
   UnderlyingMover,
 } from "@/api/analyticsAi";
 import { useCategories } from "@/api/catalog";
-import { Badge, Card, CardBody } from "@/components/ui/primitives";
+import { Badge, Button, Card, CardBody } from "@/components/ui/primitives";
 import { categoryLabelByCode } from "@/lib/categoryLabel";
-import { formatDayMonthYear } from "@/lib/dates";
+import { formatDate, formatDayMonthYear } from "@/lib/dates";
 import { formatPercent, formatWholeMoney } from "@/lib/money";
 import { explorerUrlFromLink, transactionsUrlFromFilter } from "./reviewLinks";
 
-export type UnderlyingDataGroup = "savings" | "changes" | "budgets";
+export type UnderlyingDataGroup = "savings" | "changes" | "budgets" | "decisions";
 
 interface Props {
   householdId: string;
   currency: string;
   period: SpendingReviewPeriod;
   candidates: SavingsCandidates;
+  decisions?: SpendingReviewDecision[];
+  onUndoDecision?: (decisionId: string) => void;
+  decisionBusy?: boolean;
   underlyingMovers?: UnderlyingMover[];
   underlyingBudgetOverruns?: UnderlyingBudgetOverrun[];
   open: boolean;
@@ -36,6 +40,9 @@ export function SavingsCandidatesPanel({
   currency,
   period,
   candidates,
+  decisions = [],
+  onUndoDecision,
+  decisionBusy = false,
   underlyingMovers = [],
   underlyingBudgetOverruns = [],
   open,
@@ -49,6 +56,7 @@ export function SavingsCandidatesPanel({
   const savingsRef = useRef<HTMLDivElement | null>(null);
   const changesRef = useRef<HTMLDivElement | null>(null);
   const budgetsRef = useRef<HTMLDivElement | null>(null);
+  const decisionsRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!open || !focusGroup) return;
@@ -57,7 +65,9 @@ export function SavingsCandidatesPanel({
         ? savingsRef.current
         : focusGroup === "changes"
           ? changesRef.current
-          : budgetsRef.current;
+          : focusGroup === "decisions"
+            ? decisionsRef.current
+            : budgetsRef.current;
     if (target && typeof target.scrollIntoView === "function") {
       target.scrollIntoView({ behavior: "smooth", block: "start" });
     }
@@ -74,7 +84,8 @@ export function SavingsCandidatesPanel({
     candidates.lumpyCategories.length > 0 ||
     oneOffs.length > 0 ||
     underlyingMovers.length > 0 ||
-    underlyingBudgetOverruns.length > 0;
+    underlyingBudgetOverruns.length > 0 ||
+    decisions.length > 0;
 
   return (
     <Card>
@@ -153,6 +164,7 @@ export function SavingsCandidatesPanel({
                                   <Badge tone="sky">{t("analytics.review.template_badge")}</Badge>
                                 )}
                                 <MergedVariantsToggle variants={item.mergedVariants} />
+                                <AttributedEntriesToggle entries={item.attributedEntries} />
                               </div>
                             </td>
                             <td className="py-2.5 pr-3 text-gray-600 dark:text-gray-300">{catName(item.categoryCode)}</td>
@@ -534,6 +546,87 @@ export function SavingsCandidatesPanel({
               </div>
             </div>
           )}
+          <div ref={decisionsRef} data-underlying-group="decisions" className="space-y-2.5">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+              {t("analytics.review.my_decisions_title")}
+            </h3>
+            {decisions.length === 0 ? (
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {t("analytics.review.my_decisions_empty")}
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-xs text-gray-500 dark:text-gray-400">
+                      <th className="py-2 pr-3 font-medium">{t("analytics.review.my_decisions_col_subject")}</th>
+                      <th className="py-2 pr-3 font-medium">{t("analytics.review.my_decisions_col_decision")}</th>
+                      <th className="py-2 pr-3 text-right font-medium">{t("analytics.review.my_decisions_col_amount")}</th>
+                      <th className="py-2 pr-3 font-medium">{t("analytics.review.my_decisions_col_who_when")}</th>
+                      <th className="py-2 pr-3 font-medium">{t("analytics.review.my_decisions_col_status")}</th>
+                      <th className="py-2 text-right font-medium" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {decisions.map((d) => {
+                      const statusTone =
+                        d.status === "active"
+                          ? "green"
+                          : d.status === "snoozed"
+                            ? "sky"
+                            : d.status === "resurfaced" || d.status === "expired"
+                              ? "amber"
+                              : "neutral";
+                      return (
+                        <tr key={d.id}>
+                          <td className="py-2.5 pr-3">
+                            <p className="font-medium text-gray-900 dark:text-gray-100">{d.displayLabel}</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">{catName(d.categoryCode)}</p>
+                          </td>
+                          <td className="py-2.5 pr-3 text-gray-700 dark:text-gray-300">
+                            {t(`analytics.review.decision_type_${d.decisionType}`)}
+                            {d.decisionType === "compared" && d.snoozeUntil && d.status === "snoozed" && (
+                              <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">
+                                ({t("analytics.review.my_decisions_snooze_until", {
+                                  date: formatDayMonthYear(d.snoozeUntil, locale),
+                                })})
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2.5 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-300">
+                            {d.amountAtDecision != null ? money(d.amountAtDecision) : "—"}
+                          </td>
+                          <td className="py-2.5 pr-3 text-xs text-gray-600 dark:text-gray-300">
+                            <span>{d.decidedBy}</span>
+                            <span className="block text-gray-500 dark:text-gray-400">
+                              {formatDate(d.decidedAt, locale, "d MMM yyyy")}
+                            </span>
+                          </td>
+                          <td className="py-2.5 pr-3">
+                            <Badge tone={statusTone}>
+                              {t(`analytics.review.decision_status_${d.status}`, { defaultValue: d.status })}
+                            </Badge>
+                          </td>
+                          <td className="py-2.5 text-right whitespace-nowrap">
+                            {onUndoDecision && (
+                              <Button
+                                variant="secondary"
+                                className="px-2 py-1 text-xs"
+                                disabled={decisionBusy}
+                                onClick={() => onUndoDecision(d.id)}
+                              >
+                                {t("analytics.review.decision_undo")}
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </CardBody>
       )}
     </Card>
@@ -557,6 +650,33 @@ export function MergedVariantsToggle({ variants }: { variants?: string[] }) {
         className="rounded-full border border-border bg-sunken px-2 py-0.5 text-[11px] font-normal text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10"
       >
         {t("analytics.review.variants_badge", { count: variants.length })}
+      </button>
+      {open && (
+        <span className="basis-full text-xs font-normal text-gray-500 dark:text-gray-400">
+          {title}
+        </span>
+      )}
+    </>
+  );
+}
+
+/** Local-only expandable pill listing gap-month transactions attributed to a recurring charge by amount. */
+export function AttributedEntriesToggle({ entries }: { entries?: string[] }) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  if (!entries || entries.length === 0) return null;
+  const list = entries.join(", ");
+  const title = t("analytics.review.attributed_includes", { list });
+  return (
+    <>
+      <button
+        type="button"
+        title={title}
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="rounded-full border border-border bg-sunken px-2 py-0.5 text-[11px] font-normal text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10"
+      >
+        {t("analytics.review.attributed_badge", { count: entries.length })}
       </button>
       {open && (
         <span className="basis-full text-xs font-normal text-gray-500 dark:text-gray-400">

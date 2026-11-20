@@ -30,6 +30,7 @@ class AnalyticsAiReviewEndpointTest @Autowired constructor(
     private val availability: TogglableAiAvailability,
     private val model: ScriptedSuggestionModel,
     private val aiService: AnalyticsAiReviewService,
+    private val decisionService: SpendingReviewDecisionService,
     private val reviewCache: SpendingReviewCache,
 ) : AuthHttpTestBase() {
 
@@ -482,13 +483,13 @@ class AnalyticsAiReviewEndpointTest @Autowired constructor(
             postTx(owner, household, LocalDate.of(2026, m, 5), "expense", "outings.hobbies", "120.00", "GolfClub")
         }
 
-        val svcDay5 = SavingsCandidatesService(transactions, categoryService, recurringTemplates, dataQueries, reviewCache, clockDay5)
+        val svcDay5 = SavingsCandidatesService(transactions, categoryService, recurringTemplates, dataQueries, decisionService, reviewCache, clockDay5)
         val pace5 = svcDay5.candidates(household, 2026, 11)
         assertThat(pace5.period.reviewKind).isEqualTo("pace_review")
         assertThat(pace5.period.daysElapsed).isEqualTo(5)
         assertThat(pace5.period.paceReviewEligible).isFalse()
 
-        val svcDay7 = SavingsCandidatesService(transactions, categoryService, recurringTemplates, dataQueries, reviewCache, clockDay7)
+        val svcDay7 = SavingsCandidatesService(transactions, categoryService, recurringTemplates, dataQueries, decisionService, reviewCache, clockDay7)
         val pace7 = svcDay7.candidates(household, 2026, 11)
         assertThat(pace7.period.reviewKind).isEqualTo("pace_review")
         assertThat(pace7.period.daysElapsed).isEqualTo(7)

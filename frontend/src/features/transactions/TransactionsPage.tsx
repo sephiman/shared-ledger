@@ -89,6 +89,7 @@ function buildExportQuery(filters: TransactionFilters): string {
     "categoryGroup",
     "isRefund",
     "q",
+    "unlabelled",
   ];
   const params = new URLSearchParams();
   for (const k of keys) {
@@ -403,6 +404,18 @@ export function TransactionsPage() {
               onClick={() => setListFilters({ ...listFilters, isRefund: listFilters.isRefund ? undefined : true })}
             >
               {t("tx.refunds_only")}
+            </Chip>
+            <Chip
+              active={filters.unlabelled === true}
+              onClick={() =>
+                setListFilters({
+                  ...listFilters,
+                  unlabelled: listFilters.unlabelled ? undefined : true,
+                  q: listFilters.unlabelled ? listFilters.q : undefined,
+                })
+              }
+            >
+              {t("tx.unlabelled_only")}
             </Chip>
             {(hasActiveTransactionFilters(filters) || sort !== DEFAULT_TRANSACTION_SORT) && (
               <Button variant="ghost" className="ml-auto" onClick={clearFilters}>{t("tx.clear_filters")}</Button>

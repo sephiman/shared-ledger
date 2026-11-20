@@ -22,6 +22,7 @@ data class TransactionSearchCriteria(
     val sort: String,
     val isRefund: Boolean? = null,
     val q: String? = null,
+    val unlabelled: Boolean? = null,
     val amountFrom: BigDecimal? = null,
     val amountTo: BigDecimal? = null,
 )
@@ -57,6 +58,13 @@ object TransactionSpecs {
         Specification { root, _, cb ->
             val needle = text.lowercase().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
             cb.like(cb.lower(root.get("description")), "%$needle%", '\\')
+        }
+
+    /** Matches transactions with a missing or blank description. */
+    fun isUnlabelled(): Specification<Transaction> =
+        Specification { root, _, cb ->
+            val desc = root.get<String>("description")
+            cb.or(cb.isNull(desc), cb.equal(cb.trim(desc), ""))
         }
 
     fun categoryGroupIs(householdId: UUID, group: String): Specification<Transaction> =
@@ -95,7 +103,11 @@ object TransactionSpecs {
         c.categoryCode?.let { spec = spec.and(categoryCodeIs(it)) }
         c.categoryGroup?.let { spec = spec.and(categoryGroupIs(c.householdId, it)) }
         c.isRefund?.let { spec = spec.and(isRefundIs(it)) }
-        c.q?.trim()?.takeIf { it.isNotEmpty() }?.let { spec = spec.and(descriptionContains(it)) }
+        if (c.unlabelled == true) {
+            spec = spec.and(isUnlabelled())
+        } else {
+            c.q?.trim()?.takeIf { it.isNotEmpty() }?.let { spec = spec.and(descriptionContains(it)) }
+        }
         return spec
     }
 }

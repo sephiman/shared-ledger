@@ -20,6 +20,7 @@ import java.util.UUID
 @RequestMapping("/api/households/{householdId}/analytics")
 class AnalyticsAiReviewController(
     private val skeletonService: SpendingReviewSkeletonService,
+    private val decisionService: SpendingReviewDecisionService,
     private val aiService: AnalyticsAiReviewService,
     private val currentUser: CurrentUser,
 ) {
@@ -32,6 +33,24 @@ class AnalyticsAiReviewController(
         @RequestParam(required = false) mode: String?,
     ): SpendingReviewCandidatesResponse =
         skeletonService.candidatesWithSkeleton(householdId, year, month, mode, currentUser.requireUser().locale)
+
+    @GetMapping("/spending-review/decisions")
+    fun listDecisions(@PathVariable householdId: UUID): List<SpendingReviewDecisionDto> =
+        decisionService.list(householdId)
+
+    @PostMapping("/spending-review/decisions")
+    fun recordDecision(
+        @PathVariable householdId: UUID,
+        @RequestBody body: RecordSpendingReviewDecisionRequest,
+    ): SpendingReviewDecisionDto =
+        decisionService.upsert(householdId, currentUser.requireUser(), body)
+
+    @DeleteMapping("/spending-review/decisions/{decisionId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    fun deleteDecision(
+        @PathVariable householdId: UUID,
+        @PathVariable decisionId: UUID,
+    ) = decisionService.delete(householdId, decisionId)
 
     @GetMapping("/ai-review")
     fun list(@PathVariable householdId: UUID): List<AnalyticsAiRunDto> = aiService.list(householdId)

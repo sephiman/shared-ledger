@@ -23,6 +23,7 @@ import java.util.UUID
 @Service
 class SpendingReviewSkeletonService(
     private val savingsCandidates: SavingsCandidatesService,
+    private val decisionService: SpendingReviewDecisionService,
     private val analytics: AnalyticsService,
     private val budgets: BudgetService,
     private val dataQueries: SpendingReviewDataQueries,
@@ -61,7 +62,7 @@ class SpendingReviewSkeletonService(
         }
 
         val mode = if (wantsSavingsOnly) ReviewMode.SAVINGS_ONLY else ReviewMode.FULL
-        val selected = selectForPeriod(householdId, period, mode, today, candidatesResp, categories)
+        val selected = selectForPeriod(householdId, period, mode, today, candidatesResp, categories, locale)
         val rendered = SpendingReviewRenderer.renderDeterministic(selected, locale, labelFn)
         val skeleton = toSkeletonDto(selected, rendered)
         return candidatesResp.copy(skeleton = skeleton)
@@ -75,6 +76,7 @@ class SpendingReviewSkeletonService(
         today: LocalDate,
         candidatesResp: SpendingReviewCandidatesResponse = savingsCandidates.candidates(householdId, period.year, period.monthValue),
         categories: List<CategoryView> = categoryService.listForHousehold(householdId),
+        locale: String = "en",
     ): SelectedReview {
         val currency = households.getOrThrow(householdId).currency
         val isPace = candidatesResp.period.reviewKind == "pace_review"
@@ -150,6 +152,27 @@ class SpendingReviewSkeletonService(
             } else emptyMap()
         } else emptyMap()
 
+        val upcomingCharges = UpcomingChargesBuilder.build(
+            recurringCharges = candidatesResp.candidates.recurringCharges,
+            asOf = candidatesResp.period.windowTo,
+        )
+
+        val sinceLastMonth = if (mode == ReviewMode.FULL && candidatesResp.period.monthsAvailable >= 2) {
+            val prevPeriod = period.minusMonths(1)
+            val prevAsOf = prevPeriod.atEndOfMonth()
+            val prevResp = savingsCandidates.computeForAsOf(householdId, prevPeriod, prevAsOf)
+            val decodedDecisions = decisionService.listDecoded(householdId)
+            SinceLastMonthDiff.compute(
+                current = candidatesResp.candidates,
+                previous = prevResp.candidates,
+                decisions = decodedDecisions,
+                asOfCurrent = candidatesResp.period.windowTo,
+                asOfPrevious = prevAsOf,
+                currency = currency,
+                locale = locale,
+            )
+        } else emptyList()
+
         return SpendingReviewSelector.select(
             SpendingReviewSelector.Inputs(
                 currency = currency,
@@ -165,6 +188,8 @@ class SpendingReviewSkeletonService(
                 categories = categories,
                 incomeMovers = incomeMovers,
                 budgetHistoryStats = budgetHistoryStats,
+                upcomingCharges = upcomingCharges,
+                sinceLastMonth = sinceLastMonth,
             ),
         )
     }
@@ -221,11 +246,17 @@ class SpendingReviewSkeletonService(
         return SpendingReviewSkeletonDto(
             mode = if (selected.mode == ReviewMode.SAVINGS_ONLY) "savings_only" else "full",
             summary = rendered.summary,
+            sinceLastMonth = selected.sinceLastMonth,
             savingsOpportunities = selected.savings.map { f ->
                 val txt = textById[f.id]
                 AnalyticsSavingsFindingDto(
                     findingId = f.id,
                     candidateId = f.candidateId ?: f.id,
+                    subjectKey = f.subjectKey,
+                    subjectKind = f.subjectKind,
+                    memberKeys = f.memberKeys,
+                    amountAtDecision = f.amountAtDecision,
+                    decision = f.decision,
                     localName = f.localSubject,
                     mergedVariants = f.mergedVariants,
                     categoryCode = f.categoryCode,
@@ -248,6 +279,10 @@ class SpendingReviewSkeletonService(
                 val txt = textById[f.id]
                 AnalyticsChangeFindingDto(
                     findingId = f.id,
+                    subjectKey = f.subjectKey,
+                    subjectKind = f.subjectKind,
+                    memberKeys = f.memberKeys,
+                    decision = f.decision,
                     categoryCode = f.categoryCode,
                     groupCode = f.groupCode,
                     localName = f.localSubject,
@@ -276,6 +311,7 @@ class SpendingReviewSkeletonService(
                     explorerLink = f.explorerLink,
                 )
             },
+            upcomingCharges = selected.upcomingCharges,
             savingsOmitted = selected.savingsOmitted,
             whatChangedOmitted = selected.whatChangedOmitted,
             budgetsOmitted = selected.budgetsOmitted,

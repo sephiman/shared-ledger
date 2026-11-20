@@ -1,9 +1,9 @@
 package com.sephilabs.sharedledger.analytics.review
 
+import com.sephilabs.sharedledger.analytics.recurring.RecurringDetectionConstants
 import com.sephilabs.sharedledger.bank.aisuggestion.IbanRedaction
 import com.sephilabs.sharedledger.bank.rulegeneralisation.RULE_GENERALISATION_DENY_LIST
 import com.sephilabs.sharedledger.bank.rulegeneralisation.denyKey
-import java.text.Normalizer
 
 /** Channel-first classifier deciding whether a counterparty name may leave the instance in the AI payload
  *  or must be anonymized to a generic category-based label. Local views always show the real name. */
@@ -39,7 +39,6 @@ object MerchantSanitizer {
         val allowedInPayload: Boolean get() = verdict == Verdict.PASS && !sanitizedLabel.isNullOrBlank()
     }
 
-    private val NON_ASCII_MARKS = Regex("""\p{InCombiningDiacriticalMarks}+""")
     private val SPLIT_SEPARATOR = " – "
 
     // Payment-channel signals (checked BEFORE name shape; "sepa", "transfer", "transferencia" are deliberately NOT excluded).
@@ -196,6 +195,5 @@ object MerchantSanitizer {
 
     fun anonymizedLabel(kind: String, categoryCode: String): String = "$kind in $categoryCode"
 
-    fun fold(text: String): String =
-        NON_ASCII_MARKS.replace(Normalizer.normalize(text, Normalizer.Form.NFKD), "").lowercase().trim()
+    fun fold(text: String): String = RecurringDetectionConstants.foldAscii(text)
 }

@@ -11,6 +11,89 @@ export interface TransactionLinkFilter {
   categoryCode?: string | null;
   categoryGroup?: string | null;
   q?: string | null;
+  unlabelled?: boolean | null;
+}
+
+export type DecisionSubjectKind = "recurring" | "merchant";
+export type SpendingReviewDecisionType = "keep" | "compared" | "not_recurring" | "split";
+
+export interface ActiveDecisionBadge {
+  id: string;
+  decisionType: SpendingReviewDecisionType;
+  status: "active" | "snoozed" | "resurfaced" | "expired" | "inactive" | string;
+  decidedBy: string;
+  decidedAt: string;
+  amountAtDecision?: string | null;
+  snoozeUntil?: string | null;
+}
+
+export interface SpendingReviewDecision {
+  id: string;
+  subjectKey: string;
+  subjectKind: DecisionSubjectKind;
+  categoryCode: string;
+  decisionType: SpendingReviewDecisionType;
+  displayLabel: string;
+  memberKeys: string[];
+  splitGroups: string[][];
+  amountAtDecision?: string | null;
+  currentMonthlyCost?: string | null;
+  snoozeUntil?: string | null;
+  status: "active" | "snoozed" | "resurfaced" | "expired" | "inactive" | string;
+  decidedBy: string;
+  decidedAt: string;
+}
+
+export interface RecordSpendingReviewDecisionRequest {
+  subjectKind: DecisionSubjectKind;
+  categoryCode: string;
+  decisionType: SpendingReviewDecisionType;
+  displayLabel: string;
+  memberKeys?: string[];
+  splitGroups?: string[][];
+  amountAtDecision?: string | null;
+}
+
+export interface UpcomingCharge {
+  id: string;
+  subjectKey: string;
+  merchant: string;
+  payloadLabel: string;
+  anonymized: boolean;
+  categoryCode: string;
+  groupCode: string | null;
+  cadence: "quarterly" | "yearly" | string;
+  action: "cancellable" | "negotiable" | "none" | string;
+  expectedFrom: string;
+  expectedTo: string;
+  typicalAmount: string;
+  compareBeforeRenewal: boolean;
+  kept: boolean;
+  txFilter: TransactionLinkFilter;
+  explorerLink: ExplorerLink;
+}
+
+export interface SinceLastMonthItem {
+  id: string;
+  changeType:
+    | "stopped_recurring"
+    | "new_recurring"
+    | "amount_changed"
+    | "decision_resurfaced"
+    | "decision_expired"
+    | string;
+  subjectKey?: string | null;
+  merchant: string;
+  payloadLabel: string;
+  anonymized: boolean;
+  categoryCode: string;
+  previousMonthlyCost?: string | null;
+  currentMonthlyCost?: string | null;
+  deltaMonthly?: string | null;
+  cadence?: string | null;
+  title: string;
+  detail: string;
+  txFilter?: TransactionLinkFilter | null;
 }
 
 export interface ExplorerLink {
@@ -40,8 +123,11 @@ export interface SpendingReviewPeriod {
 
 export interface RecurringChargeCandidate {
   id: string;
+  subjectKey?: string;
+  memberKeys?: string[];
   merchant: string;
   mergedVariants?: string[];
+  attributedEntries?: string[];
   payloadLabel: string;
   anonymized: boolean;
   categoryCode: string;
@@ -60,12 +146,16 @@ export interface RecurringChargeCandidate {
   yoyChangeKind?: "price_increase" | "price_decrease" | "changed" | null;
   potentialMonthlySaving: string | null;
   potentialAnnualSaving: string | null;
+  lastOccurrenceDate?: string | null;
+  decision?: ActiveDecisionBadge | null;
   txFilter: TransactionLinkFilter;
   explorerLink: ExplorerLink;
 }
 
 export interface TopMerchantCandidate {
   id: string;
+  subjectKey?: string;
+  memberKeys?: string[];
   merchant: string;
   mergedVariants?: string[];
   payloadLabel: string;
@@ -80,6 +170,7 @@ export interface TopMerchantCandidate {
   monthlyEquivalent: string;
   potentialMonthlySaving: string | null;
   potentialAnnualSaving: string | null;
+  decision?: ActiveDecisionBadge | null;
   txFilter: TransactionLinkFilter;
   explorerLink: ExplorerLink;
 }
@@ -186,9 +277,11 @@ export interface UnderlyingBudgetOverrun {
 export interface SpendingReviewSkeleton {
   mode: "full" | "savings_only" | "blocked";
   summary: string | null;
+  sinceLastMonth?: SinceLastMonthItem[];
   savingsOpportunities: AnalyticsSavingsFinding[];
   whatChanged: AnalyticsChangeFinding[];
   budgetFindings: AnalyticsBudgetFinding[];
+  upcomingCharges?: UpcomingCharge[];
   savingsOmitted: number;
   whatChangedOmitted: number;
   budgetsOmitted: number;
@@ -199,6 +292,7 @@ export interface SpendingReviewSkeleton {
 export interface SpendingReviewCandidatesResponse {
   period: SpendingReviewPeriod;
   candidates: SavingsCandidates;
+  decisions?: SpendingReviewDecision[];
   skeleton?: SpendingReviewSkeleton | null;
 }
 
@@ -218,6 +312,11 @@ export interface VerifiedMetric {
 export interface AnalyticsSavingsFinding {
   findingId?: string;
   candidateId: string;
+  subjectKey?: string | null;
+  subjectKind?: DecisionSubjectKind | null;
+  memberKeys?: string[];
+  amountAtDecision?: string | null;
+  decision?: ActiveDecisionBadge | null;
   localName: string | null;
   mergedVariants?: string[];
   categoryCode: string | null;
@@ -238,6 +337,10 @@ export interface AnalyticsSavingsFinding {
 
 export interface AnalyticsChangeFinding {
   findingId?: string;
+  subjectKey?: string | null;
+  subjectKind?: DecisionSubjectKind | null;
+  memberKeys?: string[];
+  decision?: ActiveDecisionBadge | null;
   categoryCode: string | null;
   groupCode: string | null;
   localName?: string | null;
@@ -426,6 +529,38 @@ export function useDeleteAnalyticsAiRun(householdId: string) {
       await apiClient.delete(`/households/${householdId}/analytics/ai-review/${runId}`);
     },
     onSuccess: () => void qc.invalidateQueries({ queryKey: runsKey(householdId) }),
+    meta: { silentSuccess: true },
+  });
+}
+
+export function useRecordSpendingReviewDecision(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: RecordSpendingReviewDecisionRequest) =>
+      (
+        await apiClient.post<SpendingReviewDecision>(
+          `/households/${householdId}/analytics/spending-review/decisions`,
+          body,
+        )
+      ).data,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["analytics-spending-review-candidates", householdId] });
+      void qc.invalidateQueries({ queryKey: ["analytics-ai-payload-preview", householdId] });
+    },
+    meta: { silentSuccess: true },
+  });
+}
+
+export function useDeleteSpendingReviewDecision(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (decisionId: string) => {
+      await apiClient.delete(`/households/${householdId}/analytics/spending-review/decisions/${decisionId}`);
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["analytics-spending-review-candidates", householdId] });
+      void qc.invalidateQueries({ queryKey: ["analytics-ai-payload-preview", householdId] });
+    },
     meta: { silentSuccess: true },
   });
 }

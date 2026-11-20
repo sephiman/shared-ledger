@@ -90,7 +90,7 @@ class AnalyticsAiReviewService(
         val mode = if (wantsSavingsOnly) ReviewMode.SAVINGS_ONLY else ReviewMode.FULL
         val locale = normalizeLocale(by.locale)
         val categories = categoryService.listForHousehold(householdId)
-        val selected = skeletonService.selectForPeriod(householdId, period, mode, today, candidatesResp, categories)
+        val selected = skeletonService.selectForPeriod(householdId, period, mode, today, candidatesResp, categories, locale)
         val built = AnalyticsAiPayloadBuilder.build(
             review = selected,
             locale = locale,
@@ -230,7 +230,7 @@ class AnalyticsAiReviewService(
         val mode = if (modeParam.equals("savings_only", ignoreCase = true)) ReviewMode.SAVINGS_ONLY else ReviewMode.FULL
         val normLocale = normalizeLocale(locale)
         val categories = categoryService.listForHousehold(householdId)
-        val selected = skeletonService.selectForPeriod(householdId, period, mode, today, candidatesResp, categories)
+        val selected = skeletonService.selectForPeriod(householdId, period, mode, today, candidatesResp, categories, locale)
         val built = AnalyticsAiPayloadBuilder.build(
             review = selected,
             locale = normLocale,
@@ -261,7 +261,7 @@ class AnalyticsAiReviewService(
         val period = savingsCandidates.resolvePeriod(year, month, today)
         val candidatesResp = savingsCandidates.candidates(householdId, period.year, period.monthValue)
         val categories = categoryService.listForHousehold(householdId)
-        val selected = skeletonService.selectForPeriod(householdId, period, mode, today, candidatesResp, categories)
+        val selected = skeletonService.selectForPeriod(householdId, period, mode, today, candidatesResp, categories, locale)
         return AnalyticsAiPayloadBuilder.build(
             review = selected,
             locale = normalizeLocale(locale),
@@ -560,6 +560,7 @@ class AnalyticsAiReviewService(
             categoryCode = node.path("categoryCode").takeIf { it.isString }?.asString()?.ifBlank { null },
             categoryGroup = node.path("categoryGroup").takeIf { it.isString }?.asString()?.ifBlank { null },
             q = node.path("q").takeIf { it.isString }?.asString()?.ifBlank { null },
+            unlabelled = node.path("unlabelled").takeIf { it.isBoolean }?.asBoolean(),
         )
     }
 

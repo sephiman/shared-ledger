@@ -31,6 +31,7 @@ class SpendingReviewPeriodTest {
             categoryService = org.mockito.Mockito.mock(),
             recurringTemplates = org.mockito.Mockito.mock(),
             dataQueries = org.mockito.Mockito.mock(),
+            decisionService = org.mockito.Mockito.mock(),
             cache = org.mockito.Mockito.mock(),
             clock = java.time.Clock.systemDefaultZone(),
         )

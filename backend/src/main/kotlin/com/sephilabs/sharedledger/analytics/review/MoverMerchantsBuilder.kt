@@ -1,5 +1,7 @@
 package com.sephilabs.sharedledger.analytics.review
 
+import com.sephilabs.sharedledger.analytics.recurring.ExpenseRecord
+import com.sephilabs.sharedledger.analytics.recurring.PayeeVariantClusterer
 import com.sephilabs.sharedledger.common.Money
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -40,6 +42,7 @@ object MoverMerchantsBuilder {
         recurringKeysByCategory: Map<String, Set<String>>,
         memberTokens: Set<String>,
         maxMerchants: Int = SpendingReviewConstants.MAX_MOVER_MERCHANTS,
+        splitRules: List<PayeeVariantClusterer.SplitRule> = emptyList(),
     ): Map<String, MoverCategoryBreakdown> {
         if (increaseCategoryCodes.isEmpty()) return emptyMap()
         val result = LinkedHashMap<String, MoverCategoryBreakdown>()
@@ -53,7 +56,7 @@ object MoverMerchantsBuilder {
             if (periodTotal.signum() <= 0) continue
 
             val recKeys = recurringKeysByCategory[categoryCode].orEmpty()
-            val clusters12m = PayeeVariantClusterer.clusterByCategory(cat12m)
+            val clusters12m = PayeeVariantClusterer.clusterByCategory(cat12m, splitRules)
 
             data class CandidateDriver(
                 val label: String,

@@ -1,5 +1,8 @@
 package com.sephilabs.sharedledger.analytics.review
 
+import com.sephilabs.sharedledger.analytics.recurring.DetectedCadence
+import com.sephilabs.sharedledger.analytics.recurring.RecurringAction
+import com.sephilabs.sharedledger.analytics.recurring.YoyChangeKind
 import tools.jackson.databind.JsonNode
 import java.math.BigDecimal
 import java.math.RoundingMode

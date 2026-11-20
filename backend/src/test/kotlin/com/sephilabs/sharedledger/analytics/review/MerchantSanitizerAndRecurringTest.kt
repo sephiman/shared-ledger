@@ -1,5 +1,11 @@
 package com.sephilabs.sharedledger.analytics.review
 
+import com.sephilabs.sharedledger.analytics.recurring.DetectedCadence
+import com.sephilabs.sharedledger.analytics.recurring.ExpenseRecord
+import com.sephilabs.sharedledger.analytics.recurring.RecurringAction
+import com.sephilabs.sharedledger.analytics.recurring.RecurringChargeDetector
+import com.sephilabs.sharedledger.analytics.recurring.RecurringSource
+import com.sephilabs.sharedledger.analytics.recurring.YoyChangeKind
 import com.sephilabs.sharedledger.recurring.Cadence
 import com.sephilabs.sharedledger.recurring.RecurringTemplate
 import com.sephilabs.sharedledger.transaction.Direction

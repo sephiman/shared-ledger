@@ -135,6 +135,43 @@ object AnalyticsAiPayloadBuilder {
                 }
             }
         }
+        // 5. Sanitized upcoming non-monthly charges and since-last-month changes (NEVER local merchant or user emails).
+        if (review.upcomingCharges.isNotEmpty()) {
+            root.putArray("upcomingCharges").apply {
+                for (u in review.upcomingCharges) {
+                    addObject().apply {
+                        put("subject", u.payloadLabel)
+                        if (u.anonymized) put("anonymized", true)
+                        put("categoryCode", u.categoryCode)
+                        put("categoryName", categoryLabel(u.categoryCode))
+                        put("cadence", u.cadence.name)
+                        put("action", u.action.name)
+                        put("expectedFrom", u.expectedFrom.toString())
+                        put("expectedTo", u.expectedTo.toString())
+                        putNumber("typicalAmount", u.typicalAmount)
+                        if (u.compareBeforeRenewal) put("compareBeforeRenewal", true)
+                        if (u.kept) put("kept", true)
+                    }
+                }
+            }
+        }
+        if (review.sinceLastMonth.isNotEmpty()) {
+            root.putArray("sinceLastMonth").apply {
+                for (s in review.sinceLastMonth) {
+                    addObject().apply {
+                        put("changeType", s.changeType)
+                        put("subject", s.payloadLabel)
+                        if (s.anonymized) put("anonymized", true)
+                        put("categoryCode", s.categoryCode)
+                        put("categoryName", categoryLabel(s.categoryCode))
+                        s.cadence?.let { put("cadence", it.name) }
+                        s.previousMonthlyCost?.let { putNumber("previousMonthlyCost", it) }
+                        s.currentMonthlyCost?.let { putNumber("currentMonthlyCost", it) }
+                        s.deltaMonthly?.let { putNumber("deltaMonthly", it) }
+                    }
+                }
+            }
+        }
 
         val json = AiJsonUtils.canonicalJson(root)
         val localLabelsJson = buildLocalMetaJson(review)

@@ -8,6 +8,10 @@ import com.sephilabs.sharedledger.analytics.TrailingResponse
 import com.sephilabs.sharedledger.analytics.TrailingSummary
 import com.sephilabs.sharedledger.analytics.question.AdjustmentKind
 import com.sephilabs.sharedledger.analytics.question.ScopeType
+import com.sephilabs.sharedledger.analytics.recurring.DetectedCadence
+import com.sephilabs.sharedledger.analytics.recurring.RecurringAction
+import com.sephilabs.sharedledger.analytics.recurring.RecurringSource
+import com.sephilabs.sharedledger.analytics.recurring.YoyChangeKind
 import com.sephilabs.sharedledger.budget.MonthSummaryResponse
 import com.sephilabs.sharedledger.budget.MonthSummaryRow
 import com.sephilabs.sharedledger.catalog.CategoryView
@@ -130,7 +134,7 @@ class AnalyticsAiReviewVerifierTest {
                     monthlyMean = BigDecimal("223.81"), monthlyMedian = BigDecimal("88.44"),
                     trimToMedianMonthly = BigDecimal("135.37"), trimToMedianAnnual = BigDecimal("1624.44"),
                     potentialMonthlySaving = BigDecimal("135.37"), potentialAnnualSaving = BigDecimal("1624.44"),
-                    nonZeroMonths = 11, peakMonthAmount = BigDecimal("1386.45"),
+                    nonZeroMonths = 11, peakMonthAmount = BigDecimal("520.00"),
                     txFilter = link("outings.restaurants", null), explorerLink = expLink("outings.restaurants"),
                 ),
             ),
@@ -304,7 +308,7 @@ class AnalyticsAiReviewVerifierTest {
                 { "id": "sav_fee_financial_fees", "title": "Account fees", "detail": "Fees added up to {f1} across {f3} charges ({f2} monthly)." },
                 { "id": "sav_rec_odido", "title": "Odido tariff rose", "detail": "Odido went up {f3} from {f2} to {f1} monthly ({f4} yearly); worth comparing." },
                 { "id": "sav_merch_frost", "title": "Hobbies spend at Frosthaven", "detail": "Frosthaven took {f1} across {f2} purchases ({f3} monthly, {f4} of the category)." },
-                { "id": "sav_habitual_outings_restaurants", "title": "Restaurants above typical month", "detail": "Restaurants averaged {f1} across {f5} active months vs a typical {f2}, leaving {f3} monthly ({f4} yearly), with {f7} from a single {f6} peak month." },
+                { "id": "sav_habitual_outings_restaurants", "title": "Restaurants above typical month", "detail": "Restaurants averaged {f1} across {f5} active months vs a typical {f2}, leaving {f3} monthly ({f4} yearly)." },
                 { "id": "chg_inc_outings_restaurants", "title": "Restaurants jumped on one purchase", "detail": "Restaurants hit {f1} ({f2} above the six-month average of {f3}) across {f4} purchases, led by {f7} unlabelled purchase of {f5} ({f6})." },
                 { "id": "chg_inc_groceries_groceries", "title": "Groceries up year on year", "detail": "Groceries reached {f1} ({f2} above last year's {f3}) across {f4} purchases, with {f7} at AH totalling {f5} ({f6})." },
                 { "id": "chg_rec_tax", "title": "Tax bill increased", "detail": "BelastingDienst rose {f3} from {f2} to {f1} a month ({f4} yearly)." },
@@ -1003,31 +1007,20 @@ class AnalyticsAiReviewVerifierTest {
         assertThat(sumEs).contains("en línea con un mes habitual de 4.043,64 €")
         assertThat(forbiddenEsRegister.containsMatchIn(sumEs)).isFalse()
 
-        // 3. Peak-month outlier attribution on habitual_uneven (Restaurants & bars: €1,386.45 peak is 79.9% of 12m excess)
-        val restHab = selectedSingle.savings.first { it.kind == FindingKind.habitual_uneven }
-        assertThat(restHab.context["peakDominated"]).isEqualTo("true")
-        assertThat(restHab.figures.first { it.key == "f6" }.value).isEqualByComparingTo(BigDecimal("1386.45"))
-        assertThat(restHab.figures.first { it.key == "f7" }.value).isEqualByComparingTo(BigDecimal("79.91"))
-        val habEn = SpendingReviewRenderer.substitute(
-            SpendingReviewRenderer.findingTemplate(restHab, "en", catLabelsEn).second,
-            restHab.figures, "EUR", "en",
+        // 3. Option A: dominant-peak habitual category (Restaurants & bars: €1,386.45 peak is 79.9% >= 50% of 12m excess)
+        //    is excluded from Savings so a single spike month is never sold as a repeatable monthly cut.
+        val dominantPeakInputs = base.copy(
+            candidatesResponse = base.candidatesResponse.copy(
+                candidates = base.candidatesResponse.candidates.copy(
+                    lumpyCategories = listOf(
+                        base.candidatesResponse.candidates.lumpyCategories.first().copy(peakMonthAmount = BigDecimal("1386.45")),
+                    ),
+                ),
+            ),
         )
-        val habEs = SpendingReviewRenderer.substitute(
-            SpendingReviewRenderer.findingTemplate(restHab, "es", catLabelsEs).second,
-            restHab.figures, "EUR", "es",
-        )
-        assertThat(habEn).contains("79.9%").contains("€1,386.45 peak month")
-        assertThat(habEs).contains("79,9 %").contains("pico mensual de 1.386,45 €")
-        assertThat(forbiddenEsRegister.containsMatchIn(habEs)).isFalse()
-
-        // Model omitting {f6} on a peak-dominated habitual finding falls back to the deterministic template
-        val omitPeakModel = mapper.readTree(
-            """{"summary":null,"findings":[{"id":"sav_habitual_outings_restaurants","title":"Restaurants above typical","detail":"Restaurants averaged {f1} across {f5} months vs {f2}, leaving {f3} monthly ({f4} yearly)."}]}""",
-        )
-        val renderedHab = SpendingReviewRenderer.renderWithModel(selectedSingle, omitPeakModel, "en", catLabelsEn)
-            .findings.first { it.findingId == "sav_habitual_outings_restaurants" }
-        assertThat(renderedHab.usedModel).isFalse()
-        assertThat(renderedHab.fallbackReason).isEqualTo("missing_required_placeholder:f6")
-        assertThat(renderedHab.detail).contains("€1,386.45")
+        val selectedDominant = SpendingReviewSelector.select(dominantPeakInputs)
+        assertThat(selectedDominant.savings.none { it.categoryCode == "outings.restaurants" }).isTrue()
+        // A genuinely multi-month uneven category (peak < 50% of 12m excess) still enters Savings.
+        assertThat(selectedSingle.savings.any { it.kind == FindingKind.habitual_uneven && it.categoryCode == "outings.restaurants" }).isTrue()
     }
 }

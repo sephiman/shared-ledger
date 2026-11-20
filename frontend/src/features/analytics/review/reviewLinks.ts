@@ -16,6 +16,7 @@ export function transactionsUrlFromFilter(filter: TransactionLinkFilter): string
     categoryCode: filter.categoryCode ?? undefined,
     categoryGroup: filter.categoryGroup ?? undefined,
     q: filter.q ?? undefined,
+    unlabelled: filter.unlabelled ? true : undefined,
   });
   const s = params.toString();
   return s ? `/transactions?${s}` : "/transactions";

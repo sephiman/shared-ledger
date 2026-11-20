@@ -4,6 +4,10 @@ import com.fasterxml.jackson.annotation.JsonFormat
 import com.sephilabs.sharedledger.ai.AiCitationDto
 import com.sephilabs.sharedledger.ai.AiRunStatus
 import com.sephilabs.sharedledger.analytics.question.ProjectionScenarioDto
+import com.sephilabs.sharedledger.analytics.recurring.DetectedCadence
+import com.sephilabs.sharedledger.analytics.recurring.RecurringAction
+import com.sephilabs.sharedledger.analytics.recurring.RecurringSource
+import com.sephilabs.sharedledger.analytics.recurring.YoyChangeKind
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
@@ -18,6 +22,7 @@ data class TransactionLinkFilterDto(
     val categoryCode: String? = null,
     val categoryGroup: String? = null,
     val q: String? = null,
+    val unlabelled: Boolean? = null,
 )
 
 data class ExplorerLinkDto(
@@ -47,10 +52,86 @@ data class SpendingReviewPeriodDto(
     val reviewBlockedReason: String? = null, // "empty_or_stale" | "pace_too_early" | null
 )
 
+data class ActiveDecisionBadgeDto(
+    val id: UUID,
+    val decisionType: SpendingReviewDecisionType,
+    val status: String, // "active" | "snoozed" | "resurfaced" | "expired" | "inactive"
+    val decidedBy: String,
+    val decidedAt: Instant,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val amountAtDecision: BigDecimal? = null,
+    val snoozeUntil: LocalDate? = null,
+)
+
+data class SpendingReviewDecisionDto(
+    val id: UUID,
+    val subjectKey: String,
+    val subjectKind: DecisionSubjectKind,
+    val categoryCode: String,
+    val decisionType: SpendingReviewDecisionType,
+    val displayLabel: String,
+    val memberKeys: List<String> = emptyList(),
+    val splitGroups: List<List<String>> = emptyList(),
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val amountAtDecision: BigDecimal? = null,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val currentMonthlyCost: BigDecimal? = null,
+    val snoozeUntil: LocalDate? = null,
+    val status: String, // "active" | "snoozed" | "resurfaced" | "expired" | "inactive"
+    val decidedBy: String,
+    val decidedAt: Instant,
+)
+
+data class RecordSpendingReviewDecisionRequest(
+    val subjectKind: DecisionSubjectKind,
+    val categoryCode: String,
+    val decisionType: SpendingReviewDecisionType,
+    val displayLabel: String,
+    val memberKeys: List<String> = emptyList(),
+    val splitGroups: List<List<String>> = emptyList(),
+    val amountAtDecision: BigDecimal? = null,
+)
+
+data class UpcomingChargeDto(
+    val id: String,
+    val subjectKey: String,
+    val merchant: String, // real local name (UI only)
+    val payloadLabel: String, // sanitized name or anonymized label
+    val anonymized: Boolean,
+    val categoryCode: String,
+    val groupCode: String?,
+    val cadence: DetectedCadence,
+    val action: RecurringAction,
+    val expectedFrom: LocalDate,
+    val expectedTo: LocalDate,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val typicalAmount: BigDecimal,
+    val compareBeforeRenewal: Boolean,
+    val kept: Boolean,
+    val txFilter: TransactionLinkFilterDto,
+    val explorerLink: ExplorerLinkDto,
+)
+
+data class SinceLastMonthItemDto(
+    val id: String,
+    val changeType: String, // "stopped_recurring" | "new_recurring" | "amount_changed" | "decision_resurfaced" | "decision_expired"
+    val subjectKey: String?,
+    val merchant: String, // real local name (UI only)
+    val payloadLabel: String, // sanitized name or anonymized label
+    val anonymized: Boolean,
+    val categoryCode: String,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val previousMonthlyCost: BigDecimal? = null,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val currentMonthlyCost: BigDecimal? = null,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val deltaMonthly: BigDecimal? = null,
+    val cadence: DetectedCadence? = null,
+    val title: String,
+    val detail: String,
+    val txFilter: TransactionLinkFilterDto? = null,
+)
+
 data class RecurringChargeCandidateDto(
     val id: String,
+    val subjectKey: String = "",
+    val memberKeys: List<String> = emptyList(),
     val merchant: String, // real local name (UI only)
     val mergedVariants: List<String> = emptyList(), // local-only merged payee variants (never sent to AI)
+    val attributedEntries: List<String> = emptyList(), // local-only gap-month same-amount entries (never sent to AI)
     val payloadLabel: String, // sanitized name or anonymized category label
     val anonymized: Boolean,
     val categoryCode: String,
@@ -69,12 +150,16 @@ data class RecurringChargeCandidateDto(
     val yoyChangeKind: YoyChangeKind? = null,
     @JsonFormat(shape = JsonFormat.Shape.STRING) val potentialMonthlySaving: BigDecimal?,
     @JsonFormat(shape = JsonFormat.Shape.STRING) val potentialAnnualSaving: BigDecimal?,
+    val lastOccurrenceDate: LocalDate? = null,
+    val decision: ActiveDecisionBadgeDto? = null,
     val txFilter: TransactionLinkFilterDto,
     val explorerLink: ExplorerLinkDto,
 )
 
 data class TopMerchantCandidateDto(
     val id: String,
+    val subjectKey: String = "",
+    val memberKeys: List<String> = emptyList(),
     val merchant: String, // real local name (UI only)
     val mergedVariants: List<String> = emptyList(), // local-only merged payee variants (never sent to AI)
     val payloadLabel: String,
@@ -89,6 +174,7 @@ data class TopMerchantCandidateDto(
     @JsonFormat(shape = JsonFormat.Shape.STRING) val monthlyEquivalent: BigDecimal,
     @JsonFormat(shape = JsonFormat.Shape.STRING) val potentialMonthlySaving: BigDecimal?,
     @JsonFormat(shape = JsonFormat.Shape.STRING) val potentialAnnualSaving: BigDecimal?,
+    val decision: ActiveDecisionBadgeDto? = null,
     val txFilter: TransactionLinkFilterDto,
     val explorerLink: ExplorerLinkDto,
 )
@@ -197,9 +283,11 @@ data class UnderlyingBudgetOverrunDto(
 data class SpendingReviewSkeletonDto(
     val mode: String, // "full" | "savings_only" | "blocked"
     val summary: String?,
+    val sinceLastMonth: List<SinceLastMonthItemDto> = emptyList(),
     val savingsOpportunities: List<AnalyticsSavingsFindingDto>,
     val whatChanged: List<AnalyticsChangeFindingDto>,
     val budgetFindings: List<AnalyticsBudgetFindingDto>,
+    val upcomingCharges: List<UpcomingChargeDto> = emptyList(),
     val savingsOmitted: Int = 0,
     val whatChangedOmitted: Int = 0,
     val budgetsOmitted: Int = 0,
@@ -210,6 +298,7 @@ data class SpendingReviewSkeletonDto(
 data class SpendingReviewCandidatesResponse(
     val period: SpendingReviewPeriodDto,
     val candidates: SavingsCandidatesDto,
+    val decisions: List<SpendingReviewDecisionDto> = emptyList(),
     val skeleton: SpendingReviewSkeletonDto? = null,
 )
 
@@ -245,6 +334,11 @@ data class VerifiedMetricDto(
 data class AnalyticsSavingsFindingDto(
     val findingId: String = "",
     val candidateId: String,
+    val subjectKey: String? = null,
+    val subjectKind: DecisionSubjectKind? = null,
+    val memberKeys: List<String> = emptyList(),
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val amountAtDecision: BigDecimal? = null,
+    val decision: ActiveDecisionBadgeDto? = null,
     val localName: String?,
     val mergedVariants: List<String> = emptyList(),
     val categoryCode: String?,
@@ -265,6 +359,10 @@ data class AnalyticsSavingsFindingDto(
 
 data class AnalyticsChangeFindingDto(
     val findingId: String = "",
+    val subjectKey: String? = null,
+    val subjectKind: DecisionSubjectKind? = null,
+    val memberKeys: List<String> = emptyList(),
+    val decision: ActiveDecisionBadgeDto? = null,
     val categoryCode: String?,
     val groupCode: String?,
     val localName: String? = null,

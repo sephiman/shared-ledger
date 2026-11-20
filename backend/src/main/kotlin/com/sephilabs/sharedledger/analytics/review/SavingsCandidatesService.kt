@@ -2,6 +2,10 @@ package com.sephilabs.sharedledger.analytics.review
 
 import com.sephilabs.sharedledger.ai.SpendingStaleness
 import com.sephilabs.sharedledger.analytics.MonthWindow
+import com.sephilabs.sharedledger.analytics.recurring.ExpenseRecord
+import com.sephilabs.sharedledger.analytics.recurring.PayeeVariantClusterer
+import com.sephilabs.sharedledger.analytics.recurring.RecurringAction
+import com.sephilabs.sharedledger.analytics.recurring.RecurringChargeDetector
 import com.sephilabs.sharedledger.catalog.CategoryService
 import com.sephilabs.sharedledger.common.Money
 import com.sephilabs.sharedledger.common.errors.AppException
@@ -25,6 +29,7 @@ class SavingsCandidatesService(
     private val categoryService: CategoryService,
     private val recurringTemplates: RecurringTemplateRepository,
     private val dataQueries: SpendingReviewDataQueries,
+    private val decisionService: SpendingReviewDecisionService,
     private val cache: SpendingReviewCache,
     private val clock: Clock,
 ) {
@@ -35,10 +40,16 @@ class SavingsCandidatesService(
     fun candidates(householdId: UUID, year: Int? = null, month: Int? = null): SpendingReviewCandidatesResponse {
         val today = LocalDate.now(clock)
         val period = resolvePeriod(year, month, today)
-        return cache.getOrCompute(householdId, period.year, period.monthValue, today) {
-            compute(householdId, period, today)
-        }
+        return computeForAsOf(householdId, period, today)
     }
+
+    /** Computes (with fingerprint cache) savings candidates for [period] evaluated strictly as of [asOfDate].
+     *  Used both for the live review and for clock-equivalent recomputation of the previous month. */
+    @Transactional(readOnly = true)
+    fun computeForAsOf(householdId: UUID, period: YearMonth, asOfDate: LocalDate): SpendingReviewCandidatesResponse =
+        cache.getOrCompute(householdId, period.year, period.monthValue, asOfDate) {
+            compute(householdId, period, asOfDate)
+        }
 
     /** Resolves requested (year, month) or defaults to the last complete month. Rejects invalid or future months. */
     fun resolvePeriod(year: Int?, month: Int?, today: LocalDate = LocalDate.now(clock)): YearMonth {
@@ -124,15 +135,60 @@ class SavingsCandidatesService(
         val activeExpenseTemplates = recurringTemplates.findAllByHouseholdIdAndActiveTrue(householdId)
             .filter { it.direction == Direction.expense }
 
-        // 1. Recurring charges (templates + detected over 24m).
+        val decodedDecisions = decisionService.listDecoded(householdId)
+        val splitRules = decodedDecisions.mapNotNull { it.toSplitRule() }
+        val notRecurringDecisions = decodedDecisions.filter { it.decisionType == SpendingReviewDecisionType.not_recurring }
+        val decisionEmails = dataQueries.userEmails(decodedDecisions.map { it.decidedByUserId })
+
+        val observedKeysByCategory: Map<String, Set<String>> = nonRefund24
+            .mapNotNull { r -> r.rawLabel?.let(PayeeVariantClusterer::canonicalKey)?.takeIf { it.isNotBlank() }?.let { r.categoryCode to it } }
+            .groupBy({ it.first }, { it.second })
+            .mapValues { (_, list) -> list.toSet() }
+
+        fun resolveBadge(
+            kind: DecisionSubjectKind,
+            categoryCode: String,
+            memberKeys: Set<String>,
+            currentMonthlyCost: BigDecimal,
+        ): ActiveDecisionBadgeDto? {
+            val match = decodedDecisions.firstOrNull { d ->
+                (d.decisionType == SpendingReviewDecisionType.keep || d.decisionType == SpendingReviewDecisionType.compared) &&
+                    d.matches(kind, categoryCode, memberKeys)
+            } ?: return null
+            val status = when {
+                match.decisionType == SpendingReviewDecisionType.keep -> "active"
+                match.isComparedExpired(windowTo) -> "expired"
+                match.isComparedResurfaced(currentMonthlyCost) -> "resurfaced"
+                else -> "snoozed"
+            }
+            return ActiveDecisionBadgeDto(
+                id = match.id,
+                decisionType = match.decisionType,
+                status = status,
+                decidedBy = decisionEmails[match.decidedByUserId].orEmpty(),
+                decidedAt = match.decidedAt,
+                amountAtDecision = match.amountAtDecision,
+                snoozeUntil = match.snoozeUntil,
+            )
+        }
+
+        // 1. Recurring charges (templates + detected over 24m, honouring split and not_recurring decisions).
         val detectedRecurring = RecurringChargeDetector.detect(
             history24m = nonRefund24,
             activeTemplates = activeExpenseTemplates,
             categoryMeta = catMeta,
             trailing12Start = windowFrom,
+            splitRules = splitRules,
+            excludedPayeeMatcher = { catCode, mKeys ->
+                notRecurringDecisions.any { d -> d.matches(DecisionSubjectKind.recurring, catCode, mKeys) }
+            },
+            householdMinDate = bounds.minDate,
+            twoYearWindowEnd = period,
         )
         val recurringDtos = detectedRecurring.mapIndexed { idx, r ->
             val id = "rec_${idx + 1}"
+            val subjectKey = PayeeVariantClusterer.stableSubjectKey(DecisionSubjectKind.recurring.name, r.categoryCode, r.memberKeys)
+            val badge = resolveBadge(DecisionSubjectKind.recurring, r.categoryCode, r.memberKeys, r.monthlyCost)
             val cls = MerchantSanitizer.classifyForPayload(
                 localLabel = r.merchant,
                 bankDescription = r.bankDescription,
@@ -141,13 +197,17 @@ class SavingsCandidatesService(
                 occurrences = r.occurrences,
             )
             val payloadLabel = if (cls.allowedInPayload) cls.sanitizedLabel!! else MerchantSanitizer.anonymizedLabel("Recurring charge", r.categoryCode)
-            val canCut = r.action == RecurringAction.cancellable || isFeeCategory(r.categoryCode, r.groupCode)
+            val isKept = badge?.decisionType == SpendingReviewDecisionType.keep
+            val canCut = !isKept && (r.action == RecurringAction.cancellable || isFeeCategory(r.categoryCode, r.groupCode))
             val potMonthly = if (canCut) r.monthlyCost else null
             val potAnnual = if (canCut) r.annualCost else null
             RecurringChargeCandidateDto(
                 id = id,
+                subjectKey = subjectKey,
+                memberKeys = r.memberKeys.sorted(),
                 merchant = r.merchant,
                 mergedVariants = r.mergedVariants,
+                attributedEntries = r.attributedEntries,
                 payloadLabel = payloadLabel,
                 anonymized = !cls.allowedInPayload,
                 categoryCode = r.categoryCode,
@@ -166,6 +226,8 @@ class SavingsCandidatesService(
                 yoyChangeKind = r.yoyChangeKind,
                 potentialMonthlySaving = potMonthly,
                 potentialAnnualSaving = potAnnual,
+                lastOccurrenceDate = r.lastOccurrenceDate,
+                decision = badge,
                 txFilter = TransactionLinkFilterDto(
                     from = windowFrom,
                     to = windowTo,
@@ -212,7 +274,7 @@ class SavingsCandidatesService(
             .mapValues { (_, list) -> list.fold(BigDecimal.ZERO) { acc, r -> acc + r.amount } }
         val denomMonths = monthsAvailable.coerceAtLeast(1).toBigDecimal()
 
-        val merchantClusters = PayeeVariantClusterer.clusterByCategory(nonEssential12)
+        val merchantClusters = PayeeVariantClusterer.clusterByCategory(nonEssential12, splitRules)
             .sortedByDescending { c -> c.records.fold(BigDecimal.ZERO) { acc, r -> acc + r.amount } }
 
         val qualifiedMerchants = mutableListOf<TopMerchantCandidateDto>()
@@ -251,10 +313,14 @@ class SavingsCandidatesService(
             )
             val payloadLabel = if (cls.allowedInPayload) cls.sanitizedLabel!! else MerchantSanitizer.anonymizedLabel("Frequent counterparty", catCode)
             val avgTicket = total.divide(BigDecimal.valueOf(purchases.toLong()), 2, RoundingMode.HALF_EVEN)
-            val monthlyEq = total.divide(denomMonths, 2, RoundingMode.HALF_EVEN)
+            val monthlyEq = Money.normalize(total.divide(denomMonths, 2, RoundingMode.HALF_EVEN))
+            val subjectKey = PayeeVariantClusterer.stableSubjectKey(DecisionSubjectKind.merchant.name, catCode, cluster.memberKeys)
+            val badge = resolveBadge(DecisionSubjectKind.merchant, catCode, cluster.memberKeys, monthlyEq)
 
             qualifiedMerchants += TopMerchantCandidateDto(
                 id = "merch_${qualifiedMerchants.size + 1}",
+                subjectKey = subjectKey,
+                memberKeys = cluster.memberKeys.sorted(),
                 merchant = label,
                 mergedVariants = cluster.mergedVariants,
                 payloadLabel = payloadLabel,
@@ -266,9 +332,10 @@ class SavingsCandidatesService(
                 purchases = purchases,
                 averageTicket = Money.normalize(avgTicket),
                 shareOfCategoryPct = sharePct,
-                monthlyEquivalent = Money.normalize(monthlyEq),
+                monthlyEquivalent = monthlyEq,
                 potentialMonthlySaving = null,
                 potentialAnnualSaving = null,
+                decision = badge,
                 txFilter = TransactionLinkFilterDto(
                     from = windowFrom,
                     to = windowTo,
@@ -451,6 +518,14 @@ class SavingsCandidatesService(
             reviewBlockedReason = reviewBlockedReason,
         )
 
+        val evaluatedDecisions = decisionService.evaluateAgainst(
+            decisions = decodedDecisions,
+            recurring = recurringDtos,
+            merchants = qualifiedMerchants,
+            observedKeysByCategory = observedKeysByCategory,
+            asOf = windowTo,
+        )
+
         return SpendingReviewCandidatesResponse(
             period = periodDto,
             candidates = SavingsCandidatesDto(
@@ -479,6 +554,7 @@ class SavingsCandidatesService(
                 ),
                 cutCombinations = cutCombinations,
             ),
+            decisions = evaluatedDecisions,
         )
     }
 
@@ -525,6 +601,8 @@ class SavingsCandidatesService(
             (listOf(r.merchant) + r.mergedVariants).map(PayeeVariantClusterer::canonicalKey)
         }.mapValues { (_, lists) -> lists.flatten().toSet() }
 
+        val splitRules = decisionService.listDecoded(householdId).mapNotNull { it.toSplitRule() }
+
         return MoverMerchantsBuilder.build(
             nonRefund12m = nonRefund12,
             periodStart = periodStart,
@@ -532,6 +610,7 @@ class SavingsCandidatesService(
             increaseCategoryCodes = increaseCategoryCodes,
             recurringKeysByCategory = recKeysByCat,
             memberTokens = memberTokens,
+            splitRules = splitRules,
         )
     }
 
