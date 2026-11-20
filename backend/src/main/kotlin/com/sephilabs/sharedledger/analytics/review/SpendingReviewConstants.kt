@@ -83,6 +83,7 @@ object SpendingReviewConstants {
     val LUMPY_MIN_MEAN_MEDIAN_RATIO: BigDecimal = BigDecimal("1.25")
     const val LUMPY_MIN_NON_ZERO_MONTHS: Int = 2
     const val LUMPY_MIN_ACTIVE_MONTHS: Int = 6
+    val HABITUAL_PEAK_OUTLIER_MIN_SHARE: BigDecimal = BigDecimal("0.50")
 
     val CUT_COMBINATION_TARGETS_EUR: List<Int> = listOf(100, 200, 300, 500)
 
@@ -98,11 +99,15 @@ object SpendingReviewConstants {
     const val MAX_SAVINGS_HABITUAL: Int = 2
 
     const val MAX_CHANGED_FINDINGS: Int = 6
+    const val MAX_CHANGED_INCOME: Int = 1
     const val MAX_CHANGED_INCREASES: Int = 3
     const val MAX_CHANGED_NONE_PRICES: Int = 2
     const val MAX_CHANGED_ONE_OFFS: Int = 2
 
     const val MAX_BUDGET_FINDINGS: Int = 4
+    val BUDGET_UNDERESTIMATED_MIN_RATIO: BigDecimal = BigDecimal("1.25")
+    val BUDGET_CONCENTRATED_MEDIAN_MAX_RATIO: BigDecimal = BigDecimal("0.10")
+    val BUDGET_CONCENTRATED_TOP_SHARE_MIN: BigDecimal = BigDecimal("0.75")
 
     const val MAX_MOVERS_PER_LIST: Int = 3
     const val MAX_MOVER_MERCHANTS: Int = 3

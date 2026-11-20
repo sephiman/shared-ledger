@@ -1085,6 +1085,7 @@
       "simulate_money_flow": "Simulate in Money flow",
       "see_transactions": "See transactions",
       "see_explorer": "See in Explorer",
+      "adjust_budget": "Adjust budget",
       "severity_critical": "Critical",
       "severity_warning": "Watch",
       "severity_opportunity": "Opportunity",

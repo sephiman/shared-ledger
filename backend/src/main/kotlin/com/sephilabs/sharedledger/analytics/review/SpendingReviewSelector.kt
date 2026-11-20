@@ -29,6 +29,7 @@ enum class FindingKind {
     negotiable_price_increase,
     top_merchant,
     habitual_uneven,
+    income_change,
     period_increase,
     non_actionable_price_change,
     zero_median_one_off,
@@ -62,6 +63,8 @@ data class SelectedSummaryFacts(
     val savingsDirection: String, // "below" | "above" | "at"
     val diagnosis: SummaryDiagnosis,
     val diagnosisDetail: String,
+    val incomeVsMedianContext: String = "in_line", // "normal_month_mean_skewed" | "below_typical" | "above_typical" | "in_line"
+    val expensesVsMedianContext: String = "in_line", // "normal_month_mean_skewed" | "below_typical" | "above_typical" | "in_line"
     val hasDeficit: Boolean,
     val hasProjectedDeficit: Boolean,
     val figures: List<FigureSlot>,
@@ -112,6 +115,23 @@ data class SelectedReview(
     val allFindings: List<SelectedFinding> get() = savings + whatChanged + budgets
 }
 
+data class IncomeCategoryMover(
+    val categoryCode: String,
+    val groupCode: String?,
+    val periodAmount: BigDecimal,
+    val avg12m: BigDecimal,
+    val median12m: BigDecimal,
+)
+
+data class BudgetHistoryStats(
+    val trailing6mAvg: BigDecimal,
+    val median12m: BigDecimal,
+    val total12m: BigDecimal,
+    val exceededMonths12m: Int,
+    val exceededMonthsTotal12m: BigDecimal,
+    val windowMonths: Int,
+)
+
 /** Deterministic finding selection and ordering for the Spending review.
  *  Given identical inputs, always produces the exact same findings, order, figures, and simulation scenarios. */
 object SpendingReviewSelector {
@@ -128,6 +148,8 @@ object SpendingReviewSelector {
         val budgetSummary: MonthSummaryResponse?,
         val paceProjection: MoneyFlowProjectionResponse?,
         val categories: List<CategoryView>,
+        val incomeMovers: List<IncomeCategoryMover> = emptyList(),
+        val budgetHistoryStats: Map<String, BudgetHistoryStats> = emptyMap(),
     )
 
     fun select(inputs: Inputs): SelectedReview {
@@ -335,6 +357,30 @@ object SpendingReviewSelector {
 
         // Priority 4: habitual-but-uneven categories (median > 0 and active >= LUMPY_MIN_ACTIVE_MONTHS).
         for (l in allHabitual.take(minOf(SpendingReviewConstants.MAX_SAVINGS_HABITUAL, savingsRoom()))) {
+            val peakAboveMed = (l.peakMonthAmount - l.monthlyMedian).max(BigDecimal.ZERO)
+            val totalExcess = l.trimToMedianMonthly.multiply(BigDecimal.valueOf(period.monthsAvailable.coerceAtLeast(1).toLong()))
+            val peakShare = if (totalExcess.signum() > 0) {
+                peakAboveMed.divide(totalExcess, 4, RoundingMode.HALF_EVEN)
+            } else BigDecimal.ZERO
+            val peakDominated = peakShare >= SpendingReviewConstants.HABITUAL_PEAK_OUTLIER_MIN_SHARE
+            val habFigs = mutableListOf(
+                FigureSlot("f1", "monthlyMean", FigureKind.MONEY, l.monthlyMean),
+                FigureSlot("f2", "monthlyMedian", FigureKind.MONEY, l.monthlyMedian),
+                FigureSlot("f3", "aboveMedianMonthly", FigureKind.MONEY, l.trimToMedianMonthly),
+                FigureSlot("f4", "aboveMedianAnnual", FigureKind.MONEY, l.trimToMedianAnnual),
+                FigureSlot("f5", "nonZeroMonths", FigureKind.COUNT, BigDecimal.valueOf(l.nonZeroMonths.toLong())),
+            )
+            val habCtx = mutableMapOf<String, String>()
+            if (peakDominated) {
+                habFigs += FigureSlot("f6", "peakMonthAmount", FigureKind.MONEY, Money.normalize(l.peakMonthAmount))
+                habFigs += FigureSlot(
+                    "f7",
+                    "peakExcessSharePct",
+                    FigureKind.PERCENT,
+                    bd(peakShare.multiply(BigDecimal("100")).min(BigDecimal("100")).toDouble()),
+                )
+                habCtx["peakDominated"] = "true"
+            }
             savingsPicked += SelectedFinding(
                 id = "sav_${l.id}",
                 section = FindingSection.savings,
@@ -351,14 +397,8 @@ object SpendingReviewSelector {
                 changeKind = null,
                 potentialMonthlySaving = l.trimToMedianMonthly,
                 potentialAnnualSaving = l.trimToMedianAnnual,
-                figures = listOf(
-                    FigureSlot("f1", "monthlyMean", FigureKind.MONEY, l.monthlyMean),
-                    FigureSlot("f2", "monthlyMedian", FigureKind.MONEY, l.monthlyMedian),
-                    FigureSlot("f3", "aboveMedianMonthly", FigureKind.MONEY, l.trimToMedianMonthly),
-                    FigureSlot("f4", "aboveMedianAnnual", FigureKind.MONEY, l.trimToMedianAnnual),
-                    FigureSlot("f5", "nonZeroMonths", FigureKind.COUNT, BigDecimal.valueOf(l.nonZeroMonths.toLong())),
-                ),
-                context = emptyMap(),
+                figures = habFigs,
+                context = habCtx,
                 txFilter = l.txFilter,
                 explorerLink = l.explorerLink,
                 simulationScenario = categoryDeltaScenario(l.categoryCode, l.trimToMedianMonthly),
@@ -402,8 +442,63 @@ object SpendingReviewSelector {
             val oneOffs = candidates.oneOffCategories
                 .sortedWith(compareByDescending<LumpyCategoryCandidateDto> { it.monthlyMean }.thenBy { it.categoryCode })
 
-            val totalEligibleChanged = mergedIncreases.size + nonePriceChanges.size + oneOffs.size
+            val incomeDir = summaryFacts?.incomeDirection
+            val qualifyingIncomeMovers = when (incomeDir) {
+                "below" -> inputs.incomeMovers
+                    .filter { (it.periodAmount - it.median12m) < SpendingReviewConstants.SUMMARY_IN_LINE_ABS_EUR.negate() }
+                    .sortedWith(compareBy<IncomeCategoryMover> { it.periodAmount - it.median12m }.thenBy { it.categoryCode })
+                "above" -> inputs.incomeMovers
+                    .filter { (it.periodAmount - it.median12m) > SpendingReviewConstants.SUMMARY_IN_LINE_ABS_EUR }
+                    .sortedWith(compareByDescending<IncomeCategoryMover> { it.periodAmount - it.median12m }.thenBy { it.categoryCode })
+                else -> emptyList()
+            }
+
+            val totalEligibleChanged = qualifyingIncomeMovers.size + mergedIncreases.size + nonePriceChanges.size + oneOffs.size
             fun changedRoom(): Int = (SpendingReviewConstants.MAX_CHANGED_FINDINGS - changedPicked.size).coerceAtLeast(0)
+
+            // Priority 0: top income mover whenever monthly income deviated from its median (explains genuine income shortfalls/spikes).
+            for (incMover in qualifyingIncomeMovers.take(minOf(SpendingReviewConstants.MAX_CHANGED_INCOME, changedRoom()))) {
+                val deltaAvg = Money.normalize(incMover.periodAmount - incMover.avg12m)
+                val deltaMed = Money.normalize(incMover.periodAmount - incMover.median12m)
+                val dir = if (deltaMed.signum() < 0) "below" else "above"
+                val vsMedian = directionAgainstNorm(incMover.periodAmount, incMover.median12m)
+                val medianDiffers = directionAgainstNorm(incMover.median12m, incMover.avg12m) != "at"
+                val figs = mutableListOf(
+                    FigureSlot("f1", "periodAmount", FigureKind.MONEY, Money.normalize(incMover.periodAmount)),
+                    FigureSlot("f2", "deltaVsAvgAbs", FigureKind.MONEY, deltaAvg.abs()),
+                    FigureSlot("f3", "avg12m", FigureKind.MONEY, Money.normalize(incMover.avg12m)),
+                )
+                if (medianDiffers) {
+                    figs += FigureSlot("f4", "median12m", FigureKind.MONEY, Money.normalize(incMover.median12m))
+                    figs += FigureSlot("f5", "deltaVsMedianAbs", FigureKind.MONEY, deltaMed.abs())
+                }
+                changedPicked += SelectedFinding(
+                    id = "chg_inc_income_${incMover.categoryCode.replace('.', '_')}",
+                    section = FindingSection.whatChanged,
+                    kind = FindingKind.income_change,
+                    candidateId = null,
+                    payloadSubject = incMover.categoryCode,
+                    localSubject = null,
+                    anonymized = false,
+                    mergedVariants = emptyList(),
+                    categoryCode = incMover.categoryCode,
+                    groupCode = incMover.groupCode ?: catByCode[incMover.categoryCode]?.group,
+                    action = null,
+                    severity = if (dir == "below" && (hasDeficit || summaryFacts?.savingsDirection == "below")) "warning" else "opportunity",
+                    changeKind = if (dir == "below") "drop" else "drift",
+                    potentialMonthlySaving = null,
+                    potentialAnnualSaving = null,
+                    figures = figs,
+                    context = mapOf(
+                        "direction" to dir,
+                        "vsMedian" to vsMedian,
+                        "medianDiffers" to medianDiffers.toString(),
+                    ),
+                    txFilter = TransactionLinkFilterDto(from = windowFrom, to = periodTo, direction = "income", categoryCode = incMover.categoryCode),
+                    explorerLink = null,
+                    simulationScenario = null,
+                )
+            }
 
             // Priority 1: top period increases with pre-computed merchant drivers.
             for (inc in mergedIncreases.take(minOf(SpendingReviewConstants.MAX_CHANGED_INCREASES, changedRoom()))) {
@@ -555,6 +650,36 @@ object SpendingReviewSelector {
                 } else {
                     FigureSlot("f4", "pctConsumed", FigureKind.PERCENT, bd(row.percent))
                 }
+                val stats = inputs.budgetHistoryStats[row.categoryCode]
+                val trailingAvg = stats?.trailing6mAvg?.let { Money.normalize(it) }
+                val hasTrailing = trailingAvg != null && trailingAvg.signum() > 0
+                val underSized = hasTrailing && trailingAvg > row.budget.multiply(SpendingReviewConstants.BUDGET_UNDERESTIMATED_MIN_RATIO)
+                val nearZeroMedian = stats != null &&
+                    stats.median12m <= row.budget.multiply(SpendingReviewConstants.BUDGET_CONCENTRATED_MEDIAN_MAX_RATIO)
+                val concentrated = stats != null &&
+                    stats.windowMonths >= 6 &&
+                    stats.exceededMonths12m in 1..(stats.windowMonths / 2) &&
+                    stats.total12m.signum() > 0 &&
+                    stats.exceededMonthsTotal12m.divide(stats.total12m, 4, RoundingMode.HALF_EVEN) >=
+                        SpendingReviewConstants.BUDGET_CONCENTRATED_TOP_SHARE_MIN
+                val budgetFit = when {
+                    nearZeroMedian && concentrated && (underSized || stats.exceededMonths12m >= 2) -> "annual_better"
+                    underSized -> "under_sized"
+                    else -> "genuine_overspend"
+                }
+                val budgetFigs = mutableListOf(
+                    FigureSlot("f1", "spent", FigureKind.MONEY, Money.normalize(row.spent)),
+                    FigureSlot("f2", "budget", FigureKind.MONEY, Money.normalize(row.budget)),
+                    FigureSlot("f3", "overUnder", FigureKind.MONEY, overUnder),
+                    ratioSlot,
+                )
+                if (hasTrailing) {
+                    budgetFigs += FigureSlot("f5", "trailing6mAvg", FigureKind.MONEY, trailingAvg)
+                }
+                if (stats != null && stats.windowMonths > 0) {
+                    budgetFigs += FigureSlot("f6", "exceededMonths12m", FigureKind.COUNT, BigDecimal.valueOf(stats.exceededMonths12m.toLong()))
+                    budgetFigs += FigureSlot("f7", "windowMonths", FigureKind.COUNT, BigDecimal.valueOf(stats.windowMonths.toLong()))
+                }
                 budgetsPicked += SelectedFinding(
                     id = "bud_${row.categoryCode.replace('.', '_')}",
                     section = FindingSection.budgets,
@@ -571,13 +696,11 @@ object SpendingReviewSelector {
                     changeKind = null,
                     potentialMonthlySaving = null,
                     potentialAnnualSaving = null,
-                    figures = listOf(
-                        FigureSlot("f1", "spent", FigureKind.MONEY, Money.normalize(row.spent)),
-                        FigureSlot("f2", "budget", FigureKind.MONEY, Money.normalize(row.budget)),
-                        FigureSlot("f3", "overUnder", FigureKind.MONEY, overUnder),
-                        ratioSlot,
+                    figures = budgetFigs,
+                    context = mapOf(
+                        "overrunFormat" to if (useMultiple) "multiple" else "percent",
+                        "budgetFit" to budgetFit,
                     ),
-                    context = mapOf("overrunFormat" to if (useMultiple) "multiple" else "percent"),
                     txFilter = TransactionLinkFilterDto(from = periodFrom, to = periodTo, direction = "expense", categoryCode = row.categoryCode),
                     explorerLink = ExplorerLinkDto("category", row.categoryCode, preset = "custom", from = windowFrom, to = periodTo),
                     simulationScenario = null,
@@ -648,10 +771,52 @@ object SpendingReviewSelector {
             figs += FigureSlot("f14", "daysInMonth", FigureKind.COUNT, BigDecimal.valueOf(period.daysInMonth.toLong()))
         }
 
-        val expDir = directionAgainstNorm(md.expenses, t12.avgExpenses)
-        val incDir = directionAgainstNorm(md.income, t12.avgIncome)
-        val savDir = directionAgainstNorm(md.savings, t12.avgNetSavings)
-        val (diagnosis, diagnosisDetail) = diagnoseSummary(expDir, incDir, savDir, expDelta.abs(), incDelta.abs())
+        val hasSeries = trailing12.points.size >= 3
+        val medianExpenses = if (hasSeries) Money.normalize(medianDecimal(trailing12.points.map { it.expenses })) else Money.normalize(t12.avgExpenses)
+        val medianIncome = if (hasSeries) Money.normalize(medianDecimal(trailing12.points.map { it.income })) else Money.normalize(t12.avgIncome)
+        val medianSavings = if (hasSeries) Money.normalize(medianDecimal(trailing12.points.map { it.netSavings })) else Money.normalize(t12.avgNetSavings)
+
+        // Diagnosis is decided against median expenses, median income, and median savings so
+        // exceptional bonus or travel months never distort a typical month's diagnosis.
+        val expDirVsMean = directionAgainstNorm(md.expenses, t12.avgExpenses)
+        val expDir = directionAgainstNorm(md.expenses, medianExpenses)
+        val incDirVsMean = directionAgainstNorm(md.income, t12.avgIncome)
+        val incDir = directionAgainstNorm(md.income, medianIncome)
+        val savDir = directionAgainstNorm(md.savings, medianSavings)
+        val expDeltaVsMedianAbs = Money.normalize(md.expenses - medianExpenses).abs()
+        val incDeltaVsMedianAbs = Money.normalize(md.income - medianIncome).abs()
+        val (diagnosis, diagnosisDetail) = diagnoseSummary(expDir, incDir, savDir, expDeltaVsMedianAbs, incDeltaVsMedianAbs)
+
+        var incomeVsMedianContext = "in_line"
+        var expensesVsMedianContext = "in_line"
+        if (hasSeries) {
+            val medianDiffersFromMean = directionAgainstNorm(medianIncome, t12.avgIncome) != "at"
+            val savMedianDiffersFromMean = directionAgainstNorm(medianSavings, t12.avgNetSavings) != "at"
+            val expMedianDiffersFromMean = directionAgainstNorm(medianExpenses, t12.avgExpenses) != "at"
+            if (medianDiffersFromMean) {
+                figs += FigureSlot("f15", "normMedianIncome", FigureKind.MONEY, medianIncome)
+                figs += FigureSlot("f16", "incomeVsMedianDeltaAbs", FigureKind.MONEY, incDeltaVsMedianAbs)
+                incomeVsMedianContext = when {
+                    incDirVsMean == "below" && incDir != "below" -> "normal_month_mean_skewed"
+                    incDir == "below" -> "below_typical"
+                    incDir == "above" -> "above_typical"
+                    else -> "in_line"
+                }
+            }
+            if (savMedianDiffersFromMean) {
+                figs += FigureSlot("f17", "normMedianSavings", FigureKind.MONEY, medianSavings)
+            }
+            if (expMedianDiffersFromMean) {
+                figs += FigureSlot("f18", "normMedianExpenses", FigureKind.MONEY, medianExpenses)
+                figs += FigureSlot("f19", "expensesVsMedianDeltaAbs", FigureKind.MONEY, expDeltaVsMedianAbs)
+                expensesVsMedianContext = when {
+                    expDirVsMean == "below" && expDir != "below" -> "normal_month_mean_skewed"
+                    expDir == "below" -> "below_typical"
+                    expDir == "above" -> "above_typical"
+                    else -> "in_line"
+                }
+            }
+        }
 
         return SelectedSummaryFacts(
             periodYear = period.year,
@@ -664,10 +829,23 @@ object SpendingReviewSelector {
             savingsDirection = savDir,
             diagnosis = diagnosis,
             diagnosisDetail = diagnosisDetail,
+            incomeVsMedianContext = incomeVsMedianContext,
+            expensesVsMedianContext = expensesVsMedianContext,
             hasDeficit = md.savings.signum() < 0,
             hasProjectedDeficit = paceProjection?.deficit?.signum()?.let { it > 0 } == true,
             figures = figs,
         )
+    }
+
+    internal fun medianDecimal(values: List<BigDecimal>): BigDecimal {
+        if (values.isEmpty()) return BigDecimal.ZERO
+        val sorted = values.sorted()
+        val mid = sorted.size / 2
+        return if (sorted.size % 2 == 1) {
+            sorted[mid]
+        } else {
+            (sorted[mid - 1] + sorted[mid]).divide(BigDecimal.valueOf(2L), 2, RoundingMode.HALF_EVEN)
+        }
     }
 
     internal fun directionAgainstNorm(period: BigDecimal, norm: BigDecimal): String {

@@ -58,7 +58,7 @@ object SpendingReviewRenderer {
         """(?i)(due to|comes? from|came from|driven by|because|stems? from|caused by|explains?|explained by|result of|reflects?|thanks to|down to|weighed on|contribut\w*|reduced|dragged|pulled|pushed|offset|se debe|debió|debido a|proviene|viene de|porque|ya que|como tu|al ser|\bgracias\b|a causa de|explica|obedece a|redujeron|contribuyeron|pesaron|compensó|compenso|por unos ingresos|por los menores ingresos|por la caída|por un gasto|por el aumento|por el mayor gasto)""",
     )
     private val DIAG_INCOME_CAUSE = Regex(
-        """(?i)(lower income|less income|weaker income|smaller income|drop in income|income drop|income shortfall|from income|to income|by income|income below|from lower income|to lower income|ingresos más bajos|ingresos mas bajos|menores ingresos|caída de ingresos|caida de ingresos|bajada de ingresos|descenso de ingresos|a los ingresos|de los ingresos|por los ingresos|unos ingresos bajos|sobre todo los ingresos)""",
+        """(?i)(lower income|less income|weaker income|smaller income|drop in income|income drop|income shortfall|from income|to income|by income|income\s+(?:[\p{L}\p{N}]+\s+){0,2}below|from lower income|to lower income|ingresos más bajos|ingresos mas bajos|menores ingresos|caída de ingresos|caida de ingresos|bajada de ingresos|descenso de ingresos|a los ingresos|de los ingresos|por los ingresos|unos ingresos bajos|sobre todo los ingresos|ingresos\s+(?:[\p{L}\p{N}]+\s+){0,2}por debajo)""",
     )
     private val DIAG_SPENDING_CAUSE = Regex(
         """(?i)(higher spending|higher expenses|more spending|more expenses|increased spending|increased expenses|spending increase|expense increase|rise in spending|from spending|to spending|by spending|from expenses|to expenses|by expenses|spending above|expenses above|mayor gasto|aumento del gasto|subida del gasto|gastos más altos|gastos mas altos|gasto más alto|gasto mas alto|al gasto|del gasto|por el gasto|a los gastos|por los gastos|sobre todo el gasto)""",
@@ -186,7 +186,8 @@ object SpendingReviewRenderer {
         review.summaryFacts?.let { sf ->
             val rawSummary = modelOutput?.path("summary")?.takeIf { it.isString }?.asString()?.trim()
             val allowed = sf.figures.map { it.key }.toSet()
-            val err = validatePlaceholderProse(rawSummary, allowed, CORE_SUMMARY_KEYS, requireAtLeastOne = true)
+            val required = requiredSummaryKeysFor(sf)
+            val err = validatePlaceholderProse(rawSummary, allowed, required, requireAtLeastOne = true)
                 ?: validateSummaryDiagnosis(rawSummary!!, sf)
             if (err == null) {
                 summaryText = substitute(rawSummary!!, sf.figures, review.currency, locale)
@@ -313,6 +314,8 @@ object SpendingReviewRenderer {
                 savingsDirection = savDir,
                 diagnosis = diagnosis,
                 diagnosisDetail = diagnosisDetail,
+                incomeVsMedianContext = summaryNode.path("incomeVsMedianContext").asString("in_line"),
+                expensesVsMedianContext = summaryNode.path("expensesVsMedianContext").asString("in_line"),
                 hasDeficit = summaryNode.path("hasDeficit").asBoolean(false),
                 hasProjectedDeficit = summaryNode.path("hasProjectedDeficit").asBoolean(false),
                 figures = figs,
@@ -406,14 +409,29 @@ object SpendingReviewRenderer {
         return renderWithModel(reconstructed, modelOutput, locale, fallbackLabel)
     }
 
+    private fun requiredSummaryKeysFor(sf: SelectedSummaryFacts): Set<String> {
+        val keys = CORE_SUMMARY_KEYS.toMutableSet()
+        if (sf.figures.any { it.key == "f15" } &&
+            sf.incomeVsMedianContext in setOf("normal_month_mean_skewed", "below_typical")
+        ) {
+            keys += "f15"
+        }
+        return keys
+    }
+
     /** Verifies that a model-written summary preserves the deterministic diagnosis meaning (cause of shortfall or on-track reason). */
     internal fun validateSummaryDiagnosis(rawSummary: String, sf: SelectedSummaryFacts): String? {
         val text = rawSummary.lowercase(Locale.ROOT)
         val ok = when (sf.diagnosis) {
-            SummaryDiagnosis.shortfall_from_income ->
-                DIAG_CAUSAL_CUE.containsMatchIn(text) &&
+            SummaryDiagnosis.shortfall_from_income -> {
+                val baseOk = DIAG_CAUSAL_CUE.containsMatchIn(text) &&
                     DIAG_INCOME_CAUSE.containsMatchIn(text) &&
                     !DIAG_SPENDING_BLAME.containsMatchIn(text)
+                val skewedOk = if (sf.incomeVsMedianContext == "normal_month_mean_skewed") {
+                    DIAG_IN_LINE.containsMatchIn(text)
+                } else true
+                baseOk && skewedOk
+            }
 
             SummaryDiagnosis.shortfall_from_spending ->
                 DIAG_CAUSAL_CUE.containsMatchIn(text) &&
@@ -455,73 +473,150 @@ object SpendingReviewRenderer {
     internal fun diagnosisSentence(sf: SelectedSummaryFacts, locale: String): String {
         val isEs = locale.startsWith("es", ignoreCase = true)
         val isPace = sf.reviewKind == "pace_review"
+        val hasMedian = sf.figures.any { it.key == "f15" }
+        val hasMedianExp = sf.figures.any { it.key == "f18" }
+        val skewedNoteEs = if (hasMedian && sf.incomeVsMedianContext == "normal_month_mean_skewed") {
+            " Tus ingresos estuvieron en línea con tu mes habitual de {f15}, aunque meses excepcionales elevan la media anual."
+        } else ""
+        val skewedNoteEn = if (hasMedian && sf.incomeVsMedianContext == "normal_month_mean_skewed") {
+            " Income matched your typical {f15} month, while exceptional months lift the annual average."
+        } else ""
+        val skewedExpNoteEs = if (hasMedianExp && sf.expensesVsMedianContext == "normal_month_mean_skewed" && sf.diagnosis != SummaryDiagnosis.shortfall_from_income) {
+            " El gasto quedó en línea con tu mes habitual de {f18} (algunos meses con gastos grandes elevan la media)."
+        } else ""
+        val skewedExpNoteEn = if (hasMedianExp && sf.expensesVsMedianContext == "normal_month_mean_skewed" && sf.diagnosis != SummaryDiagnosis.shortfall_from_income) {
+            " Spending stayed in line with your typical {f18} month (a few high-spend months lift the annual average)."
+        } else ""
+
         return if (isEs) {
             val stayed = if (isPace) "está" else "quedó"
             when (sf.diagnosis) {
-                SummaryDiagnosis.shortfall_from_income -> when (sf.diagnosisDetail) {
-                    "expenses_in_line" -> "Como tu gasto $stayed en línea con la media, el menor ahorro se debe a unos ingresos más bajos."
-                    else -> "Como tu gasto $stayed por debajo de la media, el menor ahorro se debe a unos ingresos más bajos."
-                }
-                SummaryDiagnosis.shortfall_from_spending -> when (sf.diagnosisDetail) {
-                    "income_above" -> "Con unos ingresos por encima de tu media, el menor ahorro se debe al aumento del gasto."
-                    else -> "Con unos ingresos en línea con tu media, el menor ahorro se debe al aumento del gasto."
-                }
-                SummaryDiagnosis.shortfall_from_both -> when (sf.diagnosisDetail) {
-                    "spending_dominant" -> "Tanto el mayor gasto ({f3} por encima de tu media) como los menores ingresos ({f6} por debajo) redujeron tu ahorro, sobre todo el gasto."
-                    "income_dominant" -> "Tanto el mayor gasto ({f3} por encima de tu media) como los menores ingresos ({f6} por debajo) redujeron tu ahorro, sobre todo los ingresos."
-                    else -> "El mayor gasto ({f3} por encima de tu media) y los menores ingresos ({f6} por debajo) redujeron tu ahorro en la misma medida."
-                }
-                SummaryDiagnosis.on_track_or_above -> if (sf.savingsDirection == "at") {
-                    when {
-                        sf.expensesDirection == "below" && sf.incomeDirection == "below" ->
-                            "Tu ahorro $stayed en línea con tu media porque el menor gasto compensó unos ingresos más bajos."
-                        sf.expensesDirection == "above" && sf.incomeDirection == "above" ->
-                            "Tu ahorro $stayed en línea con tu media porque los mayores ingresos compensaron el mayor gasto."
+                SummaryDiagnosis.shortfall_from_income -> {
+                    val expClause = when {
+                        sf.diagnosisDetail == "expenses_in_line" && hasMedianExp ->
+                            "Como tu gasto $stayed en línea con un mes habitual de {f18}"
+                        sf.diagnosisDetail == "expenses_in_line" ->
+                            "Como tu gasto $stayed en línea con la media"
+                        hasMedianExp ->
+                            "Como tu gasto $stayed por debajo de un mes habitual de {f18}"
                         else ->
-                            "Tu ahorro $stayed en línea con tu media mensual anual, con gastos e ingresos cerca de lo habitual."
+                            "Como tu gasto $stayed por debajo de la media"
                     }
-                } else {
+                    if (hasMedian) {
+                        "$expClause, el menor ahorro se debe a unos ingresos más bajos: {f16} por debajo de tu mes habitual de {f15}."
+                    } else {
+                        "$expClause, el menor ahorro se debe a unos ingresos más bajos."
+                    }
+                }
+                SummaryDiagnosis.shortfall_from_spending -> {
+                    val base = when (sf.diagnosisDetail) {
+                        "income_above" -> "Con unos ingresos por encima de lo habitual, el menor ahorro se debe al aumento del gasto."
+                        else -> "Con unos ingresos en línea con lo habitual, el menor ahorro se debe al aumento del gasto."
+                    }
+                    "$base$skewedNoteEs"
+                }
+                SummaryDiagnosis.shortfall_from_both -> {
+                    val expClause = if (hasMedianExp) {
+                        "el mayor gasto ({f19} por encima de tu mes habitual de {f18})"
+                    } else {
+                        "el mayor gasto ({f3} por encima de tu media)"
+                    }
+                    val incClause = if (hasMedian) {
+                        "los menores ingresos ({f16} por debajo de tu mes habitual de {f15})"
+                    } else {
+                        "los menores ingresos ({f6} por debajo)"
+                    }
                     when (sf.diagnosisDetail) {
-                        "both_favorable" -> "Tu ahorro $stayed por encima de tu media gracias tanto al menor gasto como a los mayores ingresos."
-                        "lower_spending" -> "Tu ahorro $stayed por encima de tu media gracias a un gasto más bajo."
-                        "higher_income" -> "Tu ahorro $stayed por encima de tu media gracias a unos ingresos más altos."
-                        else -> "Tu ahorro $stayed por encima de tu media mensual anual."
+                        "spending_dominant" -> "Tanto $expClause como $incClause redujeron tu ahorro, sobre todo el gasto."
+                        "income_dominant" -> "Tanto $expClause como $incClause redujeron tu ahorro, sobre todo los ingresos."
+                        else -> "Tanto $expClause como $incClause redujeron tu ahorro en la misma medida."
                     }
+                }
+                SummaryDiagnosis.on_track_or_above -> {
+                    val base = if (sf.savingsDirection == "at") {
+                        when {
+                            sf.expensesDirection == "below" && sf.incomeDirection == "below" ->
+                                "Tu ahorro $stayed en línea con un mes habitual porque el menor gasto compensó unos ingresos más bajos."
+                            sf.expensesDirection == "above" && sf.incomeDirection == "above" ->
+                                "Tu ahorro $stayed en línea con un mes habitual porque los mayores ingresos compensaron el mayor gasto."
+                            else ->
+                                "Tu ahorro $stayed en línea con un mes habitual, con gastos e ingresos cerca de lo normal."
+                        }
+                    } else {
+                        when (sf.diagnosisDetail) {
+                            "both_favorable" -> "Tu ahorro $stayed por encima de un mes habitual gracias tanto al menor gasto como a los mayores ingresos."
+                            "lower_spending" -> "Tu ahorro $stayed por encima de un mes habitual gracias a un gasto más bajo."
+                            "higher_income" -> "Tu ahorro $stayed por encima de un mes habitual gracias a unos ingresos más altos."
+                            else -> "Tu ahorro $stayed por encima de un mes habitual."
+                        }
+                    }
+                    "$base$skewedNoteEs$skewedExpNoteEs"
                 }
             }
         } else {
             val stayed = if (isPace) "is" else "stayed"
             val finished = if (isPace) "are running" else "finished"
             when (sf.diagnosis) {
-                SummaryDiagnosis.shortfall_from_income -> when (sf.diagnosisDetail) {
-                    "expenses_in_line" -> "Because spending $stayed in line with average, the savings shortfall comes from lower income."
-                    else -> "Because spending $stayed below average, the savings shortfall comes from lower income."
-                }
-                SummaryDiagnosis.shortfall_from_spending -> when (sf.diagnosisDetail) {
-                    "income_above" -> "With income above average, the savings shortfall comes from higher spending."
-                    else -> "With income in line with average, the savings shortfall comes from higher spending."
-                }
-                SummaryDiagnosis.shortfall_from_both -> when (sf.diagnosisDetail) {
-                    "spending_dominant" -> "Both higher spending ({f3} above average) and lower income ({f6} below) weighed on savings, with spending contributing more."
-                    "income_dominant" -> "Both higher spending ({f3} above average) and lower income ({f6} below) weighed on savings, with lower income contributing more."
-                    else -> "Higher spending ({f3} above average) and lower income ({f6} below) contributed equally to the shortfall."
-                }
-                SummaryDiagnosis.on_track_or_above -> if (sf.savingsDirection == "at") {
-                    when {
-                        sf.expensesDirection == "below" && sf.incomeDirection == "below" ->
-                            "Savings $stayed in line with average as lower spending offset lower income."
-                        sf.expensesDirection == "above" && sf.incomeDirection == "above" ->
-                            "Savings $stayed in line with average as higher income offset higher spending."
+                SummaryDiagnosis.shortfall_from_income -> {
+                    val expClause = when {
+                        sf.diagnosisDetail == "expenses_in_line" && hasMedianExp ->
+                            "Because spending $stayed in line with a typical month of {f18}"
+                        sf.diagnosisDetail == "expenses_in_line" ->
+                            "Because spending $stayed in line with average"
+                        hasMedianExp ->
+                            "Because spending $stayed below a typical month of {f18}"
                         else ->
-                            "Savings $stayed in line with your annual monthly average, with spending and income close to normal."
+                            "Because spending $stayed below average"
                     }
-                } else {
+                    if (hasMedian) {
+                        "$expClause, the savings shortfall comes from lower income — {f16} below your typical month of {f15}."
+                    } else {
+                        "$expClause, the savings shortfall comes from lower income."
+                    }
+                }
+                SummaryDiagnosis.shortfall_from_spending -> {
+                    val base = when (sf.diagnosisDetail) {
+                        "income_above" -> "With income above a typical month, the savings shortfall comes from higher spending."
+                        else -> "With income in line with a typical month, the savings shortfall comes from higher spending."
+                    }
+                    "$base$skewedNoteEn"
+                }
+                SummaryDiagnosis.shortfall_from_both -> {
+                    val expClause = if (hasMedianExp) {
+                        "higher spending ({f19} above your typical month of {f18})"
+                    } else {
+                        "higher spending ({f3} above average)"
+                    }
+                    val incClause = if (hasMedian) {
+                        "lower income ({f16} below your typical month of {f15})"
+                    } else {
+                        "lower income ({f6} below)"
+                    }
                     when (sf.diagnosisDetail) {
-                        "both_favorable" -> "Savings $finished above average thanks to both lower spending and higher income."
-                        "lower_spending" -> "Savings $finished above average thanks to lower spending."
-                        "higher_income" -> "Savings $finished above average thanks to higher income."
-                        else -> "Savings $finished above your annual monthly average."
+                        "spending_dominant" -> "Both $expClause and $incClause weighed on savings, with spending contributing more."
+                        "income_dominant" -> "Both $expClause and $incClause weighed on savings, with lower income contributing more."
+                        else -> "Both $expClause and $incClause contributed equally to the shortfall."
                     }
+                }
+                SummaryDiagnosis.on_track_or_above -> {
+                    val base = if (sf.savingsDirection == "at") {
+                        when {
+                            sf.expensesDirection == "below" && sf.incomeDirection == "below" ->
+                                "Savings $stayed in line with a typical month as lower spending offset lower income."
+                            sf.expensesDirection == "above" && sf.incomeDirection == "above" ->
+                                "Savings $stayed in line with a typical month as higher income offset higher spending."
+                            else ->
+                                "Savings $stayed in line with a typical month, with spending and income close to normal."
+                        }
+                    } else {
+                        when (sf.diagnosisDetail) {
+                            "both_favorable" -> "Savings $finished above a typical month thanks to both lower spending and higher income."
+                            "lower_spending" -> "Savings $finished above a typical month thanks to lower spending."
+                            "higher_income" -> "Savings $finished above a typical month thanks to higher income."
+                            else -> "Savings $finished above a typical month."
+                        }
+                    }
+                    "$base$skewedNoteEn$skewedExpNoteEn"
                 }
             }
         }
@@ -535,14 +630,25 @@ object SpendingReviewRenderer {
             .let { if (isEs) it.lowercase(toJavaLocale(locale)) else it.replaceFirstChar { c -> c.titlecase(toJavaLocale(locale)) } }
         val isPace = sf.reviewKind == "pace_review"
         val diag = diagnosisSentence(sf, locale)
+        // Sentence 1 compares {f1} vs {f2} and {f4} vs {f5} (annual means), while the diagnosis compares against medians.
+        val f1Val = sf.figures.firstOrNull { it.key == "f1" }?.value
+        val f2Val = sf.figures.firstOrNull { it.key == "f2" }?.value
+        val expVsMeanDir = if (f1Val != null && f2Val != null) {
+            SpendingReviewSelector.directionAgainstNorm(f1Val, f2Val)
+        } else sf.expensesDirection
+        val f4Val = sf.figures.firstOrNull { it.key == "f4" }?.value
+        val f5Val = sf.figures.firstOrNull { it.key == "f5" }?.value
+        val incVsMeanDir = if (f4Val != null && f5Val != null) {
+            SpendingReviewSelector.directionAgainstNorm(f4Val, f5Val)
+        } else sf.incomeDirection
 
         return if (isEs) {
-            val expCmp = when (sf.expensesDirection) {
+            val expCmp = when (expVsMeanDir) {
                 "below" -> "{f3} por debajo de tu media anual de {f2}"
                 "above" -> "{f3} por encima de tu media anual de {f2}"
                 else -> "en línea con tu media anual de {f2}"
             }
-            val incCmp = when (sf.incomeDirection) {
+            val incCmp = when (incVsMeanDir) {
                 "below" -> "{f6} por debajo de tu media de {f5}"
                 "above" -> "{f6} por encima de tu media de {f5}"
                 else -> "en línea con tu media de {f5}"
@@ -557,12 +663,12 @@ object SpendingReviewRenderer {
             }
             "$base $diag"
         } else {
-            val expCmp = when (sf.expensesDirection) {
+            val expCmp = when (expVsMeanDir) {
                 "below" -> "{f3} below your annual monthly average of {f2}"
                 "above" -> "{f3} above your annual monthly average of {f2}"
                 else -> "in line with your annual monthly average of {f2}"
             }
-            val incCmp = when (sf.incomeDirection) {
+            val incCmp = when (incVsMeanDir) {
                 "below" -> "{f6} below the {f5} average"
                 "above" -> "{f6} above the {f5} average"
                 else -> "in line with the {f5} average"
@@ -636,33 +742,99 @@ object SpendingReviewRenderer {
                 "Frequent spend at $subject" to "$subject totalled {f1} across {f2} purchases in $cat ({f3} a month, {f4} of the category)."
             }
 
-            FindingKind.habitual_uneven -> if (isEs) {
-                "Gasto desigual en $cat" to "$cat promedió {f1} al mes en {f5} meses activos frente a un mes habitual de {f2}, lo que deja {f3} al mes ({f4} al año) por encima de tu nivel habitual."
-            } else {
-                "Uneven spending in $cat" to "$cat averaged {f1} a month across {f5} active months against a typical month of {f2}, leaving {f3} a month ({f4} a year) above your typical level."
+            FindingKind.habitual_uneven -> {
+                val peakDominated = f.context["peakDominated"] == "true" &&
+                    f.figures.any { it.key == "f6" } &&
+                    f.figures.any { it.key == "f7" }
+                if (isEs) {
+                    val detail = if (peakDominated) {
+                        "$cat promedió {f1} al mes en {f5} meses activos frente a un mes habitual de {f2}, lo que deja {f3} al mes ({f4} al año) por encima de tu nivel habitual; un {f7} de esa diferencia viene de un solo pico mensual de {f6}."
+                    } else {
+                        "$cat promedió {f1} al mes en {f5} meses activos frente a un mes habitual de {f2}, lo que deja {f3} al mes ({f4} al año) por encima de tu nivel habitual."
+                    }
+                    "Gasto desigual en $cat" to detail
+                } else {
+                    val detail = if (peakDominated) {
+                        "$cat averaged {f1} a month across {f5} active months against a typical month of {f2}, leaving {f3} a month ({f4} a year) above your typical level — {f7} of that gap comes from a single {f6} peak month."
+                    } else {
+                        "$cat averaged {f1} a month across {f5} active months against a typical month of {f2}, leaving {f3} a month ({f4} a year) above your typical level."
+                    }
+                    "Uneven spending in $cat" to detail
+                }
+            }
+
+            FindingKind.income_change -> {
+                val dir = f.context["direction"] ?: "below"
+                val vsMedian = f.context["vsMedian"] ?: dir
+                val hasMed = f.figures.any { it.key == "f4" }
+                if (isEs) {
+                    when {
+                        dir == "below" && hasMed && vsMedian != "below" ->
+                            "$cat en línea con un mes habitual" to
+                                "$cat quedó en {f1}, {f2} por debajo de tu media anual de {f3}, pero en línea con un mes habitual de {f4} (meses con ingresos extra elevan la media)."
+                        dir == "below" && hasMed ->
+                            "Bajada en $cat" to
+                                "$cat quedó en {f1}, {f5} por debajo de un mes habitual de {f4} y {f2} por debajo de tu media anual de {f3}."
+                        dir == "below" ->
+                            "Bajada en $cat" to
+                                "$cat quedó en {f1}, {f2} por debajo de tu media anual de {f3}."
+                        hasMed ->
+                            "Subida en $cat" to
+                                "$cat llegó a {f1}, {f5} por encima de un mes habitual de {f4} ({f2} por encima de tu media anual de {f3})."
+                        else ->
+                            "Subida en $cat" to
+                                "$cat llegó a {f1}, {f2} por encima de tu media anual de {f3}."
+                    }
+                } else {
+                    when {
+                        dir == "below" && hasMed && vsMedian != "below" ->
+                            "$cat in line with typical month" to
+                                "$cat came to {f1}, {f2} below its {f3} annual average, but in line with a typical month of {f4} as higher-income months pull up the average."
+                        dir == "below" && hasMed ->
+                            "Lower income in $cat" to
+                                "$cat came to {f1}, {f5} below a typical month of {f4} and {f2} below its {f3} annual average."
+                        dir == "below" ->
+                            "Lower income in $cat" to
+                                "$cat came to {f1}, {f2} below its {f3} annual average."
+                        hasMed ->
+                            "Higher income in $cat" to
+                                "$cat reached {f1}, {f5} above a typical month of {f4} ({f2} above its {f3} annual average)."
+                        else ->
+                            "Higher income in $cat" to
+                                "$cat reached {f1}, {f2} above its {f3} annual average."
+                    }
+                }
             }
 
             FindingKind.period_increase -> {
                 val compKind = f.context["comparisonKind"]
                 val driverKind = f.context["topDriverKind"]
                 val driverName = f.context["topDriverName"]
+                val totalPurchases = f.figures.firstOrNull { it.key == "f4" }?.value?.toInt() ?: 0
                 val driverPurchases = f.figures.firstOrNull { it.key == "f7" }?.value?.toInt() ?: 0
                 if (isEs) {
                     val comp = if (compKind == "year_ago") "del mismo mes del año pasado" else "de tu media de seis meses"
                     val title = "Subida en $cat"
-                    val detail = when (driverKind) {
-                        "unlabelled" -> {
+                    val totalCompraWord = if (totalPurchases == 1) "compra" else "compras"
+                    val detail = when {
+                        totalPurchases == 1 && driverKind == "unlabelled" ->
+                            "$cat llegó a {f1} ({f2} por encima $comp, {f3}) en una sola compra sin etiqueta."
+                        totalPurchases == 1 && driverKind == "named" ->
+                            "$cat llegó a {f1} ({f2} por encima $comp, {f3}) en una sola compra en $driverName."
+                        totalPurchases == 1 && driverKind == "anonymized" ->
+                            "$cat llegó a {f1} ({f2} por encima $comp, {f3}) en una sola compra en un mismo comercio."
+                        driverKind == "unlabelled" -> {
                             val compraWord = if (driverPurchases == 1) "compra sin etiqueta" else "compras sin etiqueta"
                             val verb = if (driverPurchases == 1) "supone" else "suponen"
-                            "$cat llegó a {f1} ({f2} por encima $comp, {f3}) en {f4} compras, con {f7} $compraWord de {f5} que $verb el {f6} de la categoría."
+                            "$cat llegó a {f1} ({f2} por encima $comp, {f3}) en {f4} $totalCompraWord, con {f7} $compraWord de {f5} que $verb el {f6} de la categoría."
                         }
-                        "named" -> {
+                        driverKind == "named" -> {
                             val compraWord = if (driverPurchases == 1) "compra" else "compras"
-                            "$cat llegó a {f1} ({f2} por encima $comp, {f3}) en {f4} compras, con {f7} $compraWord en $driverName por {f5} ({f6} de la categoría)."
+                            "$cat llegó a {f1} ({f2} por encima $comp, {f3}) en {f4} $totalCompraWord, con {f7} $compraWord en $driverName por {f5} ({f6} de la categoría)."
                         }
-                        "anonymized" -> {
+                        driverKind == "anonymized" -> {
                             val compraWord = if (driverPurchases == 1) "compra" else "compras"
-                            "$cat llegó a {f1} ({f2} por encima $comp, {f3}) en {f4} compras, con {f7} $compraWord en un mismo comercio por {f5} ({f6} de la categoría)."
+                            "$cat llegó a {f1} ({f2} por encima $comp, {f3}) en {f4} $totalCompraWord, con {f7} $compraWord en un mismo comercio por {f5} ({f6} de la categoría)."
                         }
                         else -> "$cat llegó a {f1}, {f2} por encima $comp ({f3})."
                     }
@@ -670,19 +842,26 @@ object SpendingReviewRenderer {
                 } else {
                     val comp = if (compKind == "year_ago") "same month last year" else "six-month average"
                     val title = "Higher spending in $cat"
-                    val detail = when (driverKind) {
-                        "unlabelled" -> {
+                    val totalPurchaseWord = if (totalPurchases == 1) "purchase" else "purchases"
+                    val detail = when {
+                        totalPurchases == 1 && driverKind == "unlabelled" ->
+                            "$cat reached {f1} ({f2} above the $comp of {f3}) from a single unlabelled purchase."
+                        totalPurchases == 1 && driverKind == "named" ->
+                            "$cat reached {f1} ({f2} above the $comp of {f3}) from a single purchase at $driverName."
+                        totalPurchases == 1 && driverKind == "anonymized" ->
+                            "$cat reached {f1} ({f2} above the $comp of {f3}) from a single purchase at one payee."
+                        driverKind == "unlabelled" -> {
                             val purchaseWord = if (driverPurchases == 1) "unlabelled purchase" else "unlabelled purchases"
                             val verb = if (driverPurchases == 1) "accounts" else "account"
-                            "$cat reached {f1} ({f2} above the $comp of {f3}) across {f4} purchases, with {f7} $purchaseWord of {f5} that $verb for {f6} of the category."
+                            "$cat reached {f1} ({f2} above the $comp of {f3}) across {f4} $totalPurchaseWord, with {f7} $purchaseWord of {f5} that $verb for {f6} of the category."
                         }
-                        "named" -> {
+                        driverKind == "named" -> {
                             val purchaseWord = if (driverPurchases == 1) "purchase" else "purchases"
-                            "$cat reached {f1} ({f2} above the $comp of {f3}) across {f4} purchases, with {f7} $purchaseWord at $driverName totalling {f5} ({f6} of the category)."
+                            "$cat reached {f1} ({f2} above the $comp of {f3}) across {f4} $totalPurchaseWord, with {f7} $purchaseWord at $driverName totalling {f5} ({f6} of the category)."
                         }
-                        "anonymized" -> {
+                        driverKind == "anonymized" -> {
                             val purchaseWord = if (driverPurchases == 1) "purchase" else "purchases"
-                            "$cat reached {f1} ({f2} above the $comp of {f3}) across {f4} purchases, with {f7} $purchaseWord at one payee totalling {f5} ({f6} of the category)."
+                            "$cat reached {f1} ({f2} above the $comp of {f3}) across {f4} $totalPurchaseWord, with {f7} $purchaseWord at one payee totalling {f5} ({f6} of the category)."
                         }
                         else -> "$cat reached {f1}, {f2} above the $comp of {f3}."
                     }
@@ -711,20 +890,91 @@ object SpendingReviewRenderer {
 
             FindingKind.budget_overrun -> {
                 val isMult = f.context["overrunFormat"] == "multiple"
+                val hasTrailing = f.figures.any { it.key == "f5" }
+                val hasFreq = f.figures.any { it.key == "f6" } && f.figures.any { it.key == "f7" }
+                val fit = f.context["budgetFit"] ?: "genuine_overspend"
                 if (isEs) {
                     val ratio = if (isMult) "{f4} el presupuesto" else "{f4} del presupuesto"
-                    "$cat por encima del presupuesto" to "$cat llegó a {f1} frente a un presupuesto de {f2}: {f3} por encima ($ratio)."
+                    when {
+                        fit == "annual_better" && hasTrailing && hasFreq ->
+                            "$cat encaja mejor con un presupuesto anual" to
+                                "$cat llegó a {f1} frente a un presupuesto de {f2}: {f3} por encima ($ratio). El gasto superó el presupuesto en {f6} de los últimos {f7} meses con una media de seis meses de {f5}, concentrado en unos pocos cobros; un presupuesto anual encaja mejor que un tope mensual."
+                        fit == "annual_better" && hasFreq ->
+                            "$cat encaja mejor con un presupuesto anual" to
+                                "$cat llegó a {f1} frente a un presupuesto de {f2}: {f3} por encima ($ratio). El gasto superó el presupuesto en {f6} de los últimos {f7} meses, concentrado en unos pocos cobros; un presupuesto anual encaja mejor que un tope mensual."
+                        fit == "under_sized" && hasTrailing && hasFreq ->
+                            "Presupuesto bajo en $cat" to
+                                "$cat llegó a {f1} frente a un presupuesto de {f2}: {f3} por encima ($ratio). El gasto superó el presupuesto en {f6} de los últimos {f7} meses con una media de seis meses de {f5}; valora subir el presupuesto mensual."
+                        fit == "under_sized" && hasTrailing ->
+                            "Presupuesto bajo en $cat" to
+                                "$cat llegó a {f1} frente a un presupuesto de {f2}: {f3} por encima ($ratio), pero tu media de seis meses ya es de {f5}; valora subir el presupuesto mensual."
+                        hasFreq && hasTrailing ->
+                            "$cat por encima del presupuesto" to
+                                "$cat llegó a {f1} frente a un presupuesto de {f2}: {f3} por encima ($ratio), superándolo en {f6} de los últimos {f7} meses (media de seis meses: {f5})."
+                        hasFreq ->
+                            "$cat por encima del presupuesto" to
+                                "$cat llegó a {f1} frente a un presupuesto de {f2}: {f3} por encima ($ratio), superándolo en {f6} de los últimos {f7} meses."
+                        hasTrailing ->
+                            "$cat por encima del presupuesto" to
+                                "$cat llegó a {f1} frente a un presupuesto de {f2}: {f3} por encima ($ratio), por encima de tu media de seis meses de {f5}."
+                        else ->
+                            "$cat por encima del presupuesto" to
+                                "$cat llegó a {f1} frente a un presupuesto de {f2}: {f3} por encima ($ratio)."
+                    }
                 } else {
                     val ratio = if (isMult) "{f4} the budget" else "{f4} of the budget"
-                    "$cat over budget" to "$cat reached {f1} against a {f2} budget — {f3} over ($ratio)."
+                    when {
+                        fit == "annual_better" && hasTrailing && hasFreq ->
+                            "$cat fits an annual budget better" to
+                                "$cat reached {f1} against a {f2} budget — {f3} over ($ratio). Spending exceeded the budget in {f6} of the last {f7} months with a six-month average of {f5}, concentrated in a few bills; an annual budget fits this category better than a monthly cap."
+                        fit == "annual_better" && hasFreq ->
+                            "$cat fits an annual budget better" to
+                                "$cat reached {f1} against a {f2} budget — {f3} over ($ratio). Spending exceeded the budget in {f6} of the last {f7} months, concentrated in a few bills; an annual budget fits this category better than a monthly cap."
+                        fit == "under_sized" && hasTrailing && hasFreq ->
+                            "$cat budget looks too low" to
+                                "$cat reached {f1} against a {f2} budget — {f3} over ($ratio). Spending exceeded the budget in {f6} of the last {f7} months with a six-month average of {f5}; consider raising the monthly budget."
+                        fit == "under_sized" && hasTrailing ->
+                            "$cat budget looks too low" to
+                                "$cat reached {f1} against a {f2} budget — {f3} over ($ratio), and your six-month average is already {f5}; consider raising the monthly budget."
+                        hasFreq && hasTrailing ->
+                            "$cat over budget" to
+                                "$cat reached {f1} against a {f2} budget — {f3} over ($ratio), exceeding the budget in {f6} of the last {f7} months (six-month average {f5})."
+                        hasFreq ->
+                            "$cat over budget" to
+                                "$cat reached {f1} against a {f2} budget — {f3} over ($ratio), exceeding the budget in {f6} of the last {f7} months."
+                        hasTrailing ->
+                            "$cat over budget" to
+                                "$cat reached {f1} against a {f2} budget — {f3} over ($ratio), above your six-month average of {f5}."
+                        else ->
+                            "$cat over budget" to
+                                "$cat reached {f1} against a {f2} budget — {f3} over ($ratio)."
+                    }
                 }
             }
         }
     }
 
     private fun requiredPlaceholdersFor(f: SelectedFinding): Set<String> = when (f.kind) {
-        FindingKind.period_increase -> if (f.figures.any { it.key == "f5" }) setOf("f1", "f5", "f6") else setOf("f1", "f2")
-        FindingKind.budget_overrun -> setOf("f1", "f2", "f4")
+        FindingKind.habitual_uneven -> if (f.context["peakDominated"] == "true" && f.figures.any { it.key == "f6" }) {
+            setOf("f1", "f6")
+        } else {
+            setOf("f1")
+        }
+        FindingKind.income_change -> if (f.figures.any { it.key == "f4" }) setOf("f1", "f3", "f4") else setOf("f1", "f3")
+        FindingKind.period_increase -> {
+            val totalPurchases = f.figures.firstOrNull { it.key == "f4" }?.value?.toInt() ?: 0
+            if (totalPurchases > 1 && f.figures.any { it.key == "f5" }) setOf("f1", "f5", "f6") else setOf("f1", "f2")
+        }
+        FindingKind.budget_overrun -> buildSet {
+            add("f1")
+            add("f2")
+            add("f4")
+            if (f.context["budgetFit"] in setOf("annual_better", "under_sized") && f.figures.any { it.key == "f5" }) add("f5")
+            if (f.figures.any { it.key == "f6" } && f.figures.any { it.key == "f7" }) {
+                add("f6")
+                add("f7")
+            }
+        }
         else -> setOf("f1")
     }
 

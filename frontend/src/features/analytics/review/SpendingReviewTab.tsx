@@ -1006,6 +1006,20 @@ function ChangeFindingCard({
   );
 }
 
+function budgetUrlForFinding(item: AnalyticsBudgetFinding): string {
+  const params = new URLSearchParams();
+  const from = item.txFilter?.from;
+  if (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) {
+    params.set("year", String(Number(from.slice(0, 4))));
+    params.set("month", String(Number(from.slice(5, 7))));
+  }
+  if (item.categoryCode) {
+    params.set("category", item.categoryCode);
+  }
+  const qs = params.toString();
+  return qs ? `/budgets?${qs}` : "/budgets";
+}
+
 function BudgetFindingCard({
   item,
   currency,
@@ -1028,6 +1042,12 @@ function BudgetFindingCard({
           <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{item.title}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs">
+          <Link
+            to={budgetUrlForFinding(item)}
+            className="font-medium text-indigo-700 hover:underline dark:text-indigo-300"
+          >
+            {t("analytics.review.adjust_budget")}
+          </Link>
           {item.txFilter && (
             <Link
               to={transactionsUrlFromFilter(item.txFilter)}

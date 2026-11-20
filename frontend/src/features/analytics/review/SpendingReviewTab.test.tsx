@@ -525,4 +525,38 @@ describe("SpendingReviewTab & deep links", () => {
     expect(await screen.findByText("HBO recurring charge")).toBeInTheDocument();
     expect(requestedParams.some((p) => (p as { mode?: string } | undefined)?.mode === "savings_only")).toBe(true);
   });
+
+  it("renders a one-click Adjust budget link on budget overrun findings pointing to that period and category", async () => {
+    const withBudget: SpendingReviewCandidatesResponse = {
+      ...SAMPLE_CANDIDATES,
+      skeleton: {
+        ...SAMPLE_CANDIDATES.skeleton!,
+        budgetFindings: [
+          {
+            findingId: "bud_transport_car_maintenance",
+            categoryCode: "transport.car_maintenance",
+            title: "Car maintenance fits an annual budget better",
+            detail: "Car maintenance reached €533 against a €50 budget — €483 over (10.7× the budget).",
+            severity: "warning",
+            metrics: [],
+            citations: [],
+            txFilter: { from: "2026-05-01", to: "2026-05-31", direction: "expense", categoryCode: "transport.car_maintenance" },
+            explorerLink: null,
+          },
+        ],
+      },
+    };
+    vi.spyOn(apiClient, "get").mockImplementation(async (url: string) => {
+      if (url === "/features") return { data: { ai: false } };
+      if (url.endsWith("/analytics/years-available")) return { data: { years: [2026] } };
+      if (url.endsWith("/categories")) return { data: [] };
+      if (url.endsWith("/analytics/spending-review/candidates")) return { data: withBudget };
+      return { data: {} };
+    });
+
+    renderTab();
+
+    const adjustLink = await screen.findByRole("link", { name: "Adjust budget" });
+    expect(adjustLink).toHaveAttribute("href", "/budgets?year=2026&month=5&category=transport.car_maintenance");
+  });
 });

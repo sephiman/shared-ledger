@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
 import { useBudgets, useMonthSummary, useUpsertBudgets, type BudgetUpsertItem } from "@/api/budgets";
@@ -12,9 +13,19 @@ import { categoryLabel } from "@/lib/categoryLabel";
 export function BudgetsPage() {
   const { t, i18n } = useTranslation();
   const household = useActiveHousehold();
+  const [searchParams] = useSearchParams();
   const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth() + 1);
+  const initialYear = (() => {
+    const raw = Number(searchParams.get("year"));
+    return Number.isInteger(raw) && raw >= 1970 && raw <= 2200 ? raw : now.getFullYear();
+  })();
+  const initialMonth = (() => {
+    const raw = Number(searchParams.get("month"));
+    return Number.isInteger(raw) && raw >= 1 && raw <= 12 ? raw : now.getMonth() + 1;
+  })();
+  const highlightedCategory = searchParams.get("category")?.trim() || null;
+  const [year, setYear] = useState(initialYear);
+  const [month, setMonth] = useState(initialMonth);
   const { data: monthly = [] } = useBudgets(household.householdId, year, month);
   const { data: summary } = useMonthSummary(household.householdId, year, month);
   const { data: annual = [] } = useBudgets(household.householdId, year);
@@ -117,7 +128,14 @@ export function BudgetsPage() {
               const isEditingHere = editing?.code === c.code && editing.mode === "monthly";
               const monthlyAmount = monthlyByCat.get(c.code)?.amount;
               return (
-                <li key={c.code} className="rounded-md border border-border p-3">
+                <li
+                  key={c.code}
+                  className={
+                    highlightedCategory === c.code
+                      ? "rounded-md border border-indigo-400 bg-indigo-50/50 p-3 ring-1 ring-indigo-400/50 dark:border-indigo-500 dark:bg-indigo-950/30"
+                      : "rounded-md border border-border p-3"
+                  }
+                >
                   <div className="flex items-start justify-between gap-2">
                     <p className="font-medium">
                       <span className="mr-1.5" aria-hidden>{categoryIcon(c.code)}</span>
@@ -185,7 +203,14 @@ export function BudgetsPage() {
                 const isEditingHere = editing?.code === c.code && editing.mode === "monthly";
                 const monthlyAmount = monthlyByCat.get(c.code)?.amount;
                 return (
-                  <tr key={c.code} className="border-t border-border">
+                  <tr
+                    key={c.code}
+                    className={
+                      highlightedCategory === c.code
+                        ? "border-t border-border bg-indigo-50/50 dark:bg-indigo-950/30"
+                        : "border-t border-border"
+                    }
+                  >
                     <td className="py-2">
                       <span className="mr-1.5" aria-hidden>{categoryIcon(c.code)}</span>
                       {categoryLabel(c, t)}
@@ -247,7 +272,14 @@ export function BudgetsPage() {
               const isEditingHere = editing?.code === c.code && editing.mode === "annual";
               const annualAmount = annualByCat.get(c.code)?.amount;
               return (
-                <li key={c.code} className="rounded-md border border-border p-3">
+                <li
+                  key={c.code}
+                  className={
+                    highlightedCategory === c.code
+                      ? "rounded-md border border-indigo-400 bg-indigo-50/50 p-3 ring-1 ring-indigo-400/50 dark:border-indigo-500 dark:bg-indigo-950/30"
+                      : "rounded-md border border-border p-3"
+                  }
+                >
                   <div className="flex items-center justify-between gap-2">
                     <p className="font-medium">
                       <span className="mr-1.5" aria-hidden>{categoryIcon(c.code)}</span>
@@ -303,7 +335,14 @@ export function BudgetsPage() {
                 const isEditingHere = editing?.code === c.code && editing.mode === "annual";
                 const annualAmount = annualByCat.get(c.code)?.amount;
                 return (
-                  <tr key={c.code} className="border-t border-border">
+                  <tr
+                    key={c.code}
+                    className={
+                      highlightedCategory === c.code
+                        ? "border-t border-border bg-indigo-50/50 dark:bg-indigo-950/30"
+                        : "border-t border-border"
+                    }
+                  >
                     <td className="py-2">
                       <span className="mr-1.5" aria-hidden>{categoryIcon(c.code)}</span>
                       {categoryLabel(c, t)}

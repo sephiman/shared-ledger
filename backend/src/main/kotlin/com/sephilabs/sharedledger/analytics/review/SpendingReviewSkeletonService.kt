@@ -4,11 +4,14 @@ import com.sephilabs.sharedledger.analytics.AnalyticsService
 import com.sephilabs.sharedledger.budget.BudgetService
 import com.sephilabs.sharedledger.catalog.CategoryService
 import com.sephilabs.sharedledger.catalog.CategoryView
+import com.sephilabs.sharedledger.common.Money
 import com.sephilabs.sharedledger.household.HouseholdRepository
 import com.sephilabs.sharedledger.household.getOrThrow
 import org.springframework.context.MessageSource
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.Clock
 import java.time.LocalDate
 import java.time.YearMonth
@@ -22,6 +25,7 @@ class SpendingReviewSkeletonService(
     private val savingsCandidates: SavingsCandidatesService,
     private val analytics: AnalyticsService,
     private val budgets: BudgetService,
+    private val dataQueries: SpendingReviewDataQueries,
     private val categoryService: CategoryService,
     private val households: HouseholdRepository,
     private val messageSource: MessageSource,
@@ -99,6 +103,53 @@ class SpendingReviewSkeletonService(
             analytics.moneyFlowProjection(householdId, today, level = "category", windowMonths = 3)
         } else null
 
+        val incomeMovers = if (mode == ReviewMode.FULL) {
+            computeIncomeMovers(
+                householdId = householdId,
+                period = period,
+                windowFrom = candidatesResp.period.windowFrom,
+                windowTo = candidatesResp.period.windowTo,
+                monthsAvailable = candidatesResp.period.monthsAvailable,
+                categories = categories,
+            )
+        } else emptyList()
+
+        val budgetHistoryStats = if (mode == ReviewMode.FULL && budgetSummary != null) {
+            val overrunRows = budgetSummary.rows.filter { it.budget.signum() > 0 && it.spent > it.budget }
+            if (overrunRows.isNotEmpty()) {
+                val windowMonthsCount = candidatesResp.period.monthsAvailable.coerceAtLeast(1)
+                val windowMonths = (0 until windowMonthsCount).map { period.minusMonths(it.toLong()) }.reversed()
+                val prior6Months = (1..6).map { period.minusMonths(it.toLong()) }.toSet()
+                val queryFrom = minOf(candidatesResp.period.windowFrom, period.minusMonths(6).atDay(1))
+                val queryTo = candidatesResp.period.windowTo
+                val monthlyByCat = dataQueries.expenseMonthlyTotalsByCategory(
+                    householdId,
+                    queryFrom,
+                    queryTo,
+                    overrunRows.map { it.categoryCode },
+                )
+                val six = BigDecimal.valueOf(6L)
+                overrunRows.associate { row ->
+                    val byYm = monthlyByCat[row.categoryCode].orEmpty()
+                    val t6Total = prior6Months.fold(BigDecimal.ZERO) { a, ym -> a + (byYm[ym] ?: BigDecimal.ZERO).max(BigDecimal.ZERO) }
+                    val t6Avg = Money.normalize(t6Total.divide(six, 2, RoundingMode.HALF_EVEN))
+                    val series12 = windowMonths.map { ym -> (byYm[ym] ?: BigDecimal.ZERO).max(BigDecimal.ZERO) }
+                    val med12 = Money.normalize(SpendingReviewSelector.medianDecimal(series12))
+                    val tot12 = Money.normalize(series12.fold(BigDecimal.ZERO) { a, v -> a + v })
+                    val exceeded = series12.filter { it > row.budget }
+                    val exceededTotal = Money.normalize(exceeded.fold(BigDecimal.ZERO) { a, v -> a + v })
+                    row.categoryCode to BudgetHistoryStats(
+                        trailing6mAvg = t6Avg,
+                        median12m = med12,
+                        total12m = tot12,
+                        exceededMonths12m = exceeded.size,
+                        exceededMonthsTotal12m = exceededTotal,
+                        windowMonths = windowMonths.size,
+                    )
+                }
+            } else emptyMap()
+        } else emptyMap()
+
         return SpendingReviewSelector.select(
             SpendingReviewSelector.Inputs(
                 currency = currency,
@@ -112,8 +163,41 @@ class SpendingReviewSkeletonService(
                 budgetSummary = budgetSummary,
                 paceProjection = paceProjection,
                 categories = categories,
+                incomeMovers = incomeMovers,
+                budgetHistoryStats = budgetHistoryStats,
             ),
         )
+    }
+
+    private fun computeIncomeMovers(
+        householdId: UUID,
+        period: YearMonth,
+        windowFrom: LocalDate,
+        windowTo: LocalDate,
+        monthsAvailable: Int,
+        categories: List<CategoryView>,
+    ): List<IncomeCategoryMover> {
+        if (monthsAvailable <= 0) return emptyList()
+        val windowMonths = (0 until monthsAvailable).map { period.minusMonths(it.toLong()) }.reversed()
+        val monthlyByCat = dataQueries.incomeMonthlyTotalsByCategory(householdId, windowFrom, windowTo)
+        if (monthlyByCat.isEmpty()) return emptyList()
+        val catByCode = categories.associateBy { it.code }
+        val denom = BigDecimal.valueOf(windowMonths.size.toLong())
+
+        return monthlyByCat.map { (catCode, byYm) ->
+            val series = windowMonths.map { ym -> byYm[ym] ?: BigDecimal.ZERO }
+            val periodAmt = Money.normalize(byYm[period] ?: BigDecimal.ZERO)
+            val total = series.fold(BigDecimal.ZERO) { a, v -> a + v }
+            val avg = Money.normalize(total.divide(denom, 2, RoundingMode.HALF_EVEN))
+            val med = Money.normalize(SpendingReviewSelector.medianDecimal(series))
+            IncomeCategoryMover(
+                categoryCode = catCode,
+                groupCode = catByCode[catCode]?.group,
+                periodAmount = periodAmt,
+                avg12m = avg,
+                median12m = med,
+            )
+        }
     }
 
     fun categoryLabelResolver(categories: List<CategoryView>, locale: String): (String) -> String {

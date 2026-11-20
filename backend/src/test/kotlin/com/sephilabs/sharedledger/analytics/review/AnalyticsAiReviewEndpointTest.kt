@@ -155,6 +155,13 @@ class AnalyticsAiReviewEndpointTest @Autowired constructor(
         val secretNoteDate = lastComplete.atDay(19)
         txIds += postTx(owner, household, secretNoteDate, "expense", "shopping.other", "19.50", "Unique secret raw note xyz99")
 
+        // Income transactions with sensitive employer & person names: must trigger income_change in payload by category ONLY
+        for (m in 1L until 12L) {
+            txIds += postTx(owner, household, lastComplete.minusMonths(m).atDay(1), "income", "income.salary", "6000.00", "Acme Holdings BV Payroll")
+            txIds += postTx(owner, household, lastComplete.minusMonths(m).atDay(8), "income", "income.reimbursements", "150.00", "Jan de Vries Reimbursement")
+        }
+        txIds += postTx(owner, household, lastComplete.atDay(1), "income", "income.salary", "3800.00", "Acme Holdings BV Payroll")
+
         // Deterministic candidates expose mergedVariants locally for the Postcode Loterij cluster
         val candJson = mockMvc.perform(
             get("/api/households/$household/analytics/spending-review/candidates")
@@ -198,7 +205,14 @@ class AnalyticsAiReviewEndpointTest @Autowired constructor(
         assertThat(json).doesNotContain("Postcode Loterij")
         assertThat(json).doesNotContain("Nat Postcode Loterij")
 
-        // Excluded P2P & PII NEVER appear in outbound payload
+        // Excluded P2P, employer/payer income names & PII NEVER appear in outbound payload
+        val incomeFinding = findingsList.firstOrNull { it["kind"].asString() == "income_change" }
+        assertThat(incomeFinding).isNotNull()
+        assertThat(incomeFinding!!["categoryCode"].asString()).isEqualTo("income.salary")
+        assertThat(incomeFinding.has("subject")).isFalse()
+        assertThat(json).doesNotContain("Acme Holdings")
+        assertThat(json).doesNotContain("Payroll")
+        assertThat(json).doesNotContain("Jan de Vries")
         assertThat(json).doesNotContain(secretIban)
         assertThat(json).doesNotContain("Maria Garcia Lopez")
         assertThat(json).doesNotContain("van den Berg")
@@ -547,5 +561,80 @@ class AnalyticsAiReviewEndpointTest @Autowired constructor(
         assertThat(java.math.BigDecimal(rest["monthlyMedian"].asString())).isEqualByComparingTo(java.math.BigDecimal("80.00"))
         assertThat(java.math.BigDecimal(rest["monthlyMean"].asString())).isEqualByComparingTo(java.math.BigDecimal("161.67"))
         assertThat(java.math.BigDecimal(rest["trimToMedianMonthly"].asString())).isEqualByComparingTo(java.math.BigDecimal("81.67"))
+    }
+
+    @Test
+    fun `explains income shortfall against median income with an income mover and flags under-sized budgets using six-month averages`() {
+        val (owner, household) = createHousehold("review-income-budget-fit", enableAi = false)
+        // Seed 14 months (2025-04..2026-05) so both March 2026 and May 2026 have full 12-month trailing windows:
+        // normal months €6,000 salary, 2 bonus months (€12,000 in Jan/Feb), and May (€4,500).
+        // Seed transport.car_maintenance concentrated in 4 of the 12 months (median €0, 4/12 > €50 budget, 100% concentrated).
+        val windowStart = YearMonth.of(2025, 4)
+        for (i in 0L until 14L) {
+            val ym = windowStart.plusMonths(i)
+            val salary = when (ym) {
+                YearMonth.of(2026, 1), YearMonth.of(2026, 2) -> "12000.00"
+                YearMonth.of(2026, 5) -> "4500.00"
+                else -> "6000.00"
+            }
+            postTx(owner, household, ym.atDay(1), "income", "income.salary", salary, "Secret Employer Corp")
+            postTx(owner, household, ym.atDay(10), "expense", "groceries.groceries", "500.00", "Market")
+            val carBill = when (ym) {
+                YearMonth.of(2025, 9) -> "400.00"
+                YearMonth.of(2026, 1) -> "700.00"
+                YearMonth.of(2026, 4) -> "600.00"
+                YearMonth.of(2026, 5) -> "500.00"
+                else -> null
+            }
+            if (carBill != null) {
+                postTx(owner, household, ym.atDay(15), "expense", "transport.car_maintenance", carBill, "Garage")
+            }
+        }
+
+        // Create €50 monthly budget on transport.car_maintenance for May 2026
+        mockMvc.perform(
+            put("/api/households/$household/budgets")
+                .cookie(owner).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"items":[{"year":2026,"month":5,"categoryCode":"transport.car_maintenance","amount":"50.00"}]}"""),
+        ).andExpect(status().isOk)
+
+        // May 2026: income €4,500 is below BOTH mean (€6,875) and typical month (€6,000)
+        val mayJson = mockMvc.perform(
+            get("/api/households/$household/analytics/spending-review/candidates")
+                .param("year", "2026")
+                .param("month", "5")
+                .cookie(owner),
+        ).andExpect(status().isOk).andReturn().response.contentAsString
+        val maySkeleton = objectMapper.readTree(mayJson)["skeleton"]
+        assertThat(maySkeleton["summary"].asString()).contains("€6,000").contains("€1,500")
+        val firstChange = maySkeleton["whatChanged"][0]
+        assertThat(firstChange["categoryCode"].asString()).isEqualTo("income.salary")
+        assertThat(firstChange["changeKind"].asString()).isEqualTo("drop")
+        assertThat(firstChange["detail"].asString()).contains("€4,500").contains("€6,000").doesNotContain("Secret Employer")
+        assertThat(firstChange["txFilter"]["direction"].asString()).isEqualTo("income")
+
+        val carBudget = maySkeleton["budgetFindings"][0]
+        assertThat(carBudget["categoryCode"].asString()).isEqualTo("transport.car_maintenance")
+        assertThat(carBudget["title"].asString()).contains("annual budget")
+        assertThat(carBudget["detail"].asString())
+            .contains("4 of the last 12 months")
+            .contains("€216.67")
+            .contains("10×")
+            .contains("annual budget fits")
+
+        // March 2026 (€6,000 salary, €500 expenses): normal salary month whose mean is lifted by Jan/Feb €12,000 bonuses!
+        // Diagnosis is decided against median income (€6,000) & median savings (€5,500) -> NEVER says "lower income", no income_change drop!
+        val marJson = mockMvc.perform(
+            get("/api/households/$household/analytics/spending-review/candidates")
+                .param("year", "2026")
+                .param("month", "3")
+                .cookie(owner),
+        ).andExpect(status().isOk).andReturn().response.contentAsString
+        val marSkeleton = objectMapper.readTree(marJson)["skeleton"]
+        assertThat(marSkeleton["summary"].asString())
+            .doesNotContain("lower income")
+            .contains("typical €6,000 month")
+        assertThat(marSkeleton["whatChanged"].toList().none { it["categoryCode"]?.asString() == "income.salary" }).isTrue()
     }
 }

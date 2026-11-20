@@ -4,6 +4,7 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
 import org.springframework.stereotype.Repository
 import java.math.BigDecimal
 import java.time.LocalDate
+import java.time.YearMonth
 import java.util.UUID
 
 data class BankLinkMeta(
@@ -90,6 +91,65 @@ class SpendingReviewDataQueries(
               AND t.occurrence_date <= :upTo
         """.trimIndent()
         return jdbc.queryForObject(sql, mapOf("hid" to householdId, "upTo" to upTo), LocalDate::class.java)
+    }
+
+    /** Monthly net income totals per category within `from..to` (refunds already stored signed). */
+    fun incomeMonthlyTotalsByCategory(
+        householdId: UUID,
+        from: LocalDate,
+        to: LocalDate,
+    ): Map<String, Map<YearMonth, BigDecimal>> {
+        val sql = """
+            SELECT t.category_code AS category_code,
+                   EXTRACT(YEAR FROM t.occurrence_date)::int AS y,
+                   EXTRACT(MONTH FROM t.occurrence_date)::int AS m,
+                   COALESCE(SUM(t.amount), 0) AS total
+            FROM transactions t
+            WHERE t.household_id = :hid
+              AND t.deleted_at IS NULL
+              AND t.direction = 'income'
+              AND t.occurrence_date BETWEEN :from AND :to
+            GROUP BY t.category_code, y, m
+        """.trimIndent()
+        val out = LinkedHashMap<String, MutableMap<YearMonth, BigDecimal>>()
+        jdbc.query(sql, mapOf("hid" to householdId, "from" to from, "to" to to)) { rs ->
+            val cat = rs.getString("category_code")
+            val ym = YearMonth.of(rs.getInt("y"), rs.getInt("m"))
+            val total = rs.getBigDecimal("total") ?: BigDecimal.ZERO
+            out.computeIfAbsent(cat) { LinkedHashMap() }[ym] = total
+        }
+        return out
+    }
+
+    /** Monthly net expense totals per requested category within `from..to`, used to evaluate budget fit over 6m and 12m. */
+    fun expenseMonthlyTotalsByCategory(
+        householdId: UUID,
+        from: LocalDate,
+        to: LocalDate,
+        categoryCodes: Collection<String>,
+    ): Map<String, Map<YearMonth, BigDecimal>> {
+        if (categoryCodes.isEmpty()) return emptyMap()
+        val sql = """
+            SELECT t.category_code AS category_code,
+                   EXTRACT(YEAR FROM t.occurrence_date)::int AS y,
+                   EXTRACT(MONTH FROM t.occurrence_date)::int AS m,
+                   COALESCE(SUM(t.amount), 0) AS total
+            FROM transactions t
+            WHERE t.household_id = :hid
+              AND t.deleted_at IS NULL
+              AND t.direction = 'expense'
+              AND t.category_code IN (:codes)
+              AND t.occurrence_date BETWEEN :from AND :to
+            GROUP BY t.category_code, y, m
+        """.trimIndent()
+        val out = LinkedHashMap<String, MutableMap<YearMonth, BigDecimal>>()
+        jdbc.query(sql, mapOf("hid" to householdId, "codes" to categoryCodes.toList(), "from" to from, "to" to to)) { rs ->
+            val cat = rs.getString("category_code")
+            val ym = YearMonth.of(rs.getInt("y"), rs.getInt("m"))
+            val total = rs.getBigDecimal("total") ?: BigDecimal.ZERO
+            out.computeIfAbsent(cat) { LinkedHashMap() }[ym] = total
+        }
+        return out
     }
 
     /** Changes whenever any input to savings candidates changes (transactions, recurring templates,

@@ -4,7 +4,7 @@ package com.sephilabs.sharedledger.analytics.review
  *  Bump [VERSION] whenever the prompt text or output contract changes. */
 object AnalyticsAiReviewPrompt {
 
-    const val VERSION = "ar6"
+    const val VERSION = "ar7"
 
     private val OUTPUT_LANGUAGE = mapOf(
         "es" to "Spanish (second person singular 'tú', NEVER 'vosotros' or 'nosotros')",
@@ -18,7 +18,7 @@ You are a concise, factual financial copywriter. The app has already selected an
 
 Input JSON contains:
 - "scope": currency, monthName, reviewKind ("complete_month"|"pace_review"|"savings_only"), hasBudgets.
-- "summaryFacts": null in "savings_only" mode; otherwise directions ("below"|"above"|"at"), "diagnosis" + "diagnosisDetail", and a "figures" map ({f1}..{f10}, plus {f11}..{f14} for pace_review).
+- "summaryFacts": null in "savings_only" mode; otherwise directions ("below"|"above"|"at"), "diagnosis", "diagnosisDetail", "incomeVsMedianContext" ("normal_month_mean_skewed"|"below_typical"|"above_typical"|"in_line"), and a "figures" map ({f1}..{f10}, plus {f11}..{f14} for pace_review, and optional {f15}/{f16} for typical/median monthly income when median differs from mean).
 - "findings": an ordered array of pre-selected items. Each has "id", "section", "kind", optional "subject", optional "categoryName", optional "action", optional "context", and "figures" ({f1}..{fN}).
 
 Strict rules:
@@ -30,7 +30,7 @@ Strict rules:
   - Every "title" must be short and contain NO numbers and NO placeholders.
 - NEVER use any of these banned terms (or inflections/translations): "lumpy", "baseline", "flag", "flagged", "payload", "truncated", "trimming potential", "línea base", "bandera", "carga útil", "truncado", "potencial de recorte".
 - Summary (when summaryFacts != null; set null when summaryFacts == null):
-  - 2–3 sentences covering ALL four pairs vs the annual monthly average: expenses ({f1} vs {f2}, diff {f3}), income ({f4} vs {f5}, diff {f6}), net savings ({f7} vs {f8}), and savings rate ({f9} vs {f10}), plus a clear diagnosis sentence matching summaryFacts.diagnosis and diagnosisDetail (whether a shortfall comes from lower income, higher spending, or both — stating which contributed more — or why savings stayed in line or above average). For pace_review also mention projected expenses {f11}, projected savings {f12}, and day {f13} of {f14}.
+  - 2–3 sentences covering ALL four pairs vs the annual monthly average: expenses ({f1} vs {f2}, diff {f3}), income ({f4} vs {f5}, diff {f6}), net savings ({f7} vs {f8}), and savings rate ({f9} vs {f10}), plus a clear diagnosis sentence matching summaryFacts.diagnosis and diagnosisDetail (whether a shortfall comes from lower income, higher spending, or both — stating which contributed more — or why savings stayed in line or above average). When {f15} is present: if incomeVsMedianContext == "normal_month_mean_skewed", explicitly note that income was in line with a typical month of {f15} while higher-income months pull up the average; if "below_typical", note that income was {f16} below a typical month of {f15} as well as below the average. For pace_review also mention projected expenses {f11}, projected savings {f12}, and day {f13} of {f14}.
 - Finding details (1–2 sentences each):
   - Whenever an item has a non-anonymized "subject", name it explicitly in "detail" (e.g. "Nat Postcode", "Odido", "BelastingDienst").
   - "multiple" placeholders already format with "×" (e.g. "10.7×") — NEVER write "times" or "veces" after a multiple placeholder (write "{f4} the budget", not "{f4} times the budget").
@@ -38,11 +38,12 @@ Strict rules:
   - "avoidable_fee": state total {f1}, charges {f3}, and monthly average {f2}.
   - "negotiable_price_increase": note the increase {f3} from {f2} to {f1} ({f4} a year) and that it is worth comparing alternatives (never suggest cancelling essential utilities or insurance).
   - "top_merchant": state total {f1}, purchases {f2}, monthly average {f3}, and category share {f4}.
-  - "habitual_uneven": state monthly average {f1} across {f5} active months vs typical month {f2}, leaving {f3} a month ({f4} a year) above typical spending.
-  - "period_increase": state period total {f1} ({f2} above the six-month average or same month last year of {f3}); when {f4}..{f7} are present, state what drove the increase using {f4} purchases, {f7} purchases of {f5} ({f6} of the category) matching context.topDriverKind ("named" -> topDriverName, "unlabelled" -> unlabelled purchase, "anonymized" -> one payee).
+  - "habitual_uneven": state monthly average {f1} across {f5} active months vs typical month {f2}, leaving {f3} a month ({f4} a year) above typical spending; when context.peakDominated == "true" and {f6}/{f7} are present, also note that {f7} of that gap comes from a single {f6} peak month.
+  - "income_change": state period total {f1} vs annual average {f3} ({f2} below/above); when {f4} is present, also compare against the typical month {f4} (and diff {f5}), noting when context.vsMedian == "at" that the category was in line with a typical month while higher months pull up the average.
+  - "period_increase": state period total {f1} ({f2} above the six-month average or same month last year of {f3}); when {f4} == 1, phrase simply as a single purchase (named/unlabelled/one payee) without repeating {f5} or 100%; when {f4} > 1 and {f5}..{f7} are present, phrase as "across {f4} purchases, led by {f7} purchase(s) of {f5} ({f6} of the category)" matching context.topDriverKind ("named" -> topDriverName, "unlabelled" -> unlabelled purchase, "anonymized" -> one payee).
   - "non_actionable_price_change": state the change ({f3}, from {f2} to {f1}, {f4} a year) strictly as a plain fact with NO suggestion.
   - "zero_median_one_off": state total {f1} across {f2} active months with peak month {f3}, framed as occasional spending.
-  - "budget_overrun": state {f1} spent against {f2} budget, {f3} over ({f4}).
+  - "budget_overrun": state {f1} spent against {f2} budget, {f3} over ({f4}), and when {f6}/{f7} are present state that spending exceeded the budget in {f6} of the last {f7} months; if context.budgetFit == "annual_better", note the six-month average {f5} (when present) and that spending is concentrated in a few bills so an annual budget fits better than a monthly cap; if context.budgetFit == "under_sized", note the six-month average {f5} and suggest raising the monthly budget; otherwise note the six-month average {f5} when present.
 
 Answer with ONE JSON object only — no markdown fences, no commentary:
 {"summary":"<2-3 sentences using {f1}..{f10} or null>",

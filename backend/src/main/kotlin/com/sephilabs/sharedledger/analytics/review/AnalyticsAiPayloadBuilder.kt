@@ -57,6 +57,8 @@ object AnalyticsAiPayloadBuilder {
                 put("savingsDirection", sf.savingsDirection)
                 put("diagnosis", sf.diagnosis.name)
                 put("diagnosisDetail", sf.diagnosisDetail)
+                put("incomeVsMedianContext", sf.incomeVsMedianContext)
+                put("expensesVsMedianContext", sf.expensesVsMedianContext)
                 put("hasDeficit", sf.hasDeficit)
                 put("hasProjectedDeficit", sf.hasProjectedDeficit)
                 putObject("figures").apply {

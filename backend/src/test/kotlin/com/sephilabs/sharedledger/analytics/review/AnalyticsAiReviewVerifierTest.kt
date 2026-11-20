@@ -3,6 +3,7 @@ package com.sephilabs.sharedledger.analytics.review
 import com.sephilabs.sharedledger.analytics.MonthDashboardResponse
 import com.sephilabs.sharedledger.analytics.MoverRow
 import com.sephilabs.sharedledger.analytics.TopMoversResponse
+import com.sephilabs.sharedledger.analytics.TrailingPoint
 import com.sephilabs.sharedledger.analytics.TrailingResponse
 import com.sephilabs.sharedledger.analytics.TrailingSummary
 import com.sephilabs.sharedledger.analytics.question.AdjustmentKind
@@ -32,6 +33,7 @@ class AnalyticsAiReviewVerifierTest {
         CategoryView("outings.travel", "Travel", "expense", "outings", 9, false, false),
         CategoryView("transport.car_maintenance", "Car maintenance", "expense", "transport", 10, false, false),
         CategoryView("groceries.groceries", "Groceries", "expense", "groceries", 11, true, false),
+        CategoryView("income.salary", "Salary", "income", "income", 12, false, false),
     )
 
     private val catLabelsEn: (String) -> String = { code -> categories.firstOrNull { it.code == code }?.name ?: code }
@@ -47,6 +49,7 @@ class AnalyticsAiReviewVerifierTest {
             "outings.travel" to "Viajes",
             "transport.car_maintenance" to "Mantenimiento coche",
             "groceries.groceries" to "Supermercado",
+            "income.salary" to "Salario",
         )[code] ?: code
     }
 
@@ -301,7 +304,7 @@ class AnalyticsAiReviewVerifierTest {
                 { "id": "sav_fee_financial_fees", "title": "Account fees", "detail": "Fees added up to {f1} across {f3} charges ({f2} monthly)." },
                 { "id": "sav_rec_odido", "title": "Odido tariff rose", "detail": "Odido went up {f3} from {f2} to {f1} monthly ({f4} yearly); worth comparing." },
                 { "id": "sav_merch_frost", "title": "Hobbies spend at Frosthaven", "detail": "Frosthaven took {f1} across {f2} purchases ({f3} monthly, {f4} of the category)." },
-                { "id": "sav_habitual_outings_restaurants", "title": "Restaurants above typical month", "detail": "Restaurants averaged {f1} across {f5} active months vs a typical {f2}, leaving {f3} monthly ({f4} yearly)." },
+                { "id": "sav_habitual_outings_restaurants", "title": "Restaurants above typical month", "detail": "Restaurants averaged {f1} across {f5} active months vs a typical {f2}, leaving {f3} monthly ({f4} yearly), with {f7} from a single {f6} peak month." },
                 { "id": "chg_inc_outings_restaurants", "title": "Restaurants jumped on one purchase", "detail": "Restaurants hit {f1} ({f2} above the six-month average of {f3}) across {f4} purchases, led by {f7} unlabelled purchase of {f5} ({f6})." },
                 { "id": "chg_inc_groceries_groceries", "title": "Groceries up year on year", "detail": "Groceries reached {f1} ({f2} above last year's {f3}) across {f4} purchases, with {f7} at AH totalling {f5} ({f6})." },
                 { "id": "chg_rec_tax", "title": "Tax bill increased", "detail": "BelastingDienst rose {f3} from {f2} to {f1} a month ({f4} yearly)." },
@@ -765,5 +768,266 @@ class AnalyticsAiReviewVerifierTest {
             "sav_merch_ae",
         )
         assertThat(selectedWithout.savingsOmitted).isEqualTo(0)
+    }
+
+    @Test
+    fun `explains income shortfall against median income, adds top income mover to What changed, and distinguishes under-sized budgets from genuine overspends`() {
+        val base = sampleInputs()
+        val forbiddenEsRegister = Regex("""(?i)\b(vosotros|vuestro|vuestra|vuestros|vuestras|tenéis|podéis|gastáis|ahorráis|nosotros|nuestro|nuestra|nuestros|nuestras)\b""")
+
+        // 12m series where 3 bonus months pull the mean (€7,668.21) far above the median (€6,246.89)
+        val skewedPoints = listOf(
+            "6593.00", "7361.70", "6150.00", "6150.00", "6150.00", "6307.36",
+            "6186.41", "12713.53", "12965.22", "6085.84", "10908.86", "4446.64",
+        ).mapIndexed { i, inc ->
+            TrailingPoint(2025 + (5 + i) / 12, ((5 + i) % 12) + 1, BigDecimal(inc), BigDecimal("4700.52"), BigDecimal(inc) - BigDecimal("4700.52"), 30.0)
+        }
+
+        // Case A: May 2026 genuinely below typical month (€4,446.64 vs median €6,246.88 & mean €7,668.21)
+        val mayBelowTypical = SpendingReviewSelector.select(
+            base.copy(
+                trailing12 = base.trailing12.copy(points = skewedPoints),
+                incomeMovers = listOf(
+                    IncomeCategoryMover("income.salary", "income", BigDecimal("4446.64"), BigDecimal("7473.62"), BigDecimal("6150.00")),
+                ),
+                budgetSummary = MonthSummaryResponse(
+                    year = 2026, month = 5, daysElapsed = 31, daysInMonth = 31,
+                    rows = listOf(
+                        MonthSummaryRow("transport.car_maintenance", BigDecimal("50.00"), BigDecimal("533.00"), BigDecimal("50.00"), BigDecimal("533.00"), 1066.0),
+                        MonthSummaryRow("groceries.groceries", BigDecimal("400.00"), BigDecimal("595.00"), BigDecimal("400.00"), BigDecimal("595.00"), 148.75),
+                        MonthSummaryRow("outings.restaurants", BigDecimal("200.00"), BigDecimal("280.00"), BigDecimal("200.00"), BigDecimal("280.00"), 140.0),
+                    ),
+                ),
+                budgetHistoryStats = mapOf(
+                    // Near-zero median (€1 <= €5), concentrated in 4 of 12 months (99.4% of total) -> annual_better
+                    "transport.car_maintenance" to BudgetHistoryStats(
+                        trailing6mAvg = BigDecimal("230.98"),
+                        median12m = BigDecimal("1.00"),
+                        total12m = BigDecimal("2344.85"),
+                        exceededMonths12m = 4,
+                        exceededMonthsTotal12m = BigDecimal("2331.85"),
+                        windowMonths = 12,
+                    ),
+                    // Regular monthly spend well above budget (10 of 12 months) -> under_sized
+                    "groceries.groceries" to BudgetHistoryStats(
+                        trailing6mAvg = BigDecimal("540.00"),
+                        median12m = BigDecimal("520.00"),
+                        total12m = BigDecimal("6300.00"),
+                        exceededMonths12m = 10,
+                        exceededMonthsTotal12m = BigDecimal("5500.00"),
+                        windowMonths = 12,
+                    ),
+                    // Usually under budget (2 of 12 months) -> genuine_overspend
+                    "outings.restaurants" to BudgetHistoryStats(
+                        trailing6mAvg = BigDecimal("170.00"),
+                        median12m = BigDecimal("150.00"),
+                        total12m = BigDecimal("2000.00"),
+                        exceededMonths12m = 2,
+                        exceededMonthsTotal12m = BigDecimal("560.00"),
+                        windowMonths = 12,
+                    ),
+                ),
+            ),
+        )
+
+        val sfA = mayBelowTypical.summaryFacts!!
+        assertThat(sfA.diagnosis).isEqualTo(SummaryDiagnosis.shortfall_from_income)
+        assertThat(sfA.incomeVsMedianContext).isEqualTo("below_typical")
+        assertThat(sfA.figures.first { it.key == "f15" }.value).isEqualByComparingTo(BigDecimal("6246.88"))
+        assertThat(sfA.figures.first { it.key == "f16" }.value).isEqualByComparingTo(BigDecimal("1800.24"))
+
+        // Top finding in What changed is the income.salary drop, clickable to income transactions (no Explorer link)
+        val incFinding = mayBelowTypical.whatChanged.first()
+        assertThat(incFinding.kind).isEqualTo(FindingKind.income_change)
+        assertThat(incFinding.categoryCode).isEqualTo("income.salary")
+        assertThat(incFinding.changeKind).isEqualTo("drop")
+        assertThat(incFinding.txFilter!!.direction).isEqualTo("income")
+        assertThat(incFinding.explorerLink).isNull()
+
+        // Budgets distinguish annual_better (car maintenance), under_sized (groceries), and genuine_overspend (restaurants)
+        val carBudget = mayBelowTypical.budgets.first { it.categoryCode == "transport.car_maintenance" }
+        val grocBudget = mayBelowTypical.budgets.first { it.categoryCode == "groceries.groceries" }
+        val restBudget = mayBelowTypical.budgets.first { it.categoryCode == "outings.restaurants" }
+        assertThat(carBudget.context["budgetFit"]).isEqualTo("annual_better")
+        assertThat(carBudget.figures.first { it.key == "f5" }.value).isEqualByComparingTo(BigDecimal("230.98"))
+        assertThat(carBudget.figures.first { it.key == "f6" }.value).isEqualByComparingTo(BigDecimal("4"))
+        assertThat(carBudget.figures.first { it.key == "f7" }.value).isEqualByComparingTo(BigDecimal("12"))
+        assertThat(grocBudget.context["budgetFit"]).isEqualTo("under_sized")
+        assertThat(restBudget.context["budgetFit"]).isEqualTo("genuine_overspend")
+
+        // Case B: Normal salary month (€6,150) where 12m mean (€7,668.21) is lifted by bonus months.
+        // Diagnosis is decided against median income (€6,246.88) and median savings (€1,546.36):
+        // NEVER flagged as "lower income" / shortfall_from_income, and NO spurious income_change finding!
+        val normalMonthSkewed = SpendingReviewSelector.select(
+            base.copy(
+                monthDashboard = base.monthDashboard.copy(
+                    income = BigDecimal("6150.00"),
+                    expenses = BigDecimal("3832.48"),
+                    savings = BigDecimal("2317.52"),
+                    savingsRate = 37.68,
+                ),
+                trailing12 = base.trailing12.copy(points = skewedPoints),
+                incomeMovers = listOf(
+                    IncomeCategoryMover("income.salary", "income", BigDecimal("6150.00"), BigDecimal("7473.62"), BigDecimal("6150.00")),
+                ),
+            ),
+        )
+        assertThat(normalMonthSkewed.summaryFacts!!.diagnosis).isEqualTo(SummaryDiagnosis.on_track_or_above)
+        assertThat(normalMonthSkewed.summaryFacts.incomeDirection).isEqualTo("at")
+        assertThat(normalMonthSkewed.summaryFacts.incomeVsMedianContext).isEqualTo("normal_month_mean_skewed")
+        assertThat(normalMonthSkewed.whatChanged.none { it.kind == FindingKind.income_change }).isTrue()
+        val normalSumEn = SpendingReviewRenderer.substitute(
+            SpendingReviewRenderer.summaryTemplate(normalMonthSkewed.summaryFacts, "en"),
+            normalMonthSkewed.summaryFacts.figures,
+            "EUR",
+            "en",
+        )
+        assertThat(normalSumEn).doesNotContain("lower income").contains("typical €6,246.88 month")
+
+        // Verify EN & ES templates pass placeholder, diagnosis, banned-terms, and Spanish tu-register checks
+        for (rev in listOf(mayBelowTypical, normalMonthSkewed)) {
+            val sf = rev.summaryFacts!!
+            for ((loc, labels) in listOf("en" to catLabelsEn, "es" to catLabelsEs)) {
+                val sumTpl = SpendingReviewRenderer.summaryTemplate(sf, loc)
+                assertThat(
+                    SpendingReviewRenderer.validatePlaceholderProse(
+                        sumTpl,
+                        sf.figures.map { it.key }.toSet(),
+                        setOf("f1", "f2", "f4", "f5", "f7", "f8", "f9", "f10", "f15"),
+                    ),
+                ).describedAs("summary ($loc): $sumTpl").isNull()
+                assertThat(SpendingReviewRenderer.validateSummaryDiagnosis(sumTpl, sf))
+                    .describedAs("summary diagnosis ($loc): $sumTpl")
+                    .isNull()
+                if (loc == "es") {
+                    assertThat(forbiddenEsRegister.containsMatchIn(sumTpl)).isFalse()
+                }
+                for (f in rev.whatChanged.filter { it.kind == FindingKind.income_change } + rev.budgets) {
+                    val (title, detail) = SpendingReviewRenderer.findingTemplate(f, loc, labels, useLocalName = true)
+                    assertThat(SpendingReviewRenderer.validateTitle(title)).describedAs("title ($loc/${f.kind}): $title").isNull()
+                    assertThat(
+                        SpendingReviewRenderer.validatePlaceholderProse(detail, f.figures.map { it.key }.toSet(), setOf("f1")),
+                    ).describedAs("detail ($loc/${f.kind}): $detail").isNull()
+                    if (loc == "es") {
+                        assertThat(forbiddenEsRegister.containsMatchIn("$title $detail")).isFalse()
+                    }
+                }
+            }
+        }
+
+        // Model that omits {f5} or {f6}/{f7} on an annual_better budget falls back to the deterministic template
+        val omitAvgModel = mapper.readTree(
+            """{"summary":null,"findings":[{"id":"bud_transport_car_maintenance","title":"Car maintenance over budget","detail":"Car maintenance reached {f1} against {f2}, {f3} over ({f4})."}]}""",
+        )
+        val renderedCar = SpendingReviewRenderer.renderWithModel(mayBelowTypical, omitAvgModel, "en", catLabelsEn)
+            .findings.first { it.findingId == "bud_transport_car_maintenance" }
+        assertThat(renderedCar.usedModel).isFalse()
+        assertThat(renderedCar.fallbackReason).isEqualTo("missing_required_placeholder:f5")
+        assertThat(renderedCar.detail).contains("4 of the last 12 months").contains("€230.98").contains("annual budget fits")
+    }
+
+    @Test
+    fun `handles single-purchase movers without plural bugs, applies median-expenses guard in summary, and flags peak-dominated habitual categories`() {
+        val base = sampleInputs()
+        val forbiddenEsRegister = Regex("""(?i)\b(vosotros|vuestro|vuestra|vuestros|vuestras|tenéis|podéis|gastáis|ahorráis|nosotros|nuestro|nuestra|nuestros|nuestras)\b""")
+
+        // 1. Single-purchase period_increase (f4 = 1, f7 = 1): no "1 compras" / "1 purchases" or redundant 100% repetition
+        val singlePurchaseInputs = base.copy(
+            moversVsTrailing6 = TopMoversResponse(
+                year = 2026, month = 3, baseline = "trailing6_avg",
+                increases = listOf(
+                    MoverRow("outings.travel", "outings", BigDecimal("6144.60"), BigDecimal("29.10"), BigDecimal("6115.50"), 21015.46),
+                ),
+                decreases = emptyList(), newActivity = emptyList(),
+                totalIncrease = BigDecimal("6115.50"), totalDecrease = BigDecimal.ZERO,
+            ),
+            moverBreakdowns = mapOf(
+                "outings.travel" to MoverCategoryBreakdown(
+                    categoryCode = "outings.travel",
+                    periodTotal = BigDecimal("6144.60"),
+                    periodPurchases = 1,
+                    topMerchants = listOf(
+                        MoverMerchantDriver("Frequent counterparty in outings.travel", true, BigDecimal("6144.60"), 1, 100.0),
+                    ),
+                    topMerchantsSummary = null,
+                    otherMerchants = null,
+                ),
+            ),
+        )
+        val selectedSingle = SpendingReviewSelector.select(singlePurchaseInputs)
+        val travelInc = selectedSingle.whatChanged.first { it.categoryCode == "outings.travel" }
+        val (_, detailEs) = SpendingReviewRenderer.findingTemplate(travelInc, "es", catLabelsEs, useLocalName = true)
+        val (_, detailEn) = SpendingReviewRenderer.findingTemplate(travelInc, "en", catLabelsEn, useLocalName = true)
+        assertThat(detailEs).contains("en una sola compra en un mismo comercio.").doesNotContain("compras")
+        assertThat(detailEn).contains("from a single purchase at one payee.").doesNotContain("purchases")
+        assertThat(SpendingReviewRenderer.validatePlaceholderProse(detailEs, travelInc.figures.map { it.key }.toSet(), setOf("f1", "f2"))).isNull()
+        assertThat(SpendingReviewRenderer.validatePlaceholderProse(detailEn, travelInc.figures.map { it.key }.toSet(), setOf("f1", "f2"))).isNull()
+        assertThat(forbiddenEsRegister.containsMatchIn(detailEs)).isFalse()
+
+        // 2. Median expenses guard: travel-inflated mean expenses (€4,700.52) vs median (€4,043.64).
+        // A normal €4,050 spending month must read as expensesDirection == "at" ("normal_month_mean_skewed"), NOT "below".
+        val travelSkewedExpenses = listOf(
+            "4063.50", "3864.26", "4356.67", "4025.58", "3047.73", "4061.69",
+            "3759.39", "5318.87", "3391.29", "10070.38", "6614.45", "3832.48",
+        ).mapIndexed { i, exp ->
+            val e = BigDecimal(exp)
+            val inc = BigDecimal("6200.00")
+            TrailingPoint(2025 + (5 + i) / 12, ((5 + i) % 12) + 1, inc, e, inc - e, 30.0)
+        }
+        val ordinarySpend = SpendingReviewSelector.select(
+            base.copy(
+                monthDashboard = base.monthDashboard.copy(
+                    income = BigDecimal("4446.64"),
+                    expenses = BigDecimal("4050.00"),
+                    savings = BigDecimal("396.64"),
+                    savingsRate = 8.92,
+                ),
+                trailing12 = TrailingResponse(
+                    points = travelSkewedExpenses,
+                    summary = TrailingSummary(
+                        avgIncome = BigDecimal("6200.00"),
+                        avgExpenses = BigDecimal("4700.52"),
+                        avgNetSavings = BigDecimal("1499.48"),
+                        medianNetSavings = BigDecimal("2156.36"),
+                    ),
+                ),
+            ),
+        )
+        val sfExp = ordinarySpend.summaryFacts!!
+        assertThat(sfExp.expensesDirection).isEqualTo("at")
+        assertThat(sfExp.expensesVsMedianContext).isEqualTo("normal_month_mean_skewed")
+        assertThat(sfExp.figures.first { it.key == "f18" }.value).isEqualByComparingTo(BigDecimal("4043.64"))
+        val sumEn = SpendingReviewRenderer.substitute(SpendingReviewRenderer.summaryTemplate(sfExp, "en"), sfExp.figures, "EUR", "en")
+        val sumEs = SpendingReviewRenderer.substitute(SpendingReviewRenderer.summaryTemplate(sfExp, "es"), sfExp.figures, "EUR", "es")
+        assertThat(sumEn).contains("in line with a typical month of €4,043.64")
+        assertThat(sumEs).contains("en línea con un mes habitual de 4.043,64 €")
+        assertThat(forbiddenEsRegister.containsMatchIn(sumEs)).isFalse()
+
+        // 3. Peak-month outlier attribution on habitual_uneven (Restaurants & bars: €1,386.45 peak is 79.9% of 12m excess)
+        val restHab = selectedSingle.savings.first { it.kind == FindingKind.habitual_uneven }
+        assertThat(restHab.context["peakDominated"]).isEqualTo("true")
+        assertThat(restHab.figures.first { it.key == "f6" }.value).isEqualByComparingTo(BigDecimal("1386.45"))
+        assertThat(restHab.figures.first { it.key == "f7" }.value).isEqualByComparingTo(BigDecimal("79.91"))
+        val habEn = SpendingReviewRenderer.substitute(
+            SpendingReviewRenderer.findingTemplate(restHab, "en", catLabelsEn).second,
+            restHab.figures, "EUR", "en",
+        )
+        val habEs = SpendingReviewRenderer.substitute(
+            SpendingReviewRenderer.findingTemplate(restHab, "es", catLabelsEs).second,
+            restHab.figures, "EUR", "es",
+        )
+        assertThat(habEn).contains("79.9%").contains("€1,386.45 peak month")
+        assertThat(habEs).contains("79,9 %").contains("pico mensual de 1.386,45 €")
+        assertThat(forbiddenEsRegister.containsMatchIn(habEs)).isFalse()
+
+        // Model omitting {f6} on a peak-dominated habitual finding falls back to the deterministic template
+        val omitPeakModel = mapper.readTree(
+            """{"summary":null,"findings":[{"id":"sav_habitual_outings_restaurants","title":"Restaurants above typical","detail":"Restaurants averaged {f1} across {f5} months vs {f2}, leaving {f3} monthly ({f4} yearly)."}]}""",
+        )
+        val renderedHab = SpendingReviewRenderer.renderWithModel(selectedSingle, omitPeakModel, "en", catLabelsEn)
+            .findings.first { it.findingId == "sav_habitual_outings_restaurants" }
+        assertThat(renderedHab.usedModel).isFalse()
+        assertThat(renderedHab.fallbackReason).isEqualTo("missing_required_placeholder:f6")
+        assertThat(renderedHab.detail).contains("€1,386.45")
     }
 }
