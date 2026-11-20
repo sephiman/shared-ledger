@@ -67,7 +67,7 @@ export function computeCurrentWealth(input: CurrentWealthInput): CurrentWealth {
   }
 
   let liabilities = zero;
-  for (const liability of input.liabilities.filter((l) => l.active)) {
+  for (const liability of input.liabilities.filter((l) => l.active && l.countsTowardNetWorth)) {
     const prev = input.prefill.previous?.liabilities.find((l) => l.liabilityId === liability.id);
     liabilities = liabilities.plus(
       toDecimal(input.namedValues.liabilities[liability.id] ?? prev?.balance ?? liability.latestBalance ?? 0),

@@ -120,6 +120,7 @@ function useInvalidateSchedule(householdId: string, liabilityId: string) {
   return () => {
     void qc.invalidateQueries({ queryKey: ["amortization-schedule", householdId, liabilityId] });
     void qc.invalidateQueries({ queryKey: ["liabilities", householdId] });
+    void qc.invalidateQueries({ queryKey: ["named-values", householdId] });
   };
 }
 

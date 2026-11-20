@@ -13,6 +13,7 @@ import com.sephilabs.sharedledger.networth.liability.Liability
 import com.sephilabs.sharedledger.networth.liability.LiabilityBalanceEntry
 import com.sephilabs.sharedledger.networth.liability.LiabilityBalanceEntryRepository
 import com.sephilabs.sharedledger.networth.liability.LiabilityRepository
+import com.sephilabs.sharedledger.networth.liability.LiabilityType
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -32,7 +33,9 @@ class LiabilityImportService(
 
     private val log = LoggerFactory.getLogger(javaClass)
 
-    private val expectedHeaders = listOf("name", "active", "amortizable", "charge_day", "balance_date", "balance")
+    private val requiredHeaders = listOf("name", "active", "amortizable", "charge_day", "balance_date", "balance")
+    private val optionalHeaders = setOf("type", "counts_toward_net_worth")
+    private val allowedHeaders = requiredHeaders.toSet() + optionalHeaders
 
     @Transactional(readOnly = true)
     fun preview(householdId: UUID, input: InputStream): PreviewSummary {
@@ -58,13 +61,17 @@ class LiabilityImportService(
             val liability = existingByName[row.name] ?: Liability(
                 householdId = householdId,
                 name = row.name,
+                type = row.type,
                 active = row.active,
+                countsTowardNetWorth = row.countsTowardNetWorth,
                 amortizable = row.amortizable,
                 chargeDay = row.chargeDay,
                 createdByUserId = by.id,
                 updatedByUserId = by.id,
             ).also { liabilities.save(it); existingByName[row.name] = it; inserted++ }
+            liability.type = row.type
             liability.active = row.active
+            liability.countsTowardNetWorth = row.countsTowardNetWorth
             liability.amortizable = row.amortizable
             liability.chargeDay = row.chargeDay
             liability.updatedByUserId = by.id
@@ -84,9 +91,12 @@ class LiabilityImportService(
     private fun parse(householdId: UUID, input: InputStream): Parsed {
         val result = CsvReader.parse(input)
         if (result.parseError != null) throw AppException.badRequest("IMPORT_PARSE_FAILED")
-        CsvSupport.headerErrorArgs(expectedHeaders, result.headers)?.let {
+        headerErrorArgs(result.headers)?.let {
             return Parsed(result.rows.size, emptyList(), 0, listOf(RowError(1, "IMPORT_HEADER_INVALID", null, it)))
         }
+        val headerSet = result.headers.toSet()
+        val hasTypeColumn = "type" in headerSet
+        val hasCountsColumn = "counts_toward_net_worth" in headerSet
         val existing = liabilities.findAllByHouseholdIdOrderByNameAsc(householdId)
         val existingBalances = existing.associate { l ->
             l.name to balances.findAllByLiabilityIdOrderByBalanceDateDescCreatedAtDesc(l.id).map { it.balanceDate to it.balance }.toSet()
@@ -98,8 +108,24 @@ class LiabilityImportService(
             val rowNo = idx + 2
             val name = raw["name"].orEmpty().trim()
             if (name.isEmpty()) { errors.add(RowError(rowNo, "IMPORT_NAME_REQUIRED", "name", "")); continue }
+            val type = if (!hasTypeColumn) {
+                LiabilityType.other_debt
+            } else {
+                val rawType = raw["type"].orEmpty().trim().lowercase()
+                if (rawType.isEmpty()) LiabilityType.other_debt
+                else LiabilityType.entries.find { it.name == rawType }
+                    ?: run { errors.add(RowError(rowNo, "IMPORT_LIABILITY_TYPE_INVALID", "type", raw["type"])); continue }
+            }
             val active = CsvSupport.parseBoolean(raw["active"])
             if (active == null) { errors.add(RowError(rowNo, "IMPORT_BOOLEAN_INVALID", "active", raw["active"])); continue }
+            val countsTowardNetWorth = if (!hasCountsColumn) {
+                true
+            } else {
+                val rawCounts = raw["counts_toward_net_worth"].orEmpty().trim()
+                if (rawCounts.isEmpty()) true
+                else CsvSupport.parseBoolean(rawCounts)
+                    ?: run { errors.add(RowError(rowNo, "IMPORT_BOOLEAN_INVALID", "counts_toward_net_worth", raw["counts_toward_net_worth"])); continue }
+            }
             val amortizable = CsvSupport.parseBoolean(raw["amortizable"])
             if (amortizable == null) { errors.add(RowError(rowNo, "IMPORT_BOOLEAN_INVALID", "amortizable", raw["amortizable"])); continue }
             val chargeDayStr = raw["charge_day"].orEmpty().trim()
@@ -114,14 +140,30 @@ class LiabilityImportService(
                 balance = Csv.parseDecimal(balStr)?.let { Money.normalize(it) } ?: run { errors.add(RowError(rowNo, "IMPORT_VALUE_INVALID", "balance", balStr)); continue }
             }
             if (balanceDate != null && (balanceDate to balance!!) in (existingBalances[name] ?: emptySet())) { toSkip++; continue }
-            toInsert.add(Row(name, active, amortizable, chargeDay, balanceDate, balance))
+            toInsert.add(Row(name, type, active, countsTowardNetWorth, amortizable, chargeDay, balanceDate, balance))
         }
         return Parsed(result.rows.size, toInsert, toSkip, errors)
+    }
+
+    private fun headerErrorArgs(actual: List<String>): String? {
+        val missing = requiredHeaders - actual.toSet()
+        val unknown = actual - allowedHeaders
+        if (missing.isEmpty() && unknown.isEmpty()) return null
+        return (missing.map { "missing:$it" } + unknown.map { "unknown:$it" }).joinToString(", ")
     }
 
     private fun parseDate(s: String): LocalDate? =
         if (s.isEmpty()) null else try { LocalDate.parse(s) } catch (_: DateTimeParseException) { null }
 
-    private data class Row(val name: String, val active: Boolean, val amortizable: Boolean, val chargeDay: Int?, val balanceDate: LocalDate?, val balance: BigDecimal?)
+    private data class Row(
+        val name: String,
+        val type: LiabilityType,
+        val active: Boolean,
+        val countsTowardNetWorth: Boolean,
+        val amortizable: Boolean,
+        val chargeDay: Int?,
+        val balanceDate: LocalDate?,
+        val balance: BigDecimal?,
+    )
     private data class Parsed(val totalRows: Int, val toInsert: List<Row>, val toSkip: Int, val errors: List<RowError>)
 }

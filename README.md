@@ -268,6 +268,8 @@ Named debts that **subtract** from net worth, in a **Liabilities** tab under the
 - Snapshots and the tab show the **name**, never the UUID.
 - Full CSV export/import cycle (see [Liabilities CSV](#liabilities-csv) and [Amortization CSV](#amortization-csv)).
 
+Each liability also carries a **type** (*Mortgage* or *Other debt*, defaulting to *Other debt* and shown as a badge next to the name; informational only in this round — it changes no calculation) and a **"Counts toward net worth"** toggle (default on). Turning the toggle off keeps the liability's balance history or amortization schedule intact and still records its balance in new snapshots (shown in snapshot detail marked as *Not counted*), without subtracting it from net worth in new snapshots or in the Home *Current wealth* tile; every snapshot freezes whether each liability counted when it was taken, so changing the option later never alters existing snapshots. Creating a liability without loans requires its current outstanding debt (greater than zero) and an as-of date (default today, not in the future) written atomically alongside the liability so it never starts without a value; when *Contains loans* is on, the balance comes solely from its loan schedules and manual balance entries are disallowed so the two sources never coexist.
+
 ### Lending (Prestado)
 
 Tracking-only records of money the household has **lent to other people**. They live in their own sub-tab under *Patrimonio → Prestado*, alongside snapshots, movements and liabilities. They are deliberately kept out of the money path: a lending **never produces a transaction**, does not affect income/expense totals, and is **not included in net worth**. The household uses them purely to remember what it is owed and how repayment is progressing.
@@ -1459,12 +1461,14 @@ Car;vehicle;true;2026-01-01;18000,00
 
 ### Liabilities CSV
 
-Header: `name;active;amortizable;charge_day;balance_date;balance`. One row per dated balance. Amortizable loans carry their schedule via the [Amortization CSV](#amortization-csv) and usually leave the balance columns empty here.
+Header: `name;type;active;counts_toward_net_worth;amortizable;charge_day;balance_date;balance` (older 6-column files without `type` or `counts_toward_net_worth` are still accepted, defaulting to `other_debt` and `true`). One row per dated balance. Amortizable loans carry their schedule via the [Amortization CSV](#amortization-csv) and usually leave the balance columns empty here.
 
 | Column | Required | Values |
 | --- | --- | --- |
 | `name` | yes | Liability name; identifies it (reused if it exists). |
+| `type` | no | `mortgage` / `other_debt` (defaults to `other_debt`). |
 | `active` | yes | `true` / `false`. |
+| `counts_toward_net_worth` | no | `true` / `false` (defaults to `true`). |
 | `amortizable` | yes | `true` when the balance is computed by a schedule. |
 | `charge_day` | if `amortizable` | Day of month (1–31) the instalment is charged. |
 | `balance_date` | no | ISO date of a manual balance (empty for amortizable). |
@@ -1473,9 +1477,9 @@ Header: `name;active;amortizable;charge_day;balance_date;balance`. One row per d
 Matched by name; a balance row already present (same date and value) is skipped. **Import Liabilities before the Amortization feed** (the amortization rows reference existing liabilities).
 
 ```csv
-name;active;amortizable;charge_day;balance_date;balance
-Credit card;true;false;;2026-03-31;1200,00
-Mortgage;true;true;28;;
+name;type;active;counts_toward_net_worth;amortizable;charge_day;balance_date;balance
+Credit card;other_debt;true;true;false;;2026-03-31;1200,00
+Mortgage;mortgage;true;true;true;28;;
 ```
 
 ### Amortization CSV

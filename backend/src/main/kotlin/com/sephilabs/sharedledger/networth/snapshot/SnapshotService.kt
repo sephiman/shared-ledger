@@ -108,10 +108,13 @@ class SnapshotService(
         // Correcting cash re-anchors: a user-entered cash value (differing from the estimate) writes
         // a new adjustment at the snapshot date, so the estimate never becomes a desynced truth.
         reAnchorCashIfCorrected(householdId, request.snapshotDate, snapshot.assetValues, cashEstimate, createdByUserId)
+        val countedByLiabilityId = liabilities.findAllByHouseholdIdOrderByNameAsc(householdId)
+            .associate { it.id to it.countsTowardNetWorth }
         snapshot.liabilityBalances = request.liabilities.map {
             SnapshotLiabilityBalance(
                 id = SnapshotLiabilityBalanceId(snapshot.id, it.liabilityId),
                 balance = Money.normalize(it.balance),
+                countsTowardNetWorth = countedByLiabilityId[it.liabilityId] ?: true,
             )
         }.toMutableList()
         snapshot.namedAssetValues = request.namedAssets.map {
@@ -146,6 +149,10 @@ class SnapshotService(
         val givenClasses = request.assets.map { it.assetClassCode }.toSet()
         if (!givenClasses.containsAll(expectedClasses)) throw AppException.badRequest("SNAPSHOT_MISSING_ASSET_VALUES")
 
+        val existingCounted = snapshot.liabilityBalances.associate { it.id.liabilityId to it.countsTowardNetWorth }
+        val currentCounted = liabilities.findAllByHouseholdIdOrderByNameAsc(householdId)
+            .associate { it.id to it.countsTowardNetWorth }
+
         snapshot.snapshotDate = request.snapshotDate
         snapshot.note = request.note
         snapshot.updatedByUserId = by.id
@@ -164,6 +171,7 @@ class SnapshotService(
             SnapshotLiabilityBalance(
                 id = SnapshotLiabilityBalanceId(snapshot.id, it.liabilityId),
                 balance = Money.normalize(it.balance),
+                countsTowardNetWorth = existingCounted[it.liabilityId] ?: currentCounted[it.liabilityId] ?: true,
             )
         })
         snapshot.namedAssetValues.clear()
@@ -297,12 +305,15 @@ class SnapshotService(
                 it.id.liabilityId,
                 liabilityNames[it.id.liabilityId] ?: it.id.liabilityId.toString(),
                 it.balance,
+                it.countsTowardNetWorth,
             )
         }.sortedBy { it.liabilityName.lowercase() }
 
         val totalAssets = classes.fold(BigDecimal.ZERO) { acc, a -> acc + a.value } +
             namedAssets.fold(BigDecimal.ZERO) { acc, a -> acc + a.value }
-        val totalLiabilities = liabilities.fold(BigDecimal.ZERO) { acc, l -> acc + l.balance }
+        val totalLiabilities = liabilities
+            .filter { it.countsTowardNetWorth }
+            .fold(BigDecimal.ZERO) { acc, l -> acc + l.balance }
         return SnapshotDto(
             id = snapshot.id,
             snapshotDate = snapshot.snapshotDate,

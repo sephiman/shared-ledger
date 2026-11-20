@@ -426,6 +426,9 @@ export function SnapshotsTab() {
               <div className="space-y-2">
                 {liabilityIdsInForm.map((id) => {
                   const d = panel.kind === "create" ? delta(previousLiabilities[id], liab[id] ?? "0") : null;
+                  const notCounted = panel.kind === "edit"
+                    ? !(panel.s.liabilities.find((x) => x.liabilityId === id)?.countsTowardNetWorth ?? liabilities.find((x) => x.id === id)?.countsTowardNetWorth ?? true)
+                    : liabilities.find((x) => x.id === id)?.countsTowardNetWorth === false;
                   return (
                     <div key={id} className="flex items-center gap-2">
                       <Label className="mb-0 w-32">{liabilityName(id)}</Label>
@@ -440,6 +443,14 @@ export function SnapshotsTab() {
                         }}
                       />
                       {computedLiab.has(id) && <ComputedPill t={t} />}
+                      {notCounted && (
+                        <span
+                          className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] uppercase tracking-wide text-gray-500 dark:bg-chip dark:text-gray-400"
+                          title={t("networth.excluded_from_net_worth")}
+                        >
+                          {t("networth.not_counted_badge")}
+                        </span>
+                      )}
                       {d && (
                         <span className={`w-24 text-right text-xs ${d.large ? "text-amber-600" : "text-gray-500 dark:text-gray-400"}`}>{d.abs} ({d.pct})</span>
                       )}
@@ -685,8 +696,20 @@ function SnapshotComposition({ snapshot }: { snapshot: Snapshot }) {
           <ul className="space-y-0.5">
             {snapshot.liabilities.map((l) => (
               <li key={l.liabilityId} className="flex justify-between gap-3">
-                <span className="text-gray-600 dark:text-gray-300">{l.liabilityName}</span>
-                <span className="font-mono tabular-nums">{money(l.balance)}</span>
+                <span className="text-gray-600 dark:text-gray-300">
+                  {l.liabilityName}
+                  {!l.countsTowardNetWorth && (
+                    <span
+                      className="ml-2 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-gray-500 dark:bg-chip dark:text-gray-400"
+                      title={t("networth.excluded_from_net_worth")}
+                    >
+                      {t("networth.not_counted_badge")}
+                    </span>
+                  )}
+                </span>
+                <span className={`font-mono tabular-nums ${!l.countsTowardNetWorth ? "text-gray-400 dark:text-gray-500" : ""}`}>
+                  {money(l.balance)}
+                </span>
               </li>
             ))}
           </ul>

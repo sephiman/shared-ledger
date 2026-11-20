@@ -52,6 +52,8 @@ class SnapshotImportService(
             log.warn("Snapshot import aborted: {} validation errors", parsed.errors.size)
             throw AppException.badRequest("IMPORT_VALIDATION_FAILED")
         }
+        val countedByLiabilityId = liabilities.findAllByHouseholdIdOrderByNameAsc(householdId)
+            .associate { it.id to it.countsTowardNetWorth }
         var inserted = 0
         var skipped = 0
         var replaced = 0
@@ -99,6 +101,7 @@ class SnapshotImportService(
                 SnapshotLiabilityBalance(
                     id = SnapshotLiabilityBalanceId(snapshot.id, liabilityId),
                     balance = Money.normalize(balance),
+                    countsTowardNetWorth = countedByLiabilityId[liabilityId] ?: true,
                 )
             }.toMutableList()
             snapshots.save(snapshot)

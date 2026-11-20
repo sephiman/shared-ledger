@@ -7,7 +7,7 @@ import { categoryLabel } from "@/lib/categoryLabel";
 type Dataset = "transactions" | "snapshots" | "movements" | "recurring" | "lendings" | "lending_payments" | "portfolio" | "assets" | "liabilities" | "amortization";
 
 const ASSET_HEADER = "name;type;active;value_date;value";
-const LIABILITY_HEADER = "name;active;amortizable;charge_day;balance_date;balance";
+const LIABILITY_HEADER = "name;type;active;counts_toward_net_worth;amortizable;charge_day;balance_date;balance";
 const AMORT_HEADER = "liability_name;part_label;record_type;date;method;principal;annual_rate;term_months;instalment;amount;mode;interest;resulting_balance;start_mode;anchor_date;anchor_balance";
 
 const TX_HEADER = "date;direction;category_code;amount;description;created_at;updated_at;is_refund;refund_of_key";
@@ -73,8 +73,8 @@ function LiabilityNamedFormat() {
   const { t } = useTranslation();
   const example = [
     LIABILITY_HEADER,
-    "Credit card;true;false;;2026-03-31;1200,00",
-    "Mortgage;true;true;28;;",
+    "Credit card;other_debt;true;true;false;;2026-03-31;1200,00",
+    "Mortgage;mortgage;true;true;true;28;;",
   ].join("\n");
   return (
     <>
@@ -83,7 +83,9 @@ function LiabilityNamedFormat() {
       <Section title={t("import.format.columns_label")}>
         <ColumnList items={[
           { name: "name", req: true, desc: t("import.format.liab.name") },
+          { name: "type", req: false, desc: t("import.format.liab.type") },
           { name: "active", req: true, desc: t("import.format.liab.active") },
+          { name: "counts_toward_net_worth", req: false, desc: t("import.format.liab.counts_toward_net_worth") },
           { name: "amortizable", req: true, desc: t("import.format.liab.amortizable") },
           { name: "charge_day", req: false, desc: t("import.format.liab.charge_day") },
           { name: "balance_date", req: false, desc: t("import.format.liab.balance_date") },

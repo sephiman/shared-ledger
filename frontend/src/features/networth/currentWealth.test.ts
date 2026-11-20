@@ -12,7 +12,17 @@ function namedAsset(id: string, overrides: Partial<Asset> = {}): Asset {
 }
 
 function liability(id: string, overrides: Partial<Liability> = {}): Liability {
-  return { id, name: id, active: true, amortizable: false, latestBalance: null, latestBalanceDate: null, ...overrides };
+  return {
+    id,
+    name: id,
+    type: "other_debt",
+    active: true,
+    countsTowardNetWorth: true,
+    amortizable: false,
+    latestBalance: null,
+    latestBalanceDate: null,
+    ...overrides,
+  };
 }
 
 function previousSnapshot(overrides: Partial<Snapshot> = {}): Snapshot {
@@ -134,7 +144,7 @@ describe("computeCurrentWealth", () => {
         prefill: {
           previous: previousSnapshot({
             namedAssets: [{ assetId: "home", name: "home", value: "200000.00" }],
-            liabilities: [{ liabilityId: "mortgage", liabilityName: "mortgage", balance: "150000.00" }],
+            liabilities: [{ liabilityId: "mortgage", liabilityName: "mortgage", balance: "150000.00", countsTowardNetWorth: true }],
           }),
           activeLiabilities: [],
         },
@@ -168,6 +178,23 @@ describe("computeCurrentWealth", () => {
     );
     expect(w.namedAssets.isZero()).toBe(true);
     expect(w.liabilities.isZero()).toBe(true);
+  });
+
+  it("excludes liabilities with countsTowardNetWorth off from live net worth", () => {
+    const w = computeCurrentWealth(
+      input({
+        prefill: {
+          previous: previousSnapshot({ assets: [{ assetClassCode: "cash", value: "10000.00" }] }),
+          activeLiabilities: [],
+        },
+        liabilities: [
+          liability("mortgage", { latestBalance: "3000.00", countsTowardNetWorth: true }),
+          liability("credito-ele", { latestBalance: "1000.00", countsTowardNetWorth: false }),
+        ],
+      }),
+    );
+    expect(w.liabilities.toFixed(2)).toBe("3000.00");
+    expect(w.netWorth.toFixed(2)).toBe("7000.00");
   });
 
   it("reports pension only when positive (hidden-when-zero contract)", () => {

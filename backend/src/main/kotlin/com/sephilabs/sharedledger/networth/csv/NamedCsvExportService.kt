@@ -46,14 +46,14 @@ class NamedCsvExportService(
     @Transactional(readOnly = true)
     fun exportLiabilities(householdId: UUID): String {
         val sb = StringBuilder()
-        sb.append(Csv.row("name", "active", "amortizable", "charge_day", "balance_date", "balance"))
+        sb.append(Csv.row("name", "type", "active", "counts_toward_net_worth", "amortizable", "charge_day", "balance_date", "balance"))
         for (l in liabilities.findAllByHouseholdIdOrderByNameAsc(householdId)) {
             val history = liabilityBalances.findAllByLiabilityIdOrderByBalanceDateDescCreatedAtDesc(l.id).sortedBy { it.balanceDate }
             val chargeDay = l.chargeDay?.toString() ?: ""
             if (history.isEmpty()) {
-                sb.append(Csv.row(l.name, l.active, l.amortizable, chargeDay, "", ""))
+                sb.append(Csv.row(l.name, l.type, l.active, l.countsTowardNetWorth, l.amortizable, chargeDay, "", ""))
             } else {
-                for (e in history) sb.append(Csv.row(l.name, l.active, l.amortizable, chargeDay, e.balanceDate, Csv.decimal(e.balance)))
+                for (e in history) sb.append(Csv.row(l.name, l.type, l.active, l.countsTowardNetWorth, l.amortizable, chargeDay, e.balanceDate, Csv.decimal(e.balance)))
             }
         }
         return sb.toString()

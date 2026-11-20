@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useActiveHousehold } from "@/auth/AuthContext";
-import type { AssetType, ValueEntry } from "@/api/networth";
+import type { AssetType, LiabilityType, ValueEntry } from "@/api/networth";
 import { Button, FieldError, Input, Label, Select } from "@/components/ui/primitives";
 import { formatMoney } from "@/lib/money";
 import { formatDate, isoToday } from "@/lib/dates";
 
 const ASSET_TYPES: AssetType[] = ["property", "vehicle", "other"];
+const LIABILITY_TYPES: LiabilityType[] = ["other_debt", "mortgage"];
 
 type Mut<T> = { mutateAsync: (v: T) => Promise<unknown>; isPending: boolean };
 
@@ -14,6 +15,8 @@ export interface DetailsDraft {
   name: string;
   active: boolean;
   type?: AssetType;
+  liabilityType?: LiabilityType;
+  countsTowardNetWorth?: boolean;
   amortizable?: boolean;
   chargeDay?: string;
 }
@@ -23,6 +26,8 @@ export interface NamedItem {
   name: string;
   active: boolean;
   type?: AssetType;
+  liabilityType?: LiabilityType;
+  countsTowardNetWorth?: boolean;
   amortizable?: boolean;
   chargeDay?: number | null;
   latestValue?: string | null;
@@ -53,7 +58,8 @@ export function NamedValueCard({
   const { t, i18n } = useTranslation();
   const household = useActiveHousehold();
   const hid = household.householdId;
-  const { data: entries = [] } = useValues(hid, item.id);
+  const { data: loadedEntries } = useValues(hid, item.id);
+  const entries = loadedEntries ?? [];
   const add = useAdd(hid, item.id);
   const update = useUpdate(hid, item.id);
   const del = useDelete(hid, item.id);
@@ -86,7 +92,17 @@ export function NamedValueCard({
     setValueEditor(null);
   }
 
-  const addsHint = kind === "asset" ? t("networth.adds_to_net_worth") : t("networth.subtracts_from_net_worth");
+  // Once the history query has resolved, its newest entry is the header truth; before it resolves, fall back to the list DTO.
+  const latest = loadedEntries !== undefined
+    ? (loadedEntries[0] ? { value: loadedEntries[0].value, date: loadedEntries[0].date } : null)
+    : (item.latestValue != null ? { value: item.latestValue, date: item.latestValueDate ?? null } : null);
+
+  const counts = kind !== "liability" || item.countsTowardNetWorth !== false;
+  const addsHint = kind === "asset"
+    ? t("networth.adds_to_net_worth")
+    : counts
+      ? t("networth.subtracts_from_net_worth")
+      : t("networth.excluded_from_net_worth");
 
   return (
     <li className="rounded-md border border-border p-3">
@@ -100,16 +116,26 @@ export function NamedValueCard({
               {kind === "asset" && item.type && (
                 <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">{t(`networth.asset_type_${item.type}`)}</span>
               )}
+              {kind === "liability" && item.liabilityType && (
+                <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] uppercase tracking-wide text-gray-600 dark:bg-chip dark:text-gray-300">
+                  {t(`networth.liability_type_${item.liabilityType}`)}
+                </span>
+              )}
+              {kind === "liability" && !counts && (
+                <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                  {t("networth.not_counted_badge")}
+                </span>
+              )}
               {!item.active && (
                 <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] uppercase tracking-wide text-gray-500 dark:bg-chip dark:text-gray-400">
                   {t("common.inactive")}
                 </span>
               )}
             </p>
-            {item.latestValue != null ? (
+            {latest != null ? (
               <p className="mt-0.5">
-                <span className="font-mono text-lg tabular-nums">{money(item.latestValue)}</span>
-                {item.latestValueDate && <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">· {formatDate(item.latestValueDate, i18n.language)}</span>}
+                <span className="font-mono text-lg tabular-nums">{money(latest.value)}</span>
+                {latest.date && <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">· {formatDate(latest.date, i18n.language)}</span>}
               </p>
             ) : (
               <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">{t("networth.no_value_yet")}</p>
@@ -184,6 +210,8 @@ function DetailsForm({
   const [name, setName] = useState(item.name);
   const [active, setActive] = useState(item.active);
   const [type, setType] = useState<AssetType>(item.type ?? "property");
+  const [liabilityType, setLiabilityType] = useState<LiabilityType>(item.liabilityType ?? "other_debt");
+  const [countsTowardNetWorth, setCountsTowardNetWorth] = useState(item.countsTowardNetWorth ?? true);
   const [amortizable, setAmortizable] = useState(item.amortizable ?? false);
   const [chargeDay, setChargeDay] = useState(item.chargeDay?.toString() ?? "");
   const [nameError, setNameError] = useState<string | null>(null);
@@ -195,43 +223,76 @@ function DetailsForm({
       const cd = chargeDay ? Number(chargeDay) : null;
       if (cd == null || cd < 1 || cd > 31) { setChargeError(t("networth.charge_day_required")); return; }
     }
-    await onSave({ name, active, type: kind === "asset" ? type : undefined, amortizable: kind === "liability" ? amortizable : undefined, chargeDay });
+    await onSave({
+      name,
+      active,
+      type: kind === "asset" ? type : undefined,
+      liabilityType: kind === "liability" ? liabilityType : undefined,
+      countsTowardNetWorth: kind === "liability" ? countsTowardNetWorth : undefined,
+      amortizable: kind === "liability" ? amortizable : undefined,
+      chargeDay,
+    });
   }
 
   return (
     <div className="space-y-3">
       <div>
-        <Label>{kind === "asset" ? t("networth.asset_name") : t("networth.liability_name")}</Label>
-        <Input value={name} invalid={!!nameError} onChange={(e) => { setName(e.target.value); if (nameError) setNameError(null); }} />
+        <Label htmlFor={`name-${item.id}`}>{kind === "asset" ? t("networth.asset_name") : t("networth.liability_name")}</Label>
+        <Input id={`name-${item.id}`} value={name} invalid={!!nameError} onChange={(e) => { setName(e.target.value); if (nameError) setNameError(null); }} />
         <FieldError message={nameError} />
       </div>
       {kind === "asset" && (
-        <div>
-          <Label>{t("networth.asset_type")}</Label>
-          <Select value={type} onChange={(e) => setType(e.target.value as AssetType)}>
-            {ASSET_TYPES.map((tp) => <option key={tp} value={tp}>{t(`networth.asset_type_${tp}`)}</option>)}
-          </Select>
-        </div>
+        <>
+          <div>
+            <Label htmlFor={`asset-type-${item.id}`}>{t("networth.asset_type")}</Label>
+            <Select id={`asset-type-${item.id}`} value={type} onChange={(e) => setType(e.target.value as AssetType)}>
+              {ASSET_TYPES.map((tp) => <option key={tp} value={tp}>{t(`networth.asset_type_${tp}`)}</option>)}
+            </Select>
+          </div>
+          <div className="flex items-center gap-2">
+            <input id={`active-${item.id}`} type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
+            <Label htmlFor={`active-${item.id}`} className="mb-0">{t("networth.asset_active")}</Label>
+            <span className="text-xs text-gray-400 dark:text-gray-500">{t("networth.inactive_hint")}</span>
+          </div>
+        </>
       )}
-      <div className="flex items-center gap-2">
-        <input id={`active-${item.id}`} type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
-        <Label htmlFor={`active-${item.id}`} className="mb-0">{kind === "asset" ? t("networth.asset_active") : t("networth.liability_active")}</Label>
-        <span className="text-xs text-gray-400 dark:text-gray-500">{t("networth.inactive_hint")}</span>
-      </div>
       {kind === "liability" && (
         <>
-          <div className="flex items-center gap-2">
-            <input id={`amort-${item.id}`} type="checkbox" checked={amortizable} onChange={(e) => setAmortizable(e.target.checked)} />
-            <Label htmlFor={`amort-${item.id}`} className="mb-0">{t("networth.amortizable")}</Label>
+          <div>
+            <Label htmlFor={`liab-type-${item.id}`}>{t("networth.liability_type")}</Label>
+            <Select id={`liab-type-${item.id}`} value={liabilityType} onChange={(e) => setLiabilityType(e.target.value as LiabilityType)}>
+              {LIABILITY_TYPES.map((tp) => <option key={tp} value={tp}>{t(`networth.liability_type_${tp}`)}</option>)}
+            </Select>
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <input id={`amort-${item.id}`} type="checkbox" checked={amortizable} onChange={(e) => setAmortizable(e.target.checked)} />
+              <Label htmlFor={`amort-${item.id}`} className="mb-0">{t("networth.amortizable")}</Label>
+            </div>
+            <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{t("networth.amortizable_hint")}</p>
           </div>
           {amortizable && (
             <div>
-              <Label>{t("networth.charge_day")}</Label>
-              <Input type="number" min={1} max={31} invalid={!!chargeError} value={chargeDay} onChange={(e) => { setChargeDay(e.target.value); if (chargeError) setChargeError(null); }} />
+              <Label htmlFor={`charge-${item.id}`}>{t("networth.charge_day")}</Label>
+              <Input id={`charge-${item.id}`} type="number" min={1} max={31} invalid={!!chargeError} value={chargeDay} onChange={(e) => { setChargeDay(e.target.value); if (chargeError) setChargeError(null); }} />
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{t("networth.charge_day_hint")}</p>
               <FieldError message={chargeError} />
             </div>
           )}
+          <div>
+            <div className="flex items-center gap-2">
+              <input id={`counts-${item.id}`} type="checkbox" checked={countsTowardNetWorth} onChange={(e) => setCountsTowardNetWorth(e.target.checked)} />
+              <Label htmlFor={`counts-${item.id}`} className="mb-0">{t("networth.counts_toward_net_worth")}</Label>
+            </div>
+            <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{t("networth.counts_toward_net_worth_hint")}</p>
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <input id={`active-${item.id}`} type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
+              <Label htmlFor={`active-${item.id}`} className="mb-0">{t("networth.liability_active")}</Label>
+            </div>
+            <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{t("networth.liability_active_hint")}</p>
+          </div>
         </>
       )}
       <div className="flex justify-end gap-2">

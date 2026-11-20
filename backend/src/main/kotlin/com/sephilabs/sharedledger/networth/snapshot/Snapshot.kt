@@ -96,6 +96,10 @@ class SnapshotLiabilityBalance(
 
     @Column(name = "balance", nullable = false, precision = 15, scale = 2)
     var balance: BigDecimal,
+
+    // Frozen from the liability at snapshot time so toggling the liability later never rewrites history.
+    @Column(name = "counts_toward_net_worth", nullable = false)
+    var countsTowardNetWorth: Boolean = true,
 )
 
 @Embeddable

@@ -1,10 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "./client";
 
+export type LiabilityType = "mortgage" | "other_debt";
+
 export interface Liability {
   id: string;
   name: string;
+  type: LiabilityType;
   active: boolean;
+  countsTowardNetWorth: boolean;
   amortizable: boolean;
   chargeDay?: number | null;
   latestBalance?: string | null;
@@ -17,9 +21,13 @@ export interface Liability {
 export interface LiabilityUpsert {
   id?: string;
   name: string;
+  type: LiabilityType;
   active: boolean;
+  countsTowardNetWorth: boolean;
   amortizable: boolean;
   chargeDay?: number | null;
+  initialBalance?: string | null;
+  initialBalanceDate?: string | null;
 }
 
 export type AssetType = "property" | "vehicle" | "other";
@@ -59,6 +67,7 @@ export interface LiabilityBalance {
   liabilityId: string;
   liabilityName: string;
   balance: string;
+  countsTowardNetWorth: boolean;
 }
 
 export interface NamedAssetValue {
@@ -134,14 +143,38 @@ export function useLiabilities(householdId: string) {
 export function useUpsertLiability(householdId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, name, active, amortizable, chargeDay }: LiabilityUpsert) => {
-      const body = { name, active, amortizable, chargeDay: chargeDay ?? null };
+    mutationFn: async ({
+      id,
+      name,
+      type,
+      active,
+      countsTowardNetWorth,
+      amortizable,
+      chargeDay,
+      initialBalance,
+      initialBalanceDate,
+    }: LiabilityUpsert) => {
       if (id) {
+        const body = { name, type, active, countsTowardNetWorth, amortizable, chargeDay: chargeDay ?? null };
         return (await apiClient.patch<Liability>(`/households/${householdId}/liabilities/${id}`, body)).data;
       }
+      const body = {
+        name,
+        type,
+        active,
+        countsTowardNetWorth,
+        amortizable,
+        chargeDay: chargeDay ?? null,
+        ...(amortizable
+          ? {}
+          : { initialBalance: initialBalance ?? null, initialBalanceDate: initialBalanceDate ?? null }),
+      };
       return (await apiClient.post<Liability>(`/households/${householdId}/liabilities`, body)).data;
     },
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["liabilities", householdId] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["liabilities", householdId] });
+      void qc.invalidateQueries({ queryKey: ["named-values", householdId] });
+    },
   });
 }
 
@@ -151,7 +184,10 @@ export function useDeleteLiability(householdId: string) {
     mutationFn: async (id: string) => {
       await apiClient.delete(`/households/${householdId}/liabilities/${id}`);
     },
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["liabilities", householdId] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["liabilities", householdId] });
+      void qc.invalidateQueries({ queryKey: ["named-values", householdId] });
+    },
   });
 }
 
@@ -445,6 +481,7 @@ export interface BankCash {
 function invalidateLiabilityValues(qc: ReturnType<typeof useQueryClient>, householdId: string, liabilityId: string) {
   void qc.invalidateQueries({ queryKey: ["liability-values", householdId, liabilityId] });
   void qc.invalidateQueries({ queryKey: ["liabilities", householdId] });
+  void qc.invalidateQueries({ queryKey: ["named-values", householdId] });
 }
 
 function invalidateAssetValues(qc: ReturnType<typeof useQueryClient>, householdId: string, assetId: string) {

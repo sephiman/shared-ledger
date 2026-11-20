@@ -49,6 +49,7 @@ data class LiabilityBalanceDto(
     val liabilityName: String,
     @JsonFormat(shape = JsonFormat.Shape.STRING)
     val balance: BigDecimal,
+    val countsTowardNetWorth: Boolean = true,
 )
 
 data class NamedAssetValueDto(
@@ -88,17 +89,6 @@ data class NamedValuesDto(
     // The cash estimate at the date, or null when no adjustment series exists yet (cash then
     // carries over as before). Used to prefill/auto-fill the 'cash' asset class in the form.
     val cash: String? = null,
-)
-
-data class EvolutionPoint(
-    val snapshotDate: LocalDate,
-    val byClass: Map<String, BigDecimal>,
-    @JsonFormat(shape = JsonFormat.Shape.STRING)
-    val totalAssets: BigDecimal,
-    @JsonFormat(shape = JsonFormat.Shape.STRING)
-    val totalLiabilities: BigDecimal,
-    @JsonFormat(shape = JsonFormat.Shape.STRING)
-    val netWorth: BigDecimal,
 )
 
 data class AutoSnapshotSettingsRequest(
