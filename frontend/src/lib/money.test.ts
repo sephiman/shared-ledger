@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatCompactMoney,
   formatFullPrecisionMoney,
+  formatGroupedMoney,
   formatMoney,
   formatPercent,
   formatPrice,
@@ -113,5 +114,23 @@ describe("money", () => {
       expect(formatQuantity("16420", "en")).toBe("16,420");
       expect(formatQuantity("16420", "es")).toBe("16.420");
     });
+  });
+});
+
+describe("formatGroupedMoney", () => {
+  const nb = (text: string) => text.replace(/[\u00a0\u202f]/g, " ");
+
+  it("groups thousands on four-digit amounts in Spanish, where plain Intl does not", () => {
+    expect(nb(formatMoney("9132.18", "EUR", "es"))).toBe("9132,18 €");
+    expect(nb(formatGroupedMoney("9132.18", "EUR", "es"))).toBe("9.132,18 €");
+    expect(nb(formatGroupedMoney("12345.67", "EUR", "es"))).toBe("12.345,67 €");
+    expect(nb(formatGroupedMoney("-1200", "EUR", "es"))).toBe("-1.200,00 €");
+    expect(nb(formatGroupedMoney("999.5", "EUR", "es"))).toBe("999,50 €");
+  });
+
+  it("matches English, which already groups four digits", () => {
+    expect(formatGroupedMoney("9132.18", "EUR", "en")).toBe("€9,132.18");
+    expect(formatGroupedMoney("12345.67", "EUR", "en")).toBe("€12,345.67");
+    expect(formatGroupedMoney("9132.18", "EUR", "en")).toBe(formatMoney("9132.18", "EUR", "en"));
   });
 });

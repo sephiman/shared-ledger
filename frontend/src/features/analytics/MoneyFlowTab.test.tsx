@@ -630,6 +630,17 @@ describe("configure projections", () => {
     ).toBeInTheDocument();
   });
 
+  it("notes that the projection leaves out contributions and withdrawals only while the real diagram shows them", async () => {
+    const user = userEvent.setup();
+    render(<MoneyFlowTab />);
+    const note = "The projection does not include contributions or withdrawals.";
+    expect(screen.queryByText(note)).toBeNull();
+
+    await user.click(screen.getByRole("checkbox", { name: "Show contributions and withdrawals" }));
+
+    expect(screen.getByText(note)).toBeInTheDocument();
+  });
+
   it("speaks Spanish", async () => {
     const user = userEvent.setup();
     await i18n.changeLanguage("es");

@@ -88,7 +88,7 @@ class AnalyticsServiceTest @Autowired constructor(
     }
 
     @Test
-    fun `a category the refunds turned negative still surfaces as a mover and stays out of the money flow`() {
+    fun `a category the refunds turned negative still surfaces as a mover and feeds the money flow as a net refund`() {
         val (user, household) = seed()
         val ym = YearMonth.of(2025, 8)
         val previous = ym.minusMonths(1)
@@ -104,10 +104,15 @@ class AnalyticsServiceTest @Autowired constructor(
         assertThat(groceries.periodAmount).isEqualByComparingTo("-30.00")
         assertThat(groceries.deltaAbs.signum()).isNegative()
 
-        // A negative flow out of the hub has no meaning, so the bucket is left out of the diagram while
-        // the totals it feeds stay netted.
+        // A negative flow out of the hub has no meaning, so the bucket is drawn as money coming in instead,
+        // for its absolute amount, while the totals it feeds stay netted.
         val flow = service.moneyFlow(household.id, ym.atDay(1), ym.atEndOfMonth(), "category")
         assertThat(flow.nodes.none { it.side == "expense" && it.id == "groceries.groceries" }).isTrue()
+        val refund = flow.nodes.single { it.side == "net_refund" }
+        assertThat(refund.id).isEqualTo("net_refund:groceries.groceries")
+        assertThat(refund.groupCode).isEqualTo("groceries")
+        assertThat(refund.amount).isEqualByComparingTo("30.00")
+        assertThat(flow.links.single { it.source == refund.id }.target).isEqualTo(HUB_NODE_ID)
         assertThat(flow.links.none { it.amount.signum() < 0 }).isTrue()
         assertThat(service.allocation(household.id, ym.year, ym.monthValue).expenses).isEqualByComparingTo("-30.00")
     }
@@ -265,6 +270,44 @@ class AnalyticsServiceTest @Autowired constructor(
         assertThat(r.links.first { it.source == DEFICIT_NODE_ID }.amount).isEqualByComparingTo("600.00")
         assertThat(r.nodes.first { it.id == HUB_NODE_ID }.amount).isEqualByComparingTo("700.00")
         assertThat(r.nodes.map { it.id }).doesNotContain(SAVED_NODE_ID)
+    }
+
+    @Test
+    fun `money flow balances when refunds turn a group net negative`() {
+        val (user, household) = seed()
+        val ym = YearMonth.of(2025, 9)
+        addTx(household, user, ym.atDay(2), Direction.income, "income.salary", "1000.00")
+        addTx(household, user, ym.atDay(3), Direction.expense, "home.rent", "400.00")
+        addTx(household, user, ym.atDay(5), Direction.expense, "outings.restaurants", "20.00")
+        addRefund(household, user, ym.atDay(9), "outings.restaurants", "-70.00")
+
+        val r = service.moneyFlow(household.id, ym.atDay(1), ym.atEndOfMonth(), "group")
+
+        // Totals keep their netted meaning: expenses 350, saved 650.
+        assertThat(r.expenses).isEqualByComparingTo("350.00")
+        assertThat(r.saved).isEqualByComparingTo("650.00")
+        assertThat(r.nodes.map { it.id }).containsExactly("income.salary", "net_refund:outings", HUB_NODE_ID, "home", SAVED_NODE_ID)
+        assertThat(r.nodes.first { it.id == "net_refund:outings" }.amount).isEqualByComparingTo("50.00")
+        val inflow = r.links.filter { it.target == HUB_NODE_ID }.sumOf { it.amount }
+        val outflow = r.links.filter { it.source == HUB_NODE_ID }.sumOf { it.amount }
+        assertThat(inflow).isEqualByComparingTo(outflow).isEqualByComparingTo("1050.00")
+        assertThat(r.nodes.first { it.id == HUB_NODE_ID }.amount).isEqualByComparingTo(inflow)
+    }
+
+    @Test
+    fun `money flow balances a deficit month whose only expense group refunds turned negative`() {
+        val (user, household) = seed()
+        val ym = YearMonth.of(2025, 10)
+        addTx(household, user, ym.atDay(3), Direction.expense, "home.rent", "100.00")
+        addRefund(household, user, ym.atDay(9), "outings.restaurants", "-30.00")
+
+        val r = service.moneyFlow(household.id, ym.atDay(1), ym.atEndOfMonth(), "category")
+
+        assertThat(r.deficit).isEqualByComparingTo("70.00")
+        assertThat(r.nodes.map { it.id }).containsExactly("net_refund:outings.restaurants", DEFICIT_NODE_ID, HUB_NODE_ID, "home.rent")
+        val inflow = r.links.filter { it.target == HUB_NODE_ID }.sumOf { it.amount }
+        val outflow = r.links.filter { it.source == HUB_NODE_ID }.sumOf { it.amount }
+        assertThat(inflow).isEqualByComparingTo(outflow).isEqualByComparingTo("100.00")
     }
 
     @Test

@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { MANUAL_CHAPTERS_ES } from "@/features/manual/content.es";
+import en from "./en.json";
 import es from "./es.json";
 
 /** Second-person-plural (vosotros) forms; the app speaks to the reader as "tú". */
@@ -74,5 +76,63 @@ describe("Spanish FIRE copy speaks in the second person singular", () => {
       .filter(([, hits]) => hits.length > 0);
     expect(pluralHits).toEqual([]);
     expect(weHits).toEqual([]);
+  });
+});
+
+/** "retiro"/"retiros" as a word; "retirada", "retirado" and "retirarías" are other words and pass. */
+function retiroWords(text: string): string[] {
+  return text.match(/\bretiros?\b/giu) ?? [];
+}
+
+/** The only strings where "retiro" means retirement (FIRE's drawdown years), not withdrawing money. Add here only
+ *  after checking the English says retirement. */
+const RETIREMENT_KEYS = new Set([
+  "fire.drawdown_years",
+  "fire.view_drawdown",
+  "fire.settings_drawdown_fat_title",
+  "fire.ai.cite.drawdown_years",
+  "fire.ai.cite.drawdown_survival",
+]);
+
+describe("Spanish says retirada for withdrawing money", () => {
+  it("the check finds retiro and retiros and leaves retirada, retirado and retirarías alone", () => {
+    expect(retiroWords("Retiro de Cripto y dos retiros")).toEqual(["Retiro", "retiros"]);
+    expect(retiroWords("Una retirada, dos retiradas; Retirado de Cripto; retirarías {{gross}}")).toEqual([]);
+  });
+
+  it("no es string uses retiro except where it means retirement", () => {
+    const offending = collectStrings(es)
+      .filter(([key, value]) => !RETIREMENT_KEYS.has(key) && retiroWords(value).length > 0)
+      .map(([key, value]) => `${key}: ${value}`);
+    expect(offending).toEqual([]);
+  });
+
+  it("every retirement exception still exists and still says retiro, so the allowlist cannot go stale", () => {
+    const byKey = new Map(collectStrings(es));
+    for (const key of RETIREMENT_KEYS) {
+      expect(retiroWords(byKey.get(key) ?? ""), key).not.toEqual([]);
+    }
+  });
+
+  it("the Spanish manual never uses retiro", () => {
+    const offending = collectStrings(MANUAL_CHAPTERS_ES).filter(([, value]) => retiroWords(value).length > 0);
+    expect(offending).toEqual([]);
+  });
+});
+
+describe("Money flow's per-direction movement labels", () => {
+  const labels = ["money_flow_contributed_to_wealth", "money_flow_withdrawn_from_wealth"] as const;
+
+  it("never say portfolio, cartera, investments or retiro, in either language", () => {
+    for (const key of labels) {
+      expect(en.analytics[key], key).not.toMatch(/portfolio|invest/i);
+      expect(es.analytics[key], key).not.toMatch(/cartera|inversi/i);
+      expect(retiroWords(es.analytics[key]), key).toEqual([]);
+    }
+  });
+
+  it("name wealth, the app's own word for what movements change", () => {
+    expect(labels.map((key) => en.analytics[key])).toEqual(["Contributed to wealth", "Withdrawn from wealth"]);
+    expect(labels.map((key) => es.analytics[key])).toEqual(["Aportado a patrimonio", "Retirado de patrimonio"]);
   });
 });

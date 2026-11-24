@@ -98,6 +98,7 @@ class AnalyticsController(
         @RequestParam from: String,
         @RequestParam to: String,
         @RequestParam(defaultValue = "group") level: String,
+        @RequestParam(defaultValue = "false") movements: Boolean,
     ): MoneyFlowResponse = metrics.analyticsTimer("money_flow").record<MoneyFlowResponse> {
         if (level !in setOf("group", "category")) {
             throw AppException.badRequest("INVALID_PARAMETER", "level")
@@ -106,7 +107,7 @@ class AnalyticsController(
             AnalyticsRange.parseDate(from, "from"),
             AnalyticsRange.parseDate(to, "to"),
         )
-        service.moneyFlow(householdId, window.from, window.to, level)
+        service.moneyFlow(householdId, window.from, window.to, level, includeMovements = movements)
     }
 
     @GetMapping("/money-flow/projection")

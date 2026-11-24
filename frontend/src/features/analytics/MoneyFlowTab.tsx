@@ -5,7 +5,15 @@ import { useMoneyFlow, useYearsAvailable } from "@/api/analytics";
 import type { ProjectionScenario } from "@/api/questions";
 import { Card, CardBody, CardHeader, Input, Label, Select } from "@/components/ui/primitives";
 import { isoToday, monthName } from "@/lib/dates";
-import { MoneyFlowSankeyChart, MoneyFlowTotals, useMoneyFlowSankey } from "./MoneyFlowChart";
+import { MoneyFlowSankeyChart, MoneyFlowTotals, isClassNode, useMoneyFlowSankey } from "./MoneyFlowChart";
+import {
+  MovementDetailCard,
+  MovementNodeList,
+  MovementTotals,
+  MovementsToggle,
+  movementNodeDetail,
+  useShowMovements,
+} from "./MoneyFlowMovements";
 import { MoneyFlowProjectionPanel } from "./MoneyFlowProjectionPanel";
 import { resolveMoneyFlowRange, type MoneyFlowScope } from "./moneyflow";
 import { isCurrentMonthScope } from "./moneyflowProjection";
@@ -29,6 +37,8 @@ export function MoneyFlowTab({
   const [customFrom, setCustomFrom] = useState<string>("");
   const [customTo, setCustomTo] = useState<string>(isoToday());
   const [level, setLevel] = useState<Level>("group");
+  const [showMovements, setShowMovements] = useShowMovements();
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!initialScenario) return;
@@ -45,7 +55,10 @@ export function MoneyFlowTab({
     range?.to ?? "",
     level,
     range != null,
+    showMovements,
   );
+  const movements = showMovements ? data?.movements : undefined;
+  const detailOf = (id: string) => (movements ? movementNodeDetail(id, movements) : null);
 
   const yearOptions = useMemo(() => {
     const fromServer = years?.years ?? [];
@@ -56,6 +69,9 @@ export function MoneyFlowTab({
   const sankey = useMoneyFlowSankey(household.householdId, data);
 
   const currency = household.currency;
+  // Only a node the diagram draws stays pinned: switching breakdown swaps class nodes for per-direction ones.
+  const selectedDetail =
+    selectedNodeId && sankey?.nodes.some((n) => n.id === selectedNodeId) ? detailOf(selectedNodeId) : null;
   const hasFlows = sankey != null && sankey.nodes.length > 0;
 
   return (
@@ -118,22 +134,66 @@ export function MoneyFlowTab({
             </div>
           </div>
 
+          <MovementsToggle
+            checked={showMovements}
+            onChange={(next) => {
+              setShowMovements(next);
+              setSelectedNodeId(null);
+            }}
+          />
+
           {isLoading && <p className="text-gray-500 dark:text-gray-400">{t("common.loading")}</p>}
 
           {!isLoading && data && !hasFlows && (
             <p className="text-gray-500 dark:text-gray-400">{t("analytics.money_flow_empty")}</p>
           )}
 
+          {!isLoading && movements && movements.classes.length === 0 && (
+            <p className="text-sm text-gray-500 dark:text-gray-400">{t("analytics.money_flow_movements_empty")}</p>
+          )}
+
           {!isLoading && data && sankey && hasFlows && (
             <>
-              <MoneyFlowSankeyChart sankey={sankey} currency={currency} />
+              <MoneyFlowSankeyChart
+                sankey={sankey}
+                currency={currency}
+                keepOrder={movements != null}
+                {...(movements && {
+                  select: {
+                    selectedId: selectedDetail ? selectedNodeId : null,
+                    onSelect: (node) => setSelectedNodeId((current) => (current === node.id ? null : node.id)),
+                  },
+                  nodeDetail: (node) => {
+                    const detail = isClassNode(node) ? detailOf(node.id) : null;
+                    if (!detail) return null;
+                    return (
+                      <>
+                        <MovementNodeList detail={detail} currency={currency} />
+                        <p className="mt-1 text-gray-500 dark:text-gray-400">{t("analytics.money_flow_class_hint")}</p>
+                      </>
+                    );
+                  },
+                })}
+              />
+              {selectedDetail && selectedNodeId && range && (
+                <MovementDetailCard
+                  detail={selectedDetail}
+                  title={sankey.nodes.find((n) => n.id === selectedNodeId)?.name ?? selectedNodeId}
+                  currency={currency}
+                  from={range.from}
+                  to={range.to}
+                  onClose={() => setSelectedNodeId(null)}
+                />
+              )}
               <MoneyFlowTotals
                 totals={data}
                 currency={currency}
                 labelOf={(field) =>
                   t({ income: "analytics.income", expenses: "analytics.expenses", saved: "analytics.saved", deficit: "analytics.money_flow_deficit" }[field])
                 }
-              />
+              >
+                {movements && <MovementTotals movements={movements} currency={currency} />}
+              </MoneyFlowTotals>
             </>
           )}
         </CardBody>
@@ -145,6 +205,7 @@ export function MoneyFlowTab({
           currency={currency}
           initialScenario={initialScenario}
           onInitialScenarioApplied={onInitialScenarioApplied}
+          movementsShown={showMovements}
         />
       )}
     </div>

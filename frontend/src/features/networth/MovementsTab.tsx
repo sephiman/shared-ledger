@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
 import { useActiveHousehold } from "@/auth/AuthContext";
 import { useAssetClasses } from "@/api/catalog";
 import {
@@ -17,6 +18,32 @@ import { formatMoney } from "@/lib/money";
 
 type PanelMode = { kind: "closed" } | { kind: "create" } | { kind: "edit"; m: Movement };
 
+const FILTER_PARAMS = ["type", "class", "from", "to"] as const;
+const MOVEMENT_TYPES = ["contribution", "withdrawal", "debt_payment"];
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+interface MovementFilter {
+  type?: string;
+  assetClassCode?: string;
+  from?: string;
+  to?: string;
+}
+
+/** The narrowing a deep link (e.g. from Money flow) asks for; unknown or malformed values are ignored. */
+function movementFilterOf(params: URLSearchParams): MovementFilter | null {
+  const type = params.get("type");
+  const assetClassCode = params.get("class");
+  const from = params.get("from");
+  const to = params.get("to");
+  const filter: MovementFilter = {
+    ...(type && MOVEMENT_TYPES.includes(type) && { type }),
+    ...(assetClassCode && { assetClassCode }),
+    ...(from && ISO_DATE.test(from) && { from }),
+    ...(to && ISO_DATE.test(to) && { to }),
+  };
+  return Object.keys(filter).length > 0 ? filter : null;
+}
+
 function defaultDraft(): MovementInput {
   return {
     movementDate: isoToday(),
@@ -31,7 +58,9 @@ function defaultDraft(): MovementInput {
 export function MovementsTab() {
   const { t, i18n } = useTranslation();
   const household = useActiveHousehold();
-  const { data: page } = useMovements(household.householdId, { size: 100 });
+  const [searchParams, setSearchParams] = useSearchParams();
+  const filter = movementFilterOf(searchParams);
+  const { data: page } = useMovements(household.householdId, { size: 100, ...filter });
   const { data: assetClasses = [] } = useAssetClasses();
   const { data: liabilities = [] } = useLiabilities(household.householdId);
   const create = useCreateMovement(household.householdId);
@@ -129,6 +158,38 @@ export function MovementsTab() {
           </Button>
         </div>
       </div>
+      {filter && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border bg-sunken px-3 py-2 text-sm">
+          <span className="text-gray-700 dark:text-gray-300">
+            {t("networth.movements_filtered", {
+              filters: [
+                filter.type && t(`networth.movements_filter_${filter.type}`),
+                filter.assetClassCode && t(`asset.${filter.assetClassCode}`),
+                (filter.from || filter.to) &&
+                  `${filter.from ? formatDate(filter.from, i18n.language) : "…"} – ${filter.to ? formatDate(filter.to, i18n.language) : "…"}`,
+              ]
+                .filter(Boolean)
+                .join(" · "),
+            })}
+          </span>
+          <button
+            type="button"
+            className="font-medium text-primary hover:underline"
+            onClick={() =>
+              setSearchParams(
+                (prev) => {
+                  const next = new URLSearchParams(prev);
+                  FILTER_PARAMS.forEach((key) => next.delete(key));
+                  return next;
+                },
+                { replace: true },
+              )
+            }
+          >
+            {t("networth.movements_show_all")}
+          </button>
+        </div>
+      )}
       {panel.kind !== "closed" && (
         <div ref={panelRef}>
         <Card>

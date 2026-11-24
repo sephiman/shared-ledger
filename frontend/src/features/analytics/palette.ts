@@ -22,6 +22,11 @@ export const SAVED_COLOR = "#16a34a";
 export const DEFICIT_COLOR = "#b91c1c";
 export const HUB_COLOR = "#64748b";
 export const OTHERS_COLOR = "#94a3b8";
+// Per-theme tokens (index.css): SVG fill/stroke and inline color resolve var() like any CSS property.
+export const CONTRIBUTION_COLOR = "var(--color-flow-contribution)";
+export const WITHDRAWAL_COLOR = "var(--color-flow-withdrawal)";
+export const STAYS_IN_CASH_COLOR = "var(--color-flow-stays-in-cash)";
+export const FROM_CASH_COLOR = "var(--color-flow-from-cash)";
 
 // Income categories are a flat list; the seeded codes get fixed hues. Custom
 // income categories ("income.<slug>") pick from the same palette by a

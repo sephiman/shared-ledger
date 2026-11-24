@@ -1,6 +1,7 @@
 package com.sephilabs.sharedledger.analytics
 
 import com.fasterxml.jackson.annotation.JsonFormat
+import com.fasterxml.jackson.annotation.JsonInclude
 import java.math.BigDecimal
 
 data class MonthDashboardResponse(
@@ -150,11 +151,19 @@ data class AllocationResponse(
 const val HUB_NODE_ID = "hub"
 const val SAVED_NODE_ID = "saved"
 const val DEFICIT_NODE_ID = "deficit"
+// Movement nodes (option on). The colon keeps class nodes apart from category codes and group words.
+const val STAYS_IN_CASH_NODE_ID = "stays_in_cash"
+const val FROM_CASH_NODE_ID = "from_cash"
+// "By group" draws movements as one node per direction; "by category", one node per class (classNodeId).
+const val CONTRIBUTED_NODE_ID = "contributed"
+const val WITHDRAWN_NODE_ID = "withdrawn"
+fun classNodeId(direction: String, assetClassCode: String) = "$direction:$assetClassCode"
+fun netRefundNodeId(bucket: String) = "net_refund:$bucket"
 
 data class MoneyFlowNode(
     val id: String,
-    val side: String, // "income" | "deficit" | "hub" | "expense" | "saved"
-    val groupCode: String?, // expense nodes: owning group (equals id at group level)
+    val side: String, // "income" | "net_refund" | "deficit" | "hub" | "expense" | "saved"; with movements: "withdrawal" | "from_cash" | "contribution" | "stays_in_cash"
+    val groupCode: String?, // expense and net_refund nodes: owning group (equals the bucket at group level)
     @JsonFormat(shape = JsonFormat.Shape.STRING) val amount: BigDecimal,
 )
 
@@ -174,6 +183,36 @@ data class MoneyFlowResponse(
     @JsonFormat(shape = JsonFormat.Shape.STRING) val deficit: BigDecimal,
     val nodes: List<MoneyFlowNode>,
     val links: List<MoneyFlowLink>,
+    // Only with the contributions-and-withdrawals option on; omitted otherwise so the response stays exactly the plain diagram.
+    @JsonInclude(JsonInclude.Include.NON_NULL) val movements: MoneyFlowMovements? = null,
+)
+
+/** Contributions and withdrawals between cash and the asset classes in the period. `staysInCash`/`fromCash` are the two signs of
+ *  income + withdrawn − expenses − contributed, the term that balances the diagram. */
+data class MoneyFlowMovements(
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val contributed: BigDecimal,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val withdrawn: BigDecimal,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val staysInCash: BigDecimal,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val fromCash: BigDecimal,
+    val classes: List<MoneyFlowMovementClass>,
+)
+
+data class MoneyFlowMovementClass(
+    val nodeId: String,
+    val assetClassCode: String,
+    val direction: String, // "contribution" | "withdrawal"
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val amount: BigDecimal,
+    val movementCount: Int,
+    val descriptions: List<MoneyFlowMovementDescription>, // largest first, capped
+    val moreDescriptions: Int, // distinct descriptions beyond the cap
+    val undescribedCount: Int,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val undescribedAmount: BigDecimal,
+)
+
+data class MoneyFlowMovementDescription(
+    val description: String,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) val amount: BigDecimal,
+    val count: Int,
 )
 
 data class ProjectedFlowComponents(

@@ -101,6 +101,7 @@ class TestSchemaResetConfig {
     StubBenchmarkSourceConfig::class,
     MailTestDoublesConfig::class,
     AiTestDoublesConfig::class,
+    SqlRecorderConfig::class,
 )
 abstract class IntegrationTestBase {
 

@@ -28,6 +28,18 @@ export function formatWholeMoney(value: string | number | Decimal | null | undef
   }).format(toDecimal(value).toNumber());
 }
 
+/** Money with cents and a thousands separator even on four digits ("9.132,18 €", not "9132,18 €"), for views that set
+ *  amounts side by side, like Money flow. */
+export function formatGroupedMoney(value: string | number | Decimal | null | undefined, currency: string, locale: string): string {
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    useGrouping: "always",
+  }).format(toDecimal(value).toNumber());
+}
+
 export const MAX_QUANTITY_DECIMALS = 6;
 
 /** Fraction digits {@link formatPrice} uses on a standalone price: 2 at or above 1 unit, expanding to

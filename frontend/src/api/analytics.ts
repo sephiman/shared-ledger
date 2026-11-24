@@ -178,7 +178,7 @@ export interface AllocationResponse {
 
 export interface MoneyFlowNode {
   id: string;
-  side: "income" | "deficit" | "hub" | "expense" | "saved";
+  side: "income" | "net_refund" | "deficit" | "hub" | "expense" | "saved" | "withdrawal" | "from_cash" | "contribution" | "stays_in_cash";
   groupCode: string | null;
   amount: string;
 }
@@ -199,6 +199,34 @@ export interface MoneyFlowResponse {
   deficit: string;
   nodes: MoneyFlowNode[];
   links: MoneyFlowLink[];
+  /** Present only when requested with the contributions-and-withdrawals option. */
+  movements?: MoneyFlowMovements;
+}
+
+export interface MoneyFlowMovementDescription {
+  description: string;
+  amount: string;
+  count: number;
+}
+
+export interface MoneyFlowMovementClass {
+  nodeId: string;
+  assetClassCode: string;
+  direction: "contribution" | "withdrawal";
+  amount: string;
+  movementCount: number;
+  descriptions: MoneyFlowMovementDescription[];
+  moreDescriptions: number;
+  undescribedCount: number;
+  undescribedAmount: string;
+}
+
+export interface MoneyFlowMovements {
+  contributed: string;
+  withdrawn: string;
+  staysInCash: string;
+  fromCash: string;
+  classes: MoneyFlowMovementClass[];
 }
 
 export interface ProjectedFlowComponents {
@@ -317,12 +345,16 @@ export function useMoneyFlow(
   to: string,
   level: "group" | "category",
   enabled = true,
+  movements = false,
 ) {
   return useQuery({
-    queryKey: ["analytics", householdId, "money-flow", from, to, level],
+    // Off keeps the original key and request, so turning the option off is exactly the plain diagram.
+    queryKey: movements
+      ? ["analytics", householdId, "money-flow", from, to, level, "movements"]
+      : ["analytics", householdId, "money-flow", from, to, level],
     queryFn: async () =>
       (await apiClient.get<MoneyFlowResponse>(`/households/${householdId}/analytics/money-flow`, {
-        params: { from, to, level },
+        params: movements ? { from, to, level, movements: true } : { from, to, level },
       })).data,
     enabled: enabled && Boolean(from) && Boolean(to),
   });

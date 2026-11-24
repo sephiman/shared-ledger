@@ -42,6 +42,14 @@
   --color-chart-axis-text: #6b7280;
   --color-chart-marker: #334155;
 
+  /* Money flow's contributions-and-withdrawals option. Indigo is kept out of every income/group hue, so money
+   * withdrawn from a class never reads as income; the balancing term is lime (stays) or amber (drawn down), apart from the
+   * Saved green and the Deficit red. OLED inherits the dark values. */
+  --color-flow-contribution: #4f46e5;
+  --color-flow-withdrawal: #4338ca;
+  --color-flow-stays-in-cash: #4d7c0f;
+  --color-flow-from-cash: #b45309;
+
   /* Named layering scale (z-sticky-sub, z-sticky, z-dropdown, z-drawer, z-modal, z-popover, z-toast).
    * Popovers sit above modals so an InfoTip inside a dialog or drawer stays readable. */
   --z-index-sticky-sub: 10;
@@ -75,6 +83,11 @@
   --color-chart-axis: #6b7280;
   --color-chart-axis-text: #9ca3af;
   --color-chart-marker: #cbd5e1;
+
+  --color-flow-contribution: #818cf8;
+  --color-flow-withdrawal: #a5b4fc;
+  --color-flow-stays-in-cash: #a3e635;
+  --color-flow-from-cash: #f59e0b;
 }
 
 /* OLED: elevation carried by hairline borders over near-black fills, not by lighter fills. Cards sit at

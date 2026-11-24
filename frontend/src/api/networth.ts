@@ -500,6 +500,8 @@ function invalidateMovements(qc: ReturnType<typeof useQueryClient>, householdId:
   void qc.invalidateQueries({ queryKey: ["movements", householdId] });
   // The cumulative-contributions overlay in FIRE is built from movements.
   void qc.invalidateQueries({ queryKey: ["fire-projection", householdId] });
+  // Money flow draws them with its contributions-and-withdrawals option on.
+  void qc.invalidateQueries({ queryKey: ["analytics", householdId, "money-flow"] });
 }
 
 function invalidateCash(qc: ReturnType<typeof useQueryClient>, householdId: string) {

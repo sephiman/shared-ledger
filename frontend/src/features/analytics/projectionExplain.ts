@@ -1,7 +1,7 @@
 import Decimal from "decimal.js";
 import type { MoneyFlowProjectionResponse, ProjectedFlowComponents } from "@/api/analytics";
 import type { ProjectionExplain } from "@/api/questions";
-import { formatMoney, toDecimal } from "@/lib/money";
+import { formatGroupedMoney, toDecimal } from "@/lib/money";
 import { estimatedRemainder } from "./moneyflowProjection";
 
 export interface ProjectionExplanation {
@@ -21,7 +21,7 @@ export function buildProjectionExplanation(
   labelOf: LabelOf,
   t: Translate,
 ): ProjectionExplanation | null {
-  const money = (v: string | number | Decimal) => formatMoney(typeof v === "string" ? v : v.toString(), currency, locale);
+  const money = (v: string | number | Decimal) => formatGroupedMoney(typeof v === "string" ? v : v.toString(), currency, locale);
   const label = (c: ProjectedFlowComponents) => labelOf(c.side, c.id);
 
   switch (explain.kind) {

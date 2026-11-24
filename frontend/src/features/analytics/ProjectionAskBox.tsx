@@ -15,7 +15,7 @@ import {
 import { InfoTip } from "@/components/ui/InfoTip";
 import { Badge, Button, FieldError, Input } from "@/components/ui/primitives";
 import { categoryLabel } from "@/lib/categoryLabel";
-import { formatMoney, toDecimal } from "@/lib/money";
+import { formatGroupedMoney, toDecimal } from "@/lib/money";
 import { buildProjectionExplanation } from "./projectionExplain";
 
 interface ProjectionAskBoxProps {
@@ -89,11 +89,11 @@ export function ProjectionAskBox({
     if (!data || activeScenario?.savingsTarget == null) return null;
     const netSaved = toDecimal(data.saved).minus(data.deficit);
     const gap = toDecimal(activeScenario.savingsTarget).minus(netSaved);
-    const targetText = formatMoney(activeScenario.savingsTarget, currency, locale);
+    const targetText = formatGroupedMoney(activeScenario.savingsTarget, currency, locale);
     if (gap.lte(0)) return t("analytics.projection_ask_target_met", { target: targetText });
     return t("analytics.projection_ask_target_gap", {
       target: targetText,
-      gap: formatMoney(gap.toFixed(2), currency, locale),
+      gap: formatGroupedMoney(gap.toFixed(2), currency, locale),
     });
   })();
 
@@ -102,7 +102,7 @@ export function ProjectionAskBox({
         ...activeScenario.freeze.map((s) => t("analytics.projection_ask_tag_freeze", { name: scopeLabel(s) })),
         ...activeScenario.adjustments.map((a) => {
           const sign = a.value >= 0 ? "+" : "";
-          const val = a.kind === "percent" ? `${sign}${a.value}%` : `${sign}${formatMoney(a.value, currency, locale)}`;
+          const val = a.kind === "percent" ? `${sign}${a.value}%` : `${sign}${formatGroupedMoney(a.value, currency, locale)}`;
           return `${scopeLabel(a.scope)} ${val}`;
         }),
         ...(activeScenario.windowMonths != null

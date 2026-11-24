@@ -3,11 +3,29 @@ import { useTranslation } from "react-i18next";
 import type { MoneyFlowNode, MoneyFlowResponse } from "@/api/analytics";
 import { useCategories } from "@/api/catalog";
 import { Rectangle, ResponsiveContainer, Sankey, Tooltip } from "recharts";
-import { formatMoney, formatNumber } from "@/lib/money";
+import { formatGroupedMoney, formatNumber } from "@/lib/money";
 import { categoryLabelByCode } from "@/lib/categoryLabel";
 import { categoryIcon, groupIcon } from "@/lib/categoryGroup";
-import { buildMoneyFlowSankey, nodeKey, type MoneyFlowSankeyData, type SankeyNodeDatum } from "./moneyflow";
-import { DEFICIT_COLOR, HUB_COLOR, OTHERS_COLOR, SAVED_COLOR, groupColor, incomeColor } from "./palette";
+import {
+  CONTRIBUTED_NODE_ID,
+  WITHDRAWN_NODE_ID,
+  buildMoneyFlowSankey,
+  nodeKey,
+  type MoneyFlowSankeyData,
+  type SankeyNodeDatum,
+} from "./moneyflow";
+import {
+  CONTRIBUTION_COLOR,
+  DEFICIT_COLOR,
+  FROM_CASH_COLOR,
+  HUB_COLOR,
+  OTHERS_COLOR,
+  SAVED_COLOR,
+  STAYS_IN_CASH_COLOR,
+  WITHDRAWAL_COLOR,
+  groupColor,
+  incomeColor,
+} from "./palette";
 
 interface NodeRenderProps {
   x: number;
@@ -44,6 +62,17 @@ interface NodeToggle {
 }
 
 const isToggleable = (node: SankeyNodeDatum) => node.side === "income" || node.side === "expense";
+
+/** Clicking a contribution or withdrawal node (one class, or one direction "by group") pins its details; only the real diagram with the option on passes one. */
+interface NodeSelect {
+  selectedId: string | null;
+  onSelect: (node: SankeyNodeDatum) => void;
+}
+
+export const isClassNode = (node: { side: string }) => node.side === "contribution" || node.side === "withdrawal";
+
+/** The bucket behind a prefixed node id ("contribution:etfs" → "etfs", "net_refund:outings" → "outings"). */
+export const assetClassOfNode = (id: string) => id.slice(id.indexOf(":") + 1);
 
 interface Box {
   x: number;
@@ -83,10 +112,27 @@ export function useMoneyFlowSankey(
           return t(projected ? "analytics.deficit_projected" : "analytics.money_flow_deficit");
         case "income":
           return categoryLabelByCode(n.id, catalog, t);
+        case "net_refund": {
+          const bucket = assetClassOfNode(n.id);
+          const name = data.level === "category" ? categoryLabelByCode(bucket, catalog, t) : t(`category_group.${bucket}`);
+          return t("analytics.money_flow_net_refunds_in", { name });
+        }
         case "expense":
           return data.level === "category"
             ? `${categoryIcon(n.id)} ${categoryLabelByCode(n.id, catalog, t)}`
             : `${groupIcon(n.id)} ${t(`category_group.${n.id}`)}`;
+        case "contribution":
+          return n.id === CONTRIBUTED_NODE_ID
+            ? t("analytics.money_flow_contributed_to_wealth")
+            : t(`asset.${assetClassOfNode(n.id)}`);
+        case "withdrawal":
+          return n.id === WITHDRAWN_NODE_ID
+            ? t("analytics.money_flow_withdrawn_from_wealth")
+            : t("analytics.money_flow_withdrawn_from", { asset: t(`asset.${assetClassOfNode(n.id)}`) });
+        case "stays_in_cash":
+          return t("analytics.money_flow_stays_in_cash");
+        case "from_cash":
+          return t("analytics.money_flow_from_cash");
       }
     };
     const colorOf = (n: MoneyFlowNode): string => {
@@ -99,8 +145,17 @@ export function useMoneyFlowSankey(
           return DEFICIT_COLOR;
         case "income":
           return incomeColor(n.id);
+        case "net_refund":
         case "expense":
           return groupColor(n.groupCode);
+        case "contribution":
+          return CONTRIBUTION_COLOR;
+        case "withdrawal":
+          return WITHDRAWAL_COLOR;
+        case "stays_in_cash":
+          return STAYS_IN_CASH_COLOR;
+        case "from_cash":
+          return FROM_CASH_COLOR;
       }
     };
     return buildMoneyFlowSankey(data, {
@@ -114,14 +169,19 @@ export function useMoneyFlowSankey(
 }
 
 function MoneyFlowNodeShape({
-  x, y, width, height, payload, currency, locale, projected, toggle,
-}: NodeRenderProps & { currency: string; locale: string; projected: boolean; toggle?: NodeToggle }) {
+  x, y, width, height, payload, currency, locale, projected, toggle, select,
+}: NodeRenderProps & { currency: string; locale: string; projected: boolean; toggle?: NodeToggle; select?: NodeSelect }) {
   const isCenter = payload.column === "center";
   const isRight = payload.column === "right";
   const textX = isCenter ? x + width / 2 : isRight ? x - 8 : x + width + 8;
   const anchor = isCenter ? "middle" : isRight ? "end" : "start";
   const textY = isCenter ? y - 8 : y + height / 2 + 4;
   const clickable = toggle != null && isToggleable(payload);
+  const selectable = select != null && isClassNode(payload);
+  const selected = selectable && select.selectedId === payload.id;
+  // Money coming back (withdrawn from a class, or refunds exceeding a group's spending) is hatched, so it never reads
+  // as one more income category.
+  const hatchId = payload.side === "withdrawal" || payload.side === "net_refund" ? `mf-hatch-${payload.id.replace(/[^a-zA-Z0-9_-]/g, "-")}` : null;
   const actualsOnly = clickable && toggle.disabledKeys.has(nodeKey(payload));
   const estimate = projected && !actualsOnly;
   // Nothing actual yet: an outline sliver, so the node can always be clicked back on.
@@ -132,15 +192,19 @@ function MoneyFlowNodeShape({
   useLayoutEffect(() => {
     const label = labelRef.current;
     // jsdom has no SVG layout; the bar-only hit area still works there.
-    if (!clickable || !label || typeof label.getBBox !== "function") return;
+    if (!(clickable || selectable) || !label || typeof label.getBBox !== "function") return;
     const { x: bx, y: by, width: bw, height: bh } = label.getBBox();
     setLabelBox({ x: bx, y: by, width: bw, height: bh });
-  }, [clickable, payload.name, payload.amount, x, y, currency, locale]);
+  }, [clickable, selectable, payload.name, payload.amount, x, y, currency, locale]);
   const hits = hitBoxes({ x: x - 4, y, width: width + 8, height: drawnHeight }, labelBox);
+  const activate = () => {
+    if (clickable) toggle.onToggle(payload);
+    else if (selectable) select.onSelect(payload);
+  };
   const onKeyDown = (e: KeyboardEvent<SVGGElement>) => {
-    if (!clickable || (e.key !== "Enter" && e.key !== " ")) return;
+    if (!(clickable || selectable) || (e.key !== "Enter" && e.key !== " ")) return;
     e.preventDefault();
-    toggle.onToggle(payload);
+    activate();
   };
   return (
     <g
@@ -149,30 +213,48 @@ function MoneyFlowNodeShape({
         tabIndex: 0,
         "aria-pressed": actualsOnly,
         "aria-label": toggle.labelOf(payload),
-        onClick: () => toggle.onToggle(payload),
+        onClick: activate,
+        onKeyDown,
+        className: "group cursor-pointer focus:outline-none focus-visible:outline-2 focus-visible:outline-sky-500",
+      })}
+      {...(selectable && {
+        role: "button",
+        tabIndex: 0,
+        "aria-pressed": selected,
+        "aria-label": `${payload.name}: ${formatGroupedMoney(payload.amount, currency, locale)}`,
+        onClick: activate,
         onKeyDown,
         className: "group cursor-pointer focus:outline-none focus-visible:outline-2 focus-visible:outline-sky-500",
       })}
     >
-      {clickable &&
+      {hatchId && (
+        <defs>
+          <pattern id={hatchId} patternUnits="userSpaceOnUse" width={6} height={6} patternTransform="rotate(45)">
+            <rect width={6} height={6} fill={payload.fill} fillOpacity={0.35} />
+            <rect width={3} height={6} fill={payload.fill} />
+          </pattern>
+        </defs>
+      )}
+      {(clickable || selectable) &&
         hits.map((hit, i) => <rect key={i} x={hit.x} y={hit.y} width={hit.width} height={hit.height} fill="transparent" />)}
       <Rectangle
         x={x}
         y={y}
         width={width}
         height={drawnHeight}
-        fill={payload.fill}
+        fill={hatchId ? `url(#${hatchId})` : payload.fill}
         fillOpacity={empty ? 0.15 : estimate ? 0.45 : 0.95}
-        stroke={estimate || empty ? payload.fill : undefined}
+        stroke={estimate || empty || hatchId || selected ? payload.fill : undefined}
+        strokeWidth={selected ? 2 : undefined}
         strokeDasharray={estimate ? "3 2" : undefined}
         radius={2}
         // Same lift as the node's ribbon: bar, label and ribbon are one control and should read as one.
         className={clickable ? (empty ? "group-hover:[fill-opacity:0.3]" : estimate ? "group-hover:[fill-opacity:0.6]" : "group-hover:[fill-opacity:1]") : undefined}
       />
       <text ref={labelRef} x={textX} y={textY} textAnchor={anchor} fill="currentColor" fontSize={12} className="text-gray-800 dark:text-gray-100">
-        <tspan fontWeight={500}>{payload.name}</tspan>
+        <tspan fontWeight={selected ? 700 : 500} textDecoration={selected ? "underline" : undefined}>{payload.name}</tspan>
         <tspan dx={6} fontSize={11} fill="currentColor" className="tabular-nums text-gray-500 dark:text-gray-400">
-          {formatMoney(payload.amount, currency, locale)}
+          {formatGroupedMoney(payload.amount, currency, locale)}
         </tspan>
       </text>
     </g>
@@ -181,10 +263,11 @@ function MoneyFlowNodeShape({
 
 /** A ribbon is a pointer shortcut to its non-hub node (no role or tab stop: the keyboard control is the node). */
 function MoneyFlowLinkShape({
-  sourceX, sourceY, sourceControlX, targetControlX, targetX, targetY, linkWidth, payload, projected, toggle,
-}: LinkRenderProps & { projected: boolean; toggle?: NodeToggle }) {
+  sourceX, sourceY, sourceControlX, targetControlX, targetX, targetY, linkWidth, payload, projected, toggle, select,
+}: LinkRenderProps & { projected: boolean; toggle?: NodeToggle; select?: NodeSelect }) {
   const flowEnd = payload.source.side === "hub" ? payload.target : payload.source;
   const clickable = toggle != null && isToggleable(flowEnd);
+  const selectable = select != null && isClassNode(flowEnd);
   const estimate = projected && !(toggle?.disabledKeys.has(nodeKey(flowEnd)) ?? false);
   return (
     <path
@@ -197,6 +280,11 @@ function MoneyFlowLinkShape({
         "data-flow-end": nodeKey(flowEnd),
         onClick: () => toggle.onToggle(flowEnd),
         className: estimate ? "cursor-pointer hover:[stroke-opacity:0.28]" : "cursor-pointer hover:[stroke-opacity:0.5]",
+      })}
+      {...(selectable && {
+        "data-flow-end": nodeKey(flowEnd),
+        onClick: () => select.onSelect(flowEnd),
+        className: "cursor-pointer hover:[stroke-opacity:0.5]",
       })}
     />
   );
@@ -215,6 +303,7 @@ function MoneyFlowTooltip({
   locale,
   shareLine,
   detailLine,
+  nodeDetail,
 }: {
   active?: boolean;
   payload?: ReadonlyArray<SankeyTooltipItem>;
@@ -222,6 +311,7 @@ function MoneyFlowTooltip({
   locale: string;
   shareLine: (node: SankeyNodeDatum) => string | null;
   detailLine?: (node: SankeyNodeDatum) => string | null;
+  nodeDetail?: (node: SankeyNodeDatum) => ReactNode;
 }) {
   if (!active || !payload || payload.length === 0) return null;
   const isNodeDatum = (o: unknown): o is SankeyNodeDatum =>
@@ -247,20 +337,22 @@ function MoneyFlowTooltip({
   const amount = link ? link.value : node!.amount;
   const share = shareLine(flowEnd);
   const detail = detailLine?.(flowEnd) ?? null;
+  const block = nodeDetail?.(flowEnd) ?? null;
   const members = node?.members ?? null;
 
   return (
     <div className="max-w-xs rounded-md border border-border-strong bg-overlay p-2 text-xs shadow-sm">
       <p className="mb-1 font-medium text-gray-900 dark:text-gray-100">{title}</p>
-      <p className="font-medium tabular-nums text-gray-900 dark:text-gray-100">{formatMoney(amount, currency, locale)}</p>
+      <p className="font-medium tabular-nums text-gray-900 dark:text-gray-100">{formatGroupedMoney(amount, currency, locale)}</p>
       {share && <p className="text-gray-600 dark:text-gray-400">{share}</p>}
       {detail && <p className="mt-1 border-t border-border pt-1 text-gray-700 dark:text-gray-300">{detail}</p>}
+      {block && <div className="mt-1 border-t border-border pt-1">{block}</div>}
       {members && members.length > 0 && (
         <div className="mt-1 space-y-0.5 border-t border-border pt-1">
           {members.slice(0, MAX_MEMBERS).map((m) => (
             <p key={m.name} className="text-gray-900 dark:text-gray-100">
               <span className="text-gray-600 dark:text-gray-400">{m.name}: </span>
-              <span className="font-medium tabular-nums">{formatMoney(m.amount, currency, locale)}</span>
+              <span className="font-medium tabular-nums">{formatGroupedMoney(m.amount, currency, locale)}</span>
               <span className="text-gray-500 dark:text-gray-400"> · {formatNumber(m.share, locale, 1)}%</span>
             </p>
           ))}
@@ -278,14 +370,21 @@ export function MoneyFlowSankeyChart({
   currency,
   projected = false,
   detailLine,
+  nodeDetail,
   toggle,
+  select,
+  keepOrder = false,
 }: {
   sankey: MoneyFlowSankeyData;
   currency: string;
   /** Muted, dashed treatment so an estimate is never mistaken for the real diagram. */
   projected?: boolean;
   detailLine?: (node: SankeyNodeDatum) => string | null;
+  nodeDetail?: (node: SankeyNodeDatum) => ReactNode;
   toggle?: NodeToggle;
+  select?: NodeSelect;
+  /** Draw each column in the data's order instead of Recharts' own sorting (with contributions and withdrawals drawn). */
+  keepOrder?: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
@@ -305,6 +404,7 @@ export function MoneyFlowSankeyChart({
             data={sankey}
             nodeWidth={12}
             nodePadding={18}
+            sort={!keepOrder}
             margin={{ top: 24, right: 16, bottom: 16, left: 16 }}
             node={(props: unknown) => (
               <MoneyFlowNodeShape
@@ -313,10 +413,11 @@ export function MoneyFlowSankeyChart({
                 locale={locale}
                 projected={projected}
                 toggle={toggle}
+                select={select}
               />
             )}
             link={(props: unknown) => (
-              <MoneyFlowLinkShape {...(props as LinkRenderProps)} projected={projected} toggle={toggle} />
+              <MoneyFlowLinkShape {...(props as LinkRenderProps)} projected={projected} toggle={toggle} select={select} />
             )}
           >
             <Tooltip
@@ -328,6 +429,7 @@ export function MoneyFlowSankeyChart({
                   locale={locale}
                   shareLine={shareLine}
                   detailLine={detailLine}
+                  nodeDetail={nodeDetail}
                 />
               )}
             />
@@ -363,20 +465,20 @@ export function MoneyFlowTotals({
       <span className="text-gray-600 dark:text-gray-400">
         {labelOf("income")}:{" "}
         <span className="font-medium tabular-nums text-gray-900 dark:text-gray-100">
-          {formatMoney(totals.income, currency, locale)}
+          {formatGroupedMoney(totals.income, currency, locale)}
         </span>
       </span>
       <span className="text-gray-600 dark:text-gray-400">
         {labelOf("expenses")}:{" "}
         <span className="font-medium tabular-nums text-gray-900 dark:text-gray-100">
-          {formatMoney(totals.expenses, currency, locale)}
+          {formatGroupedMoney(totals.expenses, currency, locale)}
         </span>
       </span>
       {Number(totals.saved) > 0 && (
         <span className="text-gray-600 dark:text-gray-400">
           {labelOf("saved")}:{" "}
           <span className="font-medium tabular-nums" style={{ color: SAVED_COLOR }}>
-            {formatMoney(totals.saved, currency, locale)}
+            {formatGroupedMoney(totals.saved, currency, locale)}
           </span>
         </span>
       )}
@@ -384,7 +486,7 @@ export function MoneyFlowTotals({
         <span className="text-gray-600 dark:text-gray-400">
           {labelOf("deficit")}:{" "}
           <span className="font-medium tabular-nums" style={{ color: DEFICIT_COLOR }}>
-            {formatMoney(totals.deficit, currency, locale)}
+            {formatGroupedMoney(totals.deficit, currency, locale)}
           </span>
         </span>
       )}

@@ -45,6 +45,7 @@ class AnalyticsService(
     private val projectionModes: GroupProjectionModeService,
     private val snapshots: SnapshotRepository,
     private val movements: MovementRepository,
+    private val movementFlows: MovementFlowReader,
 ) {
 
     @Transactional(readOnly = true)
@@ -412,47 +413,106 @@ class AnalyticsService(
         val links: List<MoneyFlowLink>,
         val saved: BigDecimal,
         val deficit: BigDecimal,
+        val movementSummary: MoneyFlowMovements?,
     )
 
     // One node/link layout for the real and the projected money flow, so both diagrams obey the same rules.
+    // A bucket refunds turned net negative cannot flow out of the hub, so it flows in as a "net refund" source for its
+    // absolute amount: the expense side drawn is then expenses + those refunds, and both sides still balance.
+    // With contributions and withdrawals drawn, withdrawals join the sources and contributions the destinations, and the balancing term
+    // becomes "From cash" / "Stays in cash" in place of the Deficit / Saved node; the saved and deficit figures
+    // themselves keep their meaning.
     private fun flowGraph(
         income: BigDecimal,
         expenses: BigDecimal,
         incomeByCategory: Map<String, BigDecimal>,
         expenseBuckets: Map<String, BigDecimal>,
         groupOf: (String) -> String,
+        movementClasses: List<MoneyFlowMovementClass>? = null,
+        // Follows the expense side: aggregated buckets ("group") draw one node per direction, detailed ones per class.
+        aggregateMovements: Boolean = false,
     ): FlowGraph {
         val saved = (income - expenses).max(BigDecimal.ZERO)
         val deficit = (expenses - income).max(BigDecimal.ZERO)
+        val summary = movementClasses?.let { movementSummary(income, expenses, it) }
+        val withdrawals = movementNodes(movementClasses, MovementType.withdrawal, WITHDRAWN_NODE_ID, aggregateMovements)
+        val contributions = movementNodes(movementClasses, MovementType.contribution, CONTRIBUTED_NODE_ID, aggregateMovements)
+        val sourceBalance = summary?.fromCash ?: deficit
+        val sourceBalanceNode = if (summary != null) FROM_CASH_NODE_ID else DEFICIT_NODE_ID
+        val sinkBalance = summary?.staysInCash ?: saved
+        val sinkBalanceNode = if (summary != null) STAYS_IN_CASH_NODE_ID else SAVED_NODE_ID
+
         val nodes = mutableListOf<MoneyFlowNode>()
         val links = mutableListOf<MoneyFlowLink>()
-        if (income.signum() != 0 || expenses.signum() != 0) {
-            incomeByCategory.entries.filter { it.value.signum() > 0 }.sortedByDescending { it.value }.forEach { (code, amount) ->
-                nodes += MoneyFlowNode(id = code, side = "income", groupCode = null, amount = Money.normalize(amount))
-                links += MoneyFlowLink(source = code, target = HUB_NODE_ID, amount = Money.normalize(amount))
-            }
-            if (deficit.signum() > 0) {
-                nodes += MoneyFlowNode(id = DEFICIT_NODE_ID, side = "deficit", groupCode = null, amount = Money.normalize(deficit))
-                links += MoneyFlowLink(source = DEFICIT_NODE_ID, target = HUB_NODE_ID, amount = Money.normalize(deficit))
-            }
-            nodes += MoneyFlowNode(id = HUB_NODE_ID, side = "hub", groupCode = null, amount = Money.normalize(income + deficit))
-            // A bucket the refunds turned net-negative has no meaning as a flow out of the hub (and a
-            // negative link corrupts the diagram's share maths), so it is left out. The allocation and
-            // dashboard numbers keep the netted value.
-            expenseBuckets.entries.filter { it.value.signum() > 0 }.sortedByDescending { it.value }.forEach { (code, amount) ->
-                nodes += MoneyFlowNode(id = code, side = "expense", groupCode = groupOf(code), amount = Money.normalize(amount))
-                links += MoneyFlowLink(source = HUB_NODE_ID, target = code, amount = Money.normalize(amount))
-            }
-            if (saved.signum() > 0) {
-                nodes += MoneyFlowNode(id = SAVED_NODE_ID, side = "saved", groupCode = null, amount = Money.normalize(saved))
-                links += MoneyFlowLink(source = HUB_NODE_ID, target = SAVED_NODE_ID, amount = Money.normalize(saved))
-            }
+        fun source(id: String, side: String, amount: BigDecimal) {
+            nodes += MoneyFlowNode(id = id, side = side, groupCode = null, amount = Money.normalize(amount))
+            links += MoneyFlowLink(source = id, target = HUB_NODE_ID, amount = Money.normalize(amount))
         }
-        return FlowGraph(nodes, links, saved, deficit)
+        fun sink(id: String, side: String, groupCode: String?, amount: BigDecimal) {
+            nodes += MoneyFlowNode(id = id, side = side, groupCode = groupCode, amount = Money.normalize(amount))
+            links += MoneyFlowLink(source = HUB_NODE_ID, target = id, amount = Money.normalize(amount))
+        }
+        if (income.signum() != 0 || expenses.signum() != 0 || !movementClasses.isNullOrEmpty()) {
+            incomeByCategory.entries.filter { it.value.signum() > 0 }.sortedByDescending { it.value }.forEach { (code, amount) ->
+                source(code, "income", amount)
+            }
+            val netRefunds = expenseBuckets.entries.filter { it.value.signum() < 0 }.sortedBy { it.value }
+            netRefunds.forEach { (code, amount) ->
+                nodes += MoneyFlowNode(id = netRefundNodeId(code), side = "net_refund", groupCode = groupOf(code), amount = Money.normalize(amount.negate()))
+                links += MoneyFlowLink(source = netRefundNodeId(code), target = HUB_NODE_ID, amount = Money.normalize(amount.negate()))
+            }
+            withdrawals.forEach { (id, amount) -> source(id, "withdrawal", amount) }
+            if (sourceBalance.signum() > 0) source(sourceBalanceNode, sourceBalanceNode, sourceBalance)
+            val refunded = netRefunds.fold(BigDecimal.ZERO) { acc, e -> acc - e.value }
+            val hub = income + refunded + (summary?.withdrawn ?: BigDecimal.ZERO) + sourceBalance
+            nodes += MoneyFlowNode(id = HUB_NODE_ID, side = "hub", groupCode = null, amount = Money.normalize(hub))
+            expenseBuckets.entries.filter { it.value.signum() > 0 }.sortedByDescending { it.value }.forEach { (code, amount) ->
+                sink(code, "expense", groupOf(code), amount)
+            }
+            contributions.forEach { (id, amount) -> sink(id, "contribution", null, amount) }
+            if (sinkBalance.signum() > 0) sink(sinkBalanceNode, sinkBalanceNode, null, sinkBalance)
+        }
+        return FlowGraph(nodes, links, saved, deficit, summary)
+    }
+
+    /** Node id and amount per drawn node: one per class, or a single total under [aggregateId]. */
+    private fun movementNodes(
+        classes: List<MoneyFlowMovementClass>?,
+        direction: MovementType,
+        aggregateId: String,
+        aggregate: Boolean,
+    ): List<Pair<String, BigDecimal>> {
+        val forDirection = classes.orEmpty().filter { it.direction == direction.name }
+        if (!aggregate) return forDirection.map { it.nodeId to it.amount }
+        val total = forDirection.fold(BigDecimal.ZERO) { acc, c -> acc + c.amount }
+        return if (total.signum() > 0) listOf(aggregateId to total) else emptyList()
+    }
+
+    private fun movementSummary(
+        income: BigDecimal,
+        expenses: BigDecimal,
+        classes: List<MoneyFlowMovementClass>,
+    ): MoneyFlowMovements {
+        val contributed = classes.filter { it.direction == MovementType.contribution.name }.fold(BigDecimal.ZERO) { a, c -> a + c.amount }
+        val withdrawn = classes.filter { it.direction == MovementType.withdrawal.name }.fold(BigDecimal.ZERO) { a, c -> a + c.amount }
+        val balance = income + withdrawn - expenses - contributed
+        return MoneyFlowMovements(
+            contributed = Money.normalize(contributed),
+            withdrawn = Money.normalize(withdrawn),
+            staysInCash = Money.normalize(balance.max(BigDecimal.ZERO)),
+            fromCash = Money.normalize(balance.negate().max(BigDecimal.ZERO)),
+            classes = classes,
+        )
     }
 
     @Transactional(readOnly = true)
-    fun moneyFlow(householdId: UUID, from: LocalDate, to: LocalDate, level: String): MoneyFlowResponse {
+    fun moneyFlow(
+        householdId: UUID,
+        from: LocalDate,
+        to: LocalDate,
+        level: String,
+        includeMovements: Boolean = false,
+    ): MoneyFlowResponse {
         val flows = aggregateFlows(householdId, from, to)
         val graph = flowGraph(
             income = flows.income,
@@ -460,6 +520,8 @@ class AnalyticsService(
             incomeByCategory = flows.incomeByCategory,
             expenseBuckets = if (level == "category") flows.expensesByCategory else flows.expensesByGroup,
             groupOf = { code -> if (level == "category") flows.categoryGroups[code] ?: "ungrouped" else code },
+            movementClasses = if (includeMovements) movementFlows.read(householdId, from, to) else null,
+            aggregateMovements = level == "group",
         )
         return MoneyFlowResponse(
             from = from,
@@ -471,6 +533,7 @@ class AnalyticsService(
             deficit = Money.normalize(graph.deficit),
             nodes = graph.nodes,
             links = graph.links,
+            movements = graph.movementSummary,
         )
     }
 

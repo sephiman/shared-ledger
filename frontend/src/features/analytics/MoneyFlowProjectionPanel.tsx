@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useMoneyFlowProjection, type MoneyFlowProjectionResponse } from "@/api/analytics";
 import type { ProjectionScenario } from "@/api/questions";
 import { Badge, Button, Card, CardBody, CardHeader, Label, Select } from "@/components/ui/primitives";
-import { formatMoney, formatNumber } from "@/lib/money";
+import { formatGroupedMoney, formatNumber } from "@/lib/money";
 import { MoneyFlowSankeyChart, MoneyFlowTotals, useMoneyFlowSankey } from "./MoneyFlowChart";
 import { ProjectionAskBox } from "./ProjectionAskBox";
 import { ProjectionModeSettings } from "./ProjectionModeSettings";
@@ -68,11 +68,14 @@ export function MoneyFlowProjectionPanel({
   currency,
   initialScenario = null,
   onInitialScenarioApplied,
+  movementsShown = false,
 }: {
   householdId: string;
   currency: string;
   initialScenario?: ProjectionScenario | null;
   onInitialScenarioApplied?: () => void;
+  /** The real diagram above draws contributions and withdrawals; say this one does not, so the two never look contradictory. */
+  movementsShown?: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
@@ -159,7 +162,7 @@ export function MoneyFlowProjectionPanel({
     if (!data) return undefined;
     const lookup = componentsLookup(data.components);
     const span = compactMonthSpan(basisMonths(data), locale);
-    const money = (v: string) => formatMoney(v, currency, locale);
+    const money = (v: string) => formatGroupedMoney(v, currency, locale);
     return (node: SankeyNodeDatum): string | null => {
       const c = lookup(node);
       if (!c) return null;
@@ -313,6 +316,7 @@ export function MoneyFlowProjectionPanel({
               <li>{windowAssumption(data, t, locale)}</li>
               <li>{t("analytics.money_flow_projection_recurring")}</li>
               <li>{t("analytics.money_flow_projection_modes_note")}</li>
+              {movementsShown && <li>{t("analytics.money_flow_projection_no_movements")}</li>}
             </ul>
           )}
         </CardBody>

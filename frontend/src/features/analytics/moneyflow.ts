@@ -2,6 +2,10 @@ import type { MoneyFlowNode, MoneyFlowResponse } from "@/api/analytics";
 import { monthBounds, yearBounds } from "@/lib/dates";
 import { toDecimal } from "@/lib/money";
 
+/** "By group" draws contributions and withdrawals as one node per direction under these ids (backend: AnalyticsDtos). */
+export const CONTRIBUTED_NODE_ID = "contributed";
+export const WITHDRAWN_NODE_ID = "withdrawn";
+
 /** Nodes below this share of their side's total collapse into an "Others" node per side. */
 export const OTHERS_THRESHOLD_SHARE = 0.02;
 
@@ -140,8 +144,14 @@ function splitSmallFlows(
   };
 }
 
+/** Sides drawn as their own node beside the categories, never folded into "Others". Order within a column follows
+ *  this list: asset-class movements after the categories, the balancing term last. */
+const STANDALONE_LEFT: MoneyFlowNode["side"][] = ["net_refund", "withdrawal", "deficit", "from_cash"];
+const STANDALONE_RIGHT: MoneyFlowNode["side"][] = ["contribution", "saved", "stays_in_cash"];
+
 /** Map the backend's semantic nodes/links to Recharts' index-based Sankey data, collapsing sub-threshold
- *  flows into an "Others" node per side. The hub, "Saved" and "Deficit" never collapse. */
+ *  income/expense flows into an "Others" node per side. The hub, the balancing term and asset-class movements never
+ *  collapse. */
 export function buildMoneyFlowSankey(
   data: Pick<MoneyFlowResponse, "nodes" | "income" | "expenses">,
   opts: BuildMoneyFlowOptions,
@@ -151,8 +161,6 @@ export function buildMoneyFlowSankey(
   const income = Number(data.income);
   const expenses = Number(data.expenses);
   const hubNode = data.nodes.find((n) => n.side === "hub");
-  const savedNode = data.nodes.find((n) => n.side === "saved");
-  const deficitNode = data.nodes.find((n) => n.side === "deficit");
 
   const incomeSide = splitSmallFlows(
     data.nodes.filter((n) => n.side === "income"),
@@ -171,22 +179,15 @@ export function buildMoneyFlowSankey(
     "__others_expense__",
   );
 
+  const standalone = (sides: MoneyFlowNode["side"][], column: "left" | "right"): SankeyNodeDatum[] =>
+    sides.flatMap((side) =>
+      data.nodes.filter((n) => n.side === side).map((n) => standaloneDatum(n, column, income, expenses, opts)),
+    );
+
   const nodes: SankeyNodeDatum[] = [...incomeSide.kept];
   if (incomeSide.others) nodes.push(incomeSide.others);
-  if (deficitNode) {
-    nodes.push({
-      name: opts.labelOf(deficitNode),
-      id: deficitNode.id,
-      side: "deficit",
-      column: "left",
-      groupCode: null,
-      amount: Number(deficitNode.amount),
-      share: expenses > 0 ? (Number(deficitNode.amount) / expenses) * 100 : 0,
-      shareOf: "expenses",
-      fill: opts.colorOf(deficitNode),
-    });
-  }
-  const hubIndexPlaceholder = nodes.length;
+  nodes.push(...standalone(STANDALONE_LEFT, "left"));
+  const hubIndex = nodes.length;
   if (hubNode) {
     nodes.push({
       name: opts.labelOf(hubNode),
@@ -202,21 +203,8 @@ export function buildMoneyFlowSankey(
   }
   nodes.push(...expenseSide.kept);
   if (expenseSide.others) nodes.push(expenseSide.others);
-  if (savedNode) {
-    nodes.push({
-      name: opts.labelOf(savedNode),
-      id: savedNode.id,
-      side: "saved",
-      column: "right",
-      groupCode: null,
-      amount: Number(savedNode.amount),
-      share: income > 0 ? (Number(savedNode.amount) / income) * 100 : 0,
-      shareOf: "income",
-      fill: opts.colorOf(savedNode),
-    });
-  }
+  nodes.push(...standalone(STANDALONE_RIGHT, "right"));
 
-  const hubIndex = hubIndexPlaceholder;
   const indexOf = new Map(nodes.map((n, i) => [n.id, i] as const));
   const links: SankeyLinkDatum[] = [];
   for (const n of nodes) {
@@ -225,4 +213,29 @@ export function buildMoneyFlowSankey(
     else links.push({ source: hubIndex, target: indexOf.get(n.id)!, value: n.amount });
   }
   return { nodes, links };
+}
+
+/** Saved is a share of income and Deficit a share of expenses, as before; net refunds and the contribution/withdrawal
+ *  nodes carry no share line. */
+function standaloneDatum(
+  n: MoneyFlowNode,
+  column: "left" | "right",
+  income: number,
+  expenses: number,
+  opts: BuildMoneyFlowOptions,
+): SankeyNodeDatum {
+  const amount = Number(n.amount);
+  const shareOf = n.side === "saved" ? "income" : n.side === "deficit" ? "expenses" : null;
+  const base = shareOf === "income" ? income : expenses;
+  return {
+    name: opts.labelOf(n),
+    id: n.id,
+    side: n.side,
+    column,
+    groupCode: n.groupCode,
+    amount,
+    share: shareOf == null ? null : base > 0 ? (amount / base) * 100 : 0,
+    shareOf,
+    fill: opts.colorOf(n),
+  };
 }
