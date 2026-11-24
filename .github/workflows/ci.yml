@@ -39,6 +39,15 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
       # build = compile + test (Testcontainers Postgres runs on the runner's Docker) + bootJar
       - run: ./gradlew --no-daemon build
+      - name: Stage the boot jar for the image build
+        run: |
+          mkdir -p image-jar
+          cp "$(ls build/libs/*.jar | grep -v -- '-plain\.jar$')" image-jar/app.jar
+      - uses: actions/upload-artifact@v7
+        with:
+          name: backend-jar
+          path: backend/image-jar/app.jar
+          retention-days: 1
 
   # PRs only prove the images build; pushes to main publish them to ghcr.io once the tests pass.
   images:
@@ -52,6 +61,11 @@ jobs:
         component: [backend, frontend]
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        if: matrix.component == 'backend'
+        with:
+          name: backend-jar
+          path: backend-jar
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
         if: github.event_name != 'pull_request'
@@ -69,6 +83,7 @@ jobs:
       - uses: docker/build-push-action@v7
         with:
           context: ./${{ matrix.component }}
+          build-contexts: ${{ matrix.component == 'backend' && 'jar=./backend-jar' || '' }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

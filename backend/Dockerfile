@@ -12,6 +12,11 @@ RUN --mount=type=cache,id=shared-ledger-gradle-home,target=/root/.gradle,sharing
     && gradle --no-daemon bootJar -x test \
     && cp build/libs/*.jar /workspace/app.jar
 
+# CI replaces this stage with the jar its backend job already built and tested (--build-context jar=...),
+# so the image build never resolves dependencies cold: cache mounts don't survive ephemeral runners.
+FROM scratch AS jar
+COPY --from=build /workspace/app.jar /app.jar
+
 FROM eclipse-temurin:25-jre AS runtime
 # temurin:25-jre's base image no longer ships wget/curl; install curl for the health check.
 RUN apt-get update \
@@ -19,7 +24,7 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 RUN groupadd -g 10001 app && useradd -u 10001 -g app -m -d /app -s /usr/sbin/nologin app
 WORKDIR /app
-COPY --chown=app:app --from=build /workspace/app.jar /app/app.jar
+COPY --chown=app:app --from=jar /app.jar /app/app.jar
 USER app:app
 
 EXPOSE 8080 9090
